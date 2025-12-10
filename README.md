@@ -2,6 +2,28 @@
 
 Voice → Groq Whisper Large V3 → Claude Haiku 4.5 polish. Mac-Utility Look, PWA-ready, Dark/Light.
 
+---
+
+## ⬇️ Download (einfach!)
+
+**[Labertaschi-1.0.0-arm64.dmg herunterladen](https://github.com/allanhamduws-alt/Labertaschi/releases/download/v1.0.0/Labertaschi-1.0.0-arm64.dmg)**
+
+1. DMG herunterladen
+2. Doppelklick auf die DMG
+3. App in den Programme-Ordner ziehen
+4. Fertig! ✨
+
+> **Hinweis:** Die App ist nicht signiert. Beim ersten Start: **Rechtsklick → Öffnen → Öffnen bestätigen**.
+
+> **Für Apple Silicon Macs (M1/M2/M3/M4)**
+
+---
+
+## Für Entwickler
+
+<details>
+<summary>Klicken für Entwickler-Anleitung</summary>
+
 ## Voraussetzungen
 
 **Node.js muss installiert sein!**
@@ -89,3 +111,5 @@ npm run dev
 
 - Groq Whisper nutzt HTTP-Chunk-Uploads (kein WebSocket), ca. 1s-Chunks für optimale Latenz
 - Groq ist ~164x schneller als Echtzeit und günstiger als Deepgram bei vergleichbarer Qualität
+
+</details>
