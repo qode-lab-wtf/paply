@@ -276,25 +276,45 @@ function createRecordingWindow() {
     return recordingWindow;
   }
 
-  recordingWindow = new BrowserWindow({
+  // Windows doesn't handle transparent frameless windows well
+  const windowOptions = {
     width: 300,
     height: 120,
     show: false,
     resizable: false,
     alwaysOnTop: true,
-    frame: false,
-    transparent: true,
     skipTaskbar: true,
-    focusable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
-  });
+  };
+
+  if (isMac) {
+    windowOptions.frame = false;
+    windowOptions.transparent = true;
+    windowOptions.focusable = false;
+  } else {
+    // Windows: use a small titled window that stays on top
+    windowOptions.frame = false;
+    windowOptions.transparent = false;
+    windowOptions.backgroundColor = '#1a1a2e';
+    windowOptions.focusable = false;
+  }
+
+  recordingWindow = new BrowserWindow(windowOptions);
 
   recordingWindow.loadFile(path.join(__dirname, 'recording.html'));
   recordingWindow.on('closed', () => { recordingWindow = null; });
+
+  // Position window in top-right corner
+  if (isWin) {
+    const { screen } = require('electron');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width } = primaryDisplay.workAreaSize;
+    recordingWindow.setPosition(width - 320, 20);
+  }
 
   return recordingWindow;
 }
@@ -454,17 +474,36 @@ function autopasteText(text) {
       proc.stderr.on('data', (d) => console.error('AppleScript error:', d.toString()));
     }, 150);
   } else if (isWin) {
-    // On Windows, use PowerShell to simulate Ctrl+V
-    // First, small delay to ensure clipboard is ready
+    // On Windows, use PowerShell with a more robust approach
+    // We need to give time for the recording window to hide and previous window to regain focus
     setTimeout(() => {
       const psScript = `
-        Add-Type -AssemblyName System.Windows.Forms
-        [System.Windows.Forms.SendKeys]::SendWait("^v")
-      `;
-      exec(`powershell -Command "${psScript.replace(/\n/g, ' ')}"`, (err) => {
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+"@
+Start-Sleep -Milliseconds 100
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+      `.trim();
+      
+      // Write script to temp file and execute (avoids escaping issues)
+      const tempFile = path.join(app.getPath('temp'), 'labertaschi-paste.ps1');
+      fs.writeFileSync(tempFile, psScript, 'utf8');
+      
+      exec(`powershell -ExecutionPolicy Bypass -File "${tempFile}"`, (err, stdout, stderr) => {
         if (err) console.error('PowerShell paste error:', err);
+        if (stderr) console.error('PowerShell stderr:', stderr);
+        // Clean up temp file
+        try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
       });
-    }, 200);
+    }, 400);
   }
 }
 
@@ -627,6 +666,20 @@ app.whenReady().then(() => {
   console.log('Shortcut:', s.get('shortcut'));
   console.log('Groq Key:', s.get('groqApiKey') ? 'Set' : 'Not set');
   console.log('Haiku Key:', s.get('haikuApiKey') ? 'Set' : 'Not set');
+
+  // Auto-open settings on first run if no API key is configured
+  if (!s.get('groqApiKey')) {
+    setTimeout(() => {
+      createSettingsWindow();
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Willkommen bei Labertaschi!',
+        message: 'API Key benötigt',
+        detail: 'Bitte konfiguriere deinen Groq API Key in den Einstellungen.\n\nDu kannst einen kostenlosen API Key hier erstellen:\nhttps://console.groq.com/keys',
+        buttons: ['OK'],
+      });
+    }, 500);
+  }
 });
 
 app.on('will-quit', () => { globalShortcut.unregisterAll(); });
