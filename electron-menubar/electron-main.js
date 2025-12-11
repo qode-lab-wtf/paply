@@ -161,21 +161,139 @@ async function transcribeAudio(audioBuffer, language = 'de') {
 }
 
 // ============================================================================
-// UPDATE CHECKER
+// AUTO UPDATER (electron-updater)
 // ============================================================================
+const { autoUpdater } = require('electron-updater');
+
+// Configure auto-updater
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+
+let updateCheckInProgress = false;
+let downloadInProgress = false;
+
+function setupAutoUpdater() {
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for updates...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    updateCheckInProgress = false;
+    
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update verfügbar!',
+      message: `Neue Version ${info.version} verfügbar`,
+      detail: `Du hast Version ${CURRENT_VERSION}.\n\n${info.releaseNotes || 'Neue Verbesserungen und Bugfixes.'}\n\nMöchtest du das Update jetzt herunterladen und installieren?`,
+      buttons: ['Herunterladen', 'Später'],
+      defaultId: 0,
+    }).then((result) => {
+      if (result.response === 0) {
+        downloadInProgress = true;
+        autoUpdater.downloadUpdate();
+      }
+    });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('No update available, current version:', info.version);
+    updateCheckInProgress = false;
+    
+    if (!updateCheckInProgress) {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Kein Update verfügbar',
+        message: 'Du hast die neueste Version!',
+        detail: `Aktuelle Version: ${CURRENT_VERSION}`,
+        buttons: ['OK'],
+      });
+    }
+  });
+
+  autoUpdater.on('error', (error) => {
+    console.error('Auto-updater error:', error);
+    updateCheckInProgress = false;
+    downloadInProgress = false;
+    
+    // Fallback: Open GitHub releases page
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Update-Fehler',
+      message: 'Auto-Update fehlgeschlagen',
+      detail: `${error.message}\n\nMöchtest du die Releases-Seite öffnen?`,
+      buttons: ['GitHub öffnen', 'Abbrechen'],
+      defaultId: 0,
+    }).then((result) => {
+      if (result.response === 0) {
+        shell.openExternal(`https://github.com/${GITHUB_REPO}/releases/latest`);
+      }
+    });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    console.log(`Download progress: ${Math.round(progress.percent)}%`);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    downloadInProgress = false;
+    
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update bereit',
+      message: 'Update heruntergeladen!',
+      detail: `Version ${info.version} wurde heruntergeladen.\n\nDie App wird jetzt neu gestartet, um das Update zu installieren.`,
+      buttons: ['Jetzt neu starten', 'Später'],
+      defaultId: 0,
+    }).then((result) => {
+      if (result.response === 0) {
+        autoUpdater.quitAndInstall(false, true);
+      }
+    });
+  });
+}
+
 async function checkForUpdates(silent = false) {
+  if (updateCheckInProgress || downloadInProgress) {
+    console.log('Update check already in progress');
+    return;
+  }
+  
+  updateCheckInProgress = true;
+  
+  try {
+    // Remove the dialog for silent checks
+    if (silent) {
+      autoUpdater.once('update-not-available', () => {
+        updateCheckInProgress = false;
+      });
+    }
+    
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    console.error('Update check failed:', error);
+    updateCheckInProgress = false;
+    
+    if (!silent) {
+      // Fallback to manual GitHub check
+      await checkForUpdatesManual();
+    }
+  }
+}
+
+// Fallback manual update check (for unsigned builds)
+async function checkForUpdatesManual() {
   try {
     const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
     if (!response.ok) {
-      if (!silent) {
-        dialog.showMessageBox({
-          type: 'error',
-          title: 'Update-Prüfung fehlgeschlagen',
-          message: 'Konnte nicht nach Updates suchen.',
-          detail: `Status: ${response.status}`,
-          buttons: ['OK'],
-        });
-      }
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'Update-Prüfung fehlgeschlagen',
+        message: 'Konnte nicht nach Updates suchen.',
+        detail: `Status: ${response.status}`,
+        buttons: ['OK'],
+      });
       return null;
     }
 
@@ -185,8 +303,6 @@ async function checkForUpdates(silent = false) {
     console.log(`Current version: ${CURRENT_VERSION}, Latest: ${latestVersion}`);
 
     if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
-      // New version available
-      const platform = isMac ? 'mac' : 'windows';
       const assetName = isMac ? '.dmg' : 'Setup';
       const downloadAsset = release.assets.find(a => 
         a.name.toLowerCase().includes(assetName.toLowerCase())
@@ -196,7 +312,7 @@ async function checkForUpdates(silent = false) {
         type: 'info',
         title: 'Update verfügbar!',
         message: `Neue Version ${latestVersion} verfügbar`,
-        detail: `Du hast Version ${CURRENT_VERSION}.\n\n${release.body || 'Neue Verbesserungen und Bugfixes.'}\n\nMöchtest du das Update jetzt herunterladen?`,
+        detail: `Du hast Version ${CURRENT_VERSION}.\n\n${release.body || 'Neue Verbesserungen und Bugfixes.'}\n\nMöchtest du das Update jetzt herunterladen?\n\nHinweis: Nach dem Download bitte manuell installieren.`,
         buttons: ['Herunterladen', 'Später'],
         defaultId: 0,
       });
@@ -207,28 +323,24 @@ async function checkForUpdates(silent = false) {
       }
       return { hasUpdate: true, version: latestVersion };
     } else {
-      if (!silent) {
-        dialog.showMessageBox({
-          type: 'info',
-          title: 'Kein Update verfügbar',
-          message: 'Du hast die neueste Version!',
-          detail: `Aktuelle Version: ${CURRENT_VERSION}`,
-          buttons: ['OK'],
-        });
-      }
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Kein Update verfügbar',
+        message: 'Du hast die neueste Version!',
+        detail: `Aktuelle Version: ${CURRENT_VERSION}`,
+        buttons: ['OK'],
+      });
       return { hasUpdate: false, version: CURRENT_VERSION };
     }
   } catch (error) {
-    console.error('Update check failed:', error);
-    if (!silent) {
-      dialog.showMessageBox({
-        type: 'error',
-        title: 'Update-Prüfung fehlgeschlagen',
-        message: 'Konnte nicht nach Updates suchen.',
-        detail: error.message,
-        buttons: ['OK'],
-      });
-    }
+    console.error('Manual update check failed:', error);
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Update-Prüfung fehlgeschlagen',
+      message: 'Konnte nicht nach Updates suchen.',
+      detail: error.message,
+      buttons: ['OK'],
+    });
     return null;
   }
 }
@@ -416,7 +528,7 @@ function showAboutDialog() {
     message: 'Labertaschi',
     detail: `Version ${CURRENT_VERSION}
 
-Sprachtranskription mit Groq Whisper Large V3
+Sprachtranskription mit Groq Whisper Large V3 Turbo
 Optionales Polishing mit Claude Haiku 4.5
 
 Shortcuts:
@@ -744,6 +856,10 @@ function setupIpcHandlers() {
 app.whenReady().then(() => {
   // Verstecke Dock-Icon
   if (app.dock) app.dock.hide();
+  
+  // Setup auto-updater
+  setupAutoUpdater();
+  
   setupIpcHandlers();
   setupTray();
   createRecordingWindow();
@@ -752,6 +868,7 @@ app.whenReady().then(() => {
 
   const s = getStore();
   console.log('Labertaschi started');
+  console.log('Version:', CURRENT_VERSION);
   console.log('Shortcut:', s.get('shortcut'));
   console.log('Groq Key:', s.get('groqApiKey') ? 'Set' : 'Not set');
   console.log('Haiku Key:', s.get('haikuApiKey') ? 'Set' : 'Not set');
@@ -772,11 +889,7 @@ app.whenReady().then(() => {
 
   // Check for updates silently on startup (after 5 seconds)
   setTimeout(() => {
-    checkForUpdates(true).then(result => {
-      if (result?.hasUpdate) {
-        console.log(`Update available: ${result.version}`);
-      }
-    });
+    checkForUpdates(true);
   }, 5000);
 });
 

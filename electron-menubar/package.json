@@ -1,15 +1,16 @@
 {
   "name": "labertaschi-menubar",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Claude Haiku Polishing",
   "main": "electron-main.js",
   "scripts": {
     "dev": "electron .",
-    "build": "electron-builder --mac --arm64",
-    "build:universal": "electron-builder --mac --universal",
-    "build:win": "electron-builder --win --x64",
-    "build:win:ia32": "electron-builder --win --ia32",
-    "build:all": "electron-builder --mac --win",
+    "build": "electron-builder --mac --arm64 --publish never",
+    "build:universal": "electron-builder --mac --universal --publish never",
+    "build:win": "electron-builder --win --x64 --publish never",
+    "build:win:ia32": "electron-builder --win --ia32 --publish never",
+    "build:all": "electron-builder --mac --win --publish never",
+    "build:publish": "electron-builder --mac --win --publish always",
     "generate:ico": "node scripts/generate-ico.js",
     "start": "electron .",
     "lint": "echo \"no lint configured\""
@@ -27,10 +28,12 @@
   "dependencies": {
     "auto-launch": "^5.0.6",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9",
     "form-data": "^4.0.0",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "electron": "^33.4.11",
     "electron-builder": "^24.13.3",
     "sharp": "^0.34.5"
@@ -38,24 +41,36 @@
   "build": {
     "appId": "com.labertaschi.menubar",
     "productName": "Labertaschi",
+    "publish": {
+      "provider": "github",
+      "owner": "allanhamduws-alt",
+      "repo": "Labertaschi"
+    },
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ]
     },
+    "afterSign": "scripts/notarize.js",
     "win": {
       "icon": "icon.ico",
       "target": [
@@ -64,20 +79,16 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ]
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
       "installerIcon": "icon.ico",
-      "uninstallerIcon": "icon.ico"
+      "uninstallerIcon": "icon.ico",
+      "differentialPackage": true
     },
     "files": [
       "electron-main.js",
