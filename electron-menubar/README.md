@@ -1,4 +1,4 @@
-# Labertaschi Menubar App
+# paply Menubar App
 
 Eigenständige macOS/Windows Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Claude Haiku Polishing.
 
@@ -9,7 +9,7 @@ Eigenständige macOS/Windows Menüleisten-App für Sprachtranskription mit Groq 
   - History (letzte 30 Transkripte)
   - Einstellungen (API Keys, Polish, Autostart, Shortcut)
   - Nach Updates suchen (Auto-Updater)
-  - Über Labertaschi
+  - Über paply
   - Beenden (⌘Q / Ctrl+Q)
 
 - **Direkte API-Calls** zu Groq und Anthropic (kein externer Server nötig)
@@ -81,7 +81,7 @@ Für macOS müssen Builds signiert und notarisiert sein, damit Gatekeeper sie ni
 
 1. https://appleid.apple.com → Anmelden
 2. Sicherheit → App-spezifische Passwörter → Passwort erstellen
-3. Name: "Labertaschi Notarization"
+3. Name: "paply Notarization"
 
 ### Build mit Signierung
 
@@ -95,14 +95,55 @@ export TEAM_ID="XXXXXXXXXX"
 npm run build:publish
 ```
 
-## Code-Signing (Windows) - Optional
+## Code-Signing (Windows)
 
-| Variable | Beschreibung |
-|----------|-------------|
-| `WIN_CSC_LINK` | Pfad oder Base64 der .pfx Zertifikatsdatei |
+Ohne Code-Signierung zeigt Windows SmartScreen eine Warnung "Windows hat Ihren PC geschützt" an. Nutzer müssen dann auf "Weitere Informationen" → "Trotzdem ausführen" klicken.
+
+### Erforderliche GitHub Secrets
+
+| Secret | Beschreibung |
+|--------|-------------|
+| `WIN_CSC_LINK` | Base64-kodierte .pfx Zertifikatsdatei |
 | `WIN_CSC_KEY_PASSWORD` | Passwort für das Zertifikat |
 
-Windows Code-Signing-Zertifikate können bei verschiedenen CAs gekauft werden (z.B. DigiCert, Sectigo).
+### Zertifikat kaufen (günstigste Optionen)
+
+| Anbieter | Preis/Jahr | SmartScreen-Vertrauen | Link |
+|----------|------------|----------------------|------|
+| **Certum Open Source** | ~25€ | Nach einigen Downloads | certum.pl (nur für Open-Source) |
+| **Sectigo (Comodo)** | ~70€ | Nach einigen Downloads | sectigo.com |
+| **SignPath.io** | Kostenlos | Sofort | signpath.io (nur für Open-Source auf GitHub) |
+
+> ⚠️ **EV-Zertifikate** (300-500€/Jahr) haben sofortiges SmartScreen-Vertrauen, Standard-Zertifikate bauen Reputation erst nach mehreren Downloads auf.
+
+### Zertifikat als Base64 konvertieren
+
+```bash
+# macOS/Linux
+base64 -i certificate.pfx -o certificate-base64.txt
+
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("certificate.pfx")) | Out-File certificate-base64.txt
+```
+
+### GitHub Secrets einrichten
+
+1. Gehe zu: Repository → Settings → Secrets and variables → Actions
+2. Klicke "New repository secret"
+3. Erstelle:
+   - Name: `WIN_CSC_LINK` → Value: Inhalt von certificate-base64.txt
+   - Name: `WIN_CSC_KEY_PASSWORD` → Value: Dein Zertifikats-Passwort
+
+### Kostenlose Alternative: SignPath.io (für Open-Source)
+
+SignPath.io bietet **kostenlose Code-Signierung** für Open-Source-Projekte:
+
+1. Repository muss öffentlich sein auf GitHub
+2. Registriere dich auf https://signpath.io
+3. Verbinde dein GitHub Repository
+4. SignPath signiert automatisch bei jedem Release
+
+**Vorteil:** Sofortiges SmartScreen-Vertrauen, keine Kosten!
 
 ## GitHub Release erstellen
 
@@ -143,7 +184,7 @@ Bei einem verfügbaren Update wird das Update automatisch heruntergeladen und na
 
 - Bei erstem Start Mikrofon-Berechtigung und ggf. Accessibility-Berechtigung (für Auto-Paste) erteilen
 - Die App erscheint NICHT im Dock, nur in der Menüleiste
-- **macOS ohne Signierung**: Rechtsklick → Öffnen und Dialog bestätigen, oder im Terminal: `xattr -dr com.apple.quarantine /Applications/Labertaschi.app`
+- **macOS ohne Signierung**: Rechtsklick → Öffnen und Dialog bestätigen, oder im Terminal: `xattr -dr com.apple.quarantine /Applications/paply.app`
 
 ## Technische Details
 

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- paply Icon: Gr�ner Papagei (nur Kopf, ohne Text) -->
+  
+  <!-- Hintergrund -->
+  <rect width="192" height="192" rx="40" fill="#81C784"/>
+  
+  <!-- Papagei-Gruppe -->
+  <g transform="translate(30, 25)">
+    <!-- Papagei Kopf (gr�n, abgerundet) -->
+    <path d="M20 0 
+             C0 0, -15 25, -15 55
+             C-15 85, 10 100, 45 100
+             L70 100
+             L70 55
+             C70 25, 50 0, 20 0 Z" 
+          fill="#4CAF50"/>
+    
+    <!-- Hellgr�ner Bereich -->
+    <path d="M20 0 
+             C0 0, -15 25, -15 55
+             C-15 70, -5 80, 15 80
+             L40 80
+             L40 35
+             C40 15, 30 0, 20 0 Z" 
+          fill="#8BC34A"/>
+    
+    <!-- Auge Hintergrund -->
+    <ellipse cx="25" cy="48" rx="14" ry="14" fill="white"/>
+    
+    <!-- Auge Pupille -->
+    <circle cx="25" cy="48" r="7" fill="#1A237E"/>
+    
+    <!-- Schnabel oben -->
+    <path d="M70 40
+             L115 55
+             L115 62
+             L70 72
+             Z" 
+          fill="#FDD835"/>
+    
+    <!-- Schnabel unten -->
+    <path d="M70 72
+             L115 62
+             L95 80
+             L70 88
+             Z" 
+          fill="#F9A825"/>
+    
+    <!-- Mund-Bereich -->
+    <path d="M58 64
+             L70 60
+             L70 80
+             L58 76
+             Z" 
+          fill="#1A237E"/>
+  </g>
+</svg>

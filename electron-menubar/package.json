@@ -1,5 +1,5 @@
 {
-  "name": "labertaschi-menubar",
+  "name": "paply-menubar",
   "version": "1.3.2",
   "description": "Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Claude Haiku Polishing",
   "main": "electron-main.js",
@@ -23,7 +23,7 @@
     "macos",
     "windows"
   ],
-  "author": "Labertaschi",
+  "author": "paply",
   "license": "MIT",
   "dependencies": {
     "auto-launch": "^5.0.6",
@@ -39,12 +39,12 @@
     "sharp": "^0.34.5"
   },
   "build": {
-    "appId": "com.labertaschi.menubar",
-    "productName": "Labertaschi",
+    "appId": "com.paply.menubar",
+    "productName": "paply",
     "publish": {
       "provider": "github",
       "owner": "allanhamduws-alt",
-      "repo": "Labertaschi"
+      "repo": "paply"
     },
     "mac": {
       "category": "public.app-category.productivity",
@@ -73,6 +73,8 @@
     "afterSign": "scripts/notarize.js",
     "win": {
       "icon": "icon.ico",
+      "publisherName": "paply",
+      "signDlls": true,
       "target": [
         {
           "target": "nsis",
@@ -93,6 +95,7 @@
     "files": [
       "electron-main.js",
       "preload.js",
+      "dashboard.html",
       "settings.html",
       "history.html",
       "recording.html",

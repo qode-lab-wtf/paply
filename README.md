@@ -1,4 +1,4 @@
-# Labertaschi – Voice Transcription für Mac
+# paply – Voice Transcription für Mac
 
 Voice → Groq Whisper Large V3 → Claude Haiku 4.5 polish. Mac-Utility Look, PWA-ready, Dark/Light.
 
@@ -6,7 +6,7 @@ Voice → Groq Whisper Large V3 → Claude Haiku 4.5 polish. Mac-Utility Look, P
 
 ## ⬇️ Download (einfach!)
 
-**[Labertaschi-1.0.0-arm64.dmg herunterladen](https://github.com/allanhamduws-alt/Labertaschi/releases/download/v1.0.0/Labertaschi-1.0.0-arm64.dmg)**
+**[paply-1.0.0-arm64.dmg herunterladen](https://github.com/allanhamduws-alt/paply/releases/download/v1.0.0/paply-1.0.0-arm64.dmg)**
 
 1. DMG herunterladen
 2. Doppelklick auf die DMG
@@ -46,14 +46,14 @@ npm -v
 
 **Option A: Mit Git**
 ```bash
-git clone https://github.com/allanhamduws-alt/Labertaschi.git
-cd Labertaschi
+git clone https://github.com/allanhamduws-alt/paply.git
+cd paply
 ```
 
 **Option B: Als ZIP**
 - Download von GitHub → Entpacken → Im Terminal in den Ordner navigieren:
 ```bash
-cd ~/Downloads/Labertaschi-main
+cd ~/Downloads/paply-main
 ```
 
 ---
@@ -70,7 +70,7 @@ npm run dev
 
 **Vollständiger Pfad (falls du gerade das Terminal geöffnet hast):**
 ```bash
-cd ~/Downloads/Labertaschi-main/electron-menubar
+cd ~/Downloads/paply-main/electron-menubar
 npm install
 npm run dev
 ```

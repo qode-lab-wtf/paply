@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>paply Dashboard</title>
+  <style>
+    :root {
+      --bg-primary: #0f1115;
+      --bg-secondary: #16181d;
+      --bg-card: #1d2027;
+      --bg-hover: #252830;
+      --border: #2a2e38;
+      --text-primary: #f0f2f5;
+      --text-secondary: #8b9bb8;
+      --text-muted: #5c6a82;
+      --accent-green: #4CAF50;
+      --accent-green-light: #8BC34A;
+      --accent-green-bg: rgba(76, 175, 80, 0.1);
+      --accent-blue: #0a84ff;
+      --accent-yellow: #FDD835;
+      --accent-red: #f87171;
+      --accent-navy: #1A237E;
+      --success: #4ade80;
+      --warning: #f59e0b;
+      --error: #f87171;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      background: var(--accent-green);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo svg {
+      width: 24px;
+      height: 24px;
+      fill: white;
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--accent-green-bg);
+      color: var(--accent-green);
+    }
+
+    .nav-item svg {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 12px 0;
+    }
+
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .version {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Main Content */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-secondary);
+    }
+
+    .header-title {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title svg {
+      width: 20px;
+      height: 20px;
+      color: var(--accent-green);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent-green);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #43a047;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .btn-danger {
+      background: var(--error);
+      color: white;
+    }
+
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border-radius: 50%;
+    }
+
+    .btn-large {
+      padding: 16px 32px;
+      font-size: 16px;
+      border-radius: var(--radius);
+    }
+
+    /* Recording Button */
+    .record-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px rgba(76, 175, 80, 0.4);
+    }
+
+    .record-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 30px rgba(76, 175, 80, 0.5);
+    }
+
+    .record-btn.recording {
+      background: var(--error);
+      animation: pulse 1.5s ease-in-out infinite;
+      box-shadow: 0 4px 20px rgba(248, 113, 113, 0.4);
+    }
+
+    .record-btn svg {
+      width: 32px;
+      height: 32px;
+      fill: white;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* Status */
+    .status-text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    .status-text.recording {
+      color: var(--error);
+    }
+
+    .status-text.transcribing,
+    .status-text.polishing {
+      color: var(--accent-yellow);
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-change {
+      font-size: 12px;
+      color: var(--success);
+      margin-top: 4px;
+    }
+
+    /* History List */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .history-item:hover {
+      border-color: var(--accent-green);
+    }
+
+    .history-item.favorite {
+      border-color: var(--accent-yellow);
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .history-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .badge-coding {
+      background: rgba(10, 132, 255, 0.2);
+      color: var(--accent-blue);
+    }
+
+    .badge-meeting {
+      background: rgba(253, 216, 53, 0.2);
+      color: var(--accent-yellow);
+    }
+
+    .badge-dictation {
+      background: rgba(139, 195, 74, 0.2);
+      color: var(--accent-green-light);
+    }
+
+    .badge-polish {
+      background: rgba(76, 175, 80, 0.2);
+      color: var(--accent-green);
+    }
+
+    .history-text {
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .history-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 14px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .form-input:focus,
+    .form-select:focus {
+      border-color: var(--accent-green);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Toggle */
+    .toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toggle:last-child {
+      border-bottom: none;
+    }
+
+    .toggle-label {
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    .toggle-switch {
+      width: 44px;
+      height: 24px;
+      background: var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.2s ease;
+    }
+
+    .toggle-switch.active {
+      background: var(--accent-green);
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s ease;
+    }
+
+    .toggle-switch.active::after {
+      transform: translateX(20px);
+    }
+
+    /* Profile Cards */
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .profile-card {
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+
+    .profile-card:hover {
+      border-color: var(--accent-green);
+    }
+
+    .profile-card.active {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .profile-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 12px;
+      background: var(--bg-hover);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .profile-card.active .profile-icon {
+      background: var(--accent-green);
+    }
+
+    .profile-icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--text-secondary);
+    }
+
+    .profile-card.active .profile-icon svg {
+      color: white;
+    }
+
+    .profile-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .profile-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Snippet Cards */
+    .snippet-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .snippet-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .snippet-info {
+      flex: 1;
+    }
+
+    .snippet-name {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .snippet-preview {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+
+    /* Impact Section */
+    .impact-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .impact-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .impact-title {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .impact-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+
+    .impact-detail {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    /* Hotkey Display */
+    .hotkey {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      color: var(--text-secondary);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-in {
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* Owner Analytics (hidden by default) */
+    .owner-only {
+      display: none;
+    }
+
+    .owner-mode .owner-only {
+      display: block;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .filter-chip {
+      padding: 6px 12px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-chip:hover,
+    .filter-chip.active {
+      background: var(--accent-green-bg);
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    /* Textarea */
+    .form-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-family: monospace;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      resize: vertical;
+    }
+
+    .form-textarea:focus {
+      border-color: var(--accent-green);
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <span class="logo-text">paply</span>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <div class="nav-item active" data-tab="transcription">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          </svg>
+          Transkription
+        </div>
+        
+        <div class="nav-item" data-tab="history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          History
+        </div>
+        
+        <div class="nav-item" data-tab="stats">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          Stats
+        </div>
+        
+        <div class="nav-item" data-tab="profiles">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          Profile
+        </div>
+        
+        <div class="nav-item" data-tab="snippets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          Snippets
+        </div>
+        
+        <div class="nav-divider"></div>
+        
+        <div class="nav-item" data-tab="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Einstellungen
+        </div>
+        
+        <div class="nav-item owner-only" data-tab="owner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Owner Analytics
+        </div>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <div class="version">paply v<span id="version">1.0.0</span></div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <header class="header">
+        <h1 class="header-title" id="pageTitle">Transkription</h1>
+        <div class="header-actions">
+          <span class="hotkey" id="hotkeyDisplay">Alt+Cmd+K</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- Transcription Tab -->
+        <div class="tab-content active" id="tab-transcription">
+          <div class="card" style="text-align: center; padding: 40px;">
+            <button class="record-btn" id="recordBtn">
+              <svg viewBox="0 0 24 24" id="recordIcon">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <p class="status-text" id="statusText">Klicke zum Starten oder nutze den Hotkey</p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                Letztes Ergebnis
+              </div>
+              <button class="btn btn-secondary" id="copyLastBtn" style="display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Kopieren
+              </button>
+            </div>
+            <div id="lastResult" class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              </svg>
+              <h3>Noch keine Transkription</h3>
+              <p>Starte eine Aufnahme, um Text zu generieren</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Quick Settings</div>
+            </div>
+            <div class="toggle">
+              <span class="toggle-label">Autopaste aktiviert</span>
+              <div class="toggle-switch" id="toggleAutopaste"></div>
+            </div>
+            <div class="toggle">
+              <span class="toggle-label">Polish aktiviert</span>
+              <div class="toggle-switch" id="togglePolish"></div>
+            </div>
+            <div class="form-group" style="margin-top: 16px; margin-bottom: 0;">
+              <label class="form-label">Sprache</label>
+              <select class="form-select" id="languageSelect">
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- History Tab -->
+        <div class="tab-content" id="tab-history">
+          <div class="filter-bar">
+            <div class="filter-chip active" data-filter="all">Alle</div>
+            <div class="filter-chip" data-filter="favorites">Favoriten</div>
+            <div class="filter-chip" data-filter="coding">Coding</div>
+            <div class="filter-chip" data-filter="meeting">Meeting</div>
+            <div class="filter-chip" data-filter="dictation">Diktat</div>
+          </div>
+          
+          <div class="history-list" id="historyList">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <h3>Keine History</h3>
+              <p>Deine Transkriptionen erscheinen hier</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Tab -->
+        <div class="tab-content" id="tab-stats">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Wörter heute</div>
+              <div class="stat-value" id="statWordsToday">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Wörter diese Woche</div>
+              <div class="stat-value" id="statWordsWeek">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Wörter gesamt</div>
+              <div class="stat-value" id="statWordsTotal">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Sessions</div>
+              <div class="stat-value" id="statSessions">0</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                Impact (Polish-Verbesserungen)
+              </div>
+            </div>
+            <div class="impact-grid">
+              <div class="impact-card">
+                <div class="impact-title">Füllwörter entfernt</div>
+                <div class="impact-value" id="impactFillers">0</div>
+                <div class="impact-detail">durchschnittlich pro Session</div>
+              </div>
+              <div class="impact-card">
+                <div class="impact-title">Wörter optimiert</div>
+                <div class="impact-value" id="impactWords">0%</div>
+                <div class="impact-detail">Reduktion durch Polish</div>
+              </div>
+              <div class="impact-card">
+                <div class="impact-title">Polish-Nutzung</div>
+                <div class="impact-value" id="impactUsage">0%</div>
+                <div class="impact-detail">der Sessions mit Polish</div>
+              </div>
+              <div class="impact-card">
+                <div class="impact-title">Erfolgsquote</div>
+                <div class="impact-value" id="impactSuccess">100%</div>
+                <div class="impact-detail">erfolgreiche Transkriptionen</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profiles Tab -->
+        <div class="tab-content" id="tab-profiles">
+          <div class="profile-grid" id="profileGrid">
+            <div class="profile-card active" data-profile="coding">
+              <div class="profile-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
+                </svg>
+              </div>
+              <div class="profile-name">Coding</div>
+              <div class="profile-desc">Tech-Begriffe, Autopaste</div>
+            </div>
+            <div class="profile-card" data-profile="meeting">
+              <div class="profile-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <div class="profile-name">Meeting</div>
+              <div class="profile-desc">Action Items, kein Autopaste</div>
+            </div>
+            <div class="profile-card" data-profile="dictation">
+              <div class="profile-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              </div>
+              <div class="profile-name">Diktat</div>
+              <div class="profile-desc">Plain Text, Autopaste</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <div class="card-title">Aktives Profil konfigurieren</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sprache</label>
+              <select class="form-select" id="profileLanguage">
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div class="toggle">
+              <span class="toggle-label">Autopaste</span>
+              <div class="toggle-switch" id="profileAutopaste"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Snippets Tab -->
+        <div class="tab-content" id="tab-snippets">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Snippet hinzufügen</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-input" id="snippetName" placeholder="z.B. Bug Report">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Template (nutze {{text}} als Platzhalter)</label>
+              <textarea class="form-textarea" id="snippetTemplate" placeholder="## Bug Report\n\n{{text}}\n\n### Steps to Reproduce\n"></textarea>
+            </div>
+            <button class="btn btn-primary" id="addSnippetBtn">Snippet speichern</button>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Gespeicherte Snippets</div>
+            </div>
+            <div class="snippet-list" id="snippetList">
+              <!-- Snippets werden hier geladen -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="tab-settings">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">API Keys</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Groq API Key (erforderlich)</label>
+              <input type="password" class="form-input" id="groqApiKey" placeholder="gsk_...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Anthropic API Key (optional, für Polish)</label>
+              <input type="password" class="form-input" id="haikuApiKey" placeholder="sk-ant-...">
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Optionen</div>
+            </div>
+            <div class="toggle">
+              <span class="toggle-label">Bei Anmeldung automatisch starten</span>
+              <div class="toggle-switch" id="toggleAutoStart"></div>
+            </div>
+            <div class="toggle">
+              <span class="toggle-label">Piep-Sound abspielen</span>
+              <div class="toggle-switch" id="toggleBeep"></div>
+            </div>
+            <div class="toggle">
+              <span class="toggle-label">Dock-Icon verstecken (nur Tray)</span>
+              <div class="toggle-switch" id="toggleHideDock"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Tastenkürzel</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Globaler Hotkey</label>
+              <input type="text" class="form-input" id="shortcutInput" readonly placeholder="Klicken und Tastenkombination drücken">
+            </div>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <button class="btn btn-primary" id="saveSettingsBtn">Einstellungen speichern</button>
+          </div>
+        </div>
+
+        <!-- Owner Analytics Tab (hidden) -->
+        <div class="tab-content owner-only" id="tab-owner">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Groq Tokens (geschätzt)</div>
+              <div class="stat-value" id="ownerTokensGroq">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Anthropic Tokens (geschätzt)</div>
+              <div class="stat-value" id="ownerTokensAnthropic">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Geschätzte Kosten</div>
+              <div class="stat-value" id="ownerCost">$0.00</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Fehlerquote</div>
+              <div class="stat-value" id="ownerErrors">0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // State
+    let currentTab = 'transcription';
+    let isRecording = false;
+    let settings = {};
+    let history = [];
+    let stats = {};
+    let profiles = {};
+    let snippets = [];
+    let isOwnerMode = false;
+
+    // DOM Elements
+    const app = document.getElementById('app');
+    const recordBtn = document.getElementById('recordBtn');
+    const recordIcon = document.getElementById('recordIcon');
+    const statusText = document.getElementById('statusText');
+    const lastResult = document.getElementById('lastResult');
+    const copyLastBtn = document.getElementById('copyLastBtn');
+    const hotkeyDisplay = document.getElementById('hotkeyDisplay');
+
+    // Initialize
+    async function init() {
+      // Load settings
+      settings = await window.electronAPI.getSettings();
+      
+      // Check owner mode
+      isOwnerMode = await window.electronAPI.checkOwnerMode();
+      if (isOwnerMode) {
+        app.classList.add('owner-mode');
+      }
+      
+      // Load data
+      history = await window.electronAPI.getHistory();
+      stats = await window.electronAPI.getStats();
+      const profileData = await window.electronAPI.getProfiles();
+      profiles = profileData.profiles;
+      snippets = await window.electronAPI.getSnippets();
+      
+      // Update UI
+      updateSettingsUI();
+      updateHistoryUI();
+      updateStatsUI();
+      updateProfilesUI(profileData.active);
+      updateSnippetsUI();
+      
+      // Set hotkey display
+      hotkeyDisplay.textContent = settings.shortcut || 'Alt+Cmd+K';
+      
+      // Setup event listeners
+      setupEventListeners();
+      setupIpcListeners();
+    }
+
+    // Event Listeners
+    function setupEventListeners() {
+      // Navigation
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const tab = item.dataset.tab;
+          if (tab) switchTab(tab);
+        });
+      });
+
+      // Record button
+      recordBtn.addEventListener('click', toggleRecording);
+
+      // Copy last result
+      copyLastBtn.addEventListener('click', copyLastResult);
+
+      // Quick settings toggles
+      document.getElementById('toggleAutopaste').addEventListener('click', async (e) => {
+        const isActive = e.target.classList.toggle('active');
+        await window.electronAPI.setSettings({ autopaste: isActive });
+        settings.autopaste = isActive;
+      });
+
+      document.getElementById('togglePolish').addEventListener('click', async (e) => {
+        const isActive = e.target.classList.toggle('active');
+        await window.electronAPI.setSettings({ enablePolish: isActive });
+        settings.enablePolish = isActive;
+      });
+
+      // Language select
+      document.getElementById('languageSelect').addEventListener('change', async (e) => {
+        await window.electronAPI.setSettings({ language: e.target.value });
+        settings.language = e.target.value;
+      });
+
+      // History filters
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          filterHistory(chip.dataset.filter);
+        });
+      });
+
+      // Profile selection
+      document.getElementById('profileGrid').addEventListener('click', (e) => {
+        const card = e.target.closest('.profile-card');
+        if (card) {
+          const profileId = card.dataset.profile;
+          selectProfile(profileId);
+        }
+      });
+
+      // Add snippet
+      document.getElementById('addSnippetBtn').addEventListener('click', addSnippet);
+
+      // Settings toggles
+      document.getElementById('toggleAutoStart').addEventListener('click', async (e) => {
+        const isActive = e.target.classList.toggle('active');
+        await window.electronAPI.setSettings({ autoStart: isActive });
+      });
+
+      document.getElementById('toggleBeep').addEventListener('click', async (e) => {
+        const isActive = e.target.classList.toggle('active');
+        await window.electronAPI.setSettings({ beepEnabled: isActive });
+      });
+
+      document.getElementById('toggleHideDock').addEventListener('click', async (e) => {
+        const isActive = e.target.classList.toggle('active');
+        await window.electronAPI.setSettings({ hideDock: isActive });
+      });
+
+      // Save settings
+      document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+      // Shortcut capture
+      const shortcutInput = document.getElementById('shortcutInput');
+      shortcutInput.addEventListener('click', () => {
+        shortcutInput.value = 'Drücke Tastenkombination...';
+        shortcutInput.style.borderColor = 'var(--accent-green)';
+      });
+
+      shortcutInput.addEventListener('keydown', (e) => {
+        e.preventDefault();
+        const parts = [];
+        if (e.ctrlKey) parts.push('Control');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        if (e.metaKey) parts.push('Command');
+        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+          parts.push(e.key.toUpperCase());
+        }
+        if (parts.length >= 2 && !['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+          shortcutInput.value = parts.join('+');
+          shortcutInput.style.borderColor = '';
+          shortcutInput.blur();
+        }
+      });
+
+      // Secret owner mode toggle (triple-click on version)
+      let clickCount = 0;
+      let clickTimer = null;
+      document.getElementById('version').addEventListener('click', () => {
+        clickCount++;
+        if (clickTimer) clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => { clickCount = 0; }, 500);
+        
+        if (clickCount >= 5) {
+          clickCount = 0;
+          const password = prompt('Owner Password:');
+          if (password) {
+            window.electronAPI.toggleOwnerMode(password).then(enabled => {
+              isOwnerMode = enabled;
+              if (enabled) {
+                app.classList.add('owner-mode');
+                alert('Owner Mode aktiviert');
+              } else {
+                app.classList.remove('owner-mode');
+                alert('Owner Mode deaktiviert');
+              }
+            });
+          }
+        }
+      });
+    }
+
+    // IPC Listeners
+    function setupIpcListeners() {
+      window.electronAPI.onHistoryUpdated((newHistory) => {
+        history = newHistory;
+        updateHistoryUI();
+        updateLastResult();
+      });
+
+      window.electronAPI.onStatsUpdated((newStats) => {
+        stats = newStats;
+        updateStatsUI();
+      });
+    }
+
+    // Tab Navigation
+    function switchTab(tab) {
+      currentTab = tab;
+      
+      // Update nav items
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.tab === tab);
+      });
+      
+      // Update content
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `tab-${tab}`);
+      });
+      
+      // Update header
+      const titles = {
+        transcription: 'Transkription',
+        history: 'History',
+        stats: 'Statistiken',
+        profiles: 'Profile',
+        snippets: 'Snippets',
+        settings: 'Einstellungen',
+        owner: 'Owner Analytics'
+      };
+      document.getElementById('pageTitle').textContent = titles[tab] || tab;
+      
+      // Load owner stats if needed
+      if (tab === 'owner' && isOwnerMode) {
+        loadOwnerStats();
+      }
+    }
+
+    // Recording
+    async function toggleRecording() {
+      if (isRecording) {
+        await window.electronAPI.stopTranscription();
+        isRecording = false;
+        recordBtn.classList.remove('recording');
+        statusText.textContent = 'Transkribiere...';
+        statusText.className = 'status-text transcribing';
+      } else {
+        await window.electronAPI.startTranscription();
+        isRecording = true;
+        recordBtn.classList.add('recording');
+        statusText.textContent = 'Aufnahme läuft... Klicke zum Stoppen';
+        statusText.className = 'status-text recording';
+      }
+    }
+
+    // Update Last Result
+    function updateLastResult() {
+      if (history.length > 0) {
+        const last = history[0];
+        const text = last.polished || last.transcript;
+        lastResult.innerHTML = `
+          <div style="text-align: left;">
+            <div style="margin-bottom: 8px;">
+              <span class="history-badge badge-${last.role}">${last.role}</span>
+              ${last.polishUsed ? '<span class="history-badge badge-polish">Polish</span>' : ''}
+            </div>
+            <p style="line-height: 1.6;">${text}</p>
+          </div>
+        `;
+        copyLastBtn.style.display = 'flex';
+        statusText.textContent = 'Fertig! Text wurde eingefügt.';
+        statusText.className = 'status-text';
+        isRecording = false;
+        recordBtn.classList.remove('recording');
+      }
+    }
+
+    // Copy Last Result
+    function copyLastResult() {
+      if (history.length > 0) {
+        const last = history[0];
+        navigator.clipboard.writeText(last.polished || last.transcript);
+        copyLastBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Kopiert!
+        `;
+        setTimeout(() => {
+          copyLastBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            Kopieren
+          `;
+        }, 1500);
+      }
+    }
+
+    // UI Updates
+    function updateSettingsUI() {
+      document.getElementById('toggleAutopaste').classList.toggle('active', settings.autopaste);
+      document.getElementById('togglePolish').classList.toggle('active', settings.enablePolish);
+      document.getElementById('languageSelect').value = settings.language || 'de';
+      document.getElementById('groqApiKey').value = settings.groqApiKey || '';
+      document.getElementById('haikuApiKey').value = settings.haikuApiKey || '';
+      document.getElementById('toggleAutoStart').classList.toggle('active', settings.autoStart);
+      document.getElementById('toggleBeep').classList.toggle('active', settings.beepEnabled);
+      document.getElementById('toggleHideDock').classList.toggle('active', settings.hideDock);
+      document.getElementById('shortcutInput').value = settings.shortcut || '';
+    }
+
+    function updateHistoryUI() {
+      const list = document.getElementById('historyList');
+      
+      if (history.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <h3>Keine History</h3>
+            <p>Deine Transkriptionen erscheinen hier</p>
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = history.map(item => `
+        <div class="history-item ${item.favorite ? 'favorite' : ''}" data-id="${item.id}">
+          <div class="history-header">
+            <div class="history-meta">
+              <span>${new Date(item.timestamp).toLocaleString('de-DE', { 
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+              })}</span>
+              <span class="history-badge badge-${item.role}">${item.role}</span>
+              ${item.polishUsed ? '<span class="history-badge badge-polish">Polish</span>' : ''}
+              <span>${item.wordCount} Wörter</span>
+            </div>
+          </div>
+          <div class="history-text">${item.polished || item.transcript}</div>
+          <div class="history-actions">
+            <button class="btn btn-ghost btn-icon" onclick="copyHistoryItem(${item.id})" title="Kopieren">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+            <button class="btn btn-ghost btn-icon" onclick="toggleFavorite(${item.id})" title="Favorit">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="${item.favorite ? 'var(--accent-yellow)' : 'none'}" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
+            <button class="btn btn-ghost btn-icon" onclick="deleteHistoryItem(${item.id})" title="Löschen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterHistory(filter) {
+      const items = document.querySelectorAll('.history-item');
+      items.forEach(item => {
+        const id = parseInt(item.dataset.id);
+        const historyItem = history.find(h => h.id === id);
+        
+        let show = true;
+        if (filter === 'favorites') show = historyItem?.favorite;
+        else if (filter !== 'all') show = historyItem?.role === filter;
+        
+        item.style.display = show ? 'block' : 'none';
+      });
+    }
+
+    function updateStatsUI() {
+      document.getElementById('statWordsToday').textContent = (stats.wordsToday || 0).toLocaleString();
+      document.getElementById('statWordsWeek').textContent = (stats.wordsWeek || 0).toLocaleString();
+      document.getElementById('statWordsTotal').textContent = (stats.wordsTotal || 0).toLocaleString();
+      document.getElementById('statSessions').textContent = (stats.sessionsCount || 0).toLocaleString();
+      
+      // Calculate impact stats from history
+      const polishedItems = history.filter(h => h.polishUsed && h.delta);
+      const avgFillers = polishedItems.length > 0 
+        ? Math.round(polishedItems.reduce((sum, h) => sum + (h.delta?.fillersRemoved || 0), 0) / polishedItems.length)
+        : 0;
+      const avgReduction = polishedItems.length > 0
+        ? Math.round(polishedItems.reduce((sum, h) => sum + ((h.delta?.wordsDiff || 0) / (h.delta?.wordsBefore || 1) * 100), 0) / polishedItems.length)
+        : 0;
+      const polishUsage = history.length > 0
+        ? Math.round(polishedItems.length / history.length * 100)
+        : 0;
+      const successRate = stats.sessionsCount > 0
+        ? Math.round((stats.sessionsCount - (stats.errorsCount || 0)) / stats.sessionsCount * 100)
+        : 100;
+      
+      document.getElementById('impactFillers').textContent = avgFillers;
+      document.getElementById('impactWords').textContent = `${avgReduction}%`;
+      document.getElementById('impactUsage').textContent = `${polishUsage}%`;
+      document.getElementById('impactSuccess').textContent = `${successRate}%`;
+    }
+
+    function updateProfilesUI(activeProfile) {
+      document.querySelectorAll('.profile-card').forEach(card => {
+        card.classList.toggle('active', card.dataset.profile === activeProfile);
+      });
+      
+      const profile = profiles[activeProfile];
+      if (profile) {
+        document.getElementById('profileLanguage').value = profile.language || 'de';
+        document.getElementById('profileAutopaste').classList.toggle('active', profile.autopaste);
+      }
+    }
+
+    async function selectProfile(profileId) {
+      await window.electronAPI.setActiveProfile(profileId);
+      updateProfilesUI(profileId);
+      
+      // Reload settings
+      settings = await window.electronAPI.getSettings();
+      updateSettingsUI();
+    }
+
+    function updateSnippetsUI() {
+      const list = document.getElementById('snippetList');
+      
+      if (snippets.length === 0) {
+        list.innerHTML = '<p style="color: var(--text-muted);">Keine Snippets gespeichert</p>';
+        return;
+      }
+
+      list.innerHTML = snippets.map(snippet => `
+        <div class="snippet-item" data-id="${snippet.id}">
+          <div class="snippet-info">
+            <div class="snippet-name">${snippet.name}</div>
+            <div class="snippet-preview">${snippet.template.substring(0, 50)}...</div>
+          </div>
+          <button class="btn btn-ghost btn-icon" onclick="deleteSnippet('${snippet.id}')" title="Löschen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // Actions
+    async function copyHistoryItem(id) {
+      await window.electronAPI.copyHistoryItem(id);
+    }
+
+    async function toggleFavorite(id) {
+      await window.electronAPI.toggleFavorite(id);
+      const item = history.find(h => h.id === id);
+      if (item) item.favorite = !item.favorite;
+      updateHistoryUI();
+    }
+
+    async function deleteHistoryItem(id) {
+      if (confirm('Eintrag wirklich löschen?')) {
+        await window.electronAPI.deleteHistoryItem(id);
+        history = history.filter(h => h.id !== id);
+        updateHistoryUI();
+      }
+    }
+
+    async function addSnippet() {
+      const name = document.getElementById('snippetName').value.trim();
+      const template = document.getElementById('snippetTemplate').value.trim();
+      
+      if (!name || !template) {
+        alert('Bitte Name und Template ausfüllen');
+        return;
+      }
+      
+      const newSnippet = await window.electronAPI.addSnippet({ name, template });
+      snippets.push(newSnippet);
+      updateSnippetsUI();
+      
+      // Clear form
+      document.getElementById('snippetName').value = '';
+      document.getElementById('snippetTemplate').value = '';
+    }
+
+    async function deleteSnippet(id) {
+      if (confirm('Snippet wirklich löschen?')) {
+        await window.electronAPI.deleteSnippet(id);
+        snippets = snippets.filter(s => s.id !== id);
+        updateSnippetsUI();
+      }
+    }
+
+    async function saveSettings() {
+      const newSettings = {
+        groqApiKey: document.getElementById('groqApiKey').value.trim(),
+        haikuApiKey: document.getElementById('haikuApiKey').value.trim(),
+        shortcut: document.getElementById('shortcutInput').value,
+      };
+      
+      await window.electronAPI.setSettings(newSettings);
+      settings = { ...settings, ...newSettings };
+      
+      // Update hotkey display
+      if (newSettings.shortcut) {
+        hotkeyDisplay.textContent = newSettings.shortcut;
+      }
+      
+      alert('Einstellungen gespeichert!');
+    }
+
+    async function loadOwnerStats() {
+      const ownerStats = await window.electronAPI.getOwnerStats();
+      if (ownerStats) {
+        document.getElementById('ownerTokensGroq').textContent = (ownerStats.tokensGroq || 0).toLocaleString();
+        document.getElementById('ownerTokensAnthropic').textContent = (ownerStats.tokensAnthropic || 0).toLocaleString();
+        document.getElementById('ownerCost').textContent = `$${(ownerStats.estimatedCost || 0).toFixed(4)}`;
+        
+        const errorRate = stats.sessionsCount > 0
+          ? ((stats.errorsCount || 0) / stats.sessionsCount * 100).toFixed(1)
+          : 0;
+        document.getElementById('ownerErrors').textContent = `${errorRate}%`;
+      }
+    }
+
+    // Initialize app
+    init();
+  </script>
+</body>
+</html>

@@ -31,6 +31,13 @@ jobs:
       - name: Build Windows EXE
         working-directory: electron-menubar
         run: npm run build:win
+        env:
+          # Windows Code Signing (optional - funktioniert auch ohne)
+          # Füge diese Secrets in GitHub hinzu wenn du ein Zertifikat hast:
+          # CSC_LINK: Base64-kodierte .pfx Datei
+          # CSC_KEY_PASSWORD: Passwort des Zertifikats
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4

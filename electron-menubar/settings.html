@@ -3,8 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Labertaschi Einstellungen</title>
+  <title>paply Einstellungen</title>
   <style>
+    :root {
+      --bg-primary: #0f1115;
+      --bg-secondary: #16181d;
+      --bg-card: #1d2027;
+      --border: #2a2e38;
+      --text-primary: #f0f2f5;
+      --text-secondary: #8b9bb8;
+      --text-muted: #5c6a82;
+      --accent-green: #4CAF50;
+      --accent-green-light: #8BC34A;
+      --accent-blue: #0a84ff;
+      --success: #4ade80;
+      --error: #f87171;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -12,9 +27,9 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1a1a;
-      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       padding: 24px;
       line-height: 1.5;
     }
@@ -23,13 +38,24 @@
       font-size: 20px;
       font-weight: 600;
       margin-bottom: 20px;
-      color: #fff;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h1::before {
+      content: '';
+      width: 32px;
+      height: 32px;
+      background: var(--accent-green);
+      border-radius: 8px;
     }
 
     .section {
-      background: #242424;
-      border: 1px solid #333;
-      border-radius: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
       padding: 16px;
       margin-bottom: 16px;
     }
@@ -39,10 +65,10 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: #888;
+      color: var(--text-muted);
       margin-bottom: 14px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #333;
+      border-bottom: 1px solid var(--border);
     }
 
     .field {
@@ -62,7 +88,7 @@
 
     label {
       font-size: 13px;
-      color: #ccc;
+      color: var(--text-secondary);
     }
 
     input[type="text"],
@@ -71,10 +97,10 @@
       width: 100%;
       padding: 10px 12px;
       font-size: 14px;
-      background: #1a1a1a;
-      border: 1px solid #444;
-      border-radius: 6px;
-      color: #fff;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
       outline: none;
       transition: border-color 0.2s;
     }
@@ -82,7 +108,7 @@
     input[type="text"]:focus,
     input[type="password"]:focus,
     select:focus {
-      border-color: #0a84ff;
+      border-color: var(--accent-green);
     }
 
     .checkbox-row {
@@ -90,7 +116,7 @@
       align-items: center;
       gap: 10px;
       padding: 10px 0;
-      border-bottom: 1px solid #2a2a2a;
+      border-bottom: 1px solid var(--border);
     }
 
     .checkbox-row:last-of-type {
@@ -105,13 +131,13 @@
     input[type="checkbox"] {
       width: 18px;
       height: 18px;
-      accent-color: #0a84ff;
+      accent-color: var(--accent-green);
       flex-shrink: 0;
     }
 
     .checkbox-label {
       font-size: 14px;
-      color: #e0e0e0;
+      color: var(--text-primary);
       flex: 1;
     }
 
@@ -124,8 +150,8 @@
       height: 16px;
       font-size: 11px;
       font-weight: 600;
-      color: #666;
-      background: #333;
+      color: var(--text-muted);
+      background: var(--border);
       border-radius: 50%;
       cursor: help;
       transition: all 0.2s;
@@ -134,8 +160,8 @@
     }
 
     .info-icon:hover {
-      color: #fff;
-      background: #0a84ff;
+      color: white;
+      background: var(--accent-green);
     }
 
     .info-icon .tooltip {
@@ -143,10 +169,10 @@
       bottom: calc(100% + 8px);
       left: 50%;
       transform: translateX(-50%);
-      background: #333;
-      color: #e0e0e0;
+      background: var(--bg-card);
+      color: var(--text-primary);
       padding: 8px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 12px;
       font-weight: 400;
       white-space: nowrap;
@@ -159,6 +185,7 @@
       z-index: 100;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       line-height: 1.4;
+      border: 1px solid var(--border);
     }
 
     .info-icon .tooltip::after {
@@ -168,7 +195,7 @@
       left: 50%;
       transform: translateX(-50%);
       border: 6px solid transparent;
-      border-top-color: #333;
+      border-top-color: var(--bg-card);
     }
 
     .info-icon:hover .tooltip {
@@ -182,46 +209,46 @@
       justify-content: flex-end;
       margin-top: 20px;
       padding-top: 16px;
-      border-top: 1px solid #333;
+      border-top: 1px solid var(--border);
     }
 
     button {
       padding: 10px 20px;
       font-size: 14px;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       font-weight: 500;
-      transition: background 0.2s;
+      transition: all 0.15s;
     }
 
     .btn-primary {
-      background: #0a84ff;
-      color: #fff;
+      background: var(--accent-green);
+      color: white;
     }
 
     .btn-primary:hover {
-      background: #0070e0;
+      background: #43a047;
     }
 
     .btn-secondary {
-      background: #444;
-      color: #fff;
+      background: var(--border);
+      color: var(--text-primary);
     }
 
     .btn-secondary:hover {
-      background: #555;
+      background: var(--text-muted);
     }
 
     .status {
       font-size: 12px;
-      color: #4ade80;
+      color: var(--success);
       margin-top: 8px;
       text-align: right;
     }
 
     .status.error {
-      color: #f87171;
+      color: var(--error);
     }
   </style>
 </head>

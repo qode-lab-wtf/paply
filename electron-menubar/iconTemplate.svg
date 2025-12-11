@@ -1,17 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
-  <!-- Labertaschi Logo: L-Mikrofon für macOS Menüleiste (Template Image) -->
-  <!-- Das L formt gleichzeitig ein Mikrofon: oberer Teil = Mic-Kopf, Schaft + Fuß = L -->
+  <!-- paply Logo: Papagei für macOS Menüleiste (Template Image) -->
+  <!-- Nur Papagei-Silhouette, ohne Sprechlinien und ohne Text -->
   
-  <!-- Mikrofon-Kopf (oberer Teil des L, abgerundet) -->
-  <rect x="5" y="2" width="6" height="10" rx="3" fill="black"/>
+  <!-- Papagei Kopf (abgerundet) -->
+  <path d="M5 3 
+           C3 3, 2 5, 2 8
+           C2 11, 4 13, 7 13
+           L10 13
+           L10 8
+           C10 5, 8 3, 5 3 Z" 
+        fill="black"/>
   
-  <!-- Mikrofon-Ständer/L-Schaft (vertikale Linie nach unten) -->
-  <rect x="6.5" y="12" width="3" height="5" fill="black"/>
+  <!-- Auge (ausgeschnitten/weiß für Template) -->
+  <circle cx="5.5" cy="7.5" r="1.8" fill="white"/>
+  <circle cx="5.5" cy="7.5" r="0.9" fill="black"/>
   
-  <!-- L-Fuß / Mikrofon-Basis (horizontale Linie) -->
-  <rect x="6.5" y="16" width="10" height="3" rx="1.5" fill="black"/>
+  <!-- Schnabel -->
+  <path d="M10 6
+           L16 8
+           L16 9
+           L10 10.5
+           Z" 
+        fill="black"/>
   
-  <!-- Soundwellen-Akzent (optional, dezent) -->
-  <path d="M14 5.5 Q16 7 14 8.5" stroke="black" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-  <path d="M16 4 Q19 7 16 10" stroke="black" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Schnabel unten -->
+  <path d="M10 10.5
+           L16 9
+           L13 11.5
+           L10 12.5
+           Z" 
+        fill="black"/>
 </svg>

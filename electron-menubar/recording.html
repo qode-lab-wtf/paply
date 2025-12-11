@@ -21,82 +21,252 @@
       justify-content: center;
     }
 
-    .container {
-      background: rgba(30, 30, 30, 0.95);
-      border-radius: 16px;
-      padding: 20px 28px;
-      text-align: center;
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    }
-
-    .indicator {
+    .widget {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 500;
+      gap: 8px;
+      background: rgba(30, 30, 30, 0.92);
+      border-radius: 20px;
+      padding: 10px 14px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
 
-    .dot {
-      width: 12px;
-      height: 12px;
-      background: #ef4444;
-      border-radius: 50%;
+    /* Papagei Icon */
+    .parrot {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+    }
+
+    /* Audio Visualizer */
+    .visualizer {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 24px;
+    }
+
+    .bar {
+      width: 3px;
+      background: linear-gradient(to top, #4CAF50, #8BC34A);
+      border-radius: 2px;
+      transition: height 0.05s ease;
+    }
+
+    /* Processing state */
+    .widget.processing .visualizer {
+      display: none;
+    }
+
+    .widget.processing .parrot {
       animation: pulse 1s ease-in-out infinite;
     }
 
-    .dot.processing {
-      background: #fbbf24;
-      animation: spin 1s linear infinite;
+    .processing-dots {
+      display: none;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .widget.processing .processing-dots {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .processing-dots .dot {
+      width: 4px;
+      height: 4px;
+      background: #60a5fa;
+      border-radius: 50%;
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+
+    .processing-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+    .processing-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    .widget.polishing .processing-dots .dot {
+      background: #a78bfa;
+    }
+
+    /* Done state */
+    .widget.done .parrot {
+      animation: pop 0.3s ease-out;
+    }
+
+    .widget.done .visualizer,
+    .widget.done .processing-dots {
+      display: none;
+    }
+
+    .checkmark {
+      display: none;
+      width: 20px;
+      height: 20px;
+      color: #22c55e;
+    }
+
+    .widget.done .checkmark {
+      display: block;
+      animation: pop 0.3s ease-out;
+    }
+
+    /* Error state */
+    .widget.error .parrot {
+      filter: grayscale(100%) brightness(0.7);
+    }
+
+    .error-icon {
+      display: none;
+      color: #ef4444;
+      font-size: 16px;
+    }
+
+    .widget.error .error-icon {
+      display: block;
+    }
+
+    .widget.error .visualizer,
+    .widget.error .processing-dots {
+      display: none;
     }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.9); }
+      50% { opacity: 0.7; transform: scale(0.95); }
     }
 
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
     }
 
-    .status {
-      margin-top: 8px;
-      font-size: 12px;
-      color: #888;
-    }
-
-    .hidden {
-      display: none;
+    @keyframes pop {
+      0% { transform: scale(0.8); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="indicator">
-      <div class="dot" id="dot"></div>
-      <span id="label">Aufnahme läuft...</span>
+  <div class="widget" id="widget">
+    <!-- Papagei Icon (inline SVG) -->
+    <svg class="parrot" viewBox="0 0 512 512">
+      <defs>
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#A5D6A7"/>
+          <stop offset="100%" style="stop-color:#81C784"/>
+        </linearGradient>
+      </defs>
+      <rect width="512" height="512" rx="110" fill="url(#bgGrad)"/>
+      <g transform="translate(90, 80)">
+        <path d="M40 0 C-10 0, -40 60, -40 140 C-40 220, 20 260, 100 260 L160 260 L160 140 C160 60, 120 0, 40 0 Z" fill="#4CAF50"/>
+        <path d="M40 0 C-10 0, -40 60, -40 140 C-40 180, -20 200, 20 200 L80 200 L80 80 C80 30, 60 0, 40 0 Z" fill="#8BC34A"/>
+        <ellipse cx="50" cy="120" rx="35" ry="35" fill="white"/>
+        <circle cx="50" cy="120" r="18" fill="#1A237E"/>
+        <path d="M160 100 L280 140 L280 160 L160 180 Z" fill="#FDD835"/>
+        <path d="M160 180 L280 160 L220 200 L160 220 Z" fill="#F9A825"/>
+        <path d="M130 160 L160 150 L160 200 L130 190 Z" fill="#1A237E"/>
+      </g>
+    </svg>
+
+    <!-- Audio Bars -->
+    <div class="visualizer" id="visualizer">
+      <div class="bar" id="bar0"></div>
+      <div class="bar" id="bar1"></div>
+      <div class="bar" id="bar2"></div>
+      <div class="bar" id="bar3"></div>
+      <div class="bar" id="bar4"></div>
     </div>
-    <div class="status" id="status">Drücke Hotkey zum Stoppen</div>
+
+    <!-- Processing State -->
+    <div class="processing-dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+
+    <!-- Done State -->
+    <svg class="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+
+    <!-- Error State -->
+    <span class="error-icon">✕</span>
   </div>
 
   <script>
-    const dotEl = document.getElementById('dot');
-    const labelEl = document.getElementById('label');
-    const statusEl = document.getElementById('status');
+    const widgetEl = document.getElementById('widget');
+    const bars = [
+      document.getElementById('bar0'),
+      document.getElementById('bar1'),
+      document.getElementById('bar2'),
+      document.getElementById('bar3'),
+      document.getElementById('bar4'),
+    ];
 
     let mediaRecorder = null;
     let audioChunks = [];
     let beepEnabled = true;
+    let audioContext = null;
+    let analyser = null;
+    let animationId = null;
+
+    // Set widget state
+    function setWidgetState(state) {
+      widgetEl.className = 'widget';
+      if (state !== 'recording') {
+        widgetEl.classList.add(state);
+        stopVisualization();
+      }
+    }
+
+    // Audio visualization
+    function startVisualization(stream) {
+      audioContext = new AudioContext();
+      analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyser.fftSize = 32;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      function draw() {
+        animationId = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+        
+        // Map frequency data to bars
+        for (let i = 0; i < bars.length; i++) {
+          const value = dataArray[i + 2] || 0; // Skip first 2 bins (DC offset)
+          const height = Math.max(4, (value / 255) * 24);
+          bars[i].style.height = height + 'px';
+        }
+      }
+      draw();
+    }
+
+    function stopVisualization() {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      // Reset bars
+      bars.forEach(bar => bar.style.height = '4px');
+    }
 
     // Audio recording
     async function startRecording() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Start visualization
+        startVisualization(stream);
         
         const preferredType = 'audio/webm;codecs=opus';
         const mimeType = MediaRecorder.isTypeSupported(preferredType) ? preferredType : undefined;
@@ -112,6 +282,7 @@
 
         mediaRecorder.onstop = async () => {
           stream.getTracks().forEach(t => t.stop());
+          stopVisualization();
           
           if (audioChunks.length === 0) {
             console.log('No audio recorded');
@@ -129,8 +300,7 @@
         console.log('Recording started');
       } catch (err) {
         console.error('Mic error:', err);
-        labelEl.textContent = 'Mikrofon-Fehler';
-        statusEl.textContent = err.message;
+        setWidgetState('error');
       }
     }
 
@@ -138,26 +308,23 @@
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
         if (beepEnabled) playBeep(400, 0.12);
-        
-        dotEl.classList.add('processing');
-        labelEl.textContent = 'Verarbeite...';
-        statusEl.textContent = '';
+        setWidgetState('processing');
       }
     }
 
     function playBeep(frequency, duration) {
       try {
-        const audioCtx = new AudioContext();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.frequency.value = frequency;
-        oscillator.type = 'sine';
-        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + duration);
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = frequency;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration);
       } catch (e) {
         console.error('Beep failed', e);
       }
@@ -174,9 +341,7 @@
         beepEnabled = true;
       }
       if (beepEnabled) playBeep(800, 0.12);
-      dotEl.classList.remove('processing');
-      labelEl.textContent = 'Aufnahme läuft...';
-      statusEl.textContent = 'Drücke Hotkey zum Stoppen';
+      setWidgetState('recording');
       startRecording();
     });
 
@@ -185,8 +350,23 @@
       stopRecording();
     });
 
-    window.electronAPI.onStatusUpdate((status) => {
-      labelEl.textContent = status;
+    window.electronAPI.onStatusUpdate(({ status, detail }) => {
+      console.log('Status update:', status, detail);
+      
+      switch (status) {
+        case 'transcribing':
+          setWidgetState('processing');
+          break;
+        case 'polishing':
+          setWidgetState('polishing');
+          break;
+        case 'done':
+          setWidgetState('done');
+          break;
+        case 'error':
+          setWidgetState('error');
+          break;
+      }
     });
   </script>
 </body>
