@@ -9,7 +9,6 @@ const {
   nativeImage,
   shell,
   dialog,
-  desktopCapturer,
   screen,
 } = require('electron');
 const path = require('node:path');
@@ -849,223 +848,6 @@ GESPROCHENE BESCHREIBUNG:
 ${text}`;
 }
 
-// ============================================================================
-// SCREEN PARSER (Cursor Integration)
-// ============================================================================
-
-let lastScreenContext = null;
-
-// ============================================================================
-// SCREEN PARSER (Trigger Words)
-// ============================================================================
-
-// Trigger words that suggest screen context would be helpful
-const SCREEN_TRIGGER_WORDS = [
-  // German
-  'refactore', 'refaktoriere', 'ändere', 'ändern', 'fixe', 'fixen', 'repariere',
-  'bug', 'fehler', 'error', 'problem', 'issue',
-  'component', 'komponente', 'funktion', 'function', 'klasse', 'class',
-  'import', 'importiere', 'export', 'exportiere',
-  'style', 'styling', 'css', 'design',
-  'test', 'teste', 'testing',
-  'optimiere', 'verbessere', 'cleanup', 'aufräumen',
-  'lösche', 'entferne', 'remove', 'delete',
-  'füge hinzu', 'add', 'hinzufügen', 'erstelle', 'create',
-  'verschiebe', 'move', 'rename', 'umbenennen',
-  'hier', 'dieser', 'diese', 'dieses', 'aktuell', 'current',
-  'oben', 'unten', 'links', 'rechts', 'zeile', 'line',
-  // English
-  'refactor', 'change', 'fix', 'repair', 'update', 'modify',
-  'implement', 'add', 'remove', 'delete', 'create',
-  'move', 'rename', 'copy', 'paste',
-  'this', 'here', 'current', 'above', 'below'
-];
-
-/**
- * Check if the text contains trigger words that suggest screen context would be helpful
- * @param {string} text - The transcribed text
- * @returns {boolean}
- */
-function shouldCaptureScreen(text) {
-  if (!text) return false;
-  
-  const lowerText = text.toLowerCase();
-  
-  // Check for trigger words
-  const hasTriggerWord = SCREEN_TRIGGER_WORDS.some(word => 
-    lowerText.includes(word.toLowerCase())
-  );
-  
-  // Also trigger if text mentions relative positions or unclear references
-  const hasContextualReference = /\b(hier|this|diese[rs]?|current|aktuell|oben|unten|zeile \d+|line \d+)\b/i.test(text);
-  
-  return hasTriggerWord || hasContextualReference;
-}
-
-// Capture the current screen and extract file/code context
-async function captureScreenContext() {
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: 1920, height: 1080 }
-    });
-    
-    if (sources.length === 0) {
-      console.log('No screen sources found');
-      return null;
-    }
-    
-    // Get the primary screen
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const primarySource = sources[0]; // Usually the main screen
-    
-    const thumbnail = primarySource.thumbnail;
-    const dataUrl = thumbnail.toDataURL();
-    
-    // Extract base64 from data URL
-    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    
-    console.log('Screen captured, analyzing...');
-    
-    // Analyze with Claude Vision
-    const context = await analyzeScreenWithVision(base64);
-    
-    if (context) {
-      lastScreenContext = {
-        timestamp: new Date().toISOString(),
-        context
-      };
-    }
-    
-    return context;
-  } catch (error) {
-    console.error('Screen capture failed:', error);
-    return null;
-  }
-}
-
-// Analyze screenshot with Claude Vision API
-async function analyzeScreenWithVision(base64Image) {
-  const apiKey = getStore().get('haikuApiKey');
-  if (!apiKey) {
-    console.log('No Anthropic API key for vision analysis');
-    return null;
-  }
-  
-  const payload = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    messages: [{
-      role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: 'image/png',
-            data: base64Image
-          }
-        },
-        {
-          type: 'text',
-          text: `Analysiere diesen Screenshot eines Entwickler-Editors (wie Cursor, VS Code).
-
-AUFGABE: Extrahiere alle relevanten Informationen für einen Coding-Prompt.
-
-SUCHE NACH:
-1. Dateinamen in Tabs oder Sidebar (z.B. "App.tsx", "utils.js")
-2. Aktive Datei (der Tab der hervorgehoben ist)
-3. Sichtbarer Code oder Fehlermeldungen
-4. Projekt-Struktur falls sichtbar
-
-AUSGABEFORMAT (JSON):
-{
-  "files": ["@datei1.tsx", "@datei2.js"],
-  "activeFile": "@hauptdatei.tsx",
-  "visibleCode": "kurze Beschreibung was zu sehen ist",
-  "errors": ["Fehler falls sichtbar"],
-  "context": "Zusammenfassung des Kontexts"
-}
-
-WICHTIG:
-- Nur tatsächlich sichtbare Informationen
-- Dateinamen mit @ Prefix für Cursor-Tagging
-- Falls kein Editor sichtbar: {"files": [], "context": "Kein Editor erkannt"}`
-        }
-      ]
-    }]
-  };
-  
-  try {
-    const res = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(payload),
-    });
-    
-    if (!res.ok) {
-      console.error('Vision API error:', res.status);
-      return null;
-    }
-    
-    const json = await res.json();
-    const text = json?.content?.[0]?.text;
-    
-    if (!text) return null;
-    
-    // Try to parse as JSON
-    try {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (match) {
-        return JSON.parse(match[0]);
-      }
-    } catch (e) {
-      console.error('Failed to parse vision response:', e);
-    }
-    
-    return { context: text, files: [] };
-  } catch (error) {
-    console.error('Vision analysis failed:', error);
-    return null;
-  }
-}
-
-// Enhance prompt with screen context
-function enhancePromptWithContext(text, screenContext) {
-  if (!screenContext || !screenContext.files || screenContext.files.length === 0) {
-    return text;
-  }
-  
-  const fileTags = screenContext.files.join(' ');
-  const activeFileHint = screenContext.activeFile 
-    ? `\n\n[Aktive Datei: ${screenContext.activeFile}]` 
-    : '';
-  const contextHint = screenContext.context 
-    ? `\n[Kontext: ${screenContext.context}]` 
-    : '';
-  
-  return `${text}${activeFileHint}${contextHint}\n\nRelevante Dateien: ${fileTags}`;
-}
-
-// Get last screen context (if recent enough - within 5 minutes)
-function getRecentScreenContext() {
-  if (!lastScreenContext) return null;
-  
-  const now = new Date();
-  const contextTime = new Date(lastScreenContext.timestamp);
-  const diffMinutes = (now - contextTime) / (1000 * 60);
-  
-  if (diffMinutes > 5) {
-    return null; // Too old
-  }
-  
-  return lastScreenContext.context;
-}
-
 async function polishText(text, language = 'de', flavor = 'code', customSettings = null) {
   const apiKey = getStore().get('haikuApiKey');
   if (!apiKey) return null;
@@ -1656,30 +1438,6 @@ async function processAudioData(audioData, isRetry = false) {
       return { success: true, empty: true };
     }
 
-    // =========================================================================
-    // SMART SCREEN CAPTURE - Only if trigger words detected
-    // =========================================================================
-    let screenContext = null;
-    const isCodingContext = (s.get('activeProfile') === 'coding') || 
-                           (s.get('customAgents') || []).find(a => a.id === s.get('activeProfile') && a.domain === 'tech');
-    
-    if (isCodingContext && shouldCaptureScreen(transcript)) {
-      console.log('Trigger words detected, capturing screen context...');
-      updateStatus('analyzing', 'Analysiere Bildschirm...');
-      
-      try {
-        screenContext = await captureScreenContext();
-        if (screenContext) {
-          console.log('Screen context captured:', screenContext.files?.length || 0, 'files');
-        }
-      } catch (e) {
-        console.error('Screen capture failed:', e);
-      }
-    } else {
-      // Check for existing recent context
-      screenContext = getRecentScreenContext();
-    }
-
     let polished = null;
     if (enablePolish && haikuKey) {
       updateStatus('polishing');
@@ -1703,18 +1461,8 @@ async function processAudioData(audioData, isRetry = false) {
         }
       }
       
-      // Use transcript as base (Claude will handle file name formatting in polish prompt)
-      let enhancedTranscript = transcript;
-      
-      // Add screen context if available (for coding agents)
-      if (polishFlavor === 'code' || (customSettings && customSettings.domain === 'tech')) {
-        if (screenContext) {
-          enhancedTranscript = enhancePromptWithContext(enhancedTranscript, screenContext);
-          console.log('Enhanced transcript with screen context');
-        }
-      }
-      
-      polished = await polishText(enhancedTranscript, language, polishFlavor, customSettings);
+      // Polish the transcript (Claude handles file name formatting in the prompt)
+      polished = await polishText(transcript, language, polishFlavor, customSettings);
       console.log('Polished:', polished);
     } else {
       // No polishing - use transcript as-is
@@ -1804,52 +1552,6 @@ function registerHotkey() {
     retryLastRecording();
   });
   
-  // Register Screen-Parser hotkey (Cmd/Ctrl+Shift+S)
-  const screenParserKey = isMac ? 'Command+Shift+S' : 'Ctrl+Shift+S';
-  const screenOk = globalShortcut.register(screenParserKey, async () => {
-    console.log('Screen-Parser hotkey pressed');
-    updateStatus('analyzing', 'Analysiere Bildschirm...');
-    
-    // Show recording window for feedback
-    if (recordingWindow && !recordingWindow.isDestroyed()) {
-      recordingWindow.show();
-      recordingWindow.webContents.send('status:update', { 
-        status: 'analyzing', 
-        message: 'Analysiere Bildschirm...' 
-      });
-    }
-    
-    const context = await captureScreenContext();
-    
-    if (context) {
-      console.log('Screen context captured:', context);
-      updateStatus('done', 'Kontext erfasst!');
-      
-      // Notify dashboard
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('screen:context', context);
-      }
-      if (recordingWindow && !recordingWindow.isDestroyed()) {
-        recordingWindow.webContents.send('screen:context', context);
-      }
-    } else {
-      updateStatus('error', 'Analyse fehlgeschlagen');
-    }
-    
-    // Hide after delay
-    setTimeout(() => {
-      if (recordingWindow && !recordingWindow.isDestroyed() && !isRecording) {
-        recordingWindow.hide();
-      }
-    }, 1500);
-  });
-  
-  if (screenOk) {
-    console.log('Screen-Parser hotkey registered:', screenParserKey);
-  } else {
-    console.error('Screen-Parser hotkey registration failed:', screenParserKey);
-  }
-
   // Register Agent-Switch hotkeys (Cmd+1, Cmd+2, Cmd+3, ...)
   registerAgentHotkeys();
 }
@@ -2245,15 +1947,6 @@ function setupIpcHandlers() {
       return agents[index];
     }
     return null;
-  });
-  
-  // Screen Parser
-  ipcMain.handle('screen:capture', async () => {
-    return await captureScreenContext();
-  });
-  
-  ipcMain.handle('screen:getContext', () => {
-    return getRecentScreenContext();
   });
   
   // Snippets

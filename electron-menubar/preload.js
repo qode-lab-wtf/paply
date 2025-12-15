@@ -48,11 +48,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reorderAgents: (orderedIds) => ipcRenderer.invoke('agents:reorder', orderedIds),
   updateAgentHotkey: (agentId, hotkey) => ipcRenderer.invoke('agents:updateHotkey', agentId, hotkey),
   
-  // Screen Parser (Cursor Integration)
-  captureScreen: () => ipcRenderer.invoke('screen:capture'),
-  getScreenContext: () => ipcRenderer.invoke('screen:getContext'),
-  onScreenContext: (cb) => ipcRenderer.on('screen:context', (_e, data) => cb(data)),
-
   // Snippets
   getSnippets: () => ipcRenderer.invoke('snippets:get'),
   addSnippet: (snippet) => ipcRenderer.invoke('snippets:add', snippet),
