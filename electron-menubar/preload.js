@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRecordingStart: (cb) => ipcRenderer.on('recording:start', cb),
   onRecordingStop: (cb) => ipcRenderer.on('recording:stop', cb),
   onStatusUpdate: (cb) => ipcRenderer.on('status:update', (_e, status) => cb(status)),
+  onErrorRetry: (cb) => ipcRenderer.on('error:retry', (_e, data) => cb(data)),
   sendAudio: (audioData) => ipcRenderer.send('recording:audio', audioData),
 
   // Transcription control (from dashboard)
@@ -33,10 +34,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkOwnerMode: () => ipcRenderer.invoke('owner:check'),
   toggleOwnerMode: (password) => ipcRenderer.invoke('owner:toggle', password),
 
-  // Profiles
+  // Profiles / Agents
   getProfiles: () => ipcRenderer.invoke('profiles:get'),
   setActiveProfile: (profileId) => ipcRenderer.invoke('profiles:setActive', profileId),
   updateProfile: (profileId, updates) => ipcRenderer.invoke('profiles:update', profileId, updates),
+  onAgentSwitched: (cb) => ipcRenderer.on('agent:switched', (_e, data) => cb(data)),
+  
+  // Custom Agents CRUD
+  getCustomAgents: () => ipcRenderer.invoke('agents:getAll'),
+  createAgent: (agent) => ipcRenderer.invoke('agents:create', agent),
+  updateAgent: (agentId, updates) => ipcRenderer.invoke('agents:update', agentId, updates),
+  deleteAgent: (agentId) => ipcRenderer.invoke('agents:delete', agentId),
+  reorderAgents: (orderedIds) => ipcRenderer.invoke('agents:reorder', orderedIds),
+  updateAgentHotkey: (agentId, hotkey) => ipcRenderer.invoke('agents:updateHotkey', agentId, hotkey),
+  
+  // Screen Parser (Cursor Integration)
+  captureScreen: () => ipcRenderer.invoke('screen:capture'),
+  getScreenContext: () => ipcRenderer.invoke('screen:getContext'),
+  onScreenContext: (cb) => ipcRenderer.on('screen:context', (_e, data) => cb(data)),
 
   // Snippets
   getSnippets: () => ipcRenderer.invoke('snippets:get'),

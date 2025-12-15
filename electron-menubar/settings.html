@@ -290,6 +290,12 @@
       <span class="info-icon">i<span class="tooltip">Wenn aktiv, wird der Text automatisch ins vorherige Fenster eingefügt. Wenn deaktiviert, wird er nur in die Zwischenablage kopiert.</span></span>
     </div>
 
+    <div class="checkbox-row" id="copyToClipboardRow">
+      <input type="checkbox" id="copyToClipboard">
+      <label for="copyToClipboard" class="checkbox-label">In Zwischenablage kopieren</label>
+      <span class="info-icon">i<span class="tooltip">Kopiert den Text in die Zwischenablage. Nur verfügbar wenn Auto-Paste deaktiviert ist, da Auto-Paste intern die Zwischenablage nutzt.</span></span>
+    </div>
+
     <div class="checkbox-row">
       <input type="checkbox" id="beepEnabled">
       <label for="beepEnabled" class="checkbox-label">Piep-Sound abspielen</label>
@@ -338,6 +344,7 @@
     const haikuKeyInput = document.getElementById('haikuKey');
     const enablePolishCheck = document.getElementById('enablePolish');
     const autopasteCheck = document.getElementById('autopaste');
+    const copyToClipboardCheck = document.getElementById('copyToClipboard');
     const beepEnabledCheck = document.getElementById('beepEnabled');
     const autoStartCheck = document.getElementById('autoStart');
     const languageSelect = document.getElementById('language');
@@ -348,6 +355,23 @@
 
     let originalSettings = {};
     let platformInfo = { isMac: true, isWin: false };
+
+    // Update copyToClipboard checkbox state based on autopaste
+    function updateCopyToClipboardState() {
+      const isAutopasteActive = autopasteCheck.checked;
+      const copyRow = document.getElementById('copyToClipboardRow');
+      
+      if (isAutopasteActive) {
+        copyToClipboardCheck.disabled = true;
+        copyToClipboardCheck.checked = false;
+        copyRow.style.opacity = '0.5';
+        copyRow.style.pointerEvents = 'none';
+      } else {
+        copyToClipboardCheck.disabled = false;
+        copyRow.style.opacity = '1';
+        copyRow.style.pointerEvents = 'auto';
+      }
+    }
 
     // Load settings
     async function loadSettings() {
@@ -365,11 +389,20 @@
       haikuKeyInput.value = settings.haikuApiKey || '';
       enablePolishCheck.checked = settings.enablePolish || false;
       autopasteCheck.checked = settings.autopaste !== false;
+      copyToClipboardCheck.checked = settings.copyToClipboard || false;
       beepEnabledCheck.checked = settings.beepEnabled !== false;
       autoStartCheck.checked = settings.autoStart || false;
       languageSelect.value = settings.language || 'de';
       shortcutInput.value = settings.shortcut || defaultShortcut;
+      
+      // Update copyToClipboard state based on autopaste
+      updateCopyToClipboardState();
     }
+
+    // Auto-Paste change listener
+    autopasteCheck.addEventListener('change', () => {
+      updateCopyToClipboardState();
+    });
 
     // Shortcut capture
     let isCapturing = false;
@@ -419,6 +452,7 @@
         haikuApiKey: haikuKeyInput.value.trim(),
         enablePolish: enablePolishCheck.checked,
         autopaste: autopasteCheck.checked,
+        copyToClipboard: copyToClipboardCheck.checked,
         beepEnabled: beepEnabledCheck.checked,
         autoStart: autoStartCheck.checked,
         language: languageSelect.value,

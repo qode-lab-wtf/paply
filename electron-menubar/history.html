@@ -160,6 +160,27 @@
       font-size: 13px;
       color: var(--text-muted);
     }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s;
+      margin-bottom: 16px;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-green);
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
   </style>
 </head>
 <body>
@@ -170,6 +191,8 @@
     </div>
     <button class="btn btn-danger" id="clearBtn">Alle löschen</button>
   </div>
+
+  <input type="text" class="search-input" id="searchInput" placeholder="Suche in History (durchsucht Rohtext und polierter Text)...">
 
   <div id="list" class="list"></div>
   <div id="empty" class="empty" style="display: none;">
@@ -185,24 +208,44 @@
     const countEl = document.getElementById('count');
     const clearBtn = document.getElementById('clearBtn');
     const copiedEl = document.getElementById('copied');
+    const searchInput = document.getElementById('searchInput');
+
+    let allHistory = [];
 
     async function loadHistory() {
-      const history = await window.electronAPI.getHistory();
+      allHistory = await window.electronAPI.getHistory();
+      renderHistory(allHistory);
+    }
+
+    function renderHistory(history) {
+      const searchTerm = searchInput.value.toLowerCase().trim();
       
-      if (history.length === 0) {
+      // Filter by search term if present
+      let filtered = history;
+      if (searchTerm) {
+        filtered = history.filter(item => {
+          const transcript = (item.transcript || '').toLowerCase();
+          const polished = (item.polished || '').toLowerCase();
+          return transcript.includes(searchTerm) || polished.includes(searchTerm);
+        });
+      }
+      
+      if (filtered.length === 0) {
         listEl.style.display = 'none';
         emptyEl.style.display = 'block';
-        clearBtn.style.display = 'none';
-        countEl.textContent = '';
+        clearBtn.style.display = history.length > 0 ? 'block' : 'none';
+        countEl.textContent = searchTerm ? `0 von ${history.length} Einträge` : '';
         return;
       }
 
       listEl.style.display = 'flex';
       emptyEl.style.display = 'none';
       clearBtn.style.display = 'block';
-      countEl.textContent = `${history.length} Einträge`;
+      countEl.textContent = searchTerm 
+        ? `${filtered.length} von ${history.length} Einträge` 
+        : `${history.length} Einträge`;
 
-      listEl.innerHTML = history.map(item => {
+      listEl.innerHTML = filtered.map(item => {
         const date = new Date(item.timestamp).toLocaleString('de-DE', {
           day: '2-digit',
           month: '2-digit',
@@ -259,6 +302,10 @@
         await window.electronAPI.clearHistory();
         loadHistory();
       }
+    });
+
+    searchInput.addEventListener('input', () => {
+      renderHistory(allHistory);
     });
 
     loadHistory();

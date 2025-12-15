@@ -9,6 +9,8 @@ const {
   nativeImage,
   shell,
   dialog,
+  desktopCapturer,
+  screen,
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -47,15 +49,18 @@ function getStore() {
         language: 'de',
         autopaste: true,
         beepEnabled: true,
+        copyToClipboard: false,
         hideDock: false,
         history: [],
-        // Profile/Rollen
+        // Profile/Rollen (Standard-Agenten)
         activeProfile: 'coding',
         profiles: {
           coding: { name: 'Coding', language: 'de', polishFlavor: 'code', autopaste: true },
           meeting: { name: 'Meeting', language: 'de', polishFlavor: 'meeting', autopaste: false },
           dictation: { name: 'Diktat', language: 'de', polishFlavor: 'plain', autopaste: true },
         },
+        // Custom Agents (vom Nutzer erstellt)
+        customAgents: [],
         // Stats (öffentlich)
         stats: {
           wordsTotal: 0,
@@ -65,6 +70,8 @@ function getStore() {
           minutesToday: 0,
           minutesWeek: 0,
           sessionsCount: 0,
+          sessionsToday: 0,
+          sessionsWeek: 0,
           errorsCount: 0,
           lastResetDay: null,
           lastResetWeek: null,
@@ -185,12 +192,14 @@ function resetStatsIfNeeded() {
   if (stats.lastResetDay !== today) {
     stats.wordsToday = 0;
     stats.minutesToday = 0;
+    stats.sessionsToday = 0;
     stats.lastResetDay = today;
   }
   
   if (stats.lastResetWeek !== weekStart) {
     stats.wordsWeek = 0;
     stats.minutesWeek = 0;
+    stats.sessionsWeek = 0;
     stats.lastResetWeek = weekStart;
   }
   
@@ -220,6 +229,8 @@ function updateStats(wordCount, durationMinutes = 0, isError = false) {
     stats.minutesToday = (stats.minutesToday || 0) + durationMinutes;
     stats.minutesWeek = (stats.minutesWeek || 0) + durationMinutes;
     stats.sessionsCount = (stats.sessionsCount || 0) + 1;
+    stats.sessionsToday = (stats.sessionsToday || 0) + 1;
+    stats.sessionsWeek = (stats.sessionsWeek || 0) + 1;
   }
   
   s.set('stats', stats);
@@ -245,7 +256,26 @@ function updateStats(wordCount, durationMinutes = 0, isError = false) {
 // ============================================================================
 // HISTORY MANAGEMENT
 // ============================================================================
-const MAX_HISTORY = 100;
+const MAX_HISTORY_DAYS = 90;
+
+function cleanupOldHistory() {
+  const s = getStore();
+  const history = s.get('history') || [];
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - MAX_HISTORY_DAYS);
+  
+  const filtered = history.filter(item => {
+    const itemDate = new Date(item.timestamp);
+    return itemDate >= cutoffDate;
+  });
+  
+  if (filtered.length !== history.length) {
+    s.set('history', filtered);
+    console.log(`Cleaned up ${history.length - filtered.length} old history entries`);
+  }
+  
+  return filtered;
+}
 
 function addToHistory(entry) {
   const s = getStore();
@@ -269,10 +299,16 @@ function addToHistory(entry) {
   };
   
   history.unshift(newEntry);
-  if (history.length > MAX_HISTORY) {
-    history.length = MAX_HISTORY;
-  }
-  s.set('history', history);
+  
+  // Cleanup entries older than 90 days
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - MAX_HISTORY_DAYS);
+  const filtered = history.filter(item => {
+    const itemDate = new Date(item.timestamp);
+    return itemDate >= cutoffDate;
+  });
+  
+  s.set('history', filtered);
   
   // Update stats
   updateStats(wordCount, entry.durationMinutes || 0);
@@ -288,6 +324,8 @@ function addToHistory(entry) {
 }
 
 function getHistory() {
+  // Cleanup old entries when retrieving history
+  cleanupOldHistory();
   return getStore().get('history') || [];
 }
 
@@ -341,9 +379,12 @@ async function transcribeAudio(audioBuffer, language = 'de') {
     throw new Error('Groq API Key nicht konfiguriert');
   }
 
+  // Verwende File statt Blob für bessere Kompatibilität in Node.js/Electron
+  // File enthält den Dateinamen direkt, was von der Groq API erwartet wird
+  const audioFile = new File([audioBuffer], 'audio.webm', { type: 'audio/webm' });
+  
   const formData = new FormData();
-  const blob = new Blob([audioBuffer], { type: 'audio/webm' });
-  formData.append('file', blob, 'audio.webm');
+  formData.append('file', audioFile);
   formData.append('model', 'whisper-large-v3-turbo');
   formData.append('language', language);
   formData.append('response_format', 'json');
@@ -363,7 +404,7 @@ async function transcribeAudio(audioBuffer, language = 'de') {
     if (!res.ok) {
       const errText = await res.text();
       console.error('Groq error:', res.status, errText);
-      throw new Error(`Transkription fehlgeschlagen (${res.status})`);
+      throw new Error(`Transkription fehlgeschlagen (${res.status}): ${errText}`);
     }
 
     const json = await res.json();
@@ -579,7 +620,12 @@ function compareVersions(a, b) {
   return 0;
 }
 
-function getPolishPrompt(text, language, flavor) {
+function getPolishPrompt(text, language, flavor, customSettings = null) {
+  // Handle custom agent settings
+  if (flavor === 'custom' && customSettings) {
+    return getCustomAgentPrompt(text, language, customSettings);
+  }
+  
   const baseRules = `1. ENTFERNE: Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher
 2. KORRIGIERE: Grammatik, Satzbau, Interpunktion - aber behalte den Inhalt exakt bei`;
 
@@ -613,11 +659,433 @@ TEXT:
 ${text}`;
 }
 
-async function polishText(text, language = 'de', flavor = 'code') {
+// Generate prompt for custom agents with their specific settings
+function getCustomAgentPrompt(text, language, settings) {
+  // Special handling for Prompt Generator mode
+  if (settings.isPromptGenerator) {
+    return getPromptGeneratorPrompt(text, language, settings);
+  }
+  
+  const toneDescriptions = {
+    technical: 'technisch und präzise',
+    formal: 'formell und professionell',
+    casual: 'locker und umgangssprachlich',
+    creative: 'kreativ und ausdrucksstark'
+  };
+  
+  const formatDescriptions = {
+    prose: 'als Fließtext',
+    bullets: 'als Stichpunkte',
+    markdown: 'mit Markdown-Formatierung',
+    code: 'als Code-Kommentare oder technische Dokumentation'
+  };
+  
+  const lengthDescriptions = {
+    short: 'kurz und knapp',
+    medium: 'ausgewogen',
+    long: 'ausführlich und detailliert'
+  };
+
+  const tone = toneDescriptions[settings.tone] || 'neutral';
+  const format = formatDescriptions[settings.format] || 'als Fließtext';
+  const length = lengthDescriptions[settings.length] || 'ausgewogen';
+  const creativity = settings.creativity || 50;
+  const outputLang = settings.outputLang || 'same';
+  const domain = settings.domain || 'general';
+  const fillerWords = settings.fillerWords !== false; // Default: remove filler words
+  
+  let domainHint = '';
+  if (domain && domain !== 'general') {
+    const domainHints = {
+      tech: 'Beachte Tech-Begriffe (APIs, Frameworks, Programmiersprachen)',
+      business: 'Beachte Business-Terminologie und professionelle Ausdrucksweise',
+      creative: 'Beachte kreative Freiheiten und expressive Sprache',
+      academic: 'Beachte akademische Terminologie und wissenschaftlichen Stil'
+    };
+    domainHint = domainHints[domain] || '';
+  }
+  
+  let outputLangHint = '';
+  if (outputLang === 'en') {
+    outputLangHint = '\n\nWICHTIG: Übersetze den finalen Text ins Englische!';
+  } else if (outputLang === 'de') {
+    outputLangHint = '\n\nWICHTIG: Übersetze den finalen Text ins Deutsche!';
+  }
+  
+  const creativityHint = creativity > 70 
+    ? 'Sei kreativ: Verbessere Formulierungen, füge passende Ausdrücke hinzu.' 
+    : creativity < 30 
+    ? 'Sei minimal: Nur offensichtliche Fehler korrigieren, Originaltext maximal beibehalten.' 
+    : 'Sei ausgewogen: Korrigiere Fehler, behalte aber den Originalstil bei.';
+
+  return `Du bist ein Transkriptions-Polierer für "${settings.name || 'Custom Agent'}".
+
+EINGABESPRACHE: ${language}
+TON: ${tone}
+FORMAT: ${format}
+LÄNGE: ${length}
+KREATIVITÄT: ${creativity}% - ${creativityHint}
+${domainHint}
+
+REGELN:
+${fillerWords ? '1. ENTFERNE: Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher' : '1. BEHALTE: Natürliche Sprachfluss, auch mit Füllwörtern'}
+2. KORRIGIERE: Grammatik, Satzbau, Interpunktion
+3. FORMATIERE: ${format}
+4. ANPASSEN: Stil an "${tone}" anpassen
+
+WICHTIG:
+- Gib NUR den korrigierten Text zurück
+- KEINE Kommentare, KEINE Erklärungen
+- KEINE Interpretation was der User "meinen könnte"${outputLangHint}
+
+TEXT:
+${text}`;
+}
+
+// Special prompt for Prompt Generator mode (for Midjourney, DALL-E, etc.)
+function getPromptGeneratorPrompt(text, language, settings) {
+  const creativity = settings.creativity || 80;
+  const outputLang = settings.outputLang || 'en';
+  
+  const creativityLevel = creativity > 70 
+    ? 'sehr detailliert und kreativ ausschmücken'
+    : creativity > 40 
+    ? 'moderat erweitern und verbessern'
+    : 'eng am Original bleiben, nur formattieren';
+
+  return `Du bist ein Prompt-Generator für KI-Bildgenerierung (Midjourney, DALL-E, Stable Diffusion).
+
+Deine Aufgabe: Wandle die gesprochene Beschreibung in einen professionellen, detaillierten Prompt um.
+
+EINGABESPRACHE: ${language}
+AUSGABESPRACHE: ${outputLang === 'en' ? 'Englisch' : outputLang === 'de' ? 'Deutsch' : 'wie Eingabe'}
+KREATIVITÄT: ${creativity}% - ${creativityLevel}
+
+PROMPT-STRUKTUR (folge dieser Reihenfolge):
+1. Hauptmotiv/Subjekt - Was ist das zentrale Element?
+2. Stil/Medium - Fotorealistisch, Illustration, 3D, Ölgemälde, etc.
+3. Atmosphäre/Stimmung - Licht, Farben, Emotionen
+4. Details - Texturen, Materialien, Umgebung
+5. Technische Parameter - Kamerawinkel, Brennweite, Rendering-Qualität
+
+WICHTIGE BEGRIFFE (nutze wenn passend):
+- Qualität: masterpiece, highly detailed, 8k, ultra HD, professional
+- Licht: golden hour, soft lighting, dramatic shadows, volumetric lighting
+- Stil: cinematic, ethereal, minimalist, surreal, hyperrealistic
+- Kamera: wide angle, close-up, bird's eye view, shallow depth of field
+
+BEISPIEL-INPUT: "Ich möchte einen Astronauten der auf einem fremden Planeten steht und in die Ferne schaut"
+BEISPIEL-OUTPUT: "Lone astronaut standing on alien planet surface, gazing at distant nebula, sci-fi concept art, volumetric lighting, cosmic atmosphere, detailed space suit with reflective visor, purple and orange alien landscape, dramatic composition, cinematic wide shot, 8k, highly detailed, masterpiece"
+
+REGELN:
+1. Entferne ALLE Füllwörter und Unsicherheiten
+2. Extrahiere die Kernidee und erweitere sie professionell
+3. Nutze passende technische Begriffe
+4. Halte den Prompt zwischen 50-150 Wörtern
+5. ${outputLang === 'en' ? 'Ausgabe MUSS auf Englisch sein' : outputLang === 'de' ? 'Ausgabe auf Deutsch' : 'Behalte die Sprache bei'}
+
+WICHTIG:
+- Gib NUR den fertigen Prompt zurück
+- KEINE Erklärungen, KEINE Kommentare
+- KEIN "Here is your prompt:" oder ähnliches
+
+GESPROCHENE BESCHREIBUNG:
+${text}`;
+}
+
+// ============================================================================
+// SCREEN PARSER (Cursor Integration)
+// ============================================================================
+
+let lastScreenContext = null;
+
+// ============================================================================
+// SMART FILE TAGGING (Text-based)
+// ============================================================================
+
+// Common file extensions to detect
+const FILE_EXTENSIONS = [
+  'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
+  'html', 'css', 'scss', 'sass', 'less',
+  'json', 'yaml', 'yml', 'toml', 'xml',
+  'md', 'mdx', 'txt', 'csv',
+  'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift',
+  'vue', 'svelte', 'astro',
+  'sql', 'graphql', 'gql',
+  'sh', 'bash', 'zsh', 'ps1',
+  'dockerfile', 'env', 'gitignore',
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico'
+];
+
+// Trigger words that suggest screen context would be helpful
+const SCREEN_TRIGGER_WORDS = [
+  // German
+  'refactore', 'refaktoriere', 'ändere', 'ändern', 'fixe', 'fixen', 'repariere',
+  'bug', 'fehler', 'error', 'problem', 'issue',
+  'component', 'komponente', 'funktion', 'function', 'klasse', 'class',
+  'import', 'importiere', 'export', 'exportiere',
+  'style', 'styling', 'css', 'design',
+  'test', 'teste', 'testing',
+  'optimiere', 'verbessere', 'cleanup', 'aufräumen',
+  'lösche', 'entferne', 'remove', 'delete',
+  'füge hinzu', 'add', 'hinzufügen', 'erstelle', 'create',
+  'verschiebe', 'move', 'rename', 'umbenennen',
+  'hier', 'dieser', 'diese', 'dieses', 'aktuell', 'current',
+  'oben', 'unten', 'links', 'rechts', 'zeile', 'line',
+  // English
+  'refactor', 'change', 'fix', 'repair', 'update', 'modify',
+  'implement', 'add', 'remove', 'delete', 'create',
+  'move', 'rename', 'copy', 'paste',
+  'this', 'here', 'current', 'above', 'below'
+];
+
+/**
+ * Extract file names from transcribed text and add @ tags
+ * @param {string} text - The transcribed text
+ * @returns {object} { taggedText, foundFiles }
+ */
+function extractFileTagsFromText(text) {
+  if (!text) return { taggedText: text, foundFiles: [] };
+  
+  const foundFiles = [];
+  let taggedText = text;
+  
+  // Build regex pattern for file extensions
+  const extPattern = FILE_EXTENSIONS.join('|');
+  
+  // Match patterns like: filename.ext, Filename.ext, file-name.ext, file_name.ext
+  // Also match paths like: src/components/Button.tsx, ./utils/helper.js
+  const fileRegex = new RegExp(
+    `(?:^|\\s|["'\`(\\[{])` + // Start or whitespace or opening chars
+    `((?:[a-zA-Z0-9_\\-./]+/)?` + // Optional path prefix
+    `[a-zA-Z0-9_\\-]+\\.` + // Filename
+    `(?:${extPattern}))` + // Extension
+    `(?=[\\s.,;:!?"'\`()\\]}]|$)`, // End or punctuation
+    'gi'
+  );
+  
+  let match;
+  const matches = [];
+  
+  while ((match = fileRegex.exec(text)) !== null) {
+    const fileName = match[1];
+    if (fileName && !foundFiles.includes(fileName)) {
+      foundFiles.push(fileName);
+      matches.push({ fileName, index: match.index, fullMatch: match[0] });
+    }
+  }
+  
+  // Replace file names with @-tagged versions (from end to start to preserve indices)
+  matches.reverse().forEach(({ fileName, fullMatch }) => {
+    // Only tag if not already tagged
+    if (!taggedText.includes(`@${fileName}`)) {
+      taggedText = taggedText.replace(
+        new RegExp(`(?<!@)\\b${escapeRegex(fileName)}\\b`, 'g'),
+        `@${fileName}`
+      );
+    }
+  });
+  
+  return { taggedText, foundFiles };
+}
+
+/**
+ * Escape special regex characters
+ */
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Check if the text contains trigger words that suggest screen context would be helpful
+ * @param {string} text - The transcribed text
+ * @returns {boolean}
+ */
+function shouldCaptureScreen(text) {
+  if (!text) return false;
+  
+  const lowerText = text.toLowerCase();
+  
+  // Check for trigger words
+  const hasTriggerWord = SCREEN_TRIGGER_WORDS.some(word => 
+    lowerText.includes(word.toLowerCase())
+  );
+  
+  // Also trigger if text mentions relative positions or unclear references
+  const hasContextualReference = /\b(hier|this|diese[rs]?|current|aktuell|oben|unten|zeile \d+|line \d+)\b/i.test(text);
+  
+  return hasTriggerWord || hasContextualReference;
+}
+
+// Capture the current screen and extract file/code context
+async function captureScreenContext() {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1920, height: 1080 }
+    });
+    
+    if (sources.length === 0) {
+      console.log('No screen sources found');
+      return null;
+    }
+    
+    // Get the primary screen
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const primarySource = sources[0]; // Usually the main screen
+    
+    const thumbnail = primarySource.thumbnail;
+    const dataUrl = thumbnail.toDataURL();
+    
+    // Extract base64 from data URL
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    
+    console.log('Screen captured, analyzing...');
+    
+    // Analyze with Claude Vision
+    const context = await analyzeScreenWithVision(base64);
+    
+    if (context) {
+      lastScreenContext = {
+        timestamp: new Date().toISOString(),
+        context
+      };
+    }
+    
+    return context;
+  } catch (error) {
+    console.error('Screen capture failed:', error);
+    return null;
+  }
+}
+
+// Analyze screenshot with Claude Vision API
+async function analyzeScreenWithVision(base64Image) {
+  const apiKey = getStore().get('haikuApiKey');
+  if (!apiKey) {
+    console.log('No Anthropic API key for vision analysis');
+    return null;
+  }
+  
+  const payload = {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/png',
+            data: base64Image
+          }
+        },
+        {
+          type: 'text',
+          text: `Analysiere diesen Screenshot eines Entwickler-Editors (wie Cursor, VS Code).
+
+AUFGABE: Extrahiere alle relevanten Informationen für einen Coding-Prompt.
+
+SUCHE NACH:
+1. Dateinamen in Tabs oder Sidebar (z.B. "App.tsx", "utils.js")
+2. Aktive Datei (der Tab der hervorgehoben ist)
+3. Sichtbarer Code oder Fehlermeldungen
+4. Projekt-Struktur falls sichtbar
+
+AUSGABEFORMAT (JSON):
+{
+  "files": ["@datei1.tsx", "@datei2.js"],
+  "activeFile": "@hauptdatei.tsx",
+  "visibleCode": "kurze Beschreibung was zu sehen ist",
+  "errors": ["Fehler falls sichtbar"],
+  "context": "Zusammenfassung des Kontexts"
+}
+
+WICHTIG:
+- Nur tatsächlich sichtbare Informationen
+- Dateinamen mit @ Prefix für Cursor-Tagging
+- Falls kein Editor sichtbar: {"files": [], "context": "Kein Editor erkannt"}`
+        }
+      ]
+    }]
+  };
+  
+  try {
+    const res = await fetch(ANTHROPIC_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(payload),
+    });
+    
+    if (!res.ok) {
+      console.error('Vision API error:', res.status);
+      return null;
+    }
+    
+    const json = await res.json();
+    const text = json?.content?.[0]?.text;
+    
+    if (!text) return null;
+    
+    // Try to parse as JSON
+    try {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+    } catch (e) {
+      console.error('Failed to parse vision response:', e);
+    }
+    
+    return { context: text, files: [] };
+  } catch (error) {
+    console.error('Vision analysis failed:', error);
+    return null;
+  }
+}
+
+// Enhance prompt with screen context
+function enhancePromptWithContext(text, screenContext) {
+  if (!screenContext || !screenContext.files || screenContext.files.length === 0) {
+    return text;
+  }
+  
+  const fileTags = screenContext.files.join(' ');
+  const activeFileHint = screenContext.activeFile 
+    ? `\n\n[Aktive Datei: ${screenContext.activeFile}]` 
+    : '';
+  const contextHint = screenContext.context 
+    ? `\n[Kontext: ${screenContext.context}]` 
+    : '';
+  
+  return `${text}${activeFileHint}${contextHint}\n\nRelevante Dateien: ${fileTags}`;
+}
+
+// Get last screen context (if recent enough - within 5 minutes)
+function getRecentScreenContext() {
+  if (!lastScreenContext) return null;
+  
+  const now = new Date();
+  const contextTime = new Date(lastScreenContext.timestamp);
+  const diffMinutes = (now - contextTime) / (1000 * 60);
+  
+  if (diffMinutes > 5) {
+    return null; // Too old
+  }
+  
+  return lastScreenContext.context;
+}
+
+async function polishText(text, language = 'de', flavor = 'code', customSettings = null) {
   const apiKey = getStore().get('haikuApiKey');
   if (!apiKey) return null;
 
-  const prompt = getPolishPrompt(text, language, flavor);
+  const prompt = getPolishPrompt(text, language, flavor, customSettings);
 
   const payload = {
     model: 'claude-haiku-4-5-20251001',
@@ -948,11 +1416,12 @@ function savePreviousApp() {
   });
 }
 
-// Simple placeholder "..." - animation happens in the widget, not in text
-const PLACEHOLDER = '...';
+// Statischer Lade-Indikator (Animation ist zu instabil für externe Apps)
+// ⏳ = Sanduhr, signalisiert "lädt" ohne die Probleme einer Animation
+const LOADING_INDICATOR = '⏳';
 
 function insertPlaceholder() {
-  clipboard.writeText(PLACEHOLDER);
+  clipboard.writeText(LOADING_INDICATOR);
 
   if (isMac) {
     const script = previousAppName
@@ -986,7 +1455,7 @@ function insertPlaceholder() {
 }
 
 function replacePlaceholderWithText(text) {
-  // Delete "..." (3 backspaces) then paste text
+  // 1 Zeichen löschen (⏳), dann Text einfügen
   if (isMac) {
     const pasteCommand = text ? `keystroke "v" using command down` : '';
     const script = previousAppName
@@ -994,15 +1463,11 @@ function replacePlaceholderWithText(text) {
          delay 0.2
          tell application "System Events"
            key code 51
-           key code 51
-           key code 51
            delay 0.05
            ${pasteCommand}
          end tell`
       : `delay 0.15
          tell application "System Events"
-           key code 51
-           key code 51
            key code 51
            delay 0.05
            ${pasteCommand}
@@ -1020,7 +1485,7 @@ function replacePlaceholderWithText(text) {
       const psScript = `
 Add-Type -AssemblyName System.Windows.Forms
 Start-Sleep -Milliseconds 50
-[System.Windows.Forms.SendKeys]::SendWait("{BACKSPACE}{BACKSPACE}{BACKSPACE}")
+[System.Windows.Forms.SendKeys]::SendWait("{BACKSPACE}")
 ${pasteCommand}
       `.trim();
       const tempFile = path.join(app.getPath('temp'), 'paply-paste.ps1');
@@ -1094,10 +1559,254 @@ function startTranscription() {
 }
 
 // ============================================================================
+// AUDIO BACKUP SYSTEM
+// ============================================================================
+let lastAudioBackup = null;
+let backupTimestamp = null;
+const BACKUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function saveAudioBackup(audioData) {
+  // Store as proper Buffer to avoid serialization issues
+  if (Buffer.isBuffer(audioData)) {
+    lastAudioBackup = audioData;
+  } else if (audioData instanceof Uint8Array || audioData instanceof ArrayBuffer) {
+    lastAudioBackup = Buffer.from(audioData);
+  } else if (typeof audioData === 'object' && audioData.type === 'Buffer') {
+    lastAudioBackup = Buffer.from(audioData.data);
+  } else {
+    lastAudioBackup = Buffer.from(audioData);
+  }
+  backupTimestamp = Date.now();
+  console.log('Audio backup saved:', lastAudioBackup.length, 'bytes');
+}
+
+function getAudioBackup() {
+  if (!lastAudioBackup || !backupTimestamp) return null;
+  
+  // Check if backup is expired (24 hours)
+  if (Date.now() - backupTimestamp > BACKUP_EXPIRY_MS) {
+    clearAudioBackup();
+    return null;
+  }
+  
+  return lastAudioBackup;
+}
+
+function clearAudioBackup() {
+  lastAudioBackup = null;
+  backupTimestamp = null;
+  console.log('Audio backup cleared');
+}
+
+async function retryLastRecording() {
+  const backup = getAudioBackup();
+  if (!backup) {
+    console.log('No backup available for retry');
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Keine Aufnahme',
+      message: 'Keine Aufnahme zum Wiederholen verfügbar.',
+      detail: 'Das Backup ist entweder abgelaufen oder es gab keine fehlerhafte Aufnahme.',
+      buttons: ['OK'],
+    });
+    return;
+  }
+
+  console.log('Retrying last recording from backup...');
+  
+  // Show recording window with processing state
+  const win = createRecordingWindow();
+  win.showInactive();
+  win.webContents.send('status:update', { status: 'transcribing', detail: 'Wiederhole...' });
+
+  // Process the backup audio
+  await processAudioData(backup, true);
+}
+
+async function processAudioData(audioData, isRetry = false) {
+  const updateStatus = (status, detail = '') => {
+    recordingWindow?.webContents.send('status:update', { status, detail });
+  };
+
+  const s = getStore();
+  const autopaste = s.get('autopaste');
+  let placeholderInserted = false;
+
+  try {
+    const language = s.get('language');
+    const enablePolish = s.get('enablePolish');
+    const haikuKey = s.get('haikuApiKey');
+
+    updateStatus('transcribing');
+
+    // Insert placeholder if autopaste and not retry
+    if (autopaste && !isRetry) {
+      await insertPlaceholder();
+      placeholderInserted = true;
+    }
+
+    // Ensure audioData is a proper Buffer
+    let audioBuffer;
+    if (Buffer.isBuffer(audioData)) {
+      audioBuffer = audioData;
+    } else if (audioData instanceof ArrayBuffer) {
+      audioBuffer = Buffer.from(audioData);
+    } else if (audioData instanceof Uint8Array) {
+      audioBuffer = Buffer.from(audioData);
+    } else if (typeof audioData === 'object' && audioData.type === 'Buffer') {
+      // IPC serializes Buffer as {type: 'Buffer', data: [...]}
+      audioBuffer = Buffer.from(audioData.data);
+    } else {
+      audioBuffer = Buffer.from(audioData);
+    }
+    
+    console.log('Audio buffer type:', typeof audioData, 'Buffer size:', audioBuffer.length);
+    
+    const transcript = await transcribeAudio(audioBuffer, language);
+    console.log('Transcript:', transcript);
+
+    if (!transcript) {
+      if (placeholderInserted) {
+        replacePlaceholderWithText('');
+      }
+      updateStatus('done');
+      setTimeout(() => recordingWindow?.hide(), 300);
+      return { success: true, empty: true };
+    }
+
+    // =========================================================================
+    // SMART FILE TAGGING - Extract and tag file names from transcript
+    // =========================================================================
+    const { taggedText: textWithTags, foundFiles } = extractFileTagsFromText(transcript);
+    
+    if (foundFiles.length > 0) {
+      console.log('Found files in transcript:', foundFiles);
+    }
+    
+    // =========================================================================
+    // SMART SCREEN CAPTURE - Only if trigger words detected
+    // =========================================================================
+    let screenContext = null;
+    const isCodingContext = (s.get('activeProfile') === 'coding') || 
+                           (s.get('customAgents') || []).find(a => a.id === s.get('activeProfile') && a.domain === 'tech');
+    
+    if (isCodingContext && shouldCaptureScreen(transcript)) {
+      console.log('Trigger words detected, capturing screen context...');
+      updateStatus('analyzing', 'Analysiere Bildschirm...');
+      
+      try {
+        screenContext = await captureScreenContext();
+        if (screenContext) {
+          console.log('Screen context captured:', screenContext.files?.length || 0, 'files');
+        }
+      } catch (e) {
+        console.error('Screen capture failed:', e);
+      }
+    } else {
+      // Check for existing recent context
+      screenContext = getRecentScreenContext();
+    }
+
+    let polished = null;
+    if (enablePolish && haikuKey) {
+      updateStatus('polishing');
+      const activeProfileId = s.get('activeProfile') || 'coding';
+      const profiles = s.get('profiles') || {};
+      const customAgents = s.get('customAgents') || [];
+      
+      // Find active agent (standard or custom)
+      let activeAgent = profiles[activeProfileId];
+      let polishFlavor = 'code';
+      let customSettings = null;
+      
+      if (activeAgent) {
+        polishFlavor = activeAgent.polishFlavor || 'code';
+      } else {
+        // Check custom agents
+        const customAgent = customAgents.find(a => a.id === activeProfileId);
+        if (customAgent) {
+          polishFlavor = 'custom';
+          customSettings = customAgent;
+        }
+      }
+      
+      // Use tagged text as base
+      let enhancedTranscript = textWithTags;
+      
+      // Add screen context if available (for coding agents)
+      if (polishFlavor === 'code' || (customSettings && customSettings.domain === 'tech')) {
+        if (screenContext) {
+          enhancedTranscript = enhancePromptWithContext(enhancedTranscript, screenContext);
+          console.log('Enhanced transcript with screen context');
+        }
+      }
+      
+      polished = await polishText(enhancedTranscript, language, polishFlavor, customSettings);
+      console.log('Polished:', polished);
+    } else {
+      // Even without polishing, use the tagged text
+      polished = textWithTags !== transcript ? textWithTags : null;
+    }
+
+    addToHistory({ transcript, polished, language });
+
+    const finalText = polished || transcript;
+    const copyToClipboard = s.get('copyToClipboard');
+
+    if (autopaste) {
+      if (isRetry) {
+        // For retry, insert at cursor
+        await insertPlaceholder();
+        replacePlaceholderWithText(finalText);
+      } else {
+        replacePlaceholderWithText(finalText);
+      }
+    } else if (copyToClipboard) {
+      clipboard.writeText(finalText);
+    }
+
+    // Success - clear backup
+    clearAudioBackup();
+
+    updateStatus('done');
+    setTimeout(() => recordingWindow?.hide(), 300);
+    return { success: true, transcript, polished };
+    
+  } catch (error) {
+    console.error('Transcription error:', error);
+    
+    if (placeholderInserted) {
+      replacePlaceholderWithText('');
+    }
+
+    // Keep backup for retry
+    if (!isRetry) {
+      console.log('Backup preserved for retry');
+    }
+
+    // Show error with retry option
+    updateStatus('error', error.message || 'Transkription fehlgeschlagen');
+    
+    // Show retry notification in recording window
+    recordingWindow?.webContents.send('error:retry', {
+      message: error.message || 'Transkription fehlgeschlagen',
+      hotkey: isMac ? '⌘⇧R' : 'Ctrl+Shift+R'
+    });
+
+    setTimeout(() => {
+      recordingWindow?.hide();
+    }, 3000);
+
+    return { success: false, error };
+  }
+}
+
+// ============================================================================
 // HOTKEY
 // ============================================================================
 let currentShortcut = null;
 let smartPasteWindow = null;
+let agentHotkeys = [];
 
 function registerHotkey() {
   const shortcut = getStore().get('shortcut');
@@ -1121,6 +1830,180 @@ function registerHotkey() {
     console.log('Smart-Paste hotkey pressed');
     showSmartPasteOverlay();
   });
+
+  // Register Recovery hotkey (Cmd/Ctrl+Shift+R)
+  const recoveryKey = isMac ? 'Command+Shift+R' : 'Ctrl+Shift+R';
+  globalShortcut.register(recoveryKey, () => {
+    console.log('Recovery hotkey pressed');
+    retryLastRecording();
+  });
+  
+  // Register Screen-Parser hotkey (Cmd/Ctrl+Shift+S)
+  const screenParserKey = isMac ? 'Command+Shift+S' : 'Ctrl+Shift+S';
+  const screenOk = globalShortcut.register(screenParserKey, async () => {
+    console.log('Screen-Parser hotkey pressed');
+    updateStatus('analyzing', 'Analysiere Bildschirm...');
+    
+    // Show recording window for feedback
+    if (recordingWindow && !recordingWindow.isDestroyed()) {
+      recordingWindow.show();
+      recordingWindow.webContents.send('status:update', { 
+        status: 'analyzing', 
+        message: 'Analysiere Bildschirm...' 
+      });
+    }
+    
+    const context = await captureScreenContext();
+    
+    if (context) {
+      console.log('Screen context captured:', context);
+      updateStatus('done', 'Kontext erfasst!');
+      
+      // Notify dashboard
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('screen:context', context);
+      }
+      if (recordingWindow && !recordingWindow.isDestroyed()) {
+        recordingWindow.webContents.send('screen:context', context);
+      }
+    } else {
+      updateStatus('error', 'Analyse fehlgeschlagen');
+    }
+    
+    // Hide after delay
+    setTimeout(() => {
+      if (recordingWindow && !recordingWindow.isDestroyed() && !isRecording) {
+        recordingWindow.hide();
+      }
+    }, 1500);
+  });
+  
+  if (screenOk) {
+    console.log('Screen-Parser hotkey registered:', screenParserKey);
+  } else {
+    console.error('Screen-Parser hotkey registration failed:', screenParserKey);
+  }
+
+  // Register Agent-Switch hotkeys (Cmd+1, Cmd+2, Cmd+3, ...)
+  registerAgentHotkeys();
+}
+
+function registerAgentHotkeys() {
+  // Unregister existing agent hotkeys
+  agentHotkeys.forEach(key => {
+    try {
+      globalShortcut.unregister(key);
+    } catch (e) {
+      // Ignore
+    }
+  });
+  agentHotkeys = [];
+
+  // Standard-Agenten haben feste Hotkeys (Cmd+1, 2, 3)
+  const agents = [
+    { id: 'coding', key: isMac ? 'Command+1' : 'Ctrl+1' },
+    { id: 'meeting', key: isMac ? 'Command+2' : 'Ctrl+2' },
+    { id: 'dictation', key: isMac ? 'Command+3' : 'Ctrl+3' },
+  ];
+
+  // Custom Agents bekommen ihre benutzerdefinierten Hotkeys (wenn vorhanden)
+  const customAgents = getStore().get('customAgents') || [];
+  customAgents.forEach((agent) => {
+    // Nur hinzufügen, wenn ein benutzerdefinierter Hotkey gesetzt ist
+    if (agent.hotkey && agent.hotkey.trim()) {
+      agents.push({
+        id: agent.id,
+        key: agent.hotkey,
+      });
+    }
+  });
+
+  // Register each agent hotkey
+  agents.forEach(agent => {
+    try {
+      const registered = globalShortcut.register(agent.key, () => {
+        console.log(`Agent hotkey pressed: ${agent.key} -> ${agent.id}`);
+        switchAgent(agent.id);
+      });
+
+      if (registered) {
+        agentHotkeys.push(agent.key);
+        console.log(`Agent hotkey registered: ${agent.key} -> ${agent.id}`);
+      } else {
+        console.warn(`Failed to register agent hotkey: ${agent.key} (might be in use by another app)`);
+      }
+    } catch (e) {
+      console.error(`Error registering hotkey ${agent.key}:`, e.message);
+    }
+  });
+}
+
+function switchAgent(agentId) {
+  const s = getStore();
+  const currentAgent = s.get('activeProfile');
+  
+  if (currentAgent === agentId) {
+    console.log(`Already on agent: ${agentId}`);
+    return;
+  }
+
+  // Update active profile
+  s.set('activeProfile', agentId);
+  
+  // Get agent info (check standard profiles first, then custom agents)
+  const profiles = s.get('profiles') || {};
+  const customAgents = s.get('customAgents') || [];
+  let agentInfo = profiles[agentId];
+  let agentName = agentInfo?.name || agentId;
+  let agentIcon = '🎯';
+  let agentColor = '#7ED957';
+  
+  // Check custom agents if not found in standard profiles
+  if (!agentInfo) {
+    const customAgent = customAgents.find(a => a.id === agentId);
+    if (customAgent) {
+      agentInfo = customAgent;
+      agentName = customAgent.name;
+      agentIcon = customAgent.icon || '🎯';
+      agentColor = customAgent.color || '#7ED957';
+    }
+  }
+
+  // Update settings based on agent
+  if (agentInfo) {
+    s.set('autopaste', agentInfo.autopaste ?? true);
+    s.set('language', agentInfo.language || 'de');
+  }
+
+  console.log(`Switched to agent: ${agentName}`);
+
+  // Show visual feedback
+  showAgentSwitchNotification(agentId, agentName, agentIcon, agentColor);
+
+  // Notify dashboard if open
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('agent:switched', { id: agentId, name: agentName, icon: agentIcon, color: agentColor });
+  }
+}
+
+function showAgentSwitchNotification(agentId, agentName, agentIcon = '🎯', agentColor = '#7ED957') {
+  // Show in recording window as a brief toast
+  if (recordingWindow && !recordingWindow.isDestroyed()) {
+    recordingWindow.webContents.send('agent:switched', { id: agentId, name: agentName, icon: agentIcon, color: agentColor });
+    
+    // Briefly show the recording window for feedback
+    recordingWindow.show();
+    setTimeout(() => {
+      if (recordingWindow && !recordingWindow.isDestroyed() && !isRecording) {
+        recordingWindow.hide();
+      }
+    }, 1200);
+  }
+
+  // Update tray tooltip
+  if (tray) {
+    tray.setToolTip(`paply - ${agentIcon} ${agentName}`);
+  }
 }
 
 function showSmartPasteOverlay() {
@@ -1177,6 +2060,7 @@ function setupIpcHandlers() {
       language: s.get('language'),
       autopaste: s.get('autopaste'),
       beepEnabled: s.get('beepEnabled'),
+      copyToClipboard: s.get('copyToClipboard'),
       hideDock: s.get('hideDock'),
       activeProfile: s.get('activeProfile'),
     };
@@ -1190,6 +2074,7 @@ function setupIpcHandlers() {
     if (settings.language !== undefined) s.set('language', settings.language);
     if (settings.autopaste !== undefined) s.set('autopaste', settings.autopaste);
     if (settings.beepEnabled !== undefined) s.set('beepEnabled', settings.beepEnabled);
+    if (settings.copyToClipboard !== undefined) s.set('copyToClipboard', settings.copyToClipboard);
 
     if (settings.shortcut !== undefined && settings.shortcut !== s.get('shortcut')) {
       s.set('shortcut', settings.shortcut);
@@ -1258,27 +2143,41 @@ function setupIpcHandlers() {
     return false;
   });
   
-  // Profiles
+  // Profiles / Agents
   ipcMain.handle('profiles:get', () => {
     const s = getStore();
     return {
       active: s.get('activeProfile'),
       profiles: s.get('profiles'),
+      customAgents: s.get('customAgents') || [],
     };
   });
   
   ipcMain.handle('profiles:setActive', (_event, profileId) => {
     const s = getStore();
     const profiles = s.get('profiles');
+    const customAgents = s.get('customAgents') || [];
+    
+    // Check standard profiles
     if (profiles[profileId]) {
       s.set('activeProfile', profileId);
-      // Apply profile settings
       const profile = profiles[profileId];
       if (profile.language) s.set('language', profile.language);
       if (profile.autopaste !== undefined) s.set('autopaste', profile.autopaste);
       updateTrayMenu();
       return true;
     }
+    
+    // Check custom agents
+    const customAgent = customAgents.find(a => a.id === profileId);
+    if (customAgent) {
+      s.set('activeProfile', profileId);
+      if (customAgent.language) s.set('language', customAgent.language);
+      if (customAgent.autopaste !== undefined) s.set('autopaste', customAgent.autopaste);
+      updateTrayMenu();
+      return true;
+    }
+    
     return false;
   });
   
@@ -1291,6 +2190,88 @@ function setupIpcHandlers() {
       return true;
     }
     return false;
+  });
+  
+  // Custom Agents CRUD
+  ipcMain.handle('agents:getAll', () => {
+    return getStore().get('customAgents') || [];
+  });
+  
+  ipcMain.handle('agents:create', (_event, agent) => {
+    const s = getStore();
+    const agents = s.get('customAgents') || [];
+    const newAgent = {
+      ...agent,
+      id: agent.id || `agent_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    agents.push(newAgent);
+    s.set('customAgents', agents);
+    registerAgentHotkeys(); // Re-register hotkeys
+    return newAgent;
+  });
+  
+  ipcMain.handle('agents:update', (_event, agentId, updates) => {
+    const s = getStore();
+    const agents = s.get('customAgents') || [];
+    const index = agents.findIndex(a => a.id === agentId);
+    if (index !== -1) {
+      agents[index] = { ...agents[index], ...updates, updatedAt: new Date().toISOString() };
+      s.set('customAgents', agents);
+      registerAgentHotkeys(); // Re-register hotkeys
+      return agents[index];
+    }
+    return null;
+  });
+  
+  ipcMain.handle('agents:delete', (_event, agentId) => {
+    const s = getStore();
+    const agents = s.get('customAgents') || [];
+    const filtered = agents.filter(a => a.id !== agentId);
+    s.set('customAgents', filtered);
+    
+    // If deleted agent was active, switch to default
+    if (s.get('activeProfile') === agentId) {
+      s.set('activeProfile', 'coding');
+    }
+    
+    registerAgentHotkeys(); // Re-register hotkeys
+    return true;
+  });
+  
+  ipcMain.handle('agents:reorder', (_event, orderedIds) => {
+    const s = getStore();
+    const agents = s.get('customAgents') || [];
+    const reordered = orderedIds
+      .map(id => agents.find(a => a.id === id))
+      .filter(Boolean);
+    s.set('customAgents', reordered);
+    registerAgentHotkeys(); // Re-register hotkeys
+    return reordered;
+  });
+  
+  ipcMain.handle('agents:updateHotkey', (_event, agentId, hotkey) => {
+    const s = getStore();
+    const agents = s.get('customAgents') || [];
+    const index = agents.findIndex(a => a.id === agentId);
+    if (index !== -1) {
+      agents[index].hotkey = hotkey || '';
+      agents[index].updatedAt = new Date().toISOString();
+      s.set('customAgents', agents);
+      registerAgentHotkeys(); // Re-register hotkeys
+      console.log(`Agent hotkey updated: ${agentId} -> ${hotkey || '(none)'}`);
+      return agents[index];
+    }
+    return null;
+  });
+  
+  // Screen Parser
+  ipcMain.handle('screen:capture', async () => {
+    return await captureScreenContext();
+  });
+  
+  ipcMain.handle('screen:getContext', () => {
+    return getRecentScreenContext();
   });
   
   // Snippets
@@ -1354,80 +2335,11 @@ function setupIpcHandlers() {
     console.log('Received audio:', audioData.byteLength, 'bytes');
     isRecording = false;
 
-    // Helper to update status in recording window
-    const updateStatus = (status, detail = '') => {
-      recordingWindow?.webContents.send('status:update', { status, detail });
-    };
+    // Save backup immediately
+    saveAudioBackup(audioData);
 
-    const s = getStore();
-    const autopaste = s.get('autopaste');
-    let placeholderInserted = false;
-
-    try {
-      const language = s.get('language');
-      const enablePolish = s.get('enablePolish');
-      const haikuKey = s.get('haikuApiKey');
-
-      // Show transcribing status
-      updateStatus('transcribing');
-
-      // Insert placeholder at cursor if autopaste is enabled
-      if (autopaste) {
-        await insertPlaceholder();
-        placeholderInserted = true;
-      }
-
-      const transcript = await transcribeAudio(Buffer.from(audioData), language);
-      console.log('Transcript:', transcript);
-
-      if (!transcript) {
-        // Delete placeholder if inserted but no result
-        if (placeholderInserted) {
-          replacePlaceholderWithText('');
-        }
-        updateStatus('done');
-        setTimeout(() => recordingWindow?.hide(), 300);
-        return;
-      }
-
-      let polished = null;
-      if (enablePolish && haikuKey) {
-        // Show polishing status
-        updateStatus('polishing');
-        // Get polish flavor from active profile
-        const activeProfileId = s.get('activeProfile') || 'coding';
-        const profiles = s.get('profiles') || {};
-        const activeProfile = profiles[activeProfileId] || {};
-        const polishFlavor = activeProfile.polishFlavor || 'code';
-        polished = await polishText(transcript, language, polishFlavor);
-        console.log('Polished:', polished);
-      }
-
-      addToHistory({ transcript, polished, language });
-
-      const finalText = polished || transcript;
-      if (autopaste) {
-        // Replace placeholder with final text
-        replacePlaceholderWithText(finalText);
-      } else {
-        clipboard.writeText(finalText);
-      }
-
-      // Show success and hide
-      updateStatus('done');
-      setTimeout(() => recordingWindow?.hide(), 300);
-    } catch (error) {
-      console.error('Transcription error:', error);
-      // Delete placeholder if error occurred
-      if (placeholderInserted) {
-        replacePlaceholderWithText('');
-      }
-      updateStatus('error', error.message || 'Transkription fehlgeschlagen');
-      setTimeout(() => {
-        recordingWindow?.hide();
-        dialog.showErrorBox('Fehler', error.message || 'Transkription fehlgeschlagen');
-      }, 1500);
-    }
+    // Process the audio
+    await processAudioData(audioData, false);
   });
 
   ipcMain.on('open:accessibility', () => {

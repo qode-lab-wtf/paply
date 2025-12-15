@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+// ⚠️ WARNUNG: Diese React-UI ist VERALTET und wird NICHT MEHR VERWENDET.
+// Die aktuelle paply-App verwendet dashboard.html, recording.html, etc. direkt.
+// Diese Datei existiert nur für Legacy-Zwecke.
+// Falls du diese UI versehentlich siehst, verwende stattdessen die Electron-App.
+
 type StreamState = "idle" | "connecting" | "streaming" | "transcribing" | "polishing" | "error";
 
-// API URLs
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5173";
-const TRANSCRIBE_URL = `${BASE_URL}/api/transcribe`;
-const POLISH_URL = `${BASE_URL}/api/polish`;
+// VERALTET: Diese URLs werden nicht mehr verwendet - die aktuelle App 
+// kommuniziert direkt über window.electronAPI mit dem Electron Main-Prozess
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const TRANSCRIBE_URL = BASE_URL ? `${BASE_URL}/api/transcribe` : "";
+const POLISH_URL = BASE_URL ? `${BASE_URL}/api/polish` : "";
 
 type Language = "de" | "en";
 

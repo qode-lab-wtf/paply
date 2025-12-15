@@ -6,27 +6,39 @@
   <title>paply Dashboard</title>
   <style>
     :root {
-      --bg-primary: #0f1115;
-      --bg-secondary: #16181d;
-      --bg-card: #1d2027;
-      --bg-hover: #252830;
-      --border: #2a2e38;
-      --text-primary: #f0f2f5;
-      --text-secondary: #8b9bb8;
-      --text-muted: #5c6a82;
-      --accent-green: #4CAF50;
-      --accent-green-light: #8BC34A;
-      --accent-green-bg: rgba(76, 175, 80, 0.1);
-      --accent-blue: #0a84ff;
-      --accent-yellow: #FDD835;
-      --accent-red: #f87171;
-      --accent-navy: #1A237E;
-      --success: #4ade80;
-      --warning: #f59e0b;
-      --error: #f87171;
-      --radius: 12px;
-      --radius-sm: 8px;
-      --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      /* Light Mode - Default */
+      --bg-primary: #FFFFFF;
+      --bg-secondary: #F9FAFB;
+      --bg-card: #FFFFFF;
+      --bg-hover: #F3F4F6;
+      --border: #E5E7EB;
+      --border-light: #F3F4F6;
+      --text-primary: #1F2937;
+      --text-secondary: #6B7280;
+      --text-muted: #9CA3AF;
+      
+      /* Accent Colors from Logo */
+      --accent-green: #7ED957;
+      --accent-green-hover: #6BC448;
+      --accent-green-light: #A3E77F;
+      --accent-green-bg: rgba(126, 217, 87, 0.1);
+      --accent-yellow: #F7D154;
+      --accent-yellow-bg: rgba(247, 209, 84, 0.15);
+      
+      /* Status Colors */
+      --accent-blue: #3B82F6;
+      --accent-red: #EF4444;
+      --success: #7ED957;
+      --warning: #F7D154;
+      --error: #EF4444;
+      
+      /* Layout */
+      --radius: 10px;
+      --radius-sm: 6px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
     }
 
     * {
@@ -36,11 +48,15 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-      background: var(--bg-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      background: var(--bg-secondary);
       color: var(--text-primary);
       height: 100vh;
       overflow: hidden;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     .app {
@@ -50,8 +66,8 @@
 
     /* Sidebar */
     .sidebar {
-      width: 240px;
-      background: var(--bg-secondary);
+      width: 220px;
+      background: var(--bg-primary);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
@@ -59,54 +75,57 @@
     }
 
     .sidebar-header {
-      padding: 20px;
-      border-bottom: 1px solid var(--border);
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border-light);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
     .logo {
-      width: 40px;
-      height: 40px;
-      background: var(--accent-green);
-      border-radius: 10px;
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-hover) 100%);
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 2px 6px rgba(126, 217, 87, 0.25);
     }
 
     .logo svg {
-      width: 24px;
-      height: 24px;
+      width: 20px;
+      height: 20px;
       fill: white;
+      stroke: white;
     }
 
     .logo-text {
-      font-size: 20px;
-      font-weight: 700;
+      font-size: 18px;
+      font-weight: 600;
       color: var(--text-primary);
+      letter-spacing: -0.3px;
     }
 
     .sidebar-nav {
       flex: 1;
-      padding: 16px 12px;
+      padding: 12px 10px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 2px;
     }
 
     .nav-item {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
+      gap: 10px;
+      padding: 10px 12px;
       border-radius: var(--radius-sm);
       cursor: pointer;
       color: var(--text-secondary);
       transition: all 0.15s ease;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 450;
     }
 
     .nav-item:hover {
@@ -116,30 +135,33 @@
 
     .nav-item.active {
       background: var(--accent-green-bg);
-      color: var(--accent-green);
+      color: var(--accent-green-hover);
+      font-weight: 500;
     }
 
     .nav-item svg {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       flex-shrink: 0;
+      stroke-width: 1.75;
     }
 
     .nav-divider {
       height: 1px;
-      background: var(--border);
-      margin: 12px 0;
+      background: var(--border-light);
+      margin: 8px 12px;
     }
 
     .sidebar-footer {
-      padding: 16px;
-      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-light);
     }
 
     .version {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
       text-align: center;
+      font-weight: 400;
     }
 
     /* Main Content */
@@ -148,32 +170,35 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: var(--bg-secondary);
     }
 
     .header {
-      padding: 20px 24px;
+      padding: 16px 24px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--bg-secondary);
+      background: var(--bg-primary);
     }
 
     .header-title {
-      font-size: 24px;
+      font-size: 18px;
       font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
     }
 
     .header-actions {
       display: flex;
-      gap: 12px;
+      gap: 10px;
       align-items: center;
     }
 
     .content {
       flex: 1;
       overflow-y: auto;
-      padding: 24px;
+      padding: 20px 24px;
     }
 
     /* Tab Content */
@@ -190,29 +215,32 @@
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 20px;
-      margin-bottom: 16px;
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-sm);
     }
 
     .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .card-title {
-      font-size: 16px;
-      font-weight: 600;
+      font-size: 14px;
+      font-weight: 550;
       display: flex;
       align-items: center;
       gap: 8px;
+      color: var(--text-primary);
     }
 
     .card-title svg {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       color: var(--accent-green);
+      stroke-width: 1.75;
     }
 
     /* Buttons */
@@ -220,9 +248,9 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      padding: 10px 20px;
-      font-size: 14px;
+      gap: 6px;
+      padding: 8px 14px;
+      font-size: 13px;
       font-weight: 500;
       border: none;
       border-radius: var(--radius-sm);
@@ -233,25 +261,29 @@
     .btn-primary {
       background: var(--accent-green);
       color: white;
+      box-shadow: 0 1px 3px rgba(126, 217, 87, 0.2);
     }
 
     .btn-primary:hover {
-      background: #43a047;
+      background: var(--accent-green-hover);
+      box-shadow: 0 2px 6px rgba(126, 217, 87, 0.3);
     }
 
     .btn-primary:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
+      box-shadow: none;
     }
 
     .btn-secondary {
-      background: var(--bg-hover);
+      background: var(--bg-primary);
       color: var(--text-primary);
       border: 1px solid var(--border);
     }
 
     .btn-secondary:hover {
-      background: var(--border);
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
     }
 
     .btn-ghost {
@@ -269,105 +301,116 @@
       color: white;
     }
 
+    .btn-danger:hover {
+      background: #DC2626;
+    }
+
     .btn-icon {
-      width: 40px;
-      height: 40px;
+      width: 34px;
+      height: 34px;
       padding: 0;
-      border-radius: 50%;
+      border-radius: var(--radius-sm);
     }
 
     .btn-large {
-      padding: 16px 32px;
-      font-size: 16px;
+      padding: 12px 24px;
+      font-size: 14px;
       border-radius: var(--radius);
     }
 
     /* Recording Button */
     .record-btn {
-      width: 80px;
-      height: 80px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
-      background: var(--accent-green);
+      background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-hover) 100%);
       border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.2s ease;
-      box-shadow: 0 4px 20px rgba(76, 175, 80, 0.4);
+      box-shadow: 0 4px 16px rgba(126, 217, 87, 0.35);
     }
 
     .record-btn:hover {
-      transform: scale(1.05);
-      box-shadow: 0 6px 30px rgba(76, 175, 80, 0.5);
+      transform: scale(1.04);
+      box-shadow: 0 6px 24px rgba(126, 217, 87, 0.45);
     }
 
     .record-btn.recording {
-      background: var(--error);
+      background: linear-gradient(135deg, var(--error) 0%, #DC2626 100%);
       animation: pulse 1.5s ease-in-out infinite;
-      box-shadow: 0 4px 20px rgba(248, 113, 113, 0.4);
+      box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
     }
 
     .record-btn svg {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       fill: white;
+      stroke: white;
     }
 
     @keyframes pulse {
       0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.05); }
+      50% { transform: scale(1.03); }
     }
 
     /* Status */
     .status-text {
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-secondary);
-      margin-top: 12px;
+      margin-top: 14px;
       text-align: center;
+      font-weight: 400;
     }
 
     .status-text.recording {
       color: var(--error);
+      font-weight: 500;
     }
 
     .status-text.transcribing,
     .status-text.polishing {
-      color: var(--accent-yellow);
+      color: var(--accent-green-hover);
+      font-weight: 500;
     }
 
     /* Stats Grid */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
     }
 
     .stat-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 20px;
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
     }
 
     .stat-label {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+      font-weight: 500;
     }
 
     .stat-value {
-      font-size: 32px;
-      font-weight: 700;
+      font-size: 26px;
+      font-weight: 600;
       color: var(--text-primary);
     }
 
     .stat-change {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--success);
       margin-top: 4px;
+      font-weight: 500;
     }
 
     /* History List */
@@ -380,18 +423,21 @@
     .history-item {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 16px;
+      border-radius: var(--radius);
+      padding: 14px 16px;
       cursor: pointer;
       transition: all 0.15s ease;
+      box-shadow: var(--shadow-sm);
     }
 
     .history-item:hover {
       border-color: var(--accent-green);
+      box-shadow: var(--shadow);
     }
 
     .history-item.favorite {
       border-color: var(--accent-yellow);
+      background: var(--accent-yellow-bg);
     }
 
     .history-header {
@@ -405,41 +451,43 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
     }
 
     .history-badge {
-      padding: 2px 8px;
+      padding: 3px 8px;
       border-radius: 4px;
-      font-size: 11px;
-      font-weight: 500;
+      font-size: 10px;
+      font-weight: 550;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
 
     .badge-coding {
-      background: rgba(10, 132, 255, 0.2);
+      background: rgba(59, 130, 246, 0.1);
       color: var(--accent-blue);
     }
 
     .badge-meeting {
-      background: rgba(253, 216, 53, 0.2);
-      color: var(--accent-yellow);
+      background: var(--accent-yellow-bg);
+      color: #B8860B;
     }
 
     .badge-dictation {
-      background: rgba(139, 195, 74, 0.2);
-      color: var(--accent-green-light);
+      background: var(--accent-green-bg);
+      color: var(--accent-green-hover);
     }
 
     .badge-polish {
-      background: rgba(76, 175, 80, 0.2);
-      color: var(--accent-green);
+      background: var(--accent-green-bg);
+      color: var(--accent-green-hover);
     }
 
     .history-text {
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-primary);
-      line-height: 1.5;
+      line-height: 1.6;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -448,38 +496,41 @@
 
     .history-actions {
       display: flex;
-      gap: 8px;
-      margin-top: 12px;
+      gap: 6px;
+      margin-top: 10px;
     }
 
     /* Form Elements */
     .form-group {
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .form-label {
       display: block;
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-secondary);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+      font-weight: 500;
     }
 
     .form-input,
     .form-select {
       width: 100%;
-      padding: 12px 16px;
-      font-size: 14px;
-      background: var(--bg-primary);
+      padding: 10px 12px;
+      font-size: 13px;
+      background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text-primary);
       outline: none;
-      transition: border-color 0.15s ease;
+      transition: all 0.15s ease;
     }
 
     .form-input:focus,
     .form-select:focus {
       border-color: var(--accent-green);
+      background: var(--bg-primary);
+      box-shadow: 0 0 0 3px var(--accent-green-bg);
     }
 
     .form-input::placeholder {
@@ -491,8 +542,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-light);
     }
 
     .toggle:last-child {
@@ -500,15 +551,16 @@
     }
 
     .toggle-label {
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-primary);
+      font-weight: 450;
     }
 
     .toggle-switch {
-      width: 44px;
-      height: 24px;
+      width: 40px;
+      height: 22px;
       background: var(--border);
-      border-radius: 12px;
+      border-radius: 11px;
       cursor: pointer;
       position: relative;
       transition: background 0.2s ease;
@@ -521,51 +573,55 @@
     .toggle-switch::after {
       content: '';
       position: absolute;
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       background: white;
       border-radius: 50%;
       top: 2px;
       left: 2px;
       transition: transform 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
     .toggle-switch.active::after {
-      transform: translateX(20px);
+      transform: translateX(18px);
     }
 
     /* Profile Cards */
     .profile-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
+      gap: 12px;
     }
 
     .profile-card {
       background: var(--bg-card);
-      border: 2px solid var(--border);
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      padding: 20px;
+      padding: 18px 16px;
       cursor: pointer;
       transition: all 0.15s ease;
       text-align: center;
+      box-shadow: var(--shadow-sm);
     }
 
     .profile-card:hover {
       border-color: var(--accent-green);
+      box-shadow: var(--shadow);
     }
 
     .profile-card.active {
       border-color: var(--accent-green);
       background: var(--accent-green-bg);
+      box-shadow: 0 0 0 3px var(--accent-green-bg);
     }
 
     .profile-icon {
-      width: 48px;
-      height: 48px;
-      margin: 0 auto 12px;
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 10px;
       background: var(--bg-hover);
-      border-radius: 12px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -576,9 +632,10 @@
     }
 
     .profile-icon svg {
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       color: var(--text-secondary);
+      stroke-width: 1.75;
     }
 
     .profile-card.active .profile-icon svg {
@@ -586,31 +643,34 @@
     }
 
     .profile-name {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 4px;
+      font-size: 14px;
+      font-weight: 550;
+      margin-bottom: 3px;
+      color: var(--text-primary);
     }
 
     .profile-desc {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
+      font-weight: 400;
     }
 
     /* Snippet Cards */
     .snippet-list {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
     .snippet-item {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 16px;
+      border-radius: var(--radius);
+      padding: 14px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      box-shadow: var(--shadow-sm);
     }
 
     .snippet-info {
@@ -618,67 +678,393 @@
     }
 
     .snippet-name {
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 550;
+      margin-bottom: 3px;
+      color: var(--text-primary);
     }
 
     .snippet-preview {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      font-family: monospace;
+      font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
     /* Impact Section */
     .impact-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      gap: 12px;
     }
 
     .impact-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 20px;
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
     }
 
     .impact-title {
-      font-size: 14px;
+      font-size: 12px;
       color: var(--text-muted);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      font-weight: 500;
     }
 
     .impact-value {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--accent-green);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--accent-green-hover);
     }
 
     .impact-detail {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    /* Enhanced Stats Styles */
+    .stats-grid-4 {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .stats-grid-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    @media (max-width: 900px) {
+      .stats-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .stats-grid-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .stats-grid-4,
+      .stats-grid-3 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .stat-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .stat-card-highlight {
+      background: linear-gradient(135deg, var(--accent-green-bg) 0%, var(--bg-card) 100%);
+      border-color: var(--accent-green);
+    }
+
+    .stat-icon {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      background: var(--bg-hover);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .stat-card-highlight .stat-icon {
+      background: var(--accent-green);
+    }
+
+    .stat-icon svg {
+      width: 20px;
+      height: 20px;
+      color: var(--text-secondary);
+      stroke-width: 1.75;
+    }
+
+    .stat-card-highlight .stat-icon svg {
+      color: white;
+    }
+
+    .stat-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .stat-unit {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-left: 3px;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-top: 3px;
+    }
+
+    .stat-sublabel {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .stat-period {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-hover);
+      padding: 4px 10px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    /* Time-based stat cards */
+    .stat-card-time {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stat-time-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .stat-time-label {
+      font-size: 13px;
+      font-weight: 550;
+      color: var(--text-primary);
+    }
+
+    .stat-time-date {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .stat-time-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .stat-time-metric {
       font-size: 12px;
       color: var(--text-secondary);
-      margin-top: 8px;
+    }
+
+    .stat-time-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .stat-card-total {
+      background: linear-gradient(135deg, var(--bg-hover) 0%, var(--bg-card) 100%);
+    }
+
+    .stat-card-total .stat-time-value {
+      color: var(--accent-green-hover);
+    }
+
+    /* Card enhancements */
+    .card-description {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .card-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 10px;
+      background: var(--accent-green-bg);
+      color: var(--accent-green-hover);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .card-badge.inactive {
+      background: var(--bg-hover);
+      color: var(--text-muted);
+    }
+
+    /* Impact card enhancements */
+    .impact-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .impact-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--accent-green);
+      stroke-width: 1.75;
+    }
+
+    .impact-title {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .impact-value {
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--accent-green-hover);
+      line-height: 1.2;
+    }
+
+    .impact-success {
+      color: var(--success);
+    }
+
+    .impact-examples {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      font-style: italic;
+    }
+
+    .impact-ratio {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .impact-progress {
+      width: 100%;
+      height: 5px;
+      background: var(--bg-hover);
+      border-radius: 3px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    .impact-progress-bar {
+      height: 100%;
+      background: var(--accent-green);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    /* Tooltip für Info */
+    .stat-info {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: help;
+    }
+
+    .stat-info-icon {
+      width: 13px;
+      height: 13px;
+      color: var(--text-muted);
+      margin-left: 5px;
+      opacity: 0.5;
+    }
+
+    .stat-info:hover .stat-info-icon {
+      opacity: 1;
+    }
+
+    .stat-info-tooltip {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.15s ease;
+      z-index: 100;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .stat-info:hover .stat-info-tooltip {
+      opacity: 1;
+      visibility: visible;
+      bottom: calc(100% + 8px);
+    }
+
+    /* Warnung für leere/unplausible Daten */
+    .stat-warning {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--accent-yellow-bg);
+      border: 1px solid rgba(247, 209, 84, 0.4);
+      border-radius: var(--radius-sm);
+      margin-bottom: 14px;
+    }
+
+    .stat-warning svg {
+      width: 16px;
+      height: 16px;
+      color: #B8860B;
+      flex-shrink: 0;
+    }
+
+    .stat-warning-text {
+      font-size: 12px;
+      color: #B8860B;
+      font-weight: 500;
+    }
+
+    /* Null-Wert Styling */
+    .stat-value-zero {
+      color: var(--text-muted);
     }
 
     /* Empty State */
     .empty-state {
       text-align: center;
-      padding: 60px 20px;
+      padding: 48px 20px;
       color: var(--text-muted);
     }
 
     .empty-state svg {
-      width: 64px;
-      height: 64px;
-      margin-bottom: 16px;
-      opacity: 0.5;
+      width: 56px;
+      height: 56px;
+      margin-bottom: 14px;
+      opacity: 0.4;
+      stroke-width: 1.5;
     }
 
     .empty-state h3 {
-      font-size: 18px;
+      font-size: 15px;
       color: var(--text-secondary);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+      font-weight: 550;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      color: var(--text-muted);
     }
 
     /* Hotkey Display */
@@ -686,27 +1072,28 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 8px;
-      background: var(--bg-hover);
+      padding: 5px 10px;
+      background: var(--bg-secondary);
       border: 1px solid var(--border);
-      border-radius: 4px;
-      font-size: 12px;
-      font-family: monospace;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
       color: var(--text-secondary);
+      font-weight: 500;
     }
 
     /* Scrollbar */
     ::-webkit-scrollbar {
-      width: 8px;
+      width: 6px;
     }
 
     ::-webkit-scrollbar-track {
-      background: var(--bg-secondary);
+      background: transparent;
     }
 
     ::-webkit-scrollbar-thumb {
       background: var(--border);
-      border-radius: 4px;
+      border-radius: 3px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
@@ -735,45 +1122,723 @@
     /* Filter bar */
     .filter-bar {
       display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
+      gap: 8px;
+      margin-bottom: 14px;
       flex-wrap: wrap;
     }
 
     .filter-chip {
       padding: 6px 12px;
-      background: var(--bg-hover);
+      background: var(--bg-primary);
       border: 1px solid var(--border);
-      border-radius: 20px;
-      font-size: 13px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
       cursor: pointer;
       transition: all 0.15s ease;
+      color: var(--text-secondary);
     }
 
-    .filter-chip:hover,
+    .filter-chip:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    
     .filter-chip.active {
       background: var(--accent-green-bg);
       border-color: var(--accent-green);
-      color: var(--accent-green);
+      color: var(--accent-green-hover);
     }
 
     /* Textarea */
     .form-textarea {
       width: 100%;
       min-height: 100px;
-      padding: 12px 16px;
-      font-size: 14px;
-      font-family: monospace;
-      background: var(--bg-primary);
+      padding: 10px 12px;
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text-primary);
       outline: none;
       resize: vertical;
+      line-height: 1.5;
     }
 
     .form-textarea:focus {
       border-color: var(--accent-green);
+      background: var(--bg-primary);
+      box-shadow: 0 0 0 3px var(--accent-green-bg);
+    }
+
+    /* Import Inter Font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600&display=swap');
+
+    /* ============================================
+       AGENT WIZARD STYLES
+       ============================================ */
+    
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal {
+      background: var(--bg-primary);
+      border-radius: var(--radius-lg);
+      width: 90%;
+      max-width: 560px;
+      max-height: 85vh;
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(20px);
+      transition: transform 0.2s ease;
+    }
+
+    .modal-overlay.active .modal {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .modal-close {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+    }
+
+    .modal-close:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      max-height: calc(85vh - 140px);
+    }
+
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+
+    /* Wizard Steps */
+    .wizard-steps {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+    }
+
+    .wizard-step {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .wizard-step:hover {
+      background: var(--bg-hover);
+    }
+
+    .wizard-step.active {
+      background: var(--accent-green-bg);
+    }
+
+    .wizard-step.completed {
+      background: var(--bg-hover);
+    }
+
+    .wizard-step-number {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-hover);
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .wizard-step.active .wizard-step-number {
+      background: var(--accent-green);
+      color: white;
+    }
+
+    .wizard-step.completed .wizard-step-number {
+      background: var(--accent-green);
+      color: white;
+    }
+
+    .wizard-step-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .wizard-step.active .wizard-step-label {
+      color: var(--accent-green-hover);
+    }
+
+    .wizard-step.completed .wizard-step-label {
+      color: var(--text-secondary);
+    }
+
+    /* Wizard Content */
+    .wizard-content {
+      display: none;
+    }
+
+    .wizard-content.active {
+      display: block;
+    }
+
+    .wizard-section-title {
+      font-size: 14px;
+      font-weight: 550;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .wizard-tip {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--accent-green-bg);
+      border-radius: var(--radius-sm);
+      margin-top: 16px;
+    }
+
+    .wizard-tip-icon {
+      width: 18px;
+      height: 18px;
+      color: var(--accent-green);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .wizard-tip-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* Template Picker */
+    .template-picker {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    
+    .template-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      background: var(--bg-primary);
+    }
+    
+    .template-card:hover {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+    
+    .template-card.selected {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+    
+    .template-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+    }
+    
+    .template-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+    
+    .template-card.selected .template-icon {
+      background: var(--accent-green);
+      color: white;
+    }
+    
+    .template-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    
+    .template-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    
+    .template-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    .wizard-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    /* Icon/Color Picker */
+    .icon-picker,
+    .color-picker {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .icon-option,
+    .color-option {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      background: var(--bg-primary);
+    }
+
+    .icon-option svg {
+      width: 20px;
+      height: 20px;
+      color: var(--text-secondary);
+    }
+
+    .icon-option:hover,
+    .color-option:hover {
+      border-color: var(--text-muted);
+    }
+
+    .icon-option:hover svg {
+      color: var(--text-primary);
+    }
+
+    .icon-option.selected,
+    .color-option.selected {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .icon-option.selected svg {
+      color: var(--accent-green);
+    }
+
+    .color-option {
+      border-radius: 50%;
+    }
+
+    /* Slider */
+    .slider-container {
+      margin-bottom: 16px;
+    }
+
+    .slider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .slider-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .slider-value {
+      font-size: 12px;
+      color: var(--accent-green-hover);
+      font-weight: 600;
+    }
+
+    .slider {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--bg-hover);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(126, 217, 87, 0.3);
+      transition: transform 0.15s ease;
+    }
+
+    .slider::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+
+    .slider-label-text {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Option Cards (for selection) */
+    .option-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .option-card {
+      padding: 12px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .option-card:hover {
+      border-color: var(--accent-green);
+      background: var(--bg-hover);
+    }
+
+    .option-card.selected {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .option-card-title {
+      font-size: 13px;
+      font-weight: 550;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .option-card-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Checkbox Group */
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .checkbox-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .checkbox-item.checked {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .checkbox-box {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .checkbox-item.checked .checkbox-box {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    .checkbox-box svg {
+      width: 12px;
+      height: 12px;
+      color: white;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .checkbox-item.checked .checkbox-box svg {
+      opacity: 1;
+    }
+
+    .checkbox-label {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    /* Preview Box */
+    .preview-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .preview-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .preview-input {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      padding: 10px;
+      background: var(--bg-primary);
+      border-radius: var(--radius-sm);
+      font-style: italic;
+    }
+
+    .preview-output {
+      font-size: 13px;
+      color: var(--text-primary);
+      padding: 10px;
+      background: var(--bg-primary);
+      border-radius: var(--radius-sm);
+      line-height: 1.5;
+    }
+
+    /* Agent Card in List (with hotkey badge) */
+    .agent-card {
+      position: relative;
+    }
+
+    .agent-hotkey {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 10px;
+      padding: 2px 6px;
+      background: var(--bg-hover);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-family: 'SF Mono', monospace;
+      font-weight: 500;
+    }
+
+    .agent-card.active .agent-hotkey {
+      background: rgba(255,255,255,0.2);
+      color: white;
+    }
+
+    /* Add Agent Button */
+    .add-agent-card {
+      border: 2px dashed var(--border);
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 120px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .add-agent-card:hover {
+      border-color: var(--accent-green);
+    }
+    
+    /* Delete Agent Button */
+    .delete-agent-btn {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(239, 68, 68, 0.9);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    
+    .custom-agent-card:hover .delete-agent-btn {
+      opacity: 1;
+    }
+    
+    .delete-agent-btn:hover {
+      background: #dc2626;
+    }
+    
+    /* Toast Notification */
+    .toast-notification {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--text-primary);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 10000;
+    }
+    
+    .toast-notification.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    
+    .toast-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .toast-icon svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .add-agent-card svg {
+      width: 24px;
+      height: 24px;
+      color: var(--text-muted);
+    }
+
+    .add-agent-card:hover svg {
+      color: var(--accent-green);
+    }
+
+    .add-agent-card span {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .add-agent-card:hover span {
+      color: var(--accent-green-hover);
+    }
+
+    /* Toast Animations */
+    @keyframes slideInToast {
+      from {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes slideOutToast {
+      from {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(20px);
+      }
     }
   </style>
 </head>
@@ -819,12 +1884,12 @@
           Stats
         </div>
         
-        <div class="nav-item" data-tab="profiles">
+        <div class="nav-item" data-tab="agents">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
           </svg>
-          Profile
+          Agenten
         </div>
         
         <div class="nav-item" data-tab="snippets">
@@ -918,6 +1983,10 @@
               <span class="toggle-label">Autopaste aktiviert</span>
               <div class="toggle-switch" id="toggleAutopaste"></div>
             </div>
+            <div class="toggle" id="toggleCopyToClipboardRow">
+              <span class="toggle-label">In Zwischenablage kopieren</span>
+              <div class="toggle-switch" id="toggleCopyToClipboard"></div>
+            </div>
             <div class="toggle">
               <span class="toggle-label">Polish aktiviert</span>
               <div class="toggle-switch" id="togglePolish"></div>
@@ -934,6 +2003,9 @@
 
         <!-- History Tab -->
         <div class="tab-content" id="tab-history">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <input type="text" class="form-input" id="historySearch" placeholder="Suche in History (durchsucht Rohtext und polierter Text)...">
+          </div>
           <div class="filter-bar">
             <div class="filter-chip active" data-filter="all">Alle</div>
             <div class="filter-chip" data-filter="favorites">Favoriten</div>
@@ -956,65 +2028,233 @@
 
         <!-- Stats Tab -->
         <div class="tab-content" id="tab-stats">
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-label">Wörter heute</div>
-              <div class="stat-value" id="statWordsToday">0</div>
+          <!-- Hauptübersicht -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Übersicht
+              </div>
+              <span class="stat-period" id="statPeriodInfo">Letzte 90 Tage</span>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">Wörter diese Woche</div>
-              <div class="stat-value" id="statWordsWeek">0</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Wörter gesamt</div>
-              <div class="stat-value" id="statWordsTotal">0</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Sessions</div>
-              <div class="stat-value" id="statSessions">0</div>
+            <div class="stats-grid stats-grid-4">
+              <div class="stat-card stat-card-highlight">
+                <div class="stat-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  </svg>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value" id="statSessions">0</div>
+                  <div class="stat-label">Transkriptionen</div>
+                  <div class="stat-sublabel">Anzahl Sessions gesamt</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value" id="statWordsTotal">0</div>
+                  <div class="stat-label">Wörter transkribiert</div>
+                  <div class="stat-sublabel">Gesamtzahl aller Sessions</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value" id="statMinutesTotal">0<span class="stat-unit">min</span></div>
+                  <div class="stat-label">Aufnahmezeit</div>
+                  <div class="stat-sublabel">Geschätzte Sprechzeit</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="14"/>
+                  </svg>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value" id="statAvgWords">0</div>
+                  <div class="stat-label">Wörter pro Session</div>
+                  <div class="stat-sublabel">Durchschnittliche Länge</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="card" style="margin-top: 24px;">
+          <!-- Zeitbasierte Statistiken -->
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-header">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                Aktivität nach Zeitraum
+              </div>
+            </div>
+            <div class="stats-grid stats-grid-3">
+              <div class="stat-card stat-card-time">
+                <div class="stat-time-header">
+                  <span class="stat-time-label">Heute</span>
+                  <span class="stat-time-date" id="statDateToday"></span>
+                </div>
+                <div class="stat-time-row">
+                  <span class="stat-time-metric">Wörter</span>
+                  <span class="stat-time-value" id="statWordsToday">0</span>
+                </div>
+                <div class="stat-time-row">
+                  <span class="stat-time-metric">Sessions</span>
+                  <span class="stat-time-value" id="statSessionsToday">0</span>
+                </div>
+              </div>
+              <div class="stat-card stat-card-time">
+                <div class="stat-time-header">
+                  <span class="stat-time-label">Diese Woche</span>
+                  <span class="stat-time-date" id="statDateWeek"></span>
+                </div>
+                <div class="stat-time-row">
+                  <span class="stat-time-metric">Wörter</span>
+                  <span class="stat-time-value" id="statWordsWeek">0</span>
+                </div>
+                <div class="stat-time-row">
+                  <span class="stat-time-metric">Sessions</span>
+                  <span class="stat-time-value" id="statSessionsWeek">0</span>
+                </div>
+              </div>
+              <div class="stat-card stat-card-time stat-card-total">
+                <div class="stat-time-header">
+                  <span class="stat-time-label">Gesamt</span>
+                  <span class="stat-time-date">Letzte 90 Tage</span>
+                </div>
+                <div class="stat-time-row">
+                  <span class="stat-time-metric">Wörter</span>
+                  <span class="stat-time-value" id="statWordsTotalTime">0</span>
+                </div>
+                <div class="stat-time-row">
+                  <span class="stat-time-metric">Sessions</span>
+                  <span class="stat-time-value" id="statSessionsTotal">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Polish-Analyse -->
+          <div class="card" style="margin-top: 16px;" id="polishAnalysisCard">
             <div class="card-header">
               <div class="card-title">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                 </svg>
-                Impact (Polish-Verbesserungen)
+                Polish-Analyse
               </div>
+              <div class="card-badge" id="polishStatusBadge">Aktiv</div>
             </div>
+            <p class="card-description">Zeigt wie die KI-Verbesserung deine Transkriptionen optimiert hat.</p>
             <div class="impact-grid">
               <div class="impact-card">
-                <div class="impact-title">Füllwörter entfernt</div>
+                <div class="impact-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="impact-icon">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
+                  <span class="impact-title">Füllwörter entfernt</span>
+                </div>
                 <div class="impact-value" id="impactFillers">0</div>
-                <div class="impact-detail">durchschnittlich pro Session</div>
+                <div class="impact-detail">Durchschnitt pro Session</div>
+                <div class="impact-examples" id="impactFillersExamples">z.B. ähm, also, quasi</div>
               </div>
               <div class="impact-card">
-                <div class="impact-title">Wörter optimiert</div>
+                <div class="impact-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="impact-icon">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
+                  <span class="impact-title">Textreduktion</span>
+                </div>
                 <div class="impact-value" id="impactWords">0%</div>
-                <div class="impact-detail">Reduktion durch Polish</div>
+                <div class="impact-detail">Kürzerer, prägnanter Text</div>
+                <div class="impact-progress">
+                  <div class="impact-progress-bar" id="impactWordsBar" style="width: 0%"></div>
+                </div>
               </div>
               <div class="impact-card">
-                <div class="impact-title">Polish-Nutzung</div>
+                <div class="impact-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="impact-icon">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  <span class="impact-title">Polish genutzt</span>
+                </div>
                 <div class="impact-value" id="impactUsage">0%</div>
-                <div class="impact-detail">der Sessions mit Polish</div>
+                <div class="impact-detail">Anteil der Sessions mit Polish</div>
+                <div class="impact-ratio">
+                  <span id="impactPolishCount">0</span> von <span id="impactTotalCount">0</span> Sessions
+                </div>
               </div>
               <div class="impact-card">
-                <div class="impact-title">Erfolgsquote</div>
-                <div class="impact-value" id="impactSuccess">100%</div>
-                <div class="impact-detail">erfolgreiche Transkriptionen</div>
+                <div class="impact-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="impact-icon">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  <span class="impact-title">Erfolgsquote</span>
+                </div>
+                <div class="impact-value impact-success" id="impactSuccess">100%</div>
+                <div class="impact-detail">Erfolgreiche Transkriptionen</div>
+                <div class="impact-ratio">
+                  <span id="impactSuccessCount">0</span> erfolgreich, <span id="impactErrorCount">0</span> Fehler
+                </div>
               </div>
             </div>
           </div>
+
+          <!-- Leerer Zustand -->
+          <div class="empty-state" id="statsEmptyState" style="display: none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            <h3>Noch keine Statistiken</h3>
+            <p>Starte deine erste Transkription, um Statistiken zu sehen.</p>
+            <button class="btn btn-primary" onclick="switchTab('transcription')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              </svg>
+              Erste Aufnahme starten
+            </button>
+          </div>
         </div>
 
-        <!-- Profiles Tab -->
-        <div class="tab-content" id="tab-profiles">
-          <div class="profile-grid" id="profileGrid">
-            <div class="profile-card active" data-profile="coding">
-              <div class="profile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- Agents Tab -->
+        <div class="tab-content" id="tab-agents">
+          <!-- Agent Grid -->
+          <div class="profile-grid" id="agentGrid">
+            <!-- Coding Agent -->
+            <div class="profile-card agent-card active" data-agent="coding">
+              <span class="agent-hotkey">⌘1</span>
+              <div class="profile-icon" style="background: #3B82F6;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <polyline points="16 18 22 12 16 6"/>
                   <polyline points="8 6 2 12 8 18"/>
                 </svg>
@@ -1022,46 +2262,431 @@
               <div class="profile-name">Coding</div>
               <div class="profile-desc">Tech-Begriffe, Autopaste</div>
             </div>
-            <div class="profile-card" data-profile="meeting">
-              <div class="profile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <!-- Meeting Agent -->
+            <div class="profile-card agent-card" data-agent="meeting">
+              <span class="agent-hotkey">⌘2</span>
+              <div class="profile-icon" style="background: #F7D154;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                   <circle cx="9" cy="7" r="4"/>
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
               </div>
               <div class="profile-name">Meeting</div>
-              <div class="profile-desc">Action Items, kein Autopaste</div>
+              <div class="profile-desc">Action Items, Bullets</div>
             </div>
-            <div class="profile-card" data-profile="dictation">
-              <div class="profile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <!-- Dictation Agent -->
+            <div class="profile-card agent-card" data-agent="dictation">
+              <span class="agent-hotkey">⌘3</span>
+              <div class="profile-icon" style="background: #7ED957;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
               </div>
               <div class="profile-name">Diktat</div>
               <div class="profile-desc">Plain Text, Autopaste</div>
             </div>
+            <!-- Add New Agent -->
+            <div class="profile-card add-agent-card" id="addAgentBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span>Neuer Agent</span>
+            </div>
           </div>
 
-          <div class="card" style="margin-top: 24px;">
+          <!-- Active Agent Config -->
+          <div class="card" style="margin-top: 20px;" id="activeAgentConfig">
             <div class="card-header">
-              <div class="card-title">Aktives Profil konfigurieren</div>
+              <div class="card-title">
+                <span id="activeAgentName">Coding</span> konfigurieren
             </div>
+              <span class="hotkey" id="activeAgentHotkey">⌘1</span>
+            </div>
+            
             <div class="form-group">
               <label class="form-label">Sprache</label>
-              <select class="form-select" id="profileLanguage">
+              <select class="form-select" id="agentLanguage">
                 <option value="de">Deutsch</option>
                 <option value="en">English</option>
               </select>
             </div>
+            
+            <div class="form-group">
+              <label class="form-label">Output-Sprache</label>
+              <select class="form-select" id="agentOutputLanguage">
+                <option value="same">Gleich wie Input</option>
+                <option value="en">→ Englisch</option>
+                <option value="de">→ Deutsch</option>
+              </select>
+            </div>
+
             <div class="toggle">
               <span class="toggle-label">Autopaste</span>
-              <div class="toggle-switch" id="profileAutopaste"></div>
+              <div class="toggle-switch active" id="agentAutopaste"></div>
+            </div>
+            
+            <div class="slider-container" style="margin-top: 16px;">
+              <div class="slider-header">
+                <span class="slider-label">Kreativität</span>
+                <span class="slider-value" id="creativityValue">20%</span>
+              </div>
+              <input type="range" class="slider" id="agentCreativity" min="0" max="100" value="20">
+              <div class="slider-labels">
+                <span class="slider-label-text">Exakt</span>
+                <span class="slider-label-text">Kreativ</span>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;" id="agentHotkeyGroup">
+              <label class="form-label">Hotkey</label>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" class="form-input" id="agentHotkeyInput" readonly placeholder="Klicken und Tasten drücken" style="flex: 1; cursor: pointer;">
+                <button class="btn btn-secondary" id="clearAgentHotkey" style="padding: 8px 12px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+                <button class="btn btn-primary" id="saveAgentHotkey" style="padding: 8px 12px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </button>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                z.B. Alt+M, Ctrl+Shift+F – zum Aktivieren des Agents
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Wizard Modal -->
+        <div class="modal-overlay" id="agentWizardModal">
+          <div class="modal">
+            <div class="modal-header">
+              <span class="modal-title">Neuen Agenten erstellen</span>
+              <button class="modal-close" id="closeWizardBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="modal-body">
+              <!-- Wizard Steps -->
+              <div class="wizard-steps">
+                <div class="wizard-step active" data-step="1">
+                  <span class="wizard-step-number">1</span>
+                  <span class="wizard-step-label">Basics</span>
+                </div>
+                <div class="wizard-step" data-step="2">
+                  <span class="wizard-step-number">2</span>
+                  <span class="wizard-step-label">Stil</span>
+                </div>
+                <div class="wizard-step" data-step="3">
+                  <span class="wizard-step-number">3</span>
+                  <span class="wizard-step-label">Output</span>
+                </div>
+                <div class="wizard-step" data-step="4">
+                  <span class="wizard-step-number">4</span>
+                  <span class="wizard-step-label">Preview</span>
+                </div>
+              </div>
+
+              <!-- Step 1: Basics -->
+              <div class="wizard-content active" id="wizardStep1">
+                <div class="wizard-section-title">Vorlage wählen oder eigenen Agent erstellen</div>
+                
+                <!-- Template Picker -->
+                <div class="form-group">
+                  <label class="form-label">Schnellstart-Vorlagen</label>
+                  <div class="template-picker" id="templatePicker">
+                    <div class="template-card" data-template="image-prompt">
+                      <span class="template-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="0.5"/><circle cx="17.5" cy="10.5" r="0.5"/><circle cx="8.5" cy="7.5" r="0.5"/><circle cx="6.5" cy="12.5" r="0.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
+                      </span>
+                      <div class="template-info">
+                        <span class="template-name">Bild-Prompt Generator</span>
+                        <span class="template-desc">Für Midjourney, DALL-E, Stable Diffusion</span>
+                      </div>
+                    </div>
+                    <div class="template-card" data-template="social-media">
+                      <span class="template-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+                      </span>
+                      <div class="template-info">
+                        <span class="template-name">Social Media</span>
+                        <span class="template-desc">Posts für LinkedIn, Twitter, Instagram</span>
+                      </div>
+                    </div>
+                    <div class="template-card" data-template="email">
+                      <span class="template-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                      </span>
+                      <div class="template-info">
+                        <span class="template-name">E-Mail Profi</span>
+                        <span class="template-desc">Professionelle E-Mails & Newsletter</span>
+                      </div>
+                    </div>
+                    <div class="template-card" data-template="custom">
+                      <span class="template-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                      </span>
+                      <div class="template-info">
+                        <span class="template-name">Eigener Agent</span>
+                        <span class="template-desc">Von Grund auf anpassen</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="wizard-divider"></div>
+                
+                <div class="form-group">
+                  <label class="form-label">Name</label>
+                  <input type="text" class="form-input" id="wizardAgentName" placeholder="z.B. Social Media Pro">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Kurze Beschreibung</label>
+                  <input type="text" class="form-input" id="wizardAgentDesc" placeholder="z.B. Optimiert für knackige Posts">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Icon</label>
+                  <div class="icon-picker" id="iconPicker">
+                    <div class="icon-option selected" data-icon="chat">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="document">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="star">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="target">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="edit">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="zap">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="lightbulb">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+                    </div>
+                    <div class="icon-option" data-icon="palette">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="0.5"/><circle cx="17.5" cy="10.5" r="0.5"/><circle cx="8.5" cy="7.5" r="0.5"/><circle cx="6.5" cy="12.5" r="0.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Farbe</label>
+                  <div class="color-picker" id="colorPicker">
+                    <div class="color-option selected" data-color="#7ED957" style="background: #7ED957;"></div>
+                    <div class="color-option" data-color="#3B82F6" style="background: #3B82F6;"></div>
+                    <div class="color-option" data-color="#F7D154" style="background: #F7D154;"></div>
+                    <div class="color-option" data-color="#EF4444" style="background: #EF4444;"></div>
+                    <div class="color-option" data-color="#8B5CF6" style="background: #8B5CF6;"></div>
+                    <div class="color-option" data-color="#EC4899" style="background: #EC4899;"></div>
+                  </div>
+                </div>
+
+                <div class="wizard-tip">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="wizard-tip-icon">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                  <span class="wizard-tip-text">Wähle einen Namen, der den Einsatzzweck beschreibt – so findest du ihn schneller wieder.</span>
+                </div>
+              </div>
+
+              <!-- Step 2: Style -->
+              <div class="wizard-content" id="wizardStep2">
+                <div class="wizard-section-title">Wie soll der Output klingen?</div>
+                
+                <div class="form-group">
+                  <label class="form-label">Ton / Stil</label>
+                  <div class="option-grid" id="tonePicker">
+                    <div class="option-card selected" data-value="technical">
+                      <div class="option-card-title">Technisch</div>
+                      <div class="option-card-desc">Präzise, sachlich</div>
+                    </div>
+                    <div class="option-card" data-value="formal">
+                      <div class="option-card-title">Formell</div>
+                      <div class="option-card-desc">Professionell, Business</div>
+                    </div>
+                    <div class="option-card" data-value="casual">
+                      <div class="option-card-title">Casual</div>
+                      <div class="option-card-desc">Locker, freundlich</div>
+                    </div>
+                    <div class="option-card" data-value="creative">
+                      <div class="option-card-title">Kreativ</div>
+                      <div class="option-card-desc">Ausschmückend, bildhaft</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 20px;">
+                  <label class="form-label">Fachbereich</label>
+                  <select class="form-select" id="wizardDomain">
+                    <option value="general">Allgemein</option>
+                    <option value="tech">Tech / Code</option>
+                    <option value="business">Business</option>
+                    <option value="creative">Kreativ / Design</option>
+                    <option value="medical">Medizin</option>
+                    <option value="legal">Legal / Recht</option>
+                  </select>
+                </div>
+
+                <div class="slider-container" style="margin-top: 20px;">
+                  <div class="slider-header">
+                    <span class="slider-label">Kreativität (Temperature)</span>
+                    <span class="slider-value" id="wizardCreativityValue">30%</span>
+                  </div>
+                  <input type="range" class="slider" id="wizardCreativity" min="0" max="100" value="30">
+                  <div class="slider-labels">
+                    <span class="slider-label-text">Exakt wiedergeben</span>
+                    <span class="slider-label-text">Frei ausschmücken</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3: Output -->
+              <div class="wizard-content" id="wizardStep3">
+                <div class="wizard-section-title">Wie soll der Output aussehen?</div>
+                
+                <div class="form-group">
+                  <label class="form-label">Formatierung</label>
+                  <div class="option-grid" id="formatPicker">
+                    <div class="option-card selected" data-value="prose">
+                      <div class="option-card-title">Fließtext</div>
+                      <div class="option-card-desc">Normale Absätze</div>
+                    </div>
+                    <div class="option-card" data-value="bullets">
+                      <div class="option-card-title">Bullet Points</div>
+                      <div class="option-card-desc">• Aufzählungen</div>
+                    </div>
+                    <div class="option-card" data-value="markdown">
+                      <div class="option-card-title">Markdown</div>
+                      <div class="option-card-desc"># Überschriften, **fett**</div>
+                    </div>
+                    <div class="option-card" data-value="code">
+                      <div class="option-card-title">Code-Blocks</div>
+                      <div class="option-card-desc">`code` formatiert</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 20px;">
+                  <label class="form-label">Output-Sprache</label>
+                  <select class="form-select" id="wizardOutputLang">
+                    <option value="same">Gleich wie Input</option>
+                    <option value="en">→ Immer Englisch</option>
+                    <option value="de">→ Immer Deutsch</option>
+                  </select>
+                </div>
+
+                <!-- Meeting-spezifische Optionen (nur für Meeting/Business-Agenten) -->
+                <div class="form-group" style="margin-top: 20px;" id="meetingOptionsSection">
+                  <label class="form-label">Meeting-Erkennung <span style="color: var(--text-muted); font-weight: 400;">(nur für Meeting-Agents)</span></label>
+                  <div class="checkbox-group" id="autoDetectGroup">
+                    <div class="checkbox-item" data-value="actions">
+                      <div class="checkbox-box">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      </div>
+                      <span class="checkbox-label">Action Items markieren</span>
+                    </div>
+                    <div class="checkbox-item" data-value="questions">
+                      <div class="checkbox-box">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      </div>
+                      <span class="checkbox-label">Fragen erkennen</span>
+                    </div>
+                    <div class="checkbox-item" data-value="deadlines">
+                      <div class="checkbox-box">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      </div>
+                      <span class="checkbox-label">Deadlines/Termine extrahieren</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="toggle" style="margin-top: 16px;">
+                  <span class="toggle-label">Autopaste aktivieren</span>
+                  <div class="toggle-switch active" id="wizardAutopaste"></div>
+                </div>
+
+                <div class="form-group" style="margin-top: 20px;">
+                  <label class="form-label">Hotkey (optional)</label>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" class="form-input" id="wizardHotkey" readonly placeholder="Klicken und Tasten drücken" style="flex: 1; cursor: pointer;">
+                    <button class="btn btn-secondary" id="clearWizardHotkey" style="padding: 8px 12px;">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                    z.B. Alt+M, Ctrl+Shift+F, etc. Leer lassen = kein globaler Hotkey
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 4: Preview -->
+              <div class="wizard-content" id="wizardStep4">
+                <div class="wizard-section-title">So arbeitet dein Agent</div>
+                
+                <div class="preview-box">
+                  <div class="preview-label">Beispiel-Input</div>
+                  <div class="preview-input" id="wizardPreviewInput">"Ähm also ich würde sagen das Meeting war echt produktiv heute ne und wir sollten das nächste Mal mehr Zeit einplanen"</div>
+                  <div class="preview-label" style="margin-top: 12px;">Dein Agent würde ausgeben</div>
+                  <div class="preview-output" id="wizardPreviewOutput">Das Meeting war heute sehr produktiv. Für das nächste Mal sollten wir mehr Zeit einplanen.</div>
+                </div>
+
+                <div class="card" style="margin-top: 20px; padding: 14px;">
+                  <div class="card-title" style="margin-bottom: 12px; font-size: 13px;">Zusammenfassung</div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                    <div><span style="color: var(--text-muted);">Name:</span> <span id="summaryName">Social Media Pro</span></div>
+                    <div><span style="color: var(--text-muted);">Ton:</span> <span id="summaryTone">Casual</span></div>
+                    <div><span style="color: var(--text-muted);">Format:</span> <span id="summaryFormat">Fließtext</span></div>
+                    <div><span style="color: var(--text-muted);">Kreativität:</span> <span id="summaryCreativity">30%</span></div>
+                    <div><span style="color: var(--text-muted);">Sprache:</span> <span id="summaryLang">Gleich</span></div>
+                    <div><span style="color: var(--text-muted);">Autopaste:</span> <span id="summaryAutopaste">Ja</span></div>
+                  </div>
+                </div>
+
+                <div class="wizard-tip" id="wizardHotkeyTip">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="wizard-tip-icon">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  <span class="wizard-tip-text" id="wizardHotkeyTipText">Kein Hotkey konfiguriert. Du kannst den Agent im Dashboard auswählen.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn btn-secondary" id="wizardBackBtn" style="visibility: hidden;">
+                ← Zurück
+              </button>
+              <button class="btn btn-primary" id="wizardNextBtn">
+                Weiter →
+              </button>
             </div>
           </div>
         </div>
@@ -1187,6 +2812,28 @@
     const copyLastBtn = document.getElementById('copyLastBtn');
     const hotkeyDisplay = document.getElementById('hotkeyDisplay');
 
+    // Custom agents storage
+    let customAgents = [];
+
+    // SVG Icon Map for agents
+    const agentIcons = {
+      chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+      document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+      target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+      edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+      zap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      lightbulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>',
+      palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="0.5"/><circle cx="17.5" cy="10.5" r="0.5"/><circle cx="8.5" cy="7.5" r="0.5"/><circle cx="6.5" cy="12.5" r="0.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>',
+      mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+      instagram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>'
+    };
+
+    // Get SVG icon HTML for an icon name
+    function getAgentIconSvg(iconName) {
+      return agentIcons[iconName] || agentIcons.star;
+    }
+
     // Initialize
     async function init() {
       // Load settings
@@ -1203,6 +2850,7 @@
       stats = await window.electronAPI.getStats();
       const profileData = await window.electronAPI.getProfiles();
       profiles = profileData.profiles;
+      customAgents = profileData.customAgents || [];
       snippets = await window.electronAPI.getSnippets();
       
       // Update UI
@@ -1211,6 +2859,7 @@
       updateStatsUI();
       updateProfilesUI(profileData.active);
       updateSnippetsUI();
+      renderCustomAgents();
       
       // Set hotkey display
       hotkeyDisplay.textContent = settings.shortcut || 'Alt+Cmd+K';
@@ -1218,6 +2867,101 @@
       // Setup event listeners
       setupEventListeners();
       setupIpcListeners();
+    }
+    
+    // Load custom agents from backend
+    async function loadCustomAgents() {
+      customAgents = await window.electronAPI.getCustomAgents();
+      renderCustomAgents();
+    }
+    
+    // Render custom agents in the grid
+    function renderCustomAgents() {
+      const grid = document.getElementById('agentGrid');
+      const addBtn = document.getElementById('addAgentBtn');
+      
+      // Remove existing custom agent cards (keep standard ones)
+      grid.querySelectorAll('.custom-agent-card').forEach(el => el.remove());
+      
+      // Add custom agents before the "+" button
+      customAgents.forEach((agent, index) => {
+        const card = document.createElement('div');
+        card.className = 'profile-card agent-card custom-agent-card';
+        card.dataset.agent = agent.id;
+        const iconSvg = getAgentIconSvg(agent.icon);
+        // Zeige benutzerdefinierten Hotkey oder nichts
+        const hotkeyDisplay = agent.hotkey 
+          ? agent.hotkey.replace('Command', '⌘').replace('Control', 'Ctrl').replace('Alt', '⌥').replace('Shift', '⇧')
+          : '';
+        card.innerHTML = `
+          ${hotkeyDisplay ? `<span class="agent-hotkey">${hotkeyDisplay}</span>` : ''}
+          <div class="profile-icon" style="background: ${agent.color || '#7ED957'};">
+            ${iconSvg}
+          </div>
+          <div class="profile-name">${agent.name}</div>
+          <div class="profile-desc">${agent.description || ''}</div>
+          <button class="delete-agent-btn" data-agent-id="${agent.id}" title="Agent löschen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        `;
+        
+        // Add click handler for selecting agent
+        card.addEventListener('click', (e) => {
+          if (!e.target.closest('.delete-agent-btn')) {
+            selectAgent(agent.id);
+          }
+        });
+        
+        // Add delete handler
+        const deleteBtn = card.querySelector('.delete-agent-btn');
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm(`Agent "${agent.name}" wirklich löschen?`)) {
+            await deleteCustomAgent(agent.id);
+          }
+        });
+        
+        grid.insertBefore(card, addBtn);
+      });
+    }
+    
+    // Delete custom agent
+    async function deleteCustomAgent(agentId) {
+      try {
+        await window.electronAPI.deleteAgent(agentId);
+        await loadCustomAgents();
+        showToast('Agent gelöscht');
+      } catch (error) {
+        console.error('Failed to delete agent:', error);
+        alert('Fehler beim Löschen: ' + error.message);
+      }
+    }
+    
+    // Show toast notification
+    function showToast(message, iconName) {
+      // Remove existing toast
+      const existingToast = document.querySelector('.toast-notification');
+      if (existingToast) existingToast.remove();
+      
+      const toast = document.createElement('div');
+      toast.className = 'toast-notification';
+      const iconSvg = iconName && agentIcons[iconName] ? agentIcons[iconName] : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+      toast.innerHTML = `<span class="toast-icon">${iconSvg}</span> ${message}`;
+      document.body.appendChild(toast);
+      
+      // Trigger animation
+      requestAnimationFrame(() => {
+        toast.classList.add('show');
+      });
+      
+      // Remove after delay
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
     }
 
     // Event Listeners
@@ -1241,6 +2985,15 @@
         const isActive = e.target.classList.toggle('active');
         await window.electronAPI.setSettings({ autopaste: isActive });
         settings.autopaste = isActive;
+        updateCopyToClipboardToggleState();
+      });
+
+      document.getElementById('toggleCopyToClipboard').addEventListener('click', async (e) => {
+        // Only allow toggle if autopaste is off
+        if (settings.autopaste) return;
+        const isActive = e.target.classList.toggle('active');
+        await window.electronAPI.setSettings({ copyToClipboard: isActive });
+        settings.copyToClipboard = isActive;
       });
 
       document.getElementById('togglePolish').addEventListener('click', async (e) => {
@@ -1255,22 +3008,20 @@
         settings.language = e.target.value;
       });
 
+      // History search
+      document.getElementById('historySearch').addEventListener('input', (e) => {
+        const activeFilter = document.querySelector('.filter-chip.active')?.dataset.filter || 'all';
+        filterHistory(activeFilter, e.target.value);
+      });
+
       // History filters
       document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.addEventListener('click', () => {
           document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
-          filterHistory(chip.dataset.filter);
+          const searchTerm = document.getElementById('historySearch').value;
+          filterHistory(chip.dataset.filter, searchTerm);
         });
-      });
-
-      // Profile selection
-      document.getElementById('profileGrid').addEventListener('click', (e) => {
-        const card = e.target.closest('.profile-card');
-        if (card) {
-          const profileId = card.dataset.profile;
-          selectProfile(profileId);
-        }
       });
 
       // Add snippet
@@ -1344,6 +3095,271 @@
           }
         }
       });
+
+      // ============================================
+      // AGENT WIZARD LOGIC
+      // ============================================
+      
+      // Agent selection
+      document.getElementById('agentGrid').addEventListener('click', (e) => {
+        const card = e.target.closest('.agent-card');
+        if (card && !card.classList.contains('add-agent-card')) {
+          const agentId = card.dataset.agent;
+          selectAgent(agentId);
+        }
+      });
+
+      // Open wizard
+      document.getElementById('addAgentBtn').addEventListener('click', openAgentWizard);
+      
+      // Close wizard
+      document.getElementById('closeWizardBtn').addEventListener('click', closeAgentWizard);
+      document.getElementById('agentWizardModal').addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) {
+          closeAgentWizard();
+        }
+      });
+
+      // Wizard navigation
+      document.getElementById('wizardNextBtn').addEventListener('click', wizardNext);
+      document.getElementById('wizardBackBtn').addEventListener('click', wizardBack);
+
+      // Wizard step clicks
+      document.querySelectorAll('.wizard-step').forEach(step => {
+        step.addEventListener('click', () => {
+          const stepNum = parseInt(step.dataset.step);
+          if (stepNum <= currentWizardStep) {
+            goToWizardStep(stepNum);
+          }
+        });
+      });
+
+      // Template picker
+      document.getElementById('templatePicker').addEventListener('click', (e) => {
+        const card = e.target.closest('.template-card');
+        if (card) {
+          document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          applyTemplate(card.dataset.template);
+        }
+      });
+      
+      // Icon picker
+      document.getElementById('iconPicker').addEventListener('click', (e) => {
+        const option = e.target.closest('.icon-option');
+        if (option) {
+          document.querySelectorAll('#iconPicker .icon-option').forEach(o => o.classList.remove('selected'));
+          option.classList.add('selected');
+          wizardData.icon = option.dataset.icon;
+        }
+      });
+
+      // Color picker
+      document.getElementById('colorPicker').addEventListener('click', (e) => {
+        const option = e.target.closest('.color-option');
+        if (option) {
+          document.querySelectorAll('#colorPicker .color-option').forEach(o => o.classList.remove('selected'));
+          option.classList.add('selected');
+          wizardData.color = option.dataset.color;
+        }
+      });
+
+      // Tone picker
+      document.getElementById('tonePicker').addEventListener('click', (e) => {
+        const card = e.target.closest('.option-card');
+        if (card) {
+          document.querySelectorAll('#tonePicker .option-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          wizardData.tone = card.dataset.value;
+        }
+      });
+
+      // Format picker
+      document.getElementById('formatPicker').addEventListener('click', (e) => {
+        const card = e.target.closest('.option-card');
+        if (card) {
+          document.querySelectorAll('#formatPicker .option-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          wizardData.format = card.dataset.value;
+        }
+      });
+
+      // Checkbox group
+      document.getElementById('autoDetectGroup').addEventListener('click', (e) => {
+        const item = e.target.closest('.checkbox-item');
+        if (item) {
+          item.classList.toggle('checked');
+          const value = item.dataset.value;
+          if (item.classList.contains('checked')) {
+            wizardData.autoDetect.push(value);
+          } else {
+            wizardData.autoDetect = wizardData.autoDetect.filter(v => v !== value);
+          }
+        }
+      });
+      
+      // Domain select - update meeting options visibility
+      document.getElementById('wizardDomain').addEventListener('change', (e) => {
+        wizardData.domain = e.target.value;
+        updateMeetingOptionsVisibility();
+      });
+      
+      // Name input - update meeting options and preview on change
+      document.getElementById('wizardAgentName').addEventListener('input', (e) => {
+        wizardData.name = e.target.value;
+        updateMeetingOptionsVisibility();
+      });
+      
+      // Description input - update meeting options on change  
+      document.getElementById('wizardAgentDesc').addEventListener('input', (e) => {
+        wizardData.description = e.target.value;
+        updateMeetingOptionsVisibility();
+      });
+
+      // Creativity slider in wizard
+      document.getElementById('wizardCreativity').addEventListener('input', (e) => {
+        const value = e.target.value;
+        document.getElementById('wizardCreativityValue').textContent = value + '%';
+        wizardData.creativity = parseInt(value);
+      });
+
+      // Autopaste toggle in wizard
+      document.getElementById('wizardAutopaste').addEventListener('click', (e) => {
+        e.target.classList.toggle('active');
+        wizardData.autopaste = e.target.classList.contains('active');
+      });
+
+      // Hotkey input in wizard
+      const wizardHotkeyInput = document.getElementById('wizardHotkey');
+      wizardHotkeyInput.addEventListener('click', () => {
+        wizardHotkeyInput.value = 'Drücke Tastenkombination...';
+        wizardHotkeyInput.style.borderColor = 'var(--accent-green)';
+      });
+
+      wizardHotkeyInput.addEventListener('keydown', (e) => {
+        e.preventDefault();
+        const parts = [];
+        if (e.ctrlKey) parts.push('Ctrl');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        if (e.metaKey) parts.push('Cmd');
+        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+          parts.push(e.key.toUpperCase());
+        }
+        if (parts.length >= 2 && !['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+          // Format für Electron: Command statt Cmd, etc.
+          const electronParts = parts.map(p => {
+            if (p === 'Cmd') return 'Command';
+            if (p === 'Ctrl') return 'Control';
+            return p;
+          });
+          wizardHotkeyInput.value = parts.join('+');
+          wizardData.hotkey = electronParts.join('+');
+          wizardHotkeyInput.style.borderColor = '';
+          wizardHotkeyInput.blur();
+        }
+      });
+
+      wizardHotkeyInput.addEventListener('blur', () => {
+        if (wizardHotkeyInput.value === 'Drücke Tastenkombination...') {
+          wizardHotkeyInput.value = '';
+          wizardData.hotkey = '';
+        }
+        wizardHotkeyInput.style.borderColor = '';
+      });
+
+      document.getElementById('clearWizardHotkey').addEventListener('click', () => {
+        wizardHotkeyInput.value = '';
+        wizardData.hotkey = '';
+      });
+
+      // Agent config sliders
+      document.getElementById('agentCreativity').addEventListener('input', (e) => {
+        document.getElementById('creativityValue').textContent = e.target.value + '%';
+      });
+
+      document.getElementById('agentAutopaste').addEventListener('click', (e) => {
+        e.target.classList.toggle('active');
+      });
+
+      // Agent Hotkey Picker
+      const agentHotkeyInput = document.getElementById('agentHotkeyInput');
+      let pendingAgentHotkey = '';
+
+      agentHotkeyInput.addEventListener('click', () => {
+        agentHotkeyInput.value = 'Drücke Tastenkombination...';
+        agentHotkeyInput.style.borderColor = 'var(--accent-green)';
+      });
+
+      agentHotkeyInput.addEventListener('keydown', (e) => {
+        e.preventDefault();
+        const parts = [];
+        if (e.ctrlKey) parts.push('Ctrl');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        if (e.metaKey) parts.push('Cmd');
+        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+          parts.push(e.key.toUpperCase());
+        }
+        if (parts.length >= 2 && !['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+          const electronParts = parts.map(p => {
+            if (p === 'Cmd') return 'Command';
+            if (p === 'Ctrl') return 'Control';
+            return p;
+          });
+          agentHotkeyInput.value = parts.join('+');
+          pendingAgentHotkey = electronParts.join('+');
+          agentHotkeyInput.style.borderColor = '';
+          agentHotkeyInput.blur();
+        }
+      });
+
+      agentHotkeyInput.addEventListener('blur', () => {
+        if (agentHotkeyInput.value === 'Drücke Tastenkombination...') {
+          // Zeige den aktuellen Hotkey wieder an
+          const activeAgent = document.querySelector('.profile-card.active')?.dataset.agent;
+          if (activeAgent) {
+            const agent = customAgents.find(a => a.id === activeAgent);
+            if (agent?.hotkey) {
+              agentHotkeyInput.value = agent.hotkey.replace('Command', '⌘').replace('Control', 'Ctrl').replace('Alt', '⌥').replace('Shift', '⇧');
+              pendingAgentHotkey = agent.hotkey;
+            } else {
+              agentHotkeyInput.value = '';
+              pendingAgentHotkey = '';
+            }
+          }
+        }
+        agentHotkeyInput.style.borderColor = '';
+      });
+
+      document.getElementById('clearAgentHotkey').addEventListener('click', () => {
+        agentHotkeyInput.value = '';
+        pendingAgentHotkey = '';
+      });
+
+      document.getElementById('saveAgentHotkey').addEventListener('click', async () => {
+        const activeAgent = document.querySelector('.profile-card.active')?.dataset.agent;
+        if (!activeAgent) return;
+
+        try {
+          await window.electronAPI.updateAgentHotkey(activeAgent, pendingAgentHotkey);
+          
+          // Update local data
+          const agent = customAgents.find(a => a.id === activeAgent);
+          if (agent) {
+            agent.hotkey = pendingAgentHotkey;
+          }
+          
+          // Re-render agents
+          renderCustomAgents();
+          updateAgentsUI(activeAgent);
+          
+          showToast(pendingAgentHotkey ? `Hotkey gespeichert: ${agentHotkeyInput.value}` : 'Hotkey entfernt');
+        } catch (error) {
+          console.error('Failed to save hotkey:', error);
+          showToast('Fehler beim Speichern des Hotkeys', null, 'error');
+        }
+      });
     }
 
     // IPC Listeners
@@ -1358,6 +3374,87 @@
         stats = newStats;
         updateStatsUI();
       });
+
+      // Agent switch listener (from hotkey)
+      window.electronAPI.onAgentSwitched((data) => {
+        console.log('Agent switched via hotkey:', data);
+        const agentId = typeof data === 'string' ? data : data.id;
+        updateAgentsUI(agentId);
+        showAgentSwitchToast(agentId);
+      });
+    }
+
+    // Toast notification for agent switch
+    function showAgentSwitchToast(agentId) {
+      // Standard agents
+      const standardAgents = {
+        coding: { name: 'Coding', color: '#3B82F6', hotkey: '⌘1', icon: '💻' },
+        meeting: { name: 'Meeting', color: '#F7D154', hotkey: '⌘2', icon: '📅' },
+        dictation: { name: 'Diktat', color: '#7ED957', hotkey: '⌘3', icon: '✍️' }
+      };
+
+      let name, color, hotkey, icon;
+      
+      if (standardAgents[agentId]) {
+        name = standardAgents[agentId].name;
+        color = standardAgents[agentId].color;
+        hotkey = standardAgents[agentId].hotkey;
+        icon = standardAgents[agentId].icon;
+      } else {
+        // Check custom agents
+        const customAgent = customAgents.find(a => a.id === agentId);
+        if (customAgent) {
+          name = customAgent.name;
+          color = customAgent.color || '#7ED957';
+          icon = customAgent.icon || '🎯';
+          const index = customAgents.indexOf(customAgent);
+          hotkey = `⌘${index + 4}`;
+        } else {
+          name = agentId;
+          color = '#7ED957';
+          hotkey = '';
+          icon = '🎯';
+        }
+      }
+
+      // Remove existing toast
+      const existingToast = document.getElementById('agentToast');
+      if (existingToast) existingToast.remove();
+
+      // Create toast
+      const toast = document.createElement('div');
+      toast.id = 'agentToast';
+      toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 32px; height: 32px; background: ${color}; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+            ${icon}
+          </div>
+          <div>
+            <div style="font-weight: 600; font-size: 14px;">${name}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Agent aktiviert ${hotkey}</div>
+          </div>
+        </div>
+      `;
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        box-shadow: var(--shadow-lg);
+        z-index: 9999;
+        animation: slideInToast 0.3s ease;
+      `;
+
+      document.body.appendChild(toast);
+
+      // Remove after 2 seconds
+      setTimeout(() => {
+        toast.style.animation = 'slideOutToast 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
     }
 
     // Tab Navigation
@@ -1379,7 +3476,7 @@
         transcription: 'Transkription',
         history: 'History',
         stats: 'Statistiken',
-        profiles: 'Profile',
+        agents: 'Agenten',
         snippets: 'Snippets',
         settings: 'Einstellungen',
         owner: 'Owner Analytics'
@@ -1454,9 +3551,25 @@
       }
     }
 
+    // Update copyToClipboard toggle state based on autopaste
+    function updateCopyToClipboardToggleState() {
+      const copyToggle = document.getElementById('toggleCopyToClipboard');
+      const copyRow = document.getElementById('toggleCopyToClipboardRow');
+      
+      if (settings.autopaste) {
+        copyToggle.classList.remove('active');
+        copyRow.style.opacity = '0.5';
+        copyRow.style.pointerEvents = 'none';
+      } else {
+        copyRow.style.opacity = '1';
+        copyRow.style.pointerEvents = 'auto';
+      }
+    }
+
     // UI Updates
     function updateSettingsUI() {
       document.getElementById('toggleAutopaste').classList.toggle('active', settings.autopaste);
+      document.getElementById('toggleCopyToClipboard').classList.toggle('active', settings.copyToClipboard && !settings.autopaste);
       document.getElementById('togglePolish').classList.toggle('active', settings.enablePolish);
       document.getElementById('languageSelect').value = settings.language || 'de';
       document.getElementById('groqApiKey').value = settings.groqApiKey || '';
@@ -1465,6 +3578,9 @@
       document.getElementById('toggleBeep').classList.toggle('active', settings.beepEnabled);
       document.getElementById('toggleHideDock').classList.toggle('active', settings.hideDock);
       document.getElementById('shortcutInput').value = settings.shortcut || '';
+      
+      // Update copyToClipboard toggle state
+      updateCopyToClipboardToggleState();
     }
 
     function updateHistoryUI() {
@@ -1520,66 +3636,761 @@
       `).join('');
     }
 
-    function filterHistory(filter) {
+    function filterHistory(filter, searchTerm = '') {
       const items = document.querySelectorAll('.history-item');
+      const search = searchTerm.toLowerCase().trim();
+      
       items.forEach(item => {
         const id = parseInt(item.dataset.id);
         const historyItem = history.find(h => h.id === id);
         
         let show = true;
+        
+        // Filter by category
         if (filter === 'favorites') show = historyItem?.favorite;
         else if (filter !== 'all') show = historyItem?.role === filter;
+        
+        // Filter by search term (searches both transcript and polished text)
+        if (show && search) {
+          const transcript = (historyItem?.transcript || '').toLowerCase();
+          const polished = (historyItem?.polished || '').toLowerCase();
+          show = transcript.includes(search) || polished.includes(search);
+        }
         
         item.style.display = show ? 'block' : 'none';
       });
     }
 
     function updateStatsUI() {
-      document.getElementById('statWordsToday').textContent = (stats.wordsToday || 0).toLocaleString();
-      document.getElementById('statWordsWeek').textContent = (stats.wordsWeek || 0).toLocaleString();
-      document.getElementById('statWordsTotal').textContent = (stats.wordsTotal || 0).toLocaleString();
-      document.getElementById('statSessions').textContent = (stats.sessionsCount || 0).toLocaleString();
+      // Plausibilitätsprüfung
+      const warnings = validateStats();
       
-      // Calculate impact stats from history
-      const polishedItems = history.filter(h => h.polishUsed && h.delta);
-      const avgFillers = polishedItems.length > 0 
-        ? Math.round(polishedItems.reduce((sum, h) => sum + (h.delta?.fillersRemoved || 0), 0) / polishedItems.length)
-        : 0;
-      const avgReduction = polishedItems.length > 0
-        ? Math.round(polishedItems.reduce((sum, h) => sum + ((h.delta?.wordsDiff || 0) / (h.delta?.wordsBefore || 1) * 100), 0) / polishedItems.length)
-        : 0;
-      const polishUsage = history.length > 0
-        ? Math.round(polishedItems.length / history.length * 100)
-        : 0;
-      const successRate = stats.sessionsCount > 0
-        ? Math.round((stats.sessionsCount - (stats.errorsCount || 0)) / stats.sessionsCount * 100)
-        : 100;
+      const sessionsCount = stats.sessionsCount || 0;
+      const wordsTotal = stats.wordsTotal || 0;
+      const minutesTotal = stats.minutesTotal || 0;
+      const errorsCount = stats.errorsCount || 0;
       
-      document.getElementById('impactFillers').textContent = avgFillers;
-      document.getElementById('impactWords').textContent = `${avgReduction}%`;
-      document.getElementById('impactUsage').textContent = `${polishUsage}%`;
-      document.getElementById('impactSuccess').textContent = `${successRate}%`;
-    }
-
-    function updateProfilesUI(activeProfile) {
-      document.querySelectorAll('.profile-card').forEach(card => {
-        card.classList.toggle('active', card.dataset.profile === activeProfile);
+      // Zeige/verstecke Empty State
+      const hasData = sessionsCount > 0 || history.length > 0;
+      document.getElementById('statsEmptyState').style.display = hasData ? 'none' : 'block';
+      document.querySelectorAll('#tab-stats .card').forEach(card => {
+        card.style.display = hasData ? 'block' : 'none';
       });
       
-      const profile = profiles[activeProfile];
-      if (profile) {
-        document.getElementById('profileLanguage').value = profile.language || 'de';
-        document.getElementById('profileAutopaste').classList.toggle('active', profile.autopaste);
+      if (!hasData) return;
+      
+      // === Hauptübersicht ===
+      setStatValue('statSessions', sessionsCount);
+      setStatValue('statWordsTotal', wordsTotal);
+      document.getElementById('statMinutesTotal').innerHTML = `${formatNumber(Math.round(minutesTotal))}<span class="stat-unit">min</span>`;
+      
+      // Durchschnittliche Wörter pro Session
+      const avgWords = sessionsCount > 0 ? Math.round(wordsTotal / sessionsCount) : 0;
+      setStatValue('statAvgWords', avgWords, true);
+      
+      // === Zeitbasierte Statistiken ===
+      // Datum-Labels setzen
+      const today = new Date();
+      document.getElementById('statDateToday').textContent = today.toLocaleDateString('de-DE', { 
+        day: '2-digit', month: '2-digit' 
+      });
+      
+      const weekStart = getWeekStartDate(today);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      document.getElementById('statDateWeek').textContent = 
+        `${weekStart.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} - ${weekEnd.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`;
+      
+      setStatValue('statWordsToday', stats.wordsToday || 0, true);
+      setStatValue('statWordsWeek', stats.wordsWeek || 0, true);
+      setStatValue('statWordsTotalTime', wordsTotal);
+      
+      // Sessions pro Zeitraum berechnen (aus History + Stats)
+      const todayStr = today.toISOString().split('T')[0];
+      const weekStartStr = weekStart.toISOString().split('T')[0];
+      
+      // Bevorzuge Stats-Werte, Fallback auf History-Berechnung
+      const sessionsToday = stats.sessionsToday || history.filter(h => h.timestamp?.startsWith(todayStr)).length;
+      const sessionsWeek = stats.sessionsWeek || history.filter(h => h.timestamp >= weekStartStr).length;
+      
+      setStatValue('statSessionsToday', sessionsToday, true);
+      setStatValue('statSessionsWeek', sessionsWeek, true);
+      setStatValue('statSessionsTotal', sessionsCount);
+      
+      // === Polish-Analyse ===
+      const polishedItems = history.filter(h => h.polishUsed && h.delta);
+      const polishEnabled = settings.enablePolish && settings.haikuApiKey;
+      
+      // Badge Status
+      const polishBadge = document.getElementById('polishStatusBadge');
+      if (polishEnabled) {
+        polishBadge.textContent = 'Aktiv';
+        polishBadge.classList.remove('inactive');
+      } else {
+        polishBadge.textContent = 'Inaktiv';
+        polishBadge.classList.add('inactive');
+      }
+      
+      // Füllwörter entfernt
+      const totalFillers = polishedItems.reduce((sum, h) => sum + (h.delta?.fillersRemoved || 0), 0);
+      const avgFillers = polishedItems.length > 0 ? Math.round(totalFillers / polishedItems.length) : 0;
+      setStatValue('impactFillers', avgFillers, true);
+      
+      // Beispiele für entfernte Füllwörter sammeln
+      const allFillers = polishedItems.flatMap(h => h.delta?.fillersList || []);
+      const uniqueFillers = [...new Set(allFillers)].slice(0, 4);
+      document.getElementById('impactFillersExamples').textContent = 
+        uniqueFillers.length > 0 ? `z.B. ${uniqueFillers.join(', ')}` : 'z.B. ähm, also, quasi';
+      
+      // Textreduktion
+      const avgReduction = polishedItems.length > 0
+        ? Math.round(polishedItems.reduce((sum, h) => {
+            const before = h.delta?.wordsBefore || 1;
+            const diff = h.delta?.wordsDiff || 0;
+            return sum + (diff / before * 100);
+          }, 0) / polishedItems.length)
+        : 0;
+      document.getElementById('impactWords').textContent = `${Math.abs(avgReduction)}%`;
+      document.getElementById('impactWordsBar').style.width = `${Math.min(Math.abs(avgReduction), 100)}%`;
+      
+      // Polish-Nutzung
+      const polishCount = polishedItems.length;
+      const totalCount = history.length;
+      const polishUsage = totalCount > 0 ? Math.round(polishCount / totalCount * 100) : 0;
+      document.getElementById('impactUsage').textContent = `${polishUsage}%`;
+      document.getElementById('impactPolishCount').textContent = polishCount;
+      document.getElementById('impactTotalCount').textContent = totalCount;
+      
+      // Erfolgsquote
+      const successCount = sessionsCount - errorsCount;
+      const successRate = sessionsCount > 0 ? Math.round(successCount / sessionsCount * 100) : 100;
+      document.getElementById('impactSuccess').textContent = `${successRate}%`;
+      document.getElementById('impactSuccessCount').textContent = successCount;
+      document.getElementById('impactErrorCount').textContent = errorsCount;
+    }
+    
+    function getWeekStartDate(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Montag als Wochenstart
+      return new Date(d.setDate(diff));
+    }
+    
+    // Formatiert Zahlen mit K/M Suffix für große Werte
+    function formatNumber(num) {
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 10000) return (num / 1000).toFixed(1) + 'K';
+      return num.toLocaleString('de-DE');
+    }
+    
+    // Setzt einen Wert mit optionaler Zero-Klasse
+    function setStatValue(elementId, value, isZeroMuted = false) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      
+      const numValue = typeof value === 'number' ? value : parseInt(value) || 0;
+      el.textContent = formatNumber(numValue);
+      
+      if (isZeroMuted && numValue === 0) {
+        el.classList.add('stat-value-zero');
+      } else {
+        el.classList.remove('stat-value-zero');
+      }
+    }
+    
+    // Plausibilitätsprüfung der Daten
+    function validateStats() {
+      const warnings = [];
+      
+      // Prüfe ob Wörter heute/woche größer als gesamt sind
+      if ((stats.wordsToday || 0) > (stats.wordsTotal || 0)) {
+        warnings.push('Wörter heute größer als gesamt - Daten werden korrigiert.');
+        stats.wordsTotal = stats.wordsToday;
+      }
+      
+      if ((stats.wordsWeek || 0) > (stats.wordsTotal || 0)) {
+        warnings.push('Wörter diese Woche größer als gesamt - Daten werden korrigiert.');
+        stats.wordsTotal = stats.wordsWeek;
+      }
+      
+      // Prüfe auf unrealistische Durchschnittswerte
+      const avgWords = stats.sessionsCount > 0 ? stats.wordsTotal / stats.sessionsCount : 0;
+      if (avgWords > 5000) {
+        warnings.push('Ungewöhnlich hoher Wortdurchschnitt pro Session erkannt.');
+      }
+      
+      return warnings;
+    }
+
+    // ============================================
+    // AGENT SYSTEM
+    // ============================================
+    
+    let currentWizardStep = 1;
+    let wizardData = {
+      name: '',
+      description: '',
+      icon: 'chat',
+      color: '#7ED957',
+      tone: 'technical',
+      domain: 'general',
+      creativity: 30,
+      format: 'prose',
+      outputLang: 'same',
+      autoDetect: [],
+      autopaste: true,
+      length: 'medium',
+      fillerWords: true,
+      isPromptGenerator: false,
+      hotkey: '' // Benutzerdefinierter Hotkey
+    };
+    
+    // Agent Templates for Quick Start
+    const agentTemplates = {
+      'image-prompt': {
+        name: 'Bild-Prompt Generator',
+        description: 'Erstellt detaillierte Prompts für KI-Bildgenerierung',
+        icon: 'palette',
+        color: '#8B5CF6',
+        tone: 'creative',
+        domain: 'creative',
+        creativity: 80,
+        format: 'prose',
+        outputLang: 'en', // Midjourney etc. funktionieren am besten mit Englisch
+        autoDetect: [],
+        autopaste: true,
+        length: 'long',
+        fillerWords: true,
+        isPromptGenerator: true
+      },
+      'social-media': {
+        name: 'Social Media',
+        description: 'Optimiert für LinkedIn, Twitter, Instagram Posts',
+        icon: 'instagram',
+        color: '#3B82F6',
+        tone: 'casual',
+        domain: 'creative',
+        creativity: 60,
+        format: 'prose',
+        outputLang: 'same',
+        autoDetect: [],
+        autopaste: true,
+        length: 'short',
+        fillerWords: true,
+        isPromptGenerator: false
+      },
+      'email': {
+        name: 'E-Mail Profi',
+        description: 'Professionelle E-Mails & Newsletter',
+        icon: 'mail',
+        color: '#F7D154',
+        tone: 'formal',
+        domain: 'business',
+        creativity: 30,
+        format: 'prose',
+        outputLang: 'same',
+        autoDetect: ['actions'],
+        autopaste: true,
+        length: 'medium',
+        fillerWords: true,
+        isPromptGenerator: false
+      },
+      'custom': {
+        name: '',
+        description: '',
+        icon: 'chat',
+        color: '#7ED957',
+        tone: 'technical',
+        domain: 'general',
+        creativity: 30,
+        format: 'prose',
+        outputLang: 'same',
+        autoDetect: [],
+        autopaste: true,
+        length: 'medium',
+        fillerWords: true,
+        isPromptGenerator: false
+      }
+    };
+    
+    function applyTemplate(templateId) {
+      const template = agentTemplates[templateId];
+      if (!template) return;
+      
+      // Apply template to wizardData
+      Object.assign(wizardData, template);
+      
+      // Update UI elements
+      document.getElementById('wizardAgentName').value = template.name;
+      document.getElementById('wizardAgentDesc').value = template.description;
+      
+      // Update icon picker
+      document.querySelectorAll('#iconPicker .icon-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.icon === template.icon);
+      });
+      
+      // Update color picker
+      document.querySelectorAll('#colorPicker .color-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.color === template.color);
+      });
+      
+      // Update tone picker
+      document.querySelectorAll('#tonePicker .option-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.value === template.tone);
+      });
+      
+      // Update format picker
+      document.querySelectorAll('#formatPicker .option-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.value === template.format);
+      });
+      
+      // Update creativity slider
+      const creativitySlider = document.getElementById('creativitySlider');
+      if (creativitySlider) {
+        creativitySlider.value = template.creativity;
+        document.getElementById('creativityValue').textContent = template.creativity + '%';
+      }
+      
+      // Update output language
+      const outputLangSelect = document.getElementById('wizardOutputLang');
+      if (outputLangSelect) {
+        outputLangSelect.value = template.outputLang;
+      }
+      
+      // Update domain
+      const domainSelect = document.getElementById('wizardDomain');
+      if (domainSelect) {
+        domainSelect.value = template.domain;
+      }
+      
+      // Update meeting options visibility
+      updateMeetingOptionsVisibility();
+    }
+
+    function updateAgentsUI(activeAgent) {
+      document.querySelectorAll('.agent-card').forEach(card => {
+        if (!card.classList.contains('add-agent-card')) {
+          card.classList.toggle('active', card.dataset.agent === activeAgent);
+        }
+      });
+      
+      // Standard agent info (feste Hotkeys, nicht änderbar)
+      const standardAgents = {
+        coding: { name: 'Coding', hotkey: '⌘1', isStandard: true },
+        meeting: { name: 'Meeting', hotkey: '⌘2', isStandard: true },
+        dictation: { name: 'Diktat', hotkey: '⌘3', isStandard: true }
+      };
+      
+      let agentName = activeAgent;
+      let agentHotkey = '';
+      let isCustomAgent = false;
+      let rawHotkey = '';
+      
+      if (standardAgents[activeAgent]) {
+        agentName = standardAgents[activeAgent].name;
+        agentHotkey = standardAgents[activeAgent].hotkey;
+        isCustomAgent = false;
+      } else {
+        // Check custom agents
+        const customAgent = customAgents.find(a => a.id === activeAgent);
+        if (customAgent) {
+          agentName = customAgent.name;
+          rawHotkey = customAgent.hotkey || '';
+          agentHotkey = rawHotkey 
+            ? rawHotkey.replace('Command', '⌘').replace('Control', 'Ctrl').replace('Alt', '⌥').replace('Shift', '⇧')
+            : 'Kein Hotkey';
+          isCustomAgent = true;
+        }
+      }
+      
+      document.getElementById('activeAgentName').textContent = agentName;
+      document.getElementById('activeAgentHotkey').textContent = agentHotkey;
+      
+      // Zeige/verstecke Hotkey-Gruppe für Custom Agents
+      const hotkeyGroup = document.getElementById('agentHotkeyGroup');
+      const hotkeyInput = document.getElementById('agentHotkeyInput');
+      if (hotkeyGroup) {
+        hotkeyGroup.style.display = isCustomAgent ? 'block' : 'none';
+        if (isCustomAgent && hotkeyInput) {
+          hotkeyInput.value = rawHotkey 
+            ? rawHotkey.replace('Command', '⌘').replace('Control', 'Ctrl').replace('Alt', '⌥').replace('Shift', '⇧')
+            : '';
+        }
       }
     }
 
-    async function selectProfile(profileId) {
-      await window.electronAPI.setActiveProfile(profileId);
-      updateProfilesUI(profileId);
+    async function selectAgent(agentId) {
+      // Update UI immediately
+      updateAgentsUI(agentId);
       
-      // Reload settings
-      settings = await window.electronAPI.getSettings();
-      updateSettingsUI();
+      // Persist to backend
+      try {
+        await window.electronAPI.setActiveProfile(agentId);
+        console.log('Agent switched to:', agentId);
+      } catch (error) {
+        console.error('Failed to switch agent:', error);
+      }
+    }
+
+    function openAgentWizard() {
+      // Reset wizard state
+      currentWizardStep = 1;
+      wizardData = {
+        name: '',
+        description: '',
+        icon: 'chat',
+        color: '#7ED957',
+        tone: 'technical',
+        domain: 'general',
+        creativity: 30,
+        format: 'prose',
+        outputLang: 'same',
+        autoDetect: [],
+        autopaste: true,
+        length: 'medium',
+        fillerWords: true,
+        isPromptGenerator: false,
+        hotkey: ''
+      };
+      
+      // Reset form
+      document.getElementById('wizardAgentName').value = '';
+      document.getElementById('wizardAgentDesc').value = '';
+      document.getElementById('wizardHotkey').value = '';
+      document.getElementById('wizardCreativity').value = 30;
+      document.getElementById('wizardCreativityValue').textContent = '30%';
+      
+      // Reset template picker (select "custom" by default)
+      document.querySelectorAll('.template-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.template === 'custom');
+      });
+      
+      // Reset selections
+      document.querySelectorAll('#iconPicker .icon-option').forEach((o, i) => {
+        o.classList.toggle('selected', i === 0);
+      });
+      document.querySelectorAll('#colorPicker .color-option').forEach((o, i) => {
+        o.classList.toggle('selected', i === 0);
+      });
+      document.querySelectorAll('#tonePicker .option-card').forEach((o, i) => {
+        o.classList.toggle('selected', i === 0);
+      });
+      document.querySelectorAll('#formatPicker .option-card').forEach((o, i) => {
+        o.classList.toggle('selected', i === 0);
+      });
+      document.querySelectorAll('#autoDetectGroup .checkbox-item').forEach(o => {
+        o.classList.remove('checked');
+      });
+      document.getElementById('wizardAutopaste').classList.add('active');
+      
+      // Reset steps
+      goToWizardStep(1);
+      
+      // Update meeting options visibility (default: hidden)
+      updateMeetingOptionsVisibility();
+      
+      // Show modal
+      document.getElementById('agentWizardModal').classList.add('active');
+    }
+
+    function closeAgentWizard() {
+      document.getElementById('agentWizardModal').classList.remove('active');
+    }
+
+    function goToWizardStep(stepNum) {
+      currentWizardStep = stepNum;
+      
+      // Update step indicators
+      document.querySelectorAll('.wizard-step').forEach(step => {
+        const num = parseInt(step.dataset.step);
+        step.classList.remove('active', 'completed');
+        if (num === stepNum) {
+          step.classList.add('active');
+        } else if (num < stepNum) {
+          step.classList.add('completed');
+        }
+      });
+      
+      // Update content
+      document.querySelectorAll('.wizard-content').forEach((content, i) => {
+        content.classList.toggle('active', i + 1 === stepNum);
+      });
+      
+      // Update buttons
+      document.getElementById('wizardBackBtn').style.visibility = stepNum === 1 ? 'hidden' : 'visible';
+      document.getElementById('wizardNextBtn').textContent = stepNum === 4 ? 'Agent erstellen' : 'Weiter →';
+      
+      // If on preview step, update summary
+      if (stepNum === 4) {
+        updateWizardSummary();
+      }
+    }
+
+    function wizardNext() {
+      if (currentWizardStep === 1) {
+        // Validate step 1
+        const name = document.getElementById('wizardAgentName').value.trim();
+        if (!name) {
+          document.getElementById('wizardAgentName').focus();
+          return;
+        }
+        wizardData.name = name;
+        wizardData.description = document.getElementById('wizardAgentDesc').value.trim();
+      }
+      
+      if (currentWizardStep === 2) {
+        wizardData.domain = document.getElementById('wizardDomain').value;
+      }
+      
+      if (currentWizardStep === 3) {
+        wizardData.outputLang = document.getElementById('wizardOutputLang').value;
+      }
+      
+      if (currentWizardStep === 4) {
+        // Create agent
+        createAgent();
+        return;
+      }
+      
+      goToWizardStep(currentWizardStep + 1);
+    }
+
+    function wizardBack() {
+      if (currentWizardStep > 1) {
+        goToWizardStep(currentWizardStep - 1);
+      }
+    }
+
+    function updateWizardSummary() {
+      const toneLabels = {
+        technical: 'Technisch',
+        formal: 'Formell',
+        casual: 'Casual',
+        creative: 'Kreativ'
+      };
+      const formatLabels = {
+        prose: 'Fließtext',
+        bullets: 'Bullet Points',
+        markdown: 'Markdown',
+        code: 'Code-Blocks'
+      };
+      const langLabels = {
+        same: 'Gleich wie Input',
+        en: '→ Englisch',
+        de: '→ Deutsch'
+      };
+      
+      document.getElementById('summaryName').textContent = wizardData.name || 'Unbenannt';
+      document.getElementById('summaryTone').textContent = toneLabels[wizardData.tone] || wizardData.tone;
+      document.getElementById('summaryFormat').textContent = formatLabels[wizardData.format] || wizardData.format;
+      document.getElementById('summaryCreativity').textContent = wizardData.creativity + '%';
+      document.getElementById('summaryLang').textContent = langLabels[wizardData.outputLang] || wizardData.outputLang;
+      document.getElementById('summaryAutopaste').textContent = wizardData.autopaste ? 'Ja' : 'Nein';
+      
+      // Update hotkey tip
+      const hotkeyTipText = document.getElementById('wizardHotkeyTipText');
+      if (wizardData.hotkey) {
+        const displayHotkey = wizardData.hotkey.replace('Command', '⌘').replace('Control', 'Ctrl').replace('Alt', '⌥').replace('Shift', '⇧');
+        hotkeyTipText.innerHTML = `Hotkey: <strong>${displayHotkey}</strong> – Drücke diesen Shortcut überall, um den Agent zu aktivieren.`;
+      } else {
+        hotkeyTipText.textContent = 'Kein Hotkey konfiguriert. Du kannst den Agent im Dashboard auswählen.';
+      }
+      
+      // Update preview
+      updateWizardPreview();
+    }
+
+    function updateWizardPreview() {
+      // Dynamic preview examples based on agent type/name
+      const previewExamples = getPreviewExamples();
+      
+      let input = previewExamples.input;
+      let output = previewExamples.output;
+      
+      // Adjust output based on format
+      if (wizardData.format === 'bullets' && previewExamples.bulletOutput) {
+        output = previewExamples.bulletOutput;
+      }
+      
+      // Adjust for creativity level
+      if (wizardData.creativity > 60 && previewExamples.creativeOutput) {
+        output = previewExamples.creativeOutput;
+      }
+      
+      // Adjust for English output
+      if (wizardData.outputLang === 'en' && previewExamples.englishOutput) {
+        output = previewExamples.englishOutput;
+      }
+      
+      document.getElementById('wizardPreviewInput').textContent = `"${input}"`;
+      document.getElementById('wizardPreviewOutput').textContent = output;
+    }
+    
+    // Get contextual preview examples based on agent name/description/domain
+    function getPreviewExamples() {
+      const name = (wizardData.name || '').toLowerCase();
+      const desc = (wizardData.description || '').toLowerCase();
+      const domain = wizardData.domain;
+      const tone = wizardData.tone;
+      
+      // Check for specific keywords to determine example type
+      const isMeeting = name.includes('meeting') || desc.includes('meeting') || desc.includes('besprechung');
+      const isEmail = name.includes('mail') || name.includes('email') || desc.includes('mail');
+      const isSocial = name.includes('social') || name.includes('linkedin') || name.includes('twitter') || name.includes('instagram');
+      const isCreative = name.includes('märchen') || name.includes('story') || name.includes('geschichte') || name.includes('kreativ') || tone === 'creative';
+      const isCode = name.includes('code') || name.includes('coding') || name.includes('programming') || domain === 'tech';
+      const isImage = name.includes('bild') || name.includes('image') || name.includes('prompt') || name.includes('midjourney') || name.includes('dall');
+      
+      // Märchen/Kreativ
+      if (isCreative || name.includes('märchen')) {
+        return {
+          input: 'Ähm also da war mal ne Prinzessin in nem Turm und äh der Drache hat sie bewacht und dann kam halt ein Ritter',
+          output: 'Es war einmal eine wunderschöne Prinzessin, die in einem hohen Turm gefangen war. Ein furchteinflößender Drache bewachte ihren Kerker Tag und Nacht. Eines Tages ritt ein mutiger Ritter herbei...',
+          creativeOutput: 'In einem verwunschenen Königreich, wo die Sterne flüsterten und die Winde Geheimnisse trugen, lebte eine Prinzessin von unvergleichlicher Schönheit in einem Turm, der bis in die Wolken ragte. Ein majestätischer Drache mit schimmernden Schuppen hielt treue Wacht, bis eines schicksalhaften Tages ein tapferer Ritter am Horizont erschien...',
+          bulletOutput: '• Es war einmal eine Prinzessin im Turm\n• Ein Drache bewachte sie\n• Ein mutiger Ritter kam zu Hilfe',
+          englishOutput: 'Once upon a time, a beautiful princess was imprisoned in a tall tower. A fearsome dragon guarded her prison day and night. One day, a brave knight rode to her rescue...'
+        };
+      }
+      
+      // Image/Prompt Generator
+      if (isImage) {
+        return {
+          input: 'Ich will so ein Bild von ner Stadt bei Nacht mit vielen Lichtern und nem Auto auf ner nassen Straße',
+          output: 'Cyberpunk city at night, neon lights reflecting on wet asphalt, sleek sports car parked on rain-soaked street, cinematic lighting, dramatic atmosphere, highly detailed, 8k resolution',
+          creativeOutput: 'Futuristic cyberpunk metropolis at night, towering skyscrapers with holographic advertisements, vibrant neon lights in pink and cyan reflecting off rain-soaked streets, a sleek chrome sports car with glowing headlights parked on wet asphalt, steam rising from manholes, cinematic composition, ultra detailed, photorealistic, 8k, --ar 16:9 --v 6',
+          englishOutput: 'Cyberpunk city at night, neon lights reflecting on wet asphalt, sleek sports car on rain-soaked street, cinematic lighting, highly detailed, 8k'
+        };
+      }
+      
+      // Social Media
+      if (isSocial) {
+        return {
+          input: 'Ähm wir haben jetzt nen neues Feature gelauncht das ist echt cool weil man damit Zeit sparen kann',
+          output: '🚀 Wir haben gerade ein Game-Changer gelauncht! Unser neues Feature spart euch wertvolle Zeit. Probiert es aus und lasst uns wissen, was ihr denkt! #Produktivität #NewFeature',
+          creativeOutput: '🎉 BREAKING: Das Feature, auf das ihr alle gewartet habt, ist endlich da! 🚀\n\nZeit ist kostbar – und genau deshalb haben wir etwas Besonderes für euch entwickelt. Weniger Aufwand, mehr Ergebnisse!\n\n💡 Testet es jetzt und werdet Teil der Revolution!\n\n#GameChanger #Produktivität #Innovation',
+          bulletOutput: '🚀 Neu: Zeitsparendes Feature\n\n✅ Weniger Aufwand\n✅ Mehr Produktivität\n✅ Sofort verfügbar\n\n→ Jetzt ausprobieren!',
+          englishOutput: '🚀 Just launched: A game-changing feature that saves you valuable time! Try it out and let us know what you think! #Productivity #NewFeature'
+        };
+      }
+      
+      // Email
+      if (isEmail) {
+        return {
+          input: 'Hey ich wollte mal fragen ob wir das Meeting verschieben können weil ich da nen anderen Termin hab',
+          output: 'Sehr geehrte/r [Name],\n\nich möchte Sie höflich fragen, ob es möglich wäre, unser geplantes Meeting zu verschieben. Leider ist mir ein Terminkonflikt entstanden.\n\nWären Sie so freundlich, mir alternative Zeitslots vorzuschlagen?\n\nMit freundlichen Grüßen',
+          creativeOutput: 'Liebe/r [Name],\n\nich hoffe, diese Nachricht erreicht Sie wohlauf! Leider muss ich Sie um einen kleinen Gefallen bitten: Könnten wir unser Meeting vielleicht verschieben? Ein unerwarteter Termin ist dazwischengekommen.\n\nIch bin zeitlich sehr flexibel – lassen Sie mich wissen, was für Sie passt!\n\nHerzliche Grüße',
+          englishOutput: 'Dear [Name],\n\nI would like to kindly ask if it would be possible to reschedule our planned meeting. Unfortunately, a scheduling conflict has arisen.\n\nWould you be so kind as to suggest alternative time slots?\n\nBest regards'
+        };
+      }
+      
+      // Coding
+      if (isCode) {
+        return {
+          input: 'Ähm ich brauch ne Funktion die mir aus nem Array alle Duplikate entfernt',
+          output: 'Erstelle eine Funktion, die Duplikate aus einem Array entfernt. Nutze ein Set für O(1) Lookup-Zeit und konvertiere zurück zu Array.',
+          creativeOutput: 'Implementiere eine performante Deduplizierungs-Funktion:\n\n```javascript\nconst removeDuplicates = (arr) => [...new Set(arr)];\n```\n\nAlternativ für Objekte: Filter mit findIndex für erste Vorkommnisse.',
+          bulletOutput: '• Funktion: Array-Deduplizierung\n• Ansatz: Set für O(1) Lookup\n• Rückgabe: Array ohne Duplikate',
+          englishOutput: 'Create a function that removes duplicates from an array. Use a Set for O(1) lookup time and convert back to Array.'
+        };
+      }
+      
+      // Meeting (default business)
+      if (isMeeting || domain === 'business') {
+        return {
+          input: 'Ähm also ich würde sagen das Meeting war echt produktiv heute ne und wir sollten das nächste Mal mehr Zeit einplanen',
+          output: 'Das Meeting war heute sehr produktiv. Für das nächste Mal sollten wir mehr Zeit einplanen.',
+          creativeOutput: 'Das Meeting war heute äußerst produktiv und hat wichtige Erkenntnisse gebracht. Für zukünftige Treffen sollten wir definitiv mehr Zeit einplanen, um alle Themen ausführlich besprechen zu können.',
+          bulletOutput: '• Meeting war produktiv\n• Empfehlung: Mehr Zeit für nächstes Treffen einplanen',
+          englishOutput: 'The meeting was very productive today. We should plan more time for the next one.'
+        };
+      }
+      
+      // Generic default
+      return {
+        input: 'Ähm ich wollte mal kurz was erzählen also das Ding ist echt interessant gewesen heute',
+        output: 'Das war heute wirklich interessant.',
+        creativeOutput: 'Heute ist etwas wirklich Interessantes passiert, das ich unbedingt teilen möchte.',
+        bulletOutput: '• Interessante Erfahrung heute\n• Details folgen',
+        englishOutput: 'That was really interesting today.'
+      };
+    }
+    
+    // Show/hide meeting-specific options based on domain
+    function updateMeetingOptionsVisibility() {
+      const meetingSection = document.getElementById('meetingOptionsSection');
+      if (!meetingSection) return;
+      
+      const name = (wizardData.name || '').toLowerCase();
+      const desc = (wizardData.description || '').toLowerCase();
+      const domain = wizardData.domain;
+      
+      // Show meeting options only for business domain or meeting-related agents
+      const isMeetingRelated = domain === 'business' || 
+                               name.includes('meeting') || 
+                               name.includes('besprechung') ||
+                               desc.includes('meeting') ||
+                               desc.includes('besprechung') ||
+                               desc.includes('protokoll');
+      
+      meetingSection.style.display = isMeetingRelated ? 'block' : 'none';
+      
+      // Clear auto-detect selections if hiding
+      if (!isMeetingRelated) {
+        wizardData.autoDetect = [];
+        document.querySelectorAll('#autoDetectGroup .checkbox-item').forEach(item => {
+          item.classList.remove('checked');
+        });
+      }
+    }
+
+    async function createAgent() {
+      // Prepare agent data
+      const agentData = {
+        name: wizardData.name,
+        description: wizardData.description,
+        icon: wizardData.icon,
+        color: wizardData.color,
+        tone: wizardData.tone,
+        format: wizardData.format,
+        domain: wizardData.domain,
+        outputLang: wizardData.outputLang,
+        creativity: wizardData.creativity,
+        length: wizardData.length,
+        fillerWords: wizardData.fillerWords,
+        autoDetect: wizardData.autoDetect,
+        autopaste: wizardData.autopaste,
+        isPromptGenerator: wizardData.isPromptGenerator || false,
+        hotkey: wizardData.hotkey || '', // Benutzerdefinierter Hotkey
+        language: 'de',
+        polishFlavor: 'custom', // Custom agents use custom polish logic
+      };
+      
+      try {
+        // Save to backend
+        const savedAgent = await window.electronAPI.createAgent(agentData);
+        console.log('Agent created:', savedAgent);
+        
+        // Close wizard
+        closeAgentWizard();
+        
+        // Reload agents list
+        await loadCustomAgents();
+        
+        // Show success toast
+        showToast(`Agent "${wizardData.name}" erstellt!`, wizardData.icon);
+      } catch (error) {
+        console.error('Failed to create agent:', error);
+        alert('Fehler beim Erstellen des Agents: ' + error.message);
+      }
+    }
+
+    // Legacy compatibility
+    function updateProfilesUI(activeProfile) {
+      updateAgentsUI(activeProfile);
+    }
+
+    async function selectProfile(profileId) {
+      selectAgent(profileId);
     }
 
     function updateSnippetsUI() {

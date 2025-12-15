@@ -134,6 +134,36 @@
       display: none;
     }
 
+    /* Retry Info */
+    .retry-info {
+      display: none;
+      margin-left: 8px;
+    }
+
+    .widget.error .retry-info {
+      display: block;
+      animation: fadeIn 0.3s ease 0.5s forwards;
+      opacity: 0;
+    }
+
+    .retry-text {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .retry-text kbd {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: -apple-system, monospace;
+      font-size: 10px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.7; transform: scale(0.95); }
@@ -196,6 +226,11 @@
 
     <!-- Error State -->
     <span class="error-icon">✕</span>
+
+    <!-- Retry Info (shown on error) -->
+    <div class="retry-info" id="retryInfo">
+      <span class="retry-text">Erneut: <kbd>⌘⇧R</kbd></span>
+    </div>
   </div>
 
   <script>
@@ -368,6 +403,66 @@
           break;
       }
     });
+
+    // Agent switch notification
+    window.electronAPI.onAgentSwitched?.(({ id, name }) => {
+      console.log('Agent switched:', id, name);
+      showAgentBadge(name);
+    });
+
+    // Error retry notification
+    window.electronAPI.onErrorRetry?.(({ message, hotkey }) => {
+      console.log('Error with retry option:', message, hotkey);
+      const retryInfo = document.getElementById('retryInfo');
+      if (retryInfo && hotkey) {
+        retryInfo.querySelector('.retry-text').innerHTML = `Erneut: <kbd>${hotkey}</kbd>`;
+      }
+    });
+
+    function showAgentBadge(agentName) {
+      // Remove existing badge
+      const existing = document.getElementById('agentBadge');
+      if (existing) existing.remove();
+
+      // Create badge
+      const badge = document.createElement('div');
+      badge.id = 'agentBadge';
+      badge.textContent = agentName;
+      badge.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(126, 217, 87, 0.95);
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        animation: fadeInOut 1.2s ease forwards;
+        z-index: 1000;
+      `;
+
+      // Add animation style
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+          20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+        }
+      `;
+      document.head.appendChild(style);
+      document.body.appendChild(badge);
+
+      // Remove after animation
+      setTimeout(() => {
+        badge.remove();
+        style.remove();
+      }, 1200);
+    }
   </script>
 </body>
 </html>
