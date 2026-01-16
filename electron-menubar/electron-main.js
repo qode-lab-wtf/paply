@@ -135,21 +135,21 @@ function countWords(text) {
 function detectRole(text) {
   if (!text) return 'dictation';
   const lower = text.toLowerCase();
-  
+
   // Coding keywords
   const codeKeywords = ['function', 'const', 'let', 'var', 'import', 'export', 'class', 'return',
     'usestate', 'useeffect', 'component', 'react', 'typescript', 'javascript', 'python',
     'api', 'endpoint', 'database', 'query', 'async', 'await', 'promise', 'callback',
     'git', 'commit', 'push', 'pull', 'merge', 'branch', 'npm', 'yarn', 'package'];
-  
+
   // Meeting keywords
   const meetingKeywords = ['meeting', 'action item', 'action items', 'agenda', 'discussion',
     'teilnehmer', 'besprechung', 'termin', 'next steps', 'follow up', 'deadline',
     'projekt', 'project', 'team', 'status update', 'blocker'];
-  
+
   const codeScore = codeKeywords.filter(kw => lower.includes(kw)).length;
   const meetingScore = meetingKeywords.filter(kw => lower.includes(kw)).length;
-  
+
   if (codeScore >= 2) return 'coding';
   if (meetingScore >= 2) return 'meeting';
   return 'dictation';
@@ -157,21 +157,21 @@ function detectRole(text) {
 
 function calculateDelta(transcript, polished) {
   if (!transcript || !polished) return null;
-  
+
   const transcriptWords = countWords(transcript);
   const polishedWords = countWords(polished);
-  
+
   // Simple filler word detection (German + English)
   const fillerWords = ['ähm', 'äh', 'also', 'sozusagen', 'quasi', 'halt', 'ne', 'oder so',
     'um', 'uh', 'like', 'you know', 'basically', 'actually', 'literally'];
-  
+
   const transcriptLower = transcript.toLowerCase();
   const polishedLower = polished.toLowerCase();
-  
-  const fillersRemoved = fillerWords.filter(fw => 
+
+  const fillersRemoved = fillerWords.filter(fw =>
     transcriptLower.includes(fw) && !polishedLower.includes(fw)
   );
-  
+
   return {
     wordsBefore: transcriptWords,
     wordsAfter: polishedWords,
@@ -187,21 +187,21 @@ function resetStatsIfNeeded() {
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   const weekStart = getWeekStart(now).toISOString().split('T')[0];
-  
+
   if (stats.lastResetDay !== today) {
     stats.wordsToday = 0;
     stats.minutesToday = 0;
     stats.sessionsToday = 0;
     stats.lastResetDay = today;
   }
-  
+
   if (stats.lastResetWeek !== weekStart) {
     stats.wordsWeek = 0;
     stats.minutesWeek = 0;
     stats.sessionsWeek = 0;
     stats.lastResetWeek = weekStart;
   }
-  
+
   s.set('stats', stats);
 }
 
@@ -215,9 +215,9 @@ function getWeekStart(date) {
 function updateStats(wordCount, durationMinutes = 0, isError = false) {
   const s = getStore();
   resetStatsIfNeeded();
-  
+
   const stats = s.get('stats') || {};
-  
+
   if (isError) {
     stats.errorsCount = (stats.errorsCount || 0) + 1;
   } else {
@@ -231,9 +231,9 @@ function updateStats(wordCount, durationMinutes = 0, isError = false) {
     stats.sessionsToday = (stats.sessionsToday || 0) + 1;
     stats.sessionsWeek = (stats.sessionsWeek || 0) + 1;
   }
-  
+
   s.set('stats', stats);
-  
+
   // Update owner stats (token estimation)
   if (s.get('ownerMode')) {
     const ownerStats = s.get('ownerStats') || {};
@@ -241,11 +241,11 @@ function updateStats(wordCount, durationMinutes = 0, isError = false) {
     ownerStats.tokensGroq = (ownerStats.tokensGroq || 0) + Math.round(durationMinutes * 100);
     ownerStats.tokensAnthropic = (ownerStats.tokensAnthropic || 0) + Math.round(wordCount * 1.5);
     // Cost estimation: Groq ~$0.0001/min, Anthropic ~$0.00025/1k tokens
-    ownerStats.estimatedCost = (ownerStats.estimatedCost || 0) + 
+    ownerStats.estimatedCost = (ownerStats.estimatedCost || 0) +
       (durationMinutes * 0.0001) + (wordCount * 1.5 * 0.00025 / 1000);
     s.set('ownerStats', ownerStats);
   }
-  
+
   // Notify main window of stats update
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('stats:updated', stats);
@@ -262,28 +262,28 @@ function cleanupOldHistory() {
   const history = s.get('history') || [];
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - MAX_HISTORY_DAYS);
-  
+
   const filtered = history.filter(item => {
     const itemDate = new Date(item.timestamp);
     return itemDate >= cutoffDate;
   });
-  
+
   if (filtered.length !== history.length) {
     s.set('history', filtered);
     console.log(`Cleaned up ${history.length - filtered.length} old history entries`);
   }
-  
+
   return filtered;
 }
 
 function addToHistory(entry) {
   const s = getStore();
   const history = s.get('history') || [];
-  
+
   const wordCount = countWords(entry.polished || entry.transcript);
   const role = detectRole(entry.transcript);
   const delta = entry.polished ? calculateDelta(entry.transcript, entry.polished) : null;
-  
+
   const newEntry = {
     id: Date.now(),
     timestamp: new Date().toISOString(),
@@ -296,9 +296,9 @@ function addToHistory(entry) {
     polishUsed: !!entry.polished,
     favorite: false,
   };
-  
+
   history.unshift(newEntry);
-  
+
   // Cleanup entries older than 90 days
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - MAX_HISTORY_DAYS);
@@ -306,19 +306,19 @@ function addToHistory(entry) {
     const itemDate = new Date(item.timestamp);
     return itemDate >= cutoffDate;
   });
-  
+
   s.set('history', filtered);
-  
+
   // Update stats
   updateStats(wordCount, entry.durationMinutes || 0);
-  
+
   updateTrayMenu();
-  
+
   // Notify main window
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('history:updated', history);
   }
-  
+
   return newEntry;
 }
 
@@ -385,54 +385,99 @@ function isTrivialTranscript(input) {
   return false;
 }
 
-async function transcribeAudio(audioBuffer, language = 'de') {
+async function transcribeAudio(audioBuffer, language = 'de', retries = 3) {
   const apiKey = getStore().get('groqApiKey');
   if (!apiKey) {
     throw new Error('Groq API Key nicht konfiguriert');
   }
 
-  // Verwende File statt Blob für bessere Kompatibilität in Node.js/Electron
-  // File enthält den Dateinamen direkt, was von der Groq API erwartet wird
-  const audioFile = new File([audioBuffer], 'audio.webm', { type: 'audio/webm' });
-  
-  const formData = new FormData();
-  formData.append('file', audioFile);
-  formData.append('model', 'whisper-large-v3-turbo');
-  formData.append('language', language);
-  formData.append('response_format', 'json');
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const formData = new FormData();
+      const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
+      formData.append('file', audioBlob, 'audio.webm');
+      formData.append('model', 'whisper-large-v3-turbo');
+      formData.append('language', language);
+      formData.append('response_format', 'json');
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+      console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
 
-  try {
-    const res = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: formData,
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('Groq error:', res.status, errText);
-      throw new Error(`Transkription fehlgeschlagen (${res.status}): ${errText}`);
+      const res = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('Groq error:', res.status, errText);
+
+        // If it's a rate limit or server error, maybe retry
+        if (res.status >= 500 || res.status === 429) {
+          if (i < retries) {
+            console.log(`Retrying due to status ${res.status}...`);
+            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            continue;
+          }
+        }
+
+        let errorMsg = `Transkription fehlgeschlagen (${res.status})`;
+        try {
+          const errJson = JSON.parse(errText);
+          if (errJson.error?.message) errorMsg = errJson.error.message;
+        } catch (e) {
+          if (errText.length < 100) errorMsg += `: ${errText}`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const json = await res.json();
+      const rawText = json?.text?.trim() ?? '';
+
+      if (isTrivialTranscript(rawText)) {
+        console.log('Transcript discarded (trivial):', rawText);
+        return '';
+      }
+
+      return rawText;
+    } catch (error) {
+      // Besseres Logging mit Ursache
+      console.error(`Transcription attempt ${i + 1} failed:`, error.message);
+      if (error.cause) {
+        console.error('Fetch detail error:', error);
+      }
+
+      // Prüfe sowohl message als auch cause für Netzwerkfehler
+      const causeCode = error.cause?.code || '';
+      const causeMessage = error.cause?.message || '';
+      const isNetworkError =
+        error.message.includes('ECONNRESET') ||
+        error.message.includes('fetch failed') ||
+        error.message.includes('ETIMEDOUT') ||
+        error.message.includes('ECONNREFUSED') ||
+        causeCode === 'ECONNRESET' ||
+        causeCode === 'ETIMEDOUT' ||
+        causeCode === 'ECONNREFUSED' ||
+        causeCode === 'ENOTFOUND' ||
+        causeMessage.includes('ECONNRESET') ||
+        error.name === 'AbortError';
+
+      if (isNetworkError && i < retries) {
+        // Exponentielles Backoff: 1s, 2s, 4s
+        const delay = Math.min(1000 * Math.pow(2, i), 8000);
+        console.log(`Network error detected (${causeCode || error.message}), retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw error;
     }
-
-    const json = await res.json();
-    const rawText = json?.text?.trim() ?? '';
-    
-    // Filter triviale Transkripte (Stille, nur Satzzeichen, etc.)
-    if (isTrivialTranscript(rawText)) {
-      console.log('Transcript discarded (trivial):', rawText);
-      return '';
-    }
-    
-    return rawText;
-  } catch (error) {
-    clearTimeout(timeout);
-    if (error.name === 'AbortError') throw new Error('Timeout nach 30s');
-    throw error;
   }
 }
 
@@ -448,15 +493,15 @@ function getAutoUpdater() {
     autoUpdater = require('electron-updater').autoUpdater;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-    
+
     // Für unsignierte Windows-Builds: Signatur-Prüfung deaktivieren
     if (isWin) {
       autoUpdater.forceDevUpdateConfig = true;
     }
-    
+
     // Logger für bessere Debugging-Infos
-    autoUpdater.logger = require('electron').app.isPackaged 
-      ? null 
+    autoUpdater.logger = require('electron').app.isPackaged
+      ? null
       : console;
   }
   return autoUpdater;
@@ -471,7 +516,7 @@ function setupAutoUpdater() {
   updater.on('update-available', (info) => {
     console.log('Update available:', info.version);
     updateCheckInProgress = false;
-    
+
     dialog.showMessageBox({
       type: 'info',
       title: 'Update verfügbar!',
@@ -490,7 +535,7 @@ function setupAutoUpdater() {
   updater.on('update-not-available', (info) => {
     console.log('No update available, current version:', info.version);
     updateCheckInProgress = false;
-    
+
     if (!updateCheckInProgress) {
       dialog.showMessageBox({
         type: 'info',
@@ -506,7 +551,7 @@ function setupAutoUpdater() {
     console.error('Auto-updater error:', error);
     updateCheckInProgress = false;
     downloadInProgress = false;
-    
+
     // Fallback: Open GitHub releases page
     dialog.showMessageBox({
       type: 'error',
@@ -529,7 +574,7 @@ function setupAutoUpdater() {
   updater.on('update-downloaded', (info) => {
     console.log('Update downloaded:', info.version);
     downloadInProgress = false;
-    
+
     dialog.showMessageBox({
       type: 'info',
       title: 'Update bereit',
@@ -550,10 +595,10 @@ async function checkForUpdates(silent = false) {
     console.log('Update check already in progress');
     return;
   }
-  
+
   updateCheckInProgress = true;
   const updater = getAutoUpdater();
-  
+
   try {
     // Remove the dialog for silent checks
     if (silent) {
@@ -561,12 +606,12 @@ async function checkForUpdates(silent = false) {
         updateCheckInProgress = false;
       });
     }
-    
+
     await updater.checkForUpdates();
   } catch (error) {
     console.error('Update check failed:', error);
     updateCheckInProgress = false;
-    
+
     if (!silent) {
       // Fallback to manual GitHub check
       await checkForUpdatesManual();
@@ -591,12 +636,12 @@ async function checkForUpdatesManual() {
 
     const release = await response.json();
     const latestVersion = release.tag_name.replace(/^v/, '');
-    
+
     console.log(`Current version: ${CURRENT_VERSION}, Latest: ${latestVersion}`);
 
     if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
       const assetName = isMac ? '.dmg' : 'Setup';
-      const downloadAsset = release.assets.find(a => 
+      const downloadAsset = release.assets.find(a =>
         a.name.toLowerCase().includes(assetName.toLowerCase())
       );
 
@@ -640,7 +685,7 @@ async function checkForUpdatesManual() {
 function compareVersions(a, b) {
   const partsA = a.split('.').map(Number);
   const partsB = b.split('.').map(Number);
-  
+
   for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
     const numA = partsA[i] || 0;
     const numB = partsB[i] || 0;
@@ -655,7 +700,7 @@ function getPolishPrompt(text, language, flavor, customSettings = null) {
   if (flavor === 'custom' && customSettings) {
     return getCustomAgentPrompt(text, language, customSettings);
   }
-  
+
   const baseRules = `1. ENTFERNE: Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher
 2. KORRIGIERE: Grammatik, Satzbau, Interpunktion - aber behalte den Inhalt exakt bei`;
 
@@ -720,21 +765,21 @@ function getCustomAgentPrompt(text, language, settings) {
   if (settings.isPromptGenerator) {
     return getPromptGeneratorPrompt(text, language, settings);
   }
-  
+
   const toneDescriptions = {
     technical: 'technisch und präzise',
     formal: 'formell und professionell',
     casual: 'locker und umgangssprachlich',
     creative: 'kreativ und ausdrucksstark'
   };
-  
+
   const formatDescriptions = {
     prose: 'als Fließtext',
     bullets: 'als Stichpunkte',
     markdown: 'mit Markdown-Formatierung',
     code: 'als Code-Kommentare oder technische Dokumentation'
   };
-  
+
   const lengthDescriptions = {
     short: 'kurz und knapp',
     medium: 'ausgewogen',
@@ -748,7 +793,7 @@ function getCustomAgentPrompt(text, language, settings) {
   const outputLang = settings.outputLang || 'same';
   const domain = settings.domain || 'general';
   const fillerWords = settings.fillerWords !== false; // Default: remove filler words
-  
+
   let domainHint = '';
   if (domain && domain !== 'general') {
     const domainHints = {
@@ -759,19 +804,19 @@ function getCustomAgentPrompt(text, language, settings) {
     };
     domainHint = domainHints[domain] || '';
   }
-  
+
   let outputLangHint = '';
   if (outputLang === 'en') {
     outputLangHint = '\n\nWICHTIG: Übersetze den finalen Text ins Englische!';
   } else if (outputLang === 'de') {
     outputLangHint = '\n\nWICHTIG: Übersetze den finalen Text ins Deutsche!';
   }
-  
-  const creativityHint = creativity > 70 
-    ? 'Sei kreativ: Verbessere Formulierungen, füge passende Ausdrücke hinzu.' 
-    : creativity < 30 
-    ? 'Sei minimal: Nur offensichtliche Fehler korrigieren, Originaltext maximal beibehalten.' 
-    : 'Sei ausgewogen: Korrigiere Fehler, behalte aber den Originalstil bei.';
+
+  const creativityHint = creativity > 70
+    ? 'Sei kreativ: Verbessere Formulierungen, füge passende Ausdrücke hinzu.'
+    : creativity < 30
+      ? 'Sei minimal: Nur offensichtliche Fehler korrigieren, Originaltext maximal beibehalten.'
+      : 'Sei ausgewogen: Korrigiere Fehler, behalte aber den Originalstil bei.';
 
   return `Du bist ein Transkriptions-Polierer für "${settings.name || 'Custom Agent'}".
 
@@ -801,12 +846,12 @@ ${text}`;
 function getPromptGeneratorPrompt(text, language, settings) {
   const creativity = settings.creativity || 80;
   const outputLang = settings.outputLang || 'en';
-  
-  const creativityLevel = creativity > 70 
+
+  const creativityLevel = creativity > 70
     ? 'sehr detailliert und kreativ ausschmücken'
-    : creativity > 40 
-    ? 'moderat erweitern und verbessern'
-    : 'eng am Original bleiben, nur formattieren';
+    : creativity > 40
+      ? 'moderat erweitern und verbessern'
+      : 'eng am Original bleiben, nur formattieren';
 
   return `Du bist ein Prompt-Generator für KI-Bildgenerierung (Midjourney, DALL-E, Stable Diffusion).
 
@@ -922,7 +967,7 @@ function createMainWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
-  
+
   // On macOS, clicking the dock icon should show the window
   app.on('activate', () => {
     if (mainWindow === null) {
@@ -1081,15 +1126,15 @@ function updateTrayMenu() {
 
   const historySubmenu = history.length > 0
     ? history.slice(0, 10).map((item) => {
-        const preview = (item.polished || item.transcript || '').substring(0, 40);
-        const date = new Date(item.timestamp).toLocaleString('de-DE', {
-          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-        });
-        return {
-          label: `${date}: ${preview}${preview.length >= 40 ? '...' : ''}`,
-          click: () => { clipboard.writeText(item.polished || item.transcript); },
-        };
-      })
+      const preview = (item.polished || item.transcript || '').substring(0, 40);
+      const date = new Date(item.timestamp).toLocaleString('de-DE', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      });
+      return {
+        label: `${date}: ${preview}${preview.length >= 40 ? '...' : ''}`,
+        click: () => { clipboard.writeText(item.polished || item.transcript); },
+      };
+    })
     : [{ label: 'Keine Einträge', enabled: false }];
 
   if (history.length > 0) {
@@ -1301,10 +1346,10 @@ public class Win32 {
 Start-Sleep -Milliseconds 100
 [System.Windows.Forms.SendKeys]::SendWait('^v')
       `.trim();
-      
+
       const tempFile = path.join(app.getPath('temp'), 'paply-paste.ps1');
       fs.writeFileSync(tempFile, psScript, 'utf8');
-      
+
       exec(`powershell -ExecutionPolicy Bypass -File "${tempFile}"`, (err, stdout, stderr) => {
         if (err) console.error('PowerShell paste error:', err);
         if (stderr) console.error('PowerShell stderr:', stderr);
@@ -1352,13 +1397,13 @@ function saveAudioBackup(audioData) {
 
 function getAudioBackup() {
   if (!lastAudioBackup || !backupTimestamp) return null;
-  
+
   // Check if backup is expired (24 hours)
   if (Date.now() - backupTimestamp > BACKUP_EXPIRY_MS) {
     clearAudioBackup();
     return null;
   }
-  
+
   return lastAudioBackup;
 }
 
@@ -1383,7 +1428,7 @@ async function retryLastRecording() {
   }
 
   console.log('Retrying last recording from backup...');
-  
+
   // Show recording window with processing state
   const win = createRecordingWindow();
   win.showInactive();
@@ -1424,9 +1469,9 @@ async function processAudioData(audioData, isRetry = false) {
     } else {
       audioBuffer = Buffer.from(audioData);
     }
-    
+
     console.log('Audio buffer type:', typeof audioData, 'Buffer size:', audioBuffer.length);
-    
+
     const transcript = await transcribeAudio(audioBuffer, language);
     console.log('Transcript:', transcript);
 
@@ -1444,12 +1489,12 @@ async function processAudioData(audioData, isRetry = false) {
       const activeProfileId = s.get('activeProfile') || 'coding';
       const profiles = s.get('profiles') || {};
       const customAgents = s.get('customAgents') || [];
-      
+
       // Find active agent (standard or custom)
       let activeAgent = profiles[activeProfileId];
       let polishFlavor = 'code';
       let customSettings = null;
-      
+
       if (activeAgent) {
         polishFlavor = activeAgent.polishFlavor || 'code';
       } else {
@@ -1460,7 +1505,7 @@ async function processAudioData(audioData, isRetry = false) {
           customSettings = customAgent;
         }
       }
-      
+
       // Polish the transcript (Claude handles file name formatting in the prompt)
       polished = await polishText(transcript, language, polishFlavor, customSettings);
       console.log('Polished:', polished);
@@ -1487,10 +1532,10 @@ async function processAudioData(audioData, isRetry = false) {
     updateStatus('done');
     setTimeout(() => recordingWindow?.hide(), 300);
     return { success: true, transcript, polished };
-    
+
   } catch (error) {
     console.error('Transcription error:', error);
-    
+
     // Bei Fehler nichts tun - es wurde kein Placeholder eingefügt
 
     // Keep backup for retry
@@ -1500,7 +1545,7 @@ async function processAudioData(audioData, isRetry = false) {
 
     // Show error with retry option
     updateStatus('error', error.message || 'Transkription fehlgeschlagen');
-    
+
     // Show retry notification in recording window
     recordingWindow?.webContents.send('error:retry', {
       message: error.message || 'Transkription fehlgeschlagen',
@@ -1537,7 +1582,7 @@ function registerHotkey() {
   } else {
     console.error('Hotkey registration failed:', shortcut);
   }
-  
+
   // Register Smart-Paste hotkey (Cmd/Ctrl+Shift+V)
   const smartPasteKey = isMac ? 'Command+Shift+V' : 'Ctrl+Shift+V';
   globalShortcut.register(smartPasteKey, () => {
@@ -1551,7 +1596,7 @@ function registerHotkey() {
     console.log('Recovery hotkey pressed');
     retryLastRecording();
   });
-  
+
   // Register Agent-Switch hotkeys (Cmd+1, Cmd+2, Cmd+3, ...)
   registerAgentHotkeys();
 }
@@ -1569,14 +1614,14 @@ function registerAgentHotkeys() {
 
   const s = getStore();
   const profiles = s.get('profiles') || {};
-  
+
   // Standard-Agenten: Verwende benutzerdefinierte Hotkeys falls gesetzt, sonst Defaults
   const defaultHotkeys = {
     coding: isMac ? 'Command+1' : 'Ctrl+1',
     meeting: isMac ? 'Command+2' : 'Ctrl+2',
     dictation: isMac ? 'Command+3' : 'Ctrl+3',
   };
-  
+
   const agents = [
     { id: 'coding', key: profiles.coding?.hotkey || defaultHotkeys.coding },
     { id: 'meeting', key: profiles.meeting?.hotkey || defaultHotkeys.meeting },
@@ -1618,7 +1663,7 @@ function registerAgentHotkeys() {
 function switchAgent(agentId) {
   const s = getStore();
   const currentAgent = s.get('activeProfile');
-  
+
   if (currentAgent === agentId) {
     console.log(`Already on agent: ${agentId}`);
     return;
@@ -1626,7 +1671,7 @@ function switchAgent(agentId) {
 
   // Update active profile
   s.set('activeProfile', agentId);
-  
+
   // Get agent info (check standard profiles first, then custom agents)
   const profiles = s.get('profiles') || {};
   const customAgents = s.get('customAgents') || [];
@@ -1634,7 +1679,7 @@ function switchAgent(agentId) {
   let agentName = agentInfo?.name || agentId;
   let agentIcon = '🎯';
   let agentColor = '#7ED957';
-  
+
   // Check custom agents if not found in standard profiles
   if (!agentInfo) {
     const customAgent = customAgents.find(a => a.id === agentId);
@@ -1667,7 +1712,7 @@ function showAgentSwitchNotification(agentId, agentName, agentIcon = '🎯', age
   // Show in recording window as a brief toast
   if (recordingWindow && !recordingWindow.isDestroyed()) {
     recordingWindow.webContents.send('agent:switched', { id: agentId, name: agentName, icon: agentIcon, color: agentColor });
-    
+
     // Briefly show the recording window for feedback
     recordingWindow.show();
     setTimeout(() => {
@@ -1795,19 +1840,19 @@ function setupIpcHandlers() {
   });
   ipcMain.handle('history:delete', (_event, id) => deleteHistoryItem(id));
   ipcMain.handle('history:toggleFavorite', (_event, id) => toggleFavorite(id));
-  
+
   // Stats
   ipcMain.handle('stats:get', () => {
     resetStatsIfNeeded();
     return getStore().get('stats');
   });
-  
+
   ipcMain.handle('stats:owner', () => {
     const s = getStore();
     if (!s.get('ownerMode')) return null;
     return s.get('ownerStats');
   });
-  
+
   // Owner Mode
   ipcMain.handle('owner:check', () => getStore().get('ownerMode'));
   ipcMain.handle('owner:toggle', (_event, password) => {
@@ -1819,7 +1864,7 @@ function setupIpcHandlers() {
     }
     return false;
   });
-  
+
   // Profiles / Agents
   ipcMain.handle('profiles:get', () => {
     const s = getStore();
@@ -1829,12 +1874,12 @@ function setupIpcHandlers() {
       customAgents: s.get('customAgents') || [],
     };
   });
-  
+
   ipcMain.handle('profiles:setActive', (_event, profileId) => {
     const s = getStore();
     const profiles = s.get('profiles');
     const customAgents = s.get('customAgents') || [];
-    
+
     // Check standard profiles
     if (profiles[profileId]) {
       s.set('activeProfile', profileId);
@@ -1844,7 +1889,7 @@ function setupIpcHandlers() {
       updateTrayMenu();
       return true;
     }
-    
+
     // Check custom agents
     const customAgent = customAgents.find(a => a.id === profileId);
     if (customAgent) {
@@ -1854,33 +1899,33 @@ function setupIpcHandlers() {
       updateTrayMenu();
       return true;
     }
-    
+
     return false;
   });
-  
+
   ipcMain.handle('profiles:update', (_event, profileId, updates) => {
     const s = getStore();
     const profiles = s.get('profiles');
     if (profiles[profileId]) {
       profiles[profileId] = { ...profiles[profileId], ...updates };
       s.set('profiles', profiles);
-      
+
       // Re-register hotkeys if hotkey was updated
       if (updates.hotkey !== undefined) {
         registerAgentHotkeys();
         console.log(`Profile ${profileId} hotkey updated to: ${updates.hotkey || '(default)'}`);
       }
-      
+
       return true;
     }
     return false;
   });
-  
+
   // Custom Agents CRUD
   ipcMain.handle('agents:getAll', () => {
     return getStore().get('customAgents') || [];
   });
-  
+
   ipcMain.handle('agents:create', (_event, agent) => {
     const s = getStore();
     const agents = s.get('customAgents') || [];
@@ -1894,7 +1939,7 @@ function setupIpcHandlers() {
     registerAgentHotkeys(); // Re-register hotkeys
     return newAgent;
   });
-  
+
   ipcMain.handle('agents:update', (_event, agentId, updates) => {
     const s = getStore();
     const agents = s.get('customAgents') || [];
@@ -1907,22 +1952,22 @@ function setupIpcHandlers() {
     }
     return null;
   });
-  
+
   ipcMain.handle('agents:delete', (_event, agentId) => {
     const s = getStore();
     const agents = s.get('customAgents') || [];
     const filtered = agents.filter(a => a.id !== agentId);
     s.set('customAgents', filtered);
-    
+
     // If deleted agent was active, switch to default
     if (s.get('activeProfile') === agentId) {
       s.set('activeProfile', 'coding');
     }
-    
+
     registerAgentHotkeys(); // Re-register hotkeys
     return true;
   });
-  
+
   ipcMain.handle('agents:reorder', (_event, orderedIds) => {
     const s = getStore();
     const agents = s.get('customAgents') || [];
@@ -1933,7 +1978,7 @@ function setupIpcHandlers() {
     registerAgentHotkeys(); // Re-register hotkeys
     return reordered;
   });
-  
+
   ipcMain.handle('agents:updateHotkey', (_event, agentId, hotkey) => {
     const s = getStore();
     const agents = s.get('customAgents') || [];
@@ -1948,10 +1993,10 @@ function setupIpcHandlers() {
     }
     return null;
   });
-  
+
   // Snippets
   ipcMain.handle('snippets:get', () => getStore().get('snippets'));
-  
+
   ipcMain.handle('snippets:add', (_event, snippet) => {
     const s = getStore();
     const snippets = s.get('snippets') || [];
@@ -1964,7 +2009,7 @@ function setupIpcHandlers() {
     s.set('snippets', snippets);
     return newSnippet;
   });
-  
+
   ipcMain.handle('snippets:delete', (_event, id) => {
     const s = getStore();
     const snippets = s.get('snippets') || [];
@@ -1976,7 +2021,7 @@ function setupIpcHandlers() {
     }
     return false;
   });
-  
+
   ipcMain.handle('snippets:apply', (_event, snippetId, text) => {
     const snippets = getStore().get('snippets') || [];
     const snippet = snippets.find(sn => sn.id === snippetId);
@@ -1987,13 +2032,13 @@ function setupIpcHandlers() {
     }
     return text;
   });
-  
+
   // Transcription trigger from dashboard
   ipcMain.handle('transcription:start', () => {
     startTranscription();
     return true;
   });
-  
+
   ipcMain.handle('transcription:stop', () => {
     if (isRecording) {
       isRecording = false;
@@ -2001,7 +2046,7 @@ function setupIpcHandlers() {
     }
     return true;
   });
-  
+
   ipcMain.handle('transcription:status', () => ({
     isRecording,
   }));
@@ -2039,21 +2084,21 @@ function setupIpcHandlers() {
 // ============================================================================
 app.whenReady().then(() => {
   const s = getStore();
-  
+
   // Dock-Icon verstecken wenn gewünscht (Standard: sichtbar)
   if (app.dock && s.get('hideDock')) {
     app.dock.hide();
   }
-  
+
   // Setup auto-updater
   setupAutoUpdater();
-  
+
   setupIpcHandlers();
   setupTray();
   createRecordingWindow();
   registerHotkey();
   updateAutoLaunch();
-  
+
   // Reset daily/weekly stats if needed
   resetStatsIfNeeded();
 
