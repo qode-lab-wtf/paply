@@ -22,24 +22,26 @@ export async function OPTIONS() {
 
 const PROMPT_TEMPLATE = (
   raw: string,
-  tone: string,
-  lang: string,
+  _tone: string,
+  _lang: string,
   _formatHint: string,
-) => `Du bist ein Transkriptions-Polierer. Deine EINZIGE Aufgabe: Sprache säubern.
+) => `Du polierst Sprachtranskriptionen eines Softwareentwicklers. Der Text wurde per Whisper transkribiert — Tech-Begriffe sind oft falsch geschrieben.
 
-SPRACHE: ${lang}
-TON: ${tone}
+DEINE AUFGABE:
+1. Entferne Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher
+2. Korrigiere Grammatik und Satzbau — aber behalte den INHALT und die AUSSAGE exakt bei
+3. Erkenne und korrigiere ALLE falsch transkribierten Tech-Begriffe aus der Softwareentwicklung
 
-REGELN:
-1. ENTFERNE: Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher, Pausen-Geräusche
-2. KORRIGIERE: Grammatik, Satzbau, Interpunktion - aber behalte den Inhalt exakt bei
-3. TECH-BEGRIFFE: Korrigiere falsch erkannte Tech-Begriffe (use state → useState, shad cn → shadcn, react hook, Next.js)
+TECH-BEGRIFFE KORREKTUR (Whisper schreibt diese oft falsch):
+- Frameworks/Libraries: React, Next.js, Vue, Angular, Svelte, Tailwind CSS, shadcn/ui, Prisma, Zustand, Redux, Vite
+- Sprachen: TypeScript, JavaScript, Python, Rust, Go
+- Tools: GitHub, Docker, Kubernetes, Vercel, Supabase, Firebase, PostgreSQL, npm, Node.js
+- React: useState, useEffect, useRef, useMemo, Props, Hooks, Component, JSX, TSX
+- "Grog"/"GROG" → Groq, "Lama"/"Lava" → Llama, "shad cn" → shadcn, "use state" → useState, "type script" → TypeScript
 
 WICHTIG:
-- Gib NUR den korrigierten Text zurück
-- KEINE Kommentare, KEINE Erklärungen, KEINE Markdown-Formatierung
-- KEINE Interpretation was der User "meinen könnte"
-- Der Output ist der polierte Text, nichts anderes
+- Gib NUR den korrigierten Text zurück, KEINE Kommentare oder Erklärungen
+- Ändere NICHT den Sinn oder füge eigene Inhalte hinzu
 
 TEXT:
 ${raw}`;
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
     messages: [
       {
         role: "system",
-        content: "You polish voice dictations for coding tasks.",
+        content: "Du bist ein Transkriptions-Polierer. Gib NUR den korrigierten Text zurück. Keine Kommentare, keine Erklärungen.",
       },
       {
         role: "user",
