@@ -15,9 +15,7 @@ export function SettingsApp() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [platform, setPlatform] = useState<Platform | null>(null);
   const [showGroqKey, setShowGroqKey] = useState(false);
-  const [showHaikuKey, setShowHaikuKey] = useState(false);
   const [groqKey, setGroqKey] = useState('');
-  const [haikuKey, setHaikuKey] = useState('');
   const [shortcut, setShortcut] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -31,7 +29,6 @@ export function SettingsApp() {
         setSettings(settingsData);
         setPlatform(platformData);
         setGroqKey(settingsData.groqApiKey || '');
-        setHaikuKey(settingsData.haikuApiKey || '');
         setShortcut(settingsData.shortcut || '');
       } catch (error) {
         console.error('Failed to load settings:', error);
@@ -102,7 +99,7 @@ export function SettingsApp() {
             <CardHeader>
               <CardTitle className="text-base">Groq API Key</CardTitle>
               <CardDescription>
-                Für Whisper-Transkription. Hol dir einen Key auf{' '}
+                Für Whisper-Transkription & Text-Polishing. Hol dir einen Key auf{' '}
                 <a
                   href="https://console.groq.com/keys"
                   className="text-primary underline"
@@ -141,48 +138,6 @@ export function SettingsApp() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Anthropic API Key (Optional)</CardTitle>
-              <CardDescription>
-                Für Polish mit Claude Haiku. Hol dir einen Key auf{' '}
-                <a
-                  href="https://console.anthropic.com/"
-                  className="text-primary underline"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  console.anthropic.com
-                </a>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showHaikuKey ? 'text' : 'password'}
-                    value={haikuKey}
-                    onChange={(e) => setHaikuKey(e.target.value)}
-                    placeholder="sk-ant-..."
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowHaikuKey(!showHaikuKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showHaikuKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <Button
-                  onClick={() => handleSave('haikuApiKey', haikuKey)}
-                  disabled={isSaving}
-                >
-                  Speichern
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
 
@@ -279,7 +234,7 @@ export function SettingsApp() {
                 <div>
                   <Label>Polish aktivieren</Label>
                   <p className="text-xs text-muted-foreground">
-                    Text mit Claude Haiku optimieren
+                    Text mit Groq Llama optimieren
                   </p>
                 </div>
                 <Switch

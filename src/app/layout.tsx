@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "paply - Voice Transcription",
-  description: "Sprachtranskription mit Groq Whisper und Claude Haiku Polish",
+  description: "Sprachtranskription mit Groq Whisper und Groq Llama Polish",
 };
 
 export default function RootLayout({

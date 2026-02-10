@@ -1,6 +1,5 @@
 export interface Settings {
   groqApiKey: string;
-  haikuApiKey: string;
   enablePolish: boolean;
   shortcut: string;
   autoStart: boolean;
@@ -117,7 +116,7 @@ export interface ElectronAPI {
 
   // Stats
   getStats: () => Promise<Stats>;
-  getOwnerStats: () => Promise<{ tokensGroq: number; tokensAnthropic: number; estimatedCost: number } | null>;
+  getOwnerStats: () => Promise<{ tokensGroq: number; tokensGroqPolish: number; estimatedCost: number } | null>;
   onStatsUpdated: (cb: (stats: Stats) => void) => void;
 
   // Owner Mode
