@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "paply",
     short_name: "paply",
-    description: "Sprachtranskription mit Groq Whisper und Claude Haiku Polish",
+    description: "Sprachtranskription mit Groq Whisper und Groq Llama Polish",
     start_url: "/dashboard",
     display: "standalone",
     background_color: "#F5F5F7",

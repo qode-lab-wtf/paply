@@ -201,7 +201,7 @@ export default function DashboardPage() {
       const text = data.text ?? "";
       setPolished(text);
       const latency = Math.round(performance.now() - started);
-      console.debug(`[Claude Haiku 4.5] Latency: ${latency}ms`);
+      console.debug(`[Groq Llama 3.3] Latency: ${latency}ms`);
       toast.success("Polished Prompt bereit");
     } catch (error) {
       console.error(error);
@@ -235,7 +235,7 @@ export default function DashboardPage() {
               <span className="text-sm font-semibold text-foreground">
                 Wispr Flow Clone ✨
               </span>
-              <span className="text-xs text-muted-foreground">Groq Whisper · Claude Haiku 4.5</span>
+              <span className="text-xs text-muted-foreground">Groq Whisper · Groq Llama 3.3</span>
             </div>
           </div>
 

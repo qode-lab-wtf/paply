@@ -298,7 +298,7 @@ export default function App() {
           />
           Auto-Paste
         </label>
-        <label className="row small-gap" title="Poliert mit Claude Haiku nach Transkription">
+        <label className="row small-gap" title="Poliert mit Groq Llama nach Transkription">
           <input
             type="checkbox"
             checked={enablePolish}

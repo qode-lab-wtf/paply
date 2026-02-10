@@ -41,7 +41,6 @@ function getStore() {
     store = new Store({
       defaults: {
         groqApiKey: '',
-        haikuApiKey: '',
         enablePolish: false,
         shortcut: getDefaultShortcut(),
         autoStart: false,
@@ -79,7 +78,7 @@ function getStore() {
         ownerMode: false,
         ownerStats: {
           tokensGroq: 0,
-          tokensAnthropic: 0,
+          tokensGroqPolish: 0,
           estimatedCost: 0,
         },
         // Snippets
@@ -239,10 +238,10 @@ function updateStats(wordCount, durationMinutes = 0, isError = false) {
     const ownerStats = s.get('ownerStats') || {};
     // Rough estimation: ~1 token per 4 characters for text, ~100 tokens per minute for audio
     ownerStats.tokensGroq = (ownerStats.tokensGroq || 0) + Math.round(durationMinutes * 100);
-    ownerStats.tokensAnthropic = (ownerStats.tokensAnthropic || 0) + Math.round(wordCount * 1.5);
-    // Cost estimation: Groq ~$0.0001/min, Anthropic ~$0.00025/1k tokens
+    ownerStats.tokensGroqPolish = (ownerStats.tokensGroqPolish || 0) + Math.round(wordCount * 1.5);
+    // Cost estimation: Groq Whisper ~$0.0001/min, Groq Llama ~$0.00079/1k tokens (output)
     ownerStats.estimatedCost = (ownerStats.estimatedCost || 0) +
-      (durationMinutes * 0.0001) + (wordCount * 1.5 * 0.00025 / 1000);
+      (durationMinutes * 0.0001) + (wordCount * 1.5 * 0.00079 / 1000);
     s.set('ownerStats', ownerStats);
   }
 
@@ -368,7 +367,7 @@ function deleteHistoryItem(id) {
 // API CALLS
 // ============================================================================
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GITHUB_REPO = 'allanhamduws-alt/paply';
 const CURRENT_VERSION = require('./package.json').version;
 
@@ -894,28 +893,29 @@ ${text}`;
 }
 
 async function polishText(text, language = 'de', flavor = 'code', customSettings = null) {
-  const apiKey = getStore().get('haikuApiKey');
+  const apiKey = getStore().get('groqApiKey');
   if (!apiKey) return null;
 
   const prompt = getPolishPrompt(text, language, flavor, customSettings);
 
   const payload = {
-    model: 'claude-haiku-4-5-20251001',
+    model: 'llama-3.3-70b-versatile',
     max_tokens: 1024,
-    system: 'You polish voice dictations for coding tasks.',
-    messages: [{ role: 'user', content: prompt }],
+    messages: [
+      { role: 'system', content: 'You polish voice dictations for coding tasks.' },
+      { role: 'user', content: prompt },
+    ],
   };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const res = await fetch(ANTHROPIC_API_URL, {
+    const res = await fetch(GROQ_CHAT_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
@@ -923,12 +923,12 @@ async function polishText(text, language = 'de', flavor = 'code', customSettings
     clearTimeout(timeout);
 
     if (!res.ok) {
-      console.error('Anthropic error:', res.status);
+      console.error('Groq polish error:', res.status);
       return null;
     }
 
     const json = await res.json();
-    return json?.content?.[0]?.text?.trim() || null;
+    return json?.choices?.[0]?.message?.content?.trim() || null;
   } catch (error) {
     clearTimeout(timeout);
     console.error('Polish error:', error);
@@ -1100,7 +1100,7 @@ function showAboutDialog() {
     detail: `Version ${CURRENT_VERSION}
 
 Sprachtranskription mit Groq Whisper Large V3 Turbo
-Optionales Polishing mit Claude Haiku 4.5
+Optionales Polishing mit Groq Llama 3.3
 
 Shortcuts:
 • ${shortcut} - Aufnahme starten/stoppen
@@ -1121,7 +1121,6 @@ function updateTrayMenu() {
   const history = getHistory();
   const shortcut = s.get('shortcut');
   const enablePolish = s.get('enablePolish');
-  const haikuKey = s.get('haikuApiKey');
   const groqKey = s.get('groqApiKey');
 
   const historySubmenu = history.length > 0
@@ -1144,7 +1143,7 @@ function updateTrayMenu() {
   }
 
   const statusLabel = groqKey
-    ? (enablePolish && haikuKey ? '✓ Bereit (mit Polish)' : '✓ Bereit')
+    ? (enablePolish && groqKey ? '✓ Bereit (mit Polish)' : '✓ Bereit')
     : '⚠ API Key fehlt';
 
   const template = [
@@ -1449,8 +1448,6 @@ async function processAudioData(audioData, isRetry = false) {
   try {
     const language = s.get('language');
     const enablePolish = s.get('enablePolish');
-    const haikuKey = s.get('haikuApiKey');
-
     updateStatus('transcribing');
 
     // KEIN Placeholder mehr - wir fügen nur den finalen Text ein, wenn er bereit ist
@@ -1484,7 +1481,7 @@ async function processAudioData(audioData, isRetry = false) {
     }
 
     let polished = null;
-    if (enablePolish && haikuKey) {
+    if (enablePolish && s.get('groqApiKey')) {
       updateStatus('polishing');
       const activeProfileId = s.get('activeProfile') || 'coding';
       const profiles = s.get('profiles') || {};
@@ -1775,7 +1772,6 @@ function setupIpcHandlers() {
     const s = getStore();
     return {
       groqApiKey: s.get('groqApiKey'),
-      haikuApiKey: s.get('haikuApiKey'),
       enablePolish: s.get('enablePolish'),
       shortcut: s.get('shortcut'),
       autoStart: s.get('autoStart'),
@@ -1791,7 +1787,6 @@ function setupIpcHandlers() {
   ipcMain.handle('settings:set', (_event, settings) => {
     const s = getStore();
     if (settings.groqApiKey !== undefined) s.set('groqApiKey', settings.groqApiKey);
-    if (settings.haikuApiKey !== undefined) s.set('haikuApiKey', settings.haikuApiKey);
     if (settings.enablePolish !== undefined) s.set('enablePolish', settings.enablePolish);
     if (settings.language !== undefined) s.set('language', settings.language);
     if (settings.autopaste !== undefined) s.set('autopaste', settings.autopaste);
@@ -2106,7 +2101,7 @@ app.whenReady().then(() => {
   console.log('Version:', CURRENT_VERSION);
   console.log('Shortcut:', s.get('shortcut'));
   console.log('Groq Key:', s.get('groqApiKey') ? 'Set' : 'Not set');
-  console.log('Haiku Key:', s.get('haikuApiKey') ? 'Set' : 'Not set');
+  console.log('Polish:', s.get('enablePolish') ? 'Enabled' : 'Disabled');
 
   // Auto-open dashboard (or settings on first run if no API key)
   if (!s.get('groqApiKey')) {

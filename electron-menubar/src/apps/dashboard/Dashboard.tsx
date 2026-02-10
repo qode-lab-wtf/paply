@@ -1773,7 +1773,6 @@ function SettingsView({
   onSettingChange: (key: keyof SettingsType, value: boolean | string) => void;
 }) {
   const [groqKey, setGroqKey] = useState('');
-  const [haikuKey, setHaikuKey] = useState('');
   const [shortcutInput, setShortcutInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1781,7 +1780,6 @@ function SettingsView({
   useEffect(() => {
     if (settings) {
       setGroqKey(settings.groqApiKey ? '••••••••••••••••' : '');
-      setHaikuKey(settings.haikuApiKey ? '••••••••••••••••' : '');
       setShortcutInput(settings.shortcut || '');
     }
   }, [settings]);
@@ -1808,9 +1806,6 @@ function SettingsView({
     // Save API keys if changed
     if (groqKey && !groqKey.includes('•')) {
       await onSettingChange('groqApiKey', groqKey);
-    }
-    if (haikuKey && !haikuKey.includes('•')) {
-      await onSettingChange('haikuApiKey', haikuKey);
     }
     if (shortcutInput && shortcutInput !== settings?.shortcut) {
       await onSettingChange('shortcut', shortcutInput);
@@ -1841,17 +1836,6 @@ function SettingsView({
               placeholder="gsk_..."
             />
           </div>
-          <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">
-              Anthropic API Key (optional, für Polish)
-            </Label>
-            <Input
-              type="password"
-              value={haikuKey}
-              onChange={(e) => setHaikuKey(e.target.value)}
-              placeholder="sk-ant-..."
-            />
-          </div>
         </CardContent>
       </Card>
 
@@ -1874,7 +1858,7 @@ function SettingsView({
           <div className="flex items-center justify-between">
             <div>
               <Label>Polish aktivieren</Label>
-              <p className="text-xs text-muted-foreground">Mit Claude Haiku optimieren</p>
+              <p className="text-xs text-muted-foreground">Mit Groq Llama optimieren</p>
             </div>
             <Switch
               checked={settings.enablePolish}

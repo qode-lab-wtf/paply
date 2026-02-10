@@ -45,11 +45,11 @@ TEXT:
 ${raw}`;
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
     return cors(
-      NextResponse.json({ error: "ANTHROPIC_API_KEY fehlt" }, { status: 500 }),
+      NextResponse.json({ error: "GROQ_API_KEY fehlt" }, { status: 500 }),
     );
   }
 
@@ -66,10 +66,13 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = {
-    model: "claude-haiku-4-5-20251001",
+    model: "llama-3.3-70b-versatile",
     max_tokens: 1024,
-    system: "You polish voice dictations for coding tasks.",
     messages: [
+      {
+        role: "system",
+        content: "You polish voice dictations for coding tasks.",
+      },
       {
         role: "user",
         content: PROMPT_TEMPLATE(raw, tone, lang, formatHint),
@@ -81,12 +84,11 @@ export async function POST(req: NextRequest) {
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
@@ -96,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const err = await res.text();
-      console.error("Anthropic error", res.status, err);
+      console.error("Groq polish error", res.status, err);
       return cors(
         NextResponse.json(
           { error: `Polish fehlgeschlagen (${res.status})` },
@@ -106,13 +108,13 @@ export async function POST(req: NextRequest) {
     }
 
     const json = await res.json();
-    const text = json?.content?.[0]?.text?.trim() || "";
+    const text = json?.choices?.[0]?.message?.content?.trim() || "";
 
     return cors(NextResponse.json({ text }));
   } catch (error) {
     clearTimeout(timeout);
     if (error instanceof Error && error.name === "AbortError") {
-      console.error("Anthropic timeout");
+      console.error("Groq polish timeout");
       return cors(
         NextResponse.json({ error: "Timeout nach 30s" }, { status: 504 }),
       );
@@ -123,4 +125,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

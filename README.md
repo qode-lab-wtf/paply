@@ -1,6 +1,6 @@
 # paply – Voice Transcription für Mac
 
-Voice → Groq Whisper Large V3 → Claude Haiku 4.5 polish. Mac-Utility Look, PWA-ready, Dark/Light.
+Voice → Groq Whisper Large V3 → Groq Llama 3.3 polish. Mac-Utility Look, PWA-ready, Dark/Light.
 
 ---
 
@@ -84,7 +84,6 @@ Für die Web-Version brauchst du API-Keys:
 1. Erstelle `.env.local` im Hauptordner:
 ```
 GROQ_API_KEY=...
-ANTHROPIC_API_KEY=...
 ```
 
 2. Starte den Dev-Server:
@@ -100,7 +99,7 @@ npm run dev
 ## Features
 
 - **Live-Transkription** – MediaRecorder → Chunk-HTTP-POST → Groq Whisper Large V3
-- **AI Polish** – Claude Haiku 4.5 mit Tone (Code/Casual/Formal) + FormatHint (Code Block/Bullets)
+- **AI Polish** – Groq Llama 3.3 mit Tone (Code/Casual/Formal) + FormatHint (Code Block/Bullets)
 - **Cmd+K Palette** – Code Block, Bullets, Formal, Start/Stop Recording, Polish
 - **Copy + Toast** – „Perfekt für Cursor Agent!", Dark/Light Toggle, DE/EN Toggle
 - **PWA manifest** – start_url `/dashboard`, mobile-first Layout

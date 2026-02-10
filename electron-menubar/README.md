@@ -1,6 +1,6 @@
 # paply Menubar App
 
-Eigenständige macOS/Windows Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Claude Haiku Polishing.
+Eigenständige macOS/Windows Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Groq Llama Polishing.
 
 ## Features
 
@@ -193,4 +193,4 @@ Bei einem verfügbaren Update wird das Update automatisch heruntergeladen und na
 - electron-updater für Auto-Updates
 - auto-launch für Autostart-Funktion
 - Groq Whisper Large V3 Turbo für Transkription
-- Claude Haiku 4.5 für optionales Polishing
+- Groq Llama 3.3 für optionales Polishing
