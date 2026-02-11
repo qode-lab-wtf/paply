@@ -75,8 +75,7 @@ jobs:
         working-directory: electron-menubar
         run: npm run build:win
         env:
-          CSC_LINK: ""
-          CSC_KEY_PASSWORD: ""
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
