@@ -1,6 +1,6 @@
 {
   "name": "paply-menubar",
-  "version": "1.7.1",
+  "version": "1.7.0",
   "description": "Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Groq Llama Polishing",
   "main": "electron-main.js",
   "scripts": {
@@ -15,6 +15,8 @@
     "build:publish": "npm run vite:build && electron-builder --mac --win --publish always",
     "generate:ico": "node scripts/generate-ico.js",
     "start": "npm run vite:build && electron .",
+    "compile:globe": "node scripts/build-globe-listener.js",
+    "prebuild": "npm run compile:globe",
     "lint": "echo \"no lint configured\""
   },
   "keywords": [
@@ -38,7 +40,8 @@
     "node-fetch": "^3.3.2",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "uiohook-napi": "^1.5.4"
   },
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
@@ -122,6 +125,12 @@
       "iconTemplate.png",
       "iconTemplate@2x.png"
     ],
-    "extraResources": []
+    "extraResources": [
+      {
+        "from": "resources/bin/macos-globe-listener",
+        "to": "bin/macos-globe-listener",
+        "filter": ["!*.swift"]
+      }
+    ]
   }
 }

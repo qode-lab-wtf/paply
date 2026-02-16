@@ -9,6 +9,7 @@ export interface Settings {
   copyToClipboard: boolean;
   hideDock: boolean;
   activeProfile: string;
+  pttThreshold: number;
 }
 
 export interface HistoryItem {

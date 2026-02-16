@@ -21,6 +21,11 @@
 # production
 /build
 /electron-menubar/dist
+/electron-menubar/renderer
+
+# compiled native binaries (built from source)
+/electron-menubar/resources/bin/macos-globe-listener
+!/electron-menubar/resources/bin/macos-globe-listener.swift
 
 # misc
 .DS_Store

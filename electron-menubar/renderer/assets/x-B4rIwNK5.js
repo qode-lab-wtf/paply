@@ -1,1 +1,0 @@
-import{c}from"./globals-B-VILdgX.js";const o=[["path",{d:"M20 6 9 17l-5-5",key:"1gmf2c"}]],d=c("check",o);const e=[["path",{d:"M18 6 6 18",key:"1bl5f8"}],["path",{d:"m6 6 12 12",key:"d8bk6v"}]],n=c("x",e);export{d as C,n as X};

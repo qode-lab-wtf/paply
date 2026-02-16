@@ -21,6 +21,19 @@ const { spawn, exec } = require('node:child_process');
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 
+// ============================================================================
+// GLOBE KEY MANAGER (macOS Fn/Globe key support)
+// ============================================================================
+const GlobeKeyManager = require('./globe-key-manager');
+const globeKeyManager = new GlobeKeyManager();
+
+// ============================================================================
+// PUSH-TO-TALK STATE
+// ============================================================================
+let pttKeyDownTime = 0;      // Timestamp when hotkey was pressed down
+let pttIsHolding = false;     // True while key is held in PTT mode
+let pttHoldTimer = null;      // Timer to detect hold vs. tap
+
 function getDefaultShortcut() {
   return isMac ? 'Alt+Command+K' : 'Ctrl+Alt+K';
 }
@@ -81,6 +94,8 @@ function getStore() {
           tokensGroqPolish: 0,
           estimatedCost: 0,
         },
+        // PTT hold threshold in ms (press longer than this = hold-to-talk mode)
+        pttThreshold: 350,
         // Snippets
         snippets: [
           { id: 'ticket', name: 'Ticket-Entwurf', template: '## Ticket\n\n{{text}}\n\n### Action Items\n- [ ] ' },
@@ -1122,7 +1137,7 @@ Sprachtranskription mit Groq Whisper Large V3 Turbo
 Optionales Polishing mit Groq Llama 3.3
 
 Shortcuts:
-• ${shortcut} - Aufnahme starten/stoppen
+• ${shortcut === 'GLOBE' ? 'Fn/Globe-Taste' : shortcut} - Aufnahme starten/stoppen
 • ${quitKey} - Beenden
 
 © 2024 paply`,
@@ -1169,7 +1184,7 @@ function updateTrayMenu() {
     { label: statusLabel, enabled: false },
     { type: 'separator' },
     { label: 'Dashboard öffnen', click: showMainWindow },
-    { label: 'Transcribe', accelerator: shortcut, click: startTranscription },
+    { label: 'Transcribe', accelerator: shortcut === 'GLOBE' ? undefined : shortcut, click: startTranscription },
     { type: 'separator' },
     { label: 'History', submenu: historySubmenu },
     { type: 'separator' },
@@ -1378,17 +1393,92 @@ Start-Sleep -Milliseconds 100
 }
 
 function startTranscription() {
+  // Legacy toggle: used by dashboard button, tray menu, etc.
   if (isRecording) {
-    isRecording = false;
-    recordingWindow?.webContents.send('recording:stop');
-    // Window bleibt offen für Spinner - wird in 'recording:audio' Handler versteckt
+    stopRecording();
   } else {
-    isRecording = true;
-    savePreviousApp();
-    const win = createRecordingWindow();
-    win.showInactive();
-    win.webContents.send('recording:start');
+    beginRecording();
   }
+}
+
+function beginRecording() {
+  if (isRecording) return;
+  isRecording = true;
+  savePreviousApp();
+  const win = createRecordingWindow();
+  win.showInactive();
+  win.webContents.send('recording:start');
+}
+
+function stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+  recordingWindow?.webContents.send('recording:stop');
+}
+
+// ============================================================================
+// PUSH-TO-TALK LOGIC
+// ============================================================================
+
+/**
+ * Called when the main hotkey is pressed DOWN.
+ * Smart combo behavior — always active, no mode selection needed:
+ *   - Short tap → starts recording, stays on (toggle)
+ *   - Second short tap → stops recording (toggle off)
+ *   - Hold (> threshold) → Push-to-Talk, stops on release
+ */
+function handleHotkeyDown() {
+  pttKeyDownTime = Date.now();
+
+  if (isRecording) {
+    // Already recording — stop it (second tap = toggle off)
+    stopRecording();
+    if (pttHoldTimer) { clearTimeout(pttHoldTimer); pttHoldTimer = null; }
+    return;
+  }
+
+  // Start recording immediately (responsive feel)
+  const threshold = getStore().get('pttThreshold', 350);
+  beginRecording();
+  pttIsHolding = false;
+
+  // After threshold, mark as "holding" so release will stop
+  if (pttHoldTimer) clearTimeout(pttHoldTimer);
+  pttHoldTimer = setTimeout(() => {
+    pttIsHolding = true;
+    pttHoldTimer = null;
+  }, threshold);
+}
+
+/**
+ * Called when the main hotkey is released (key UP).
+ * If the key was held long enough, stop recording (PTT).
+ * If it was a short tap, recording stays on (toggle).
+ */
+function handleHotkeyUp() {
+  // If recording was already stopped by handleHotkeyDown (second tap), skip
+  if (!isRecording) {
+    pttIsHolding = false;
+    pttKeyDownTime = 0;
+    return;
+  }
+
+  const holdDuration = Date.now() - pttKeyDownTime;
+  const threshold = getStore().get('pttThreshold', 350);
+
+  if (pttHoldTimer) {
+    clearTimeout(pttHoldTimer);
+    pttHoldTimer = null;
+  }
+
+  if (holdDuration >= threshold || pttIsHolding) {
+    // Long press (held) — stop recording on release
+    stopRecording();
+  }
+  // Short press (tap) — recording stays on
+
+  pttIsHolding = false;
+  pttKeyDownTime = 0;
 }
 
 // ============================================================================
@@ -1582,21 +1672,100 @@ async function processAudioData(audioData, isRetry = false) {
 let currentShortcut = null;
 let smartPasteWindow = null;
 let agentHotkeys = [];
+let uioHook = null;
+let uioHookStarted = false;
+
+/**
+ * Initialize uiohook-napi for keyUp detection (needed for Push-to-Talk).
+ * Returns the uioHook instance or null if not available.
+ */
+function getUioHook() {
+  if (uioHook) return uioHook;
+  try {
+    const { uIOhook } = require('uiohook-napi');
+    uioHook = uIOhook;
+    return uioHook;
+  } catch (err) {
+    console.warn('[PTT] uiohook-napi not available:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Map an Electron accelerator string to a uiohook keycode.
+ * This handles the most common keys; extend as needed.
+ */
+function acceleratorToUioKeycode(accelerator) {
+  const keyMap = {
+    'A': 30, 'B': 48, 'C': 46, 'D': 32, 'E': 18, 'F': 33, 'G': 34,
+    'H': 35, 'I': 23, 'J': 36, 'K': 37, 'L': 38, 'M': 50, 'N': 49,
+    'O': 24, 'P': 25, 'Q': 16, 'R': 19, 'S': 31, 'T': 20, 'U': 22,
+    'V': 47, 'W': 17, 'X': 45, 'Y': 21, 'Z': 44,
+    '0': 11, '1': 2, '2': 3, '3': 4, '4': 5, '5': 6, '6': 7, '7': 8, '8': 9, '9': 10,
+    'F1': 59, 'F2': 60, 'F3': 61, 'F4': 62, 'F5': 63, 'F6': 64,
+    'F7': 65, 'F8': 66, 'F9': 67, 'F10': 68, 'F11': 87, 'F12': 88,
+    'SPACE': 57, 'ENTER': 28, 'BACKSPACE': 14, 'TAB': 15, 'ESCAPE': 1,
+    '`': 41, '-': 12, '=': 13, '[': 26, ']': 27, '\\': 43,
+    ';': 39, "'": 40, ',': 51, '.': 52, '/': 53,
+  };
+  // Extract the main key (last part after +)
+  const parts = accelerator.split('+');
+  const mainKey = parts[parts.length - 1].toUpperCase().trim();
+  return keyMap[mainKey] || null;
+}
 
 function registerHotkey() {
   const shortcut = getStore().get('shortcut');
-  if (currentShortcut) globalShortcut.unregister(currentShortcut);
 
-  const ok = globalShortcut.register(shortcut, () => {
-    console.log('Hotkey pressed:', shortcut);
-    startTranscription();
-  });
+  // Unregister previous shortcut
+  if (currentShortcut && currentShortcut !== 'GLOBE') {
+    try { globalShortcut.unregister(currentShortcut); } catch {}
+  }
 
-  if (ok) {
-    currentShortcut = shortcut;
-    console.log('Hotkey registered:', shortcut);
+  // Stop Globe key listener if switching away from GLOBE
+  if (shortcut !== 'GLOBE') {
+    globeKeyManager.stop();
+    globeKeyManager.removeAllListeners();
+  }
+
+  // Handle GLOBE key (macOS only)
+  if (shortcut === 'GLOBE') {
+    if (!isMac) {
+      console.error('GLOBE key only supported on macOS');
+      return;
+    }
+    currentShortcut = 'GLOBE';
+
+    // Remove old listeners before adding new ones
+    globeKeyManager.removeAllListeners();
+
+    globeKeyManager.on('globe-down', () => {
+      console.log('Globe key DOWN');
+      handleHotkeyDown();
+    });
+    globeKeyManager.on('globe-up', () => {
+      console.log('Globe key UP');
+      handleHotkeyUp();
+    });
+    globeKeyManager.start();
+
+    console.log('Hotkey registered: GLOBE (Fn) key');
   } else {
-    console.error('Hotkey registration failed:', shortcut);
+    // Standard Electron globalShortcut for keyDown
+    const ok = globalShortcut.register(shortcut, () => {
+      console.log('Hotkey pressed:', shortcut);
+      handleHotkeyDown();
+    });
+
+    if (ok) {
+      currentShortcut = shortcut;
+      console.log('Hotkey registered:', shortcut);
+    } else {
+      console.error('Hotkey registration failed:', shortcut);
+    }
+
+    // Always set up keyUp detection for combo mode (tap=toggle, hold=PTT)
+    setupUioHookKeyUp(shortcut);
   }
 
   // Register Smart-Paste hotkey (Cmd/Ctrl+Shift+V)
@@ -1615,6 +1784,62 @@ function registerHotkey() {
 
   // Register Agent-Switch hotkeys (Cmd+1, Cmd+2, Cmd+3, ...)
   registerAgentHotkeys();
+}
+
+/**
+ * Set up uiohook keyUp listener for Push-to-Talk.
+ * This detects when the user releases the hotkey.
+ */
+function setupUioHookKeyUp(shortcut) {
+  const hook = getUioHook();
+  if (!hook) {
+    console.warn('[PTT] Cannot set up keyUp detection — uiohook-napi not available');
+    return;
+  }
+
+  const targetKeycode = acceleratorToUioKeycode(shortcut);
+  if (!targetKeycode) {
+    console.warn(`[PTT] Cannot map shortcut "${shortcut}" to uiohook keycode`);
+    return;
+  }
+
+  // Remove previous listeners to avoid duplicates
+  hook.removeAllListeners('keyup');
+
+  hook.on('keyup', (e) => {
+    if (e.keycode === targetKeycode) {
+      handleHotkeyUp();
+    }
+  });
+
+  // Start hook if not already running
+  if (!uioHookStarted) {
+    try {
+      hook.start();
+      uioHookStarted = true;
+      console.log('[PTT] uiohook keyUp listener started for keycode:', targetKeycode);
+    } catch (err) {
+      console.error('[PTT] Failed to start uiohook:', err.message);
+    }
+  } else {
+    console.log('[PTT] uiohook keyUp listener updated for keycode:', targetKeycode);
+  }
+}
+
+/**
+ * Stop uiohook if no longer needed (e.g. switching to toggle mode).
+ */
+function stopUioHook() {
+  if (uioHook && uioHookStarted) {
+    try {
+      uioHook.removeAllListeners('keyup');
+      uioHook.stop();
+      uioHookStarted = false;
+      console.log('[PTT] uiohook stopped');
+    } catch (err) {
+      console.warn('[PTT] Error stopping uiohook:', err.message);
+    }
+  }
 }
 
 function registerAgentHotkeys() {
@@ -1794,6 +2019,7 @@ function setupIpcHandlers() {
       copyToClipboard: s.get('copyToClipboard'),
       hideDock: s.get('hideDock'),
       activeProfile: s.get('activeProfile'),
+      pttThreshold: s.get('pttThreshold', 350),
     };
   });
 
@@ -1809,6 +2035,10 @@ function setupIpcHandlers() {
     if (settings.shortcut !== undefined && settings.shortcut !== s.get('shortcut')) {
       s.set('shortcut', settings.shortcut);
       registerHotkey();
+    }
+
+    if (settings.pttThreshold !== undefined) {
+      s.set('pttThreshold', settings.pttThreshold);
     }
 
     if (settings.autoStart !== undefined) {
@@ -2139,5 +2369,9 @@ app.whenReady().then(() => {
   }, 5000);
 });
 
-app.on('will-quit', () => { globalShortcut.unregisterAll(); });
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  globeKeyManager.stop();
+  stopUioHook();
+});
 app.on('window-all-closed', (e) => { e.preventDefault(); });

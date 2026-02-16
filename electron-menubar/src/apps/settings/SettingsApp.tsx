@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Mic, Key, Keyboard, Volume2, Clipboard, Eye, EyeOff } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Key, Keyboard, Volume2, Eye, EyeOff, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,35 @@ import type { Settings, Platform } from '@/types/electron';
 
 type Tab = 'api' | 'shortcuts' | 'behavior';
 
+/**
+ * Maps a keyboard event to an Electron accelerator string.
+ */
+function keyEventToAccelerator(e: KeyboardEvent): string | null {
+  const parts: string[] = [];
+
+  if (e.metaKey) parts.push('Command');
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+
+  const key = e.key;
+  // Ignore standalone modifier keys
+  if (['Meta', 'Control', 'Alt', 'Shift', 'Fn'].includes(key)) return null;
+
+  // Map special keys
+  const keyMap: Record<string, string> = {
+    ' ': 'Space', 'ArrowUp': 'Up', 'ArrowDown': 'Down',
+    'ArrowLeft': 'Left', 'ArrowRight': 'Right', 'Escape': 'Escape',
+    'Enter': 'Enter', 'Backspace': 'Backspace', 'Delete': 'Delete',
+    'Tab': 'Tab',
+  };
+
+  const mappedKey = keyMap[key] || (key.length === 1 ? key.toUpperCase() : key);
+  parts.push(mappedKey);
+
+  return parts.join('+');
+}
+
 export function SettingsApp() {
   const [activeTab, setActiveTab] = useState<Tab>('api');
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -17,6 +46,7 @@ export function SettingsApp() {
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [groqKey, setGroqKey] = useState('');
   const [shortcut, setShortcut] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -35,6 +65,17 @@ export function SettingsApp() {
       }
     };
     loadData();
+  }, []);
+
+  // Key-capture handler
+  const handleKeyCapture = useCallback((e: KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const accel = keyEventToAccelerator(e);
+    if (accel) {
+      setShortcut(accel);
+      setIsCapturing(false);
+    }
   }, []);
 
   const handleSave = async (key: keyof Settings, value: string | boolean) => {
@@ -143,6 +184,7 @@ export function SettingsApp() {
 
       {activeTab === 'shortcuts' && (
         <div className="space-y-4">
+          {/* Aufnahme-Shortcut */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Aufnahme-Shortcut</CardTitle>
@@ -151,25 +193,85 @@ export function SettingsApp() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Key Capture Area */}
               <div className="flex gap-2">
-                <Input
-                  value={shortcut}
-                  onChange={(e) => setShortcut(e.target.value)}
-                  placeholder={platform?.isMac ? 'Alt+Command+K' : 'Ctrl+Alt+K'}
-                />
+                <button
+                  onClick={() => {
+                    if (isCapturing) {
+                      setIsCapturing(false);
+                      window.removeEventListener('keydown', handleKeyCapture, true);
+                    } else {
+                      setIsCapturing(true);
+                      window.addEventListener('keydown', handleKeyCapture, true);
+                    }
+                  }}
+                  className={cn(
+                    'flex-1 h-10 px-3 rounded-md border text-sm font-mono text-left transition-colors',
+                    isCapturing
+                      ? 'border-primary bg-primary/5 text-primary animate-pulse'
+                      : 'border-input bg-background text-foreground hover:bg-muted/50'
+                  )}
+                >
+                  {isCapturing
+                    ? '⌨️ Drücke eine Tastenkombination...'
+                    : shortcut === 'GLOBE'
+                      ? '🌐 Fn / Globe-Taste'
+                      : shortcut || 'Klicken zum Aufnehmen'}
+                </button>
                 <Button
-                  onClick={() => handleSave('shortcut', shortcut)}
+                  onClick={async () => {
+                    if (isCapturing) {
+                      setIsCapturing(false);
+                      window.removeEventListener('keydown', handleKeyCapture, true);
+                    }
+                    await handleSave('shortcut', shortcut);
+                  }}
                   disabled={isSaving}
                 >
                   Speichern
                 </Button>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Beispiele: {platform?.isMac ? 'Command+Shift+R, Alt+Command+K' : 'Ctrl+Shift+R, Ctrl+Alt+K'}
-              </p>
+
+              {/* Globe Key Button (macOS only) */}
+              {platform?.isMac && (
+                <button
+                  onClick={async () => {
+                    setShortcut('GLOBE');
+                    setIsCapturing(false);
+                    window.removeEventListener('keydown', handleKeyCapture, true);
+                    await handleSave('shortcut', 'GLOBE');
+                  }}
+                  className={cn(
+                    'mt-3 w-full flex items-center gap-2 p-2.5 rounded-lg border transition-colors text-sm',
+                    shortcut === 'GLOBE'
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-muted hover:border-muted-foreground/30 text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Globe className="w-4 h-4" />
+                  <div className="text-left">
+                    <div className="font-medium">Fn / Globe-Taste verwenden</div>
+                    <div className="text-[11px] opacity-70">
+                      Die Taste unten links auf der Mac-Tastatur
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              <div className="mt-3 text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-lg space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground/70">Kurz drücken</span>
+                  <span>→ Aufnahme ein/aus</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground/70">Gedrückt halten</span>
+                  <span>→ Aufnahme solange gehalten</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
+          {/* Weitere Shortcuts */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Weitere Shortcuts</CardTitle>

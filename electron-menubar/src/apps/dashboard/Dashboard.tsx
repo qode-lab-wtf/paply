@@ -120,7 +120,7 @@ export function Dashboard() {
     ));
   };
 
-  const handleSettingChange = async (key: keyof SettingsType, value: boolean | string) => {
+  const handleSettingChange = async (key: keyof SettingsType, value: boolean | string | number) => {
     await window.electronAPI.setSettings({ [key]: value });
     setSettings(prev => prev ? { ...prev, [key]: value } : null);
   };
@@ -309,7 +309,7 @@ function TranscriptionView({
   profiles: Record<string, Profile>;
   customAgents: CustomAgent[];
   onToggleRecording: () => void;
-  onSettingChange: (key: keyof SettingsType, value: boolean | string) => void;
+  onSettingChange: (key: keyof SettingsType, value: boolean | string | number) => void;
   onCopy: (item: HistoryItem) => void;
   copied: number | null;
 }) {
@@ -1766,7 +1766,7 @@ function SettingsView({
 }: {
   settings: SettingsType | null;
   platform: { isMac: boolean; isWin: boolean } | null;
-  onSettingChange: (key: keyof SettingsType, value: boolean | string) => void;
+  onSettingChange: (key: keyof SettingsType, value: boolean | string | number) => void;
 }) {
   const [groqKey, setGroqKey] = useState('');
   const [shortcutInput, setShortcutInput] = useState('');
@@ -1785,21 +1785,24 @@ function SettingsView({
     e.preventDefault();
     
     const parts: string[] = [];
+    if (e.metaKey) parts.push('Command');
     if (e.ctrlKey) parts.push('Ctrl');
     if (e.altKey) parts.push('Alt');
-    if (e.metaKey) parts.push(platform?.isMac ? 'Cmd' : 'Win');
     if (e.shiftKey) parts.push('Shift');
     
     const key = e.key;
-    if (!['Control', 'Alt', 'Meta', 'Shift'].includes(key)) {
-      parts.push(key.toUpperCase());
+    if (!['Control', 'Alt', 'Meta', 'Shift', 'Fn'].includes(key)) {
+      const keyMap: Record<string, string> = {
+        ' ': 'Space', 'ArrowUp': 'Up', 'ArrowDown': 'Down',
+        'ArrowLeft': 'Left', 'ArrowRight': 'Right',
+      };
+      parts.push(keyMap[key] || (key.length === 1 ? key.toUpperCase() : key));
       setShortcutInput(parts.join('+'));
       setIsRecording(false);
     }
   };
 
   const handleSave = async () => {
-    // Save API keys if changed
     if (groqKey && !groqKey.includes('•')) {
       await onSettingChange('groqApiKey', groqKey);
     }
@@ -1902,17 +1905,42 @@ function SettingsView({
         <CardContent>
           <Label className="text-xs text-muted-foreground mb-2 block">Globaler Hotkey</Label>
           <Input
-            value={shortcutInput}
+            value={shortcutInput === 'GLOBE' ? '🌐 Fn / Globe-Taste' : shortcutInput}
             placeholder="Klicken und Tastenkombination drücken"
             readOnly
             onKeyDown={handleHotkeyRecord}
             onClick={() => setIsRecording(true)}
             onBlur={() => setIsRecording(false)}
-            className={cn(isRecording && 'ring-2 ring-primary')}
+            className={cn(
+              'font-mono',
+              isRecording && 'ring-2 ring-primary'
+            )}
           />
-          <p className="text-xs text-muted-foreground mt-2">
-            z.B. Alt+Cmd+K oder Ctrl+Shift+X
-          </p>
+          {platform?.isMac && (
+            <button
+              onClick={() => {
+                setShortcutInput('GLOBE');
+                setIsRecording(false);
+                onSettingChange('shortcut', 'GLOBE');
+              }}
+              className={cn(
+                'mt-2 w-full flex items-center gap-2 p-2 rounded-lg border transition-colors text-sm',
+                shortcutInput === 'GLOBE'
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-muted text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
+              )}
+            >
+              <span>🌐</span>
+              <div className="text-left">
+                <div className="font-medium text-xs">Fn / Globe-Taste verwenden</div>
+                <div className="text-[10px] opacity-70">Taste unten links auf der Mac-Tastatur</div>
+              </div>
+            </button>
+          )}
+          <div className="mt-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded-lg space-y-0.5">
+            <div><span className="font-medium text-foreground/70">Kurz drücken</span> → Aufnahme ein/aus</div>
+            <div><span className="font-medium text-foreground/70">Gedrückt halten</span> → Aufnahme solange gehalten</div>
+          </div>
         </CardContent>
       </Card>
 
