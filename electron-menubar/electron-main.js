@@ -1639,9 +1639,9 @@ function registerAgentHotkeys() {
   };
 
   const agents = [
-    { id: 'coding', key: profiles.coding?.hotkey || defaultHotkeys.coding },
-    { id: 'meeting', key: profiles.meeting?.hotkey || defaultHotkeys.meeting },
-    { id: 'dictation', key: profiles.dictation?.hotkey || defaultHotkeys.dictation },
+    { id: 'coding', key: profiles.coding?.hotkey !== undefined ? profiles.coding.hotkey : defaultHotkeys.coding },
+    { id: 'meeting', key: profiles.meeting?.hotkey !== undefined ? profiles.meeting.hotkey : defaultHotkeys.meeting },
+    { id: 'dictation', key: profiles.dictation?.hotkey !== undefined ? profiles.dictation.hotkey : defaultHotkeys.dictation },
   ];
 
   // Custom Agents bekommen ihre benutzerdefinierten Hotkeys (wenn vorhanden)
@@ -1656,8 +1656,8 @@ function registerAgentHotkeys() {
     }
   });
 
-  // Register each agent hotkey
-  agents.forEach(agent => {
+  // Register each agent hotkey (skip agents with empty/cleared hotkeys)
+  agents.filter(agent => agent.key && agent.key.trim()).forEach(agent => {
     try {
       const registered = globalShortcut.register(agent.key, () => {
         console.log(`Agent hotkey pressed: ${agent.key} -> ${agent.id}`);

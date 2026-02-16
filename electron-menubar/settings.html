@@ -1177,10 +1177,12 @@
       try {
         await window.electronAPI.setSettings(settings);
         
-        // Save standard agent hotkeys
+        // Save standard agent hotkeys (including cleared ones as empty string)
         for (const agentId of ['coding', 'meeting', 'dictation']) {
           if (standardAgentHotkeys[agentId] !== null) {
             await window.electronAPI.updateProfile(agentId, { hotkey: standardAgentHotkeys[agentId] });
+          } else if (standardAgentHotkeys[agentId] === null) {
+            await window.electronAPI.updateProfile(agentId, { hotkey: '' });
           }
         }
         
