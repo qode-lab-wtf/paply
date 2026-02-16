@@ -2252,7 +2252,6 @@
           <div class="profile-grid" id="agentGrid">
             <!-- Coding Agent -->
             <div class="profile-card agent-card active" data-agent="coding">
-              <span class="agent-hotkey">⌘1</span>
               <div class="profile-icon" style="background: #3B82F6;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <polyline points="16 18 22 12 16 6"/>
@@ -2264,7 +2263,6 @@
             </div>
             <!-- Meeting Agent -->
             <div class="profile-card agent-card" data-agent="meeting">
-              <span class="agent-hotkey">⌘2</span>
               <div class="profile-icon" style="background: #F7D154;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -2277,7 +2275,6 @@
             </div>
             <!-- Dictation Agent -->
             <div class="profile-card agent-card" data-agent="dictation">
-              <span class="agent-hotkey">⌘3</span>
               <div class="profile-icon" style="background: #7ED957;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -2303,7 +2300,6 @@
               <div class="card-title">
                 <span id="activeAgentName">Coding</span> konfigurieren
             </div>
-              <span class="hotkey" id="activeAgentHotkey">⌘1</span>
             </div>
             
             <div class="form-group">
@@ -2852,16 +2848,9 @@
       return agentIcons[iconName] || agentIcons.star;
     }
     
-    // Update platform-specific hotkeys in UI
+    // Update platform-specific hotkeys in UI (no-op: standard agents no longer have default hotkeys)
     function updatePlatformHotkeys() {
-      // Update standard agent hotkey badges
-      const codingHotkey = document.querySelector('[data-agent="coding"] .agent-hotkey');
-      const meetingHotkey = document.querySelector('[data-agent="meeting"] .agent-hotkey');
-      const dictationHotkey = document.querySelector('[data-agent="dictation"] .agent-hotkey');
-      
-      if (codingHotkey) codingHotkey.textContent = getPlatformHotkey(1);
-      if (meetingHotkey) meetingHotkey.textContent = getPlatformHotkey(2);
-      if (dictationHotkey) dictationHotkey.textContent = getPlatformHotkey(3);
+      // Standard agents no longer have default hotkeys - nothing to update
     }
 
     // Initialize
@@ -3451,9 +3440,9 @@
     function showAgentSwitchToast(agentId) {
       // Standard agents
       const standardAgents = {
-        coding: { name: 'Coding', color: '#3B82F6', hotkey: getPlatformHotkey(1), icon: '💻' },
-        meeting: { name: 'Meeting', color: '#F7D154', hotkey: getPlatformHotkey(2), icon: '📅' },
-        dictation: { name: 'Diktat', color: '#7ED957', hotkey: getPlatformHotkey(3), icon: '✍️' }
+        coding: { name: 'Coding', color: '#3B82F6', hotkey: '', icon: '💻' },
+        meeting: { name: 'Meeting', color: '#F7D154', hotkey: '', icon: '📅' },
+        dictation: { name: 'Diktat', color: '#7ED957', hotkey: '', icon: '✍️' }
       };
 
       let name, color, hotkey, icon;
@@ -4038,9 +4027,9 @@
       
       // Standard agent info (feste Hotkeys, nicht änderbar)
       const standardAgents = {
-        coding: { name: 'Coding', hotkey: getPlatformHotkey(1), isStandard: true },
-        meeting: { name: 'Meeting', hotkey: getPlatformHotkey(2), isStandard: true },
-        dictation: { name: 'Diktat', hotkey: getPlatformHotkey(3), isStandard: true }
+        coding: { name: 'Coding', hotkey: '', isStandard: true },
+        meeting: { name: 'Meeting', hotkey: '', isStandard: true },
+        dictation: { name: 'Diktat', hotkey: '', isStandard: true }
       };
       
       let agentName = activeAgent;
@@ -4066,7 +4055,6 @@
       }
       
       document.getElementById('activeAgentName').textContent = agentName;
-      document.getElementById('activeAgentHotkey').textContent = agentHotkey;
       
       // Zeige/verstecke Hotkey-Gruppe für Custom Agents
       const hotkeyGroup = document.getElementById('agentHotkeyGroup');

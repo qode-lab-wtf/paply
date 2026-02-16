@@ -661,7 +661,6 @@
         <div class="agents-grid">
           <!-- Coding Agent -->
           <div class="agent-card" data-agent="coding">
-            <span class="agent-hotkey-badge" id="codingHotkeyBadge">⌘1</span>
             <div class="agent-icon" style="background: #3B82F6;">
               <svg viewBox="0 0 24 24" fill="none">
                 <polyline points="16 18 22 12 16 6"/>
@@ -673,7 +672,6 @@
 
           <!-- Meeting Agent -->
           <div class="agent-card" data-agent="meeting">
-            <span class="agent-hotkey-badge" id="meetingHotkeyBadge">⌘2</span>
             <div class="agent-icon" style="background: #F7D154;">
               <svg viewBox="0 0 24 24" fill="none">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -686,7 +684,6 @@
 
           <!-- Dictation Agent -->
           <div class="agent-card" data-agent="dictation">
-            <span class="agent-hotkey-badge" id="dictationHotkeyBadge">⌘3</span>
             <div class="agent-icon" style="background: #7ED957;">
               <svg viewBox="0 0 24 24" fill="none">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -871,21 +868,9 @@
       }
     }
 
-    // Update hotkey badges for standard agents
+    // Update hotkey badges for standard agents (no-op: badges removed)
     function updateHotkeyBadges() {
-      const codingBadge = document.getElementById('codingHotkeyBadge');
-      const meetingBadge = document.getElementById('meetingHotkeyBadge');
-      const dictationBadge = document.getElementById('dictationHotkeyBadge');
-      
-      codingBadge.textContent = standardAgentHotkeys.coding 
-        ? formatHotkeyForDisplay(standardAgentHotkeys.coding)
-        : getPlatformHotkey(1);
-      meetingBadge.textContent = standardAgentHotkeys.meeting
-        ? formatHotkeyForDisplay(standardAgentHotkeys.meeting)
-        : getPlatformHotkey(2);
-      dictationBadge.textContent = standardAgentHotkeys.dictation
-        ? formatHotkeyForDisplay(standardAgentHotkeys.dictation)
-        : getPlatformHotkey(3);
+      // Standard agent hotkey badges have been removed
     }
 
     // Load Settings
@@ -1003,13 +988,8 @@
           const names = { coding: 'Coding', meeting: 'Meeting', dictation: 'Diktat' };
           selectedAgentName.textContent = names[agentId];
           
-          // Show current hotkey
-          const defaultHotkeys = {
-            coding: platformInfo.isMac ? 'Command+1' : 'Ctrl+1',
-            meeting: platformInfo.isMac ? 'Command+2' : 'Ctrl+2',
-            dictation: platformInfo.isMac ? 'Command+3' : 'Ctrl+3'
-          };
-          standardAgentHotkey.value = standardAgentHotkeys[agentId] || defaultHotkeys[agentId];
+          // Show current hotkey (no defaults for standard agents)
+          standardAgentHotkey.value = standardAgentHotkeys[agentId] || '';
         }
       });
     });
@@ -1028,12 +1008,7 @@
         isCapturingAgentHotkey = false;
         const agentId = selectedStandardAgent || selectedCustomAgent?.id;
         if (selectedStandardAgent) {
-          const defaultHotkeys = {
-            coding: platformInfo.isMac ? 'Command+1' : 'Ctrl+1',
-            meeting: platformInfo.isMac ? 'Command+2' : 'Ctrl+2',
-            dictation: platformInfo.isMac ? 'Command+3' : 'Ctrl+3'
-          };
-          standardAgentHotkey.value = standardAgentHotkeys[agentId] || defaultHotkeys[agentId];
+          standardAgentHotkey.value = standardAgentHotkeys[agentId] || '';
         } else if (selectedCustomAgent) {
           standardAgentHotkey.value = selectedCustomAgent.hotkey || '';
         }

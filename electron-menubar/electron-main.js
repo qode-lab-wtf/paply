@@ -1631,17 +1631,11 @@ function registerAgentHotkeys() {
   const s = getStore();
   const profiles = s.get('profiles') || {};
 
-  // Standard-Agenten: Verwende benutzerdefinierte Hotkeys falls gesetzt, sonst Defaults
-  const defaultHotkeys = {
-    coding: isMac ? 'Command+1' : 'Ctrl+1',
-    meeting: isMac ? 'Command+2' : 'Ctrl+2',
-    dictation: isMac ? 'Command+3' : 'Ctrl+3',
-  };
-
+  // Standard-Agenten: Nur benutzerdefinierte Hotkeys verwenden (keine Defaults)
   const agents = [
-    { id: 'coding', key: profiles.coding?.hotkey !== undefined ? profiles.coding.hotkey : defaultHotkeys.coding },
-    { id: 'meeting', key: profiles.meeting?.hotkey !== undefined ? profiles.meeting.hotkey : defaultHotkeys.meeting },
-    { id: 'dictation', key: profiles.dictation?.hotkey !== undefined ? profiles.dictation.hotkey : defaultHotkeys.dictation },
+    { id: 'coding', key: profiles.coding?.hotkey || '' },
+    { id: 'meeting', key: profiles.meeting?.hotkey || '' },
+    { id: 'dictation', key: profiles.dictation?.hotkey || '' },
   ];
 
   // Custom Agents bekommen ihre benutzerdefinierten Hotkeys (wenn vorhanden)

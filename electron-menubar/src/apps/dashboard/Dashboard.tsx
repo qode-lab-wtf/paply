@@ -1060,7 +1060,6 @@ function AgentsView({
     name: profile.name,
     icon: id === 'coding' ? '💻' : id === 'meeting' ? '📝' : '🎤',
     color: id === 'coding' ? '#3B82F6' : id === 'meeting' ? '#F7D154' : '#7ED957',
-    hotkey: platform?.isMac ? `⌘${index + 1}` : `Ctrl+${index + 1}`,
     profile,
   }));
 
@@ -1181,9 +1180,6 @@ function AgentsView({
               }}
             >
               <CardContent className="p-4 text-center">
-                <Badge variant="outline" className="absolute top-2 right-2 text-[10px] font-mono">
-                  {agent.hotkey}
-                </Badge>
                 <div 
                   className="w-11 h-11 rounded-lg mx-auto mb-2 flex items-center justify-center"
                   style={{ backgroundColor: activeProfile === agent.id ? agent.color : 'hsl(var(--muted))' }}
