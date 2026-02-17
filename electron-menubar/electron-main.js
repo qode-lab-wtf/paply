@@ -1264,97 +1264,20 @@ function savePreviousApp() {
   });
 }
 
-// Statischer Lade-Indikator (Animation ist zu instabil für externe Apps)
-// ⏳ = Sanduhr, signalisiert "lädt" ohne die Probleme einer Animation
-const LOADING_INDICATOR = '⏳';
-
-function insertPlaceholder() {
-  clipboard.writeText(LOADING_INDICATOR);
-
-  if (isMac) {
-    const script = previousAppName
-      ? `tell application "${previousAppName}" to activate
-         delay 0.2
-         tell application "System Events" to keystroke "v" using command down`
-      : `delay 0.15
-         tell application "System Events" to keystroke "v" using command down`;
-
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const proc = spawn('osascript', ['-e', script]);
-        proc.on('close', () => setTimeout(resolve, 100));
-        proc.on('error', () => resolve());
-      }, 100);
-    });
-  } else if (isWin) {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const psScript = `Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('^v')`;
-        const tempFile = path.join(app.getPath('temp'), 'paply-placeholder.ps1');
-        fs.writeFileSync(tempFile, psScript, 'utf8');
-        exec(`powershell -ExecutionPolicy Bypass -File "${tempFile}"`, () => {
-          try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
-          resolve();
-        });
-      }, 150);
-    });
-  }
-  return Promise.resolve();
-}
-
-function replacePlaceholderWithText(text) {
-  // 1 Zeichen löschen (⏳), dann Text einfügen
-  if (isMac) {
-    const pasteCommand = text ? `keystroke "v" using command down` : '';
-    const script = previousAppName
-      ? `tell application "${previousAppName}" to activate
-         delay 0.2
-         tell application "System Events"
-           key code 51
-           delay 0.05
-           ${pasteCommand}
-         end tell`
-      : `delay 0.15
-         tell application "System Events"
-           key code 51
-           delay 0.05
-           ${pasteCommand}
-         end tell`;
-
-    if (text) clipboard.writeText(text);
-    setTimeout(() => {
-      const proc = spawn('osascript', ['-e', script]);
-      proc.stderr.on('data', (d) => console.error('AppleScript error:', d.toString()));
-    }, 100);
-  } else if (isWin) {
-    if (text) clipboard.writeText(text);
-    setTimeout(() => {
-      const pasteCommand = text ? `Start-Sleep -Milliseconds 30; [System.Windows.Forms.SendKeys]::SendWait('^v')` : '';
-      const psScript = `
-Add-Type -AssemblyName System.Windows.Forms
-Start-Sleep -Milliseconds 50
-[System.Windows.Forms.SendKeys]::SendWait("{BACKSPACE}")
-${pasteCommand}
-      `.trim();
-      const tempFile = path.join(app.getPath('temp'), 'paply-paste.ps1');
-      fs.writeFileSync(tempFile, psScript, 'utf8');
-      exec(`powershell -ExecutionPolicy Bypass -File "${tempFile}"`, (err, stdout, stderr) => {
-        if (err) console.error('PowerShell paste error:', err);
-        if (stderr) console.error('PowerShell stderr:', stderr);
-        try { fs.unlinkSync(tempFile); } catch (e) { /* ignore */ }
-      });
-    }, 100);
-  }
-}
-
 function autopasteText(text) {
   clipboard.writeText(text);
 
   if (isMac) {
+    // Use "set frontmost of process" instead of "activate" to avoid
+    // bringing ALL windows of the app to front across all screens.
+    // "activate" reorganizes every window on every display — "set frontmost"
+    // only raises the app's currently-focused window on the current screen.
     const script = previousAppName
-      ? `tell application "${previousAppName}" to activate
-         delay 0.3
-         tell application "System Events" to keystroke "v" using command down`
+      ? `tell application "System Events"
+           set frontmost of process "${previousAppName}" to true
+           delay 0.3
+           keystroke "v" using command down
+         end tell`
       : `delay 0.2
          tell application "System Events" to keystroke "v" using command down`;
 
@@ -1401,10 +1324,10 @@ function startTranscription() {
   }
 }
 
-function beginRecording() {
+async function beginRecording() {
   if (isRecording) return;
   isRecording = true;
-  savePreviousApp();
+  await savePreviousApp();
   const win = createRecordingWindow();
   win.showInactive();
   win.webContents.send('recording:start');
@@ -1482,11 +1405,20 @@ function handleHotkeyUp() {
 }
 
 // ============================================================================
-// AUDIO BACKUP SYSTEM
+// AUDIO BACKUP SYSTEM (RAM + Disk persistence for crash-safe recovery)
 // ============================================================================
 let lastAudioBackup = null;
 let backupTimestamp = null;
 const BACKUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Lazy-initialized backup directory on disk
+let _backupDir = null;
+function getBackupDir() {
+  if (!_backupDir) {
+    _backupDir = path.join(app.getPath('userData'), 'audio-backups');
+  }
+  return _backupDir;
+}
 
 function saveAudioBackup(audioData) {
   // Store as proper Buffer to avoid serialization issues
@@ -1501,10 +1433,56 @@ function saveAudioBackup(audioData) {
   }
   backupTimestamp = Date.now();
   console.log('Audio backup saved:', lastAudioBackup.length, 'bytes');
+
+  // Persist to disk asynchronously
+  try {
+    const dir = getBackupDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const filename = `backup_${backupTimestamp}.webm`;
+    fs.writeFile(path.join(dir, filename), lastAudioBackup, (err) => {
+      if (err) {
+        console.error('Failed to write audio backup to disk:', err);
+      } else {
+        console.log('Audio backup persisted to disk:', filename);
+      }
+    });
+  } catch (err) {
+    console.error('Failed to persist audio backup:', err);
+  }
+}
+
+function loadBackupFromDisk() {
+  try {
+    const dir = getBackupDir();
+    if (!fs.existsSync(dir)) return;
+
+    const files = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.webm'))
+      .sort()
+      .reverse();
+
+    if (files.length > 0) {
+      const latest = files[0];
+      const timestamp = parseInt(latest.match(/backup_(\d+)/)?.[1] || '0');
+      const age = Date.now() - timestamp;
+
+      if (age < BACKUP_EXPIRY_MS) {
+        lastAudioBackup = fs.readFileSync(path.join(dir, latest));
+        backupTimestamp = timestamp;
+        console.log('Audio backup restored from disk:', latest, '(' + lastAudioBackup.length + ' bytes)');
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load audio backup from disk:', err);
+  }
 }
 
 function getAudioBackup() {
-  if (!lastAudioBackup || !backupTimestamp) return null;
+  // If no RAM backup, try loading from disk as fallback
+  if (!lastAudioBackup || !backupTimestamp) {
+    loadBackupFromDisk();
+    if (!lastAudioBackup || !backupTimestamp) return null;
+  }
 
   // Check if backup is expired (24 hours)
   if (Date.now() - backupTimestamp > BACKUP_EXPIRY_MS) {
@@ -1519,6 +1497,44 @@ function clearAudioBackup() {
   lastAudioBackup = null;
   backupTimestamp = null;
   console.log('Audio backup cleared');
+
+  // Also clear disk backups
+  try {
+    const dir = getBackupDir();
+    if (fs.existsSync(dir)) {
+      fs.readdirSync(dir).forEach(f => {
+        try {
+          fs.unlinkSync(path.join(dir, f));
+        } catch (e) {
+          console.error('Failed to delete backup file:', f, e);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Failed to clear disk backups:', err);
+  }
+}
+
+function cleanupOldBackups() {
+  try {
+    const dir = getBackupDir();
+    if (!fs.existsSync(dir)) return;
+
+    const now = Date.now();
+    fs.readdirSync(dir).forEach(f => {
+      const timestamp = parseInt(f.match(/backup_(\d+)/)?.[1] || '0');
+      if (now - timestamp > BACKUP_EXPIRY_MS) {
+        try {
+          fs.unlinkSync(path.join(dir, f));
+          console.log('Cleaned up old backup:', f);
+        } catch (e) {
+          console.error('Failed to delete old backup:', f, e);
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Failed to cleanup old backups:', err);
+  }
 }
 
 async function retryLastRecording() {
@@ -1655,7 +1671,7 @@ async function processAudioData(audioData, isRetry = false) {
     // Show retry notification in recording window
     recordingWindow?.webContents.send('error:retry', {
       message: error.message || 'Transkription fehlgeschlagen',
-      hotkey: isMac ? '⌘⇧R' : 'Ctrl+Shift+R'
+      hotkey: isMac ? '⌥⇧⌘R' : 'Ctrl+Alt+Shift+R'
     });
 
     setTimeout(() => {
@@ -1768,15 +1784,17 @@ function registerHotkey() {
     setupUioHookKeyUp(shortcut);
   }
 
-  // Register Smart-Paste hotkey (Cmd/Ctrl+Shift+V)
-  const smartPasteKey = isMac ? 'Command+Shift+V' : 'Ctrl+Shift+V';
+  // Register Smart-Paste hotkey (Cmd+Option+Shift+V / Ctrl+Alt+Shift+V)
+  // Avoid Cmd+Shift+V — that's "Paste without formatting" in most apps!
+  const smartPasteKey = isMac ? 'Command+Option+Shift+V' : 'Ctrl+Alt+Shift+V';
   globalShortcut.register(smartPasteKey, () => {
     console.log('Smart-Paste hotkey pressed');
     showSmartPasteOverlay();
   });
 
-  // Register Recovery hotkey (Cmd/Ctrl+Shift+R)
-  const recoveryKey = isMac ? 'Command+Shift+R' : 'Ctrl+Shift+R';
+  // Register Recovery hotkey (Cmd+Option+Shift+R / Ctrl+Alt+Shift+R)
+  // Avoid Cmd+Shift+R — that's "Hard Reload" in browsers!
+  const recoveryKey = isMac ? 'Command+Option+Shift+R' : 'Ctrl+Alt+Shift+R';
   globalShortcut.register(recoveryKey, () => {
     console.log('Recovery hotkey pressed');
     retryLastRecording();
@@ -2327,6 +2345,10 @@ app.whenReady().then(() => {
   if (app.dock && s.get('hideDock')) {
     app.dock.hide();
   }
+
+  // Restore audio backup from disk (crash-safe recovery)
+  cleanupOldBackups();
+  loadBackupFromDisk();
 
   // Setup auto-updater
   setupAutoUpdater();

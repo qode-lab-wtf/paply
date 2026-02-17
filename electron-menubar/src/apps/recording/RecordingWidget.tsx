@@ -6,7 +6,7 @@ type Status = 'idle' | 'recording' | 'processing' | 'polishing' | 'done' | 'erro
 
 export function RecordingWidget() {
   const [status, setStatus] = useState<Status>('idle');
-  const [retryHotkey, setRetryHotkey] = useState('⌘⇧R');
+  const [retryHotkey, setRetryHotkey] = useState('⌥⇧⌘R');
   const [agentBadge, setAgentBadge] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -20,7 +20,7 @@ export function RecordingWidget() {
   useEffect(() => {
     // Init platform-specific hotkey
     window.electronAPI.getPlatform().then((platform) => {
-      setRetryHotkey(platform.isMac ? '⌘⇧R' : 'Ctrl+Shift+R');
+      setRetryHotkey(platform.isMac ? '⌥⇧⌘R' : 'Ctrl+Alt+Shift+R');
     });
 
     // Listen for recording events
@@ -66,6 +66,7 @@ export function RecordingWidget() {
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + duration);
+      osc.onended = () => ctx.close();
     } catch (e) {
       console.error('Beep failed', e);
     }
