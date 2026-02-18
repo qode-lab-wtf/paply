@@ -74,9 +74,6 @@ jobs:
       - name: Build Windows EXE
         working-directory: electron-menubar
         run: npm run build:win
-        env:
-          CSC_LINK: ""
-          CSC_KEY_PASSWORD: ""
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -87,7 +84,7 @@ jobs:
             electron-menubar/dist/latest.yml
 
   create-release:
-    needs: [build-mac]
+    needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -103,7 +100,6 @@ jobs:
         with:
           name: windows-build
           path: ./windows-build
-        continue-on-error: true
 
       - name: List files
         run: |

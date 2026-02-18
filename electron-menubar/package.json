@@ -88,6 +88,13 @@
             "x64"
           ]
         }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/bin/macos-globe-listener",
+          "to": "bin/macos-globe-listener",
+          "filter": ["!*.swift"]
+        }
       ]
     },
     "afterSign": "scripts/notarize.js",
@@ -125,13 +132,6 @@
       "icon.ico",
       "iconTemplate.png",
       "iconTemplate@2x.png"
-    ],
-    "extraResources": [
-      {
-        "from": "resources/bin/macos-globe-listener",
-        "to": "bin/macos-globe-listener",
-        "filter": ["!*.swift"]
-      }
     ]
   }
 }
