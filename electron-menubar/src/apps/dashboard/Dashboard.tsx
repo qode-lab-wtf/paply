@@ -208,7 +208,7 @@ export function Dashboard() {
         </nav>
 
         <div className="p-4 border-t text-xs text-muted-foreground text-center">
-          paply v{platform?.version ?? '1.12.5'}
+          {settings?.localMeetingTest ? 'Lokale Testversion · kein Update nötig' : `paply v${platform?.version ?? '1.12.5'}`}
         </div>
       </aside>
 

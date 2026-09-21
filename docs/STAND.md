@@ -76,6 +76,19 @@ Die installierte `/Applications/paply.app` und ihre Daten bleiben unverändert.
   Quellenverknüpfung zu Sprecher 2 in der echten Oberfläche geprüft. Frühere
   Testkorrektur blieb gespeichert und wurde bei geänderten IDs als unverknüpft gezeigt.
 
+## Bedienklarheit / Absturzmeldung geprüft
+
+- 21.09.2026, 16:04: Genau eine installierte Paply-App und eine separate Test-App
+  liefen. Vier vorhandene Crashberichte betreffen ausschließlich den alten Build
+  „Paply Gespräch Test“ von 14:41–14:42; kein neuer Bericht zum aktuellen Build.
+- Testfenster heißt jetzt „Paply Gespräch – TESTVERSION“, Versionsfußzeile nennt
+  ausdrücklich den lokalen Test statt einer vermeintlich aktuellen Release-Version.
+  Zusätzlich Dock-Badge TEST gesetzt. Neuer Build gestartet, Fenstertitel und
+  Fußzeile in der echten Oberfläche verifiziert; normale App nicht neu gestartet.
+- Allan braucht keinen GitHub-Download und kein Update. Nächster Praxistest direkt
+  über Cmd+Option+Shift+X: zwei bekannte Personen, zunächst ohne zusätzliche Tonquelle.
+  Die inhaltlichen Qualitätsgrenzen unten bleiben bestehen.
+
 ## Offen / nächster Schritt
 
 - Qwen3.5-9B mit Ollama0.34.2 liefert jetzt strukturell gültige Berichte auf zwei

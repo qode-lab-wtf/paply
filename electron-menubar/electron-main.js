@@ -1059,7 +1059,7 @@ function createMainWindow() {
     height: 780,
     minWidth: 960,
     minHeight: 640,
-    title: 'paply',
+    title: localMeetingTest ? 'Paply Gespräch – TESTVERSION' : 'paply',
     backgroundColor: '#0f1115',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -1068,6 +1068,7 @@ function createMainWindow() {
     },
   });
 
+  if (localMeetingTest) mainWindow.on('page-title-updated', event => event.preventDefault());
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
 
@@ -2545,6 +2546,7 @@ function setupIpcHandlers() {
 // APP LIFECYCLE
 // ============================================================================
 app.whenReady().then(() => {
+  if (localMeetingTest && app.dock) app.dock.setBadge('TEST');
   const s = getStore();
 
   // Dock-Icon verstecken wenn gewünscht (Standard: sichtbar)
