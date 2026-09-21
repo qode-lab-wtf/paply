@@ -55,3 +55,21 @@ Zeitüberlappungsregel verwirft 28 von 36 neuen Whisper-Mikrofonsegmenten; das b
 noch nicht, wie viel davon Echo bzw. echter Gesprächsbeitrag ist.
 Noch keine Modellkombination qualifiziert; Integration/Ansicht/Retention/Export stehen
 hinter diesem Qualitätsgate. Instinct-Empfang nicht nachgewiesen.
+
+## Nächster Prüfstand: verständliche Zuordnung
+
+`conversation_preview.py` verknüpft vorhandene Whisper-Wortzeiten mit jeder
+Sprecheranalyse getrennt. Kein Löschen als Echo; Überlappung/zu wenig zeitliche
+Abdeckung bleiben unklar. Unvollständige Wortausrichtung erhält den Originaltext.
+Die kurze Antwort am Ende wird in beiden Kandidaten Sprecher 2 zugeordnet.
+Stimmspannen ohne erkannten Text sind separat markiert; weiterhin keine bestätigte
+Referenz. Private Vorschau im lokalen outputs-Ordner, 26 Harness-Tests bestanden.
+Automatisches Öffnen der file-URL wurde durch die Browser-URL-Prüfung blockiert;
+kein Umweg versucht, Dateilink für Allan verfügbar.
+
+Berichtsexperiment `--evidence-v2`: einzelne Textstellen mit stabilen IDs und Zeiten,
+belegte Übersicht, Quellenzitate deterministisch aus Originaltext ergänzt, keine
+selbst erfundenen Zitate des Modells. Vollständigkeit der Quellsegmentierung geprüft.
+Erneuter Vergleich abgeschlossen: Qwen3-8B strukturell gültig (199 s), aber bei
+Textprüfung weiterhin falsche Rollen-/Bedeutungszuordnung und überbreite Beleglisten.
+Gemma3-4B-Ausgabe nach 104 s vom Validator abgelehnt. Kein Berichtsmodell freigegeben.

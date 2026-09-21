@@ -80,3 +80,16 @@ Pyannote liefert auf der kurzen Aufnahme zwei zusätzliche Sprachintervalle gege
 FluidAudio; dies ist eine Modellabweichung, keine bestätigte Verbesserung. Auf dem
 90-s-Mikrofon bildet pyannote zwei statt FluidAudios drei Gruppen. Referenz bleibt
 ungesichert, also keine Qualitätsfreigabe. Zugriff blockiert die Fortsetzung nicht mehr.
+
+## Belegbericht und verständliche Zuordnung
+
+26 Harness-Tests bestanden. Sprecher-Text-Vorschau erhält sämtliche Wörter des
+kurzen Whisper-Transkripts, weist die abschließende Antwort in beiden Varianten
+Sprecher 2 zu und markiert Unsicherheit statt Beiträge zu verwerfen.
+Die Benutzeransicht ist ein Diagnoseartefakt, keine produktive Sprecher-Pipeline.
+
+Bericht v2 mit einzelnen Quellenstellen, belegter Übersicht und deterministisch
+angefügtem Originaltext erneut auf identischem Whisper-Eingabetext verglichen.
+Qwen3-8B: schema-valid-unreviewed, 199,20 s; weiterhin semantische Rollen-/
+Bedeutungsfehler bei Codex-Textvergleich, zudem zu breite Quellenlisten.
+Gemma3-4B: invalid, 104,40 s. Keine Freigabe aus Schemaerfolg ableiten.

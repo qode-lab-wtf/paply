@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import time
 import urllib.request
+from jsonschema import ValidationError
 
 ROOT = Path(__file__).resolve().parents[2]
 def claim_schema(properties):
@@ -66,6 +67,7 @@ def main():
     p.add_argument('transcript', type=Path)
     p.add_argument('output', type=Path)
     p.add_argument('--thinking', action='store_true')
+    p.add_argument('--evidence-v2', action='store_true')
     a = p.parse_args()
     a.output.resolve().relative_to(ROOT/'work')
     t = json.loads(a.transcript.read_text())
@@ -73,10 +75,16 @@ def main():
     text = t['text']
     if len(text) > 20000:
         raise ValueError('Benchmark sample too long; do not silently truncate')
-    request = {'model': a.model, 'stream': False, 'think': a.thinking, 'format': REPORT_SCHEMA,
+    sources = None
+    report_schema, system, user_text = REPORT_SCHEMA, SYSTEM, '[segment-1]\n' + text
+    if a.evidence_v2:
+        import report_evidence as evidence
+        sources = evidence.build_sources(t)
+        report_schema, system, user_text = evidence.schema(sources), evidence.SYSTEM, json.dumps(sources, ensure_ascii=False)
+    request = {'model': a.model, 'stream': False, 'think': a.thinking, 'format': report_schema,
                'keep_alive': 0, 'options': {'temperature': 0, 'num_ctx': 16384, 'num_predict': 8192 if a.thinking else 4096},
-               'messages': [{'role': 'system', 'content': SYSTEM},
-                            {'role': 'user', 'content': '[segment-1]\n' + text}]}
+               'messages': [{'role': 'system', 'content': system},
+                            {'role': 'user', 'content': user_text}]}
     start = time.monotonic()
     req = urllib.request.Request('http://127.0.0.1:11435/api/chat', data=json.dumps(request).encode(),
                                  headers={'Content-Type': 'application/json'})
@@ -84,12 +92,15 @@ def main():
         data = json.load(response)
     output = {'model': a.model, 'inputSha256': hashlib.sha256(text.encode()).hexdigest(),
               'wallSeconds': time.monotonic()-start, 'humanReviewed': False, 'thinking': a.thinking,
-              'doneReason': data.get('done_reason'), 'raw': data['message']['content']}
+              'evidenceVersion': 2 if a.evidence_v2 else 1, 'sources': sources, 'doneReason': data.get('done_reason'), 'raw': data['message']['content']}
     try:
         report = json.loads(output['raw'])
-        validate_report(report, text, data.get('done_reason'))
+        if a.evidence_v2:
+            report = evidence.validate_and_attach(report, sources, data.get('done_reason'))
+        else:
+            validate_report(report, text, data.get('done_reason'))
         output.update(status='schema-valid-unreviewed', report=report)
-    except (ValueError, TypeError) as e:
+    except (ValueError, TypeError, ValidationError) as e:
         output.update(status='invalid', error=str(e))
     a.output.write_text(json.dumps(output, ensure_ascii=False, indent=2))
     print(json.dumps({k: output[k] for k in ['model', 'status', 'wallSeconds']}))

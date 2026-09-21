@@ -146,3 +146,15 @@ eines Ergebnisses, nicht modell- oder kanalübergreifend. Keine automatische Fre
 `node tools/meeting-eval/legacy_replay.js MIC_WHISPER_JSON SYSTEM_WHISPER_JSON`
 misst den Eingriff der bisherigen zeitbasierten Echo-Unterdrückung auf den
 Kandidatensegmenten. Unterdrückte Dauer ist keine bestätigte verlorene Gesprächsdauer.
+
+## Verständliches Gespräch / Belegbericht v2
+
+`conversation_preview.py MANIFEST WHISPER_JSON DIARIZATION_JSON... --output work/conversation.html`
+erhält alle Wörter, zeigt unklare Zuordnungen und Stimmspannen ohne erkannten Text.
+Die 60-Prozent-Abdeckung / 20-Prozent-Zweitstimmen-Grenze ist eine explizite
+Darstellungsheuristik, keine validierte Sprecher-Pipeline.
+
+`report.py ... --evidence-v2` verwendet Quellenstellen mit Zeitmarken statt einer
+einzigen Gesamtreferenz. Belegzitate werden erst nach Schema-/ID-Prüfung aus
+Originaltext eingefügt. Das verhindert erfundene Zitate, nicht falsche Interpretation.
+Alte Berichtsfassung bleibt für reproduzierbare Vergleiche verfügbar.
