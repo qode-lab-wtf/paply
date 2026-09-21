@@ -1874,7 +1874,7 @@ function SettingsView({
           </div>
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">
-              Google Gemini API Key (optional — Protokoll-Fallback, großzügigeres Gratis-Limit)
+              Google Gemini API Key (nötig für Meetings mit Sprechertrennung + Bericht; kostenlos auf aistudio.google.com)
             </Label>
             <Input
               type="password"
@@ -1899,7 +1899,7 @@ function SettingsView({
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              „Automatisch": Groq zuerst, bei erschöpftem Tageslimit automatisch Gemini.
+              „Automatisch": Gemini zuerst (Meeting-Bericht), bei erschöpftem Kontingent automatisch Groq.
             </p>
           </div>
         </CardContent>
@@ -1971,16 +1971,6 @@ function SettingsView({
             <Switch
               checked={settings.copyToClipboard}
               onCheckedChange={(checked) => onSettingChange('copyToClipboard', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Sprecher trennen (Meetings)</Label>
-              <p className="text-xs text-muted-foreground">Mehrere Personen an einem Mikrofon lokal trennen (kostenlos, kein Key)</p>
-            </div>
-            <Switch
-              checked={settings.diarizationEnabled}
-              onCheckedChange={(checked) => onSettingChange('diarizationEnabled', checked)}
             />
           </div>
           <div className="flex items-center justify-between">

@@ -1,12 +1,16 @@
 'use strict';
-// Gemeinsamer LLM-Client für Meeting-Aufgaben (Protokoll + Sprecher-Korrektur). Unterstützt
-// ZWEI Anbieter — Groq (schnell) und Google Gemini (großzügigeres Free-Tier) — mit Auto-Fallback:
-// 'auto' (Default) probiert Groq zuerst und fällt bei Limit/Fehler/fehlendem Key auf Gemini zurück,
-// damit das Protokoll auch dann zustande kommt, wenn Groqs Tageslimit erschöpft ist. 'groq'/'gemini'
-// erzwingen einen Anbieter. Gibt { text, model } zurück. Bei 429 hat der Fehler code='rate_limit'.
+// Gemeinsamer LLM-Client für Meeting-Aufgaben (Bericht). Unterstützt ZWEI Anbieter — Google Gemini
+// (großzügiges Free-Tier, auch für die Audio-Auswertung genutzt) und Groq (schnell) — mit
+// Auto-Fallback. 'auto' (Default) probiert in der übergebenen Reihenfolge (`order`, Default
+// Gemini → Groq, damit das Groq-Tageskontingent fürs Diktat frei bleibt) und fällt bei
+// Limit/Fehler/fehlendem Key auf den nächsten Anbieter zurück. 'groq'/'gemini' erzwingen einen
+// Anbieter. Gibt { text, model } zurück. Bei 429 hat der Fehler code='rate_limit'.
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash-lite'];
+const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey, model, fetchImpl }) {
   const fetch = fetchImpl || globalThis.fetch;
@@ -26,6 +30,7 @@ async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey
   });
   if (!res.ok) {
     const e = new Error(`Groq HTTP ${res.status}`);
+    e.status = res.status;
     if (res.status === 429) e.code = 'rate_limit';
     throw e;
   }
@@ -33,7 +38,7 @@ async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey
   return { text: (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '', model };
 }
 
-async function callGemini({ system, user, jsonMode, maxTokens, temperature, apiKey, model, fetchImpl }) {
+async function callGemini({ system, user, jsonMode, responseSchema, thinkingBudget, maxTokens, temperature, apiKey, model, fetchImpl }) {
   const fetch = fetchImpl || globalThis.fetch;
   const url = `${GEMINI_BASE}/${model}:generateContent`;
   const body = {
@@ -42,6 +47,8 @@ async function callGemini({ system, user, jsonMode, maxTokens, temperature, apiK
       temperature,
       maxOutputTokens: maxTokens,
       ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      ...(jsonMode && responseSchema ? { responseSchema } : {}),
+      ...(typeof thinkingBudget === 'number' ? { thinkingConfig: { thinkingBudget } } : {}),
     },
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
   };
@@ -52,6 +59,7 @@ async function callGemini({ system, user, jsonMode, maxTokens, temperature, apiK
   });
   if (!res.ok) {
     const e = new Error(`Gemini HTTP ${res.status}`);
+    e.status = res.status;
     if (res.status === 429) e.code = 'rate_limit';
     throw e;
   }
@@ -63,33 +71,42 @@ async function callGemini({ system, user, jsonMode, maxTokens, temperature, apiK
 /**
  * Führt eine Chat-Completion aus — provider-agnostisch, mit Fallback.
  * @param {{
- *   system?:string, user:string, jsonMode?:boolean, maxTokens?:number, temperature?:number,
- *   provider?:'auto'|'groq'|'gemini',
+ *   system?:string, user:string, jsonMode?:boolean, responseSchema?:object, thinkingBudget?:number,
+ *   maxTokens?:number, temperature?:number,
+ *   provider?:'auto'|'groq'|'gemini', order?:('groq'|'gemini')[],
  *   groqApiKey?:string, groqModel?:string, geminiApiKey?:string, geminiModel?:string,
  *   fetchImpl?:Function
  * }} opts
  * @returns {Promise<{text:string, model:string}>}
  */
 async function chatComplete({
-  system, user, jsonMode = false, maxTokens = 2048, temperature = 0,
-  provider = 'auto',
-  groqApiKey, groqModel = 'llama-3.3-70b-versatile',
-  geminiApiKey, geminiModel = 'gemini-2.5-flash',
+  system, user, jsonMode = false, responseSchema, thinkingBudget, maxTokens = 2048, temperature = 0,
+  provider = 'auto', order = ['gemini', 'groq'],
+  groqApiKey, groqModel = DEFAULT_GROQ_MODEL,
+  geminiApiKey, geminiModel = DEFAULT_GEMINI_MODEL,
   fetchImpl,
 } = {}) {
-  const order = provider === 'groq' ? ['groq'] : provider === 'gemini' ? ['gemini'] : ['groq', 'gemini'];
+  const seq = provider === 'groq' ? ['groq'] : provider === 'gemini' ? ['gemini'] : order;
   let lastErr = null;
-  for (const p of order) {
+  for (const p of seq) {
     if (p === 'groq' && !groqApiKey) continue;
     if (p === 'gemini' && !geminiApiKey) continue;
-    try {
-      if (p === 'groq') return await callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey: groqApiKey, model: groqModel, fetchImpl });
-      return await callGemini({ system, user, jsonMode, maxTokens, temperature, apiKey: geminiApiKey, model: geminiModel, fetchImpl });
-    } catch (e) {
-      lastErr = e; // im 'auto'-Modus: nächsten Anbieter probieren (Groq-Limit → Gemini)
+    if (p === 'groq') {
+      try { return await callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey: groqApiKey, model: groqModel, fetchImpl }); } catch (e) { lastErr = e; }
+      continue;
+    }
+    // Gemini: Modell-Fallback bei 404/400 (Modell nicht verfügbar); sonst nächster Anbieter
+    const models = [geminiModel, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== geminiModel)];
+    for (const m of models) {
+      try {
+        return await callGemini({ system, user, jsonMode, responseSchema, thinkingBudget, maxTokens, temperature, apiKey: geminiApiKey, model: m, fetchImpl });
+      } catch (e) {
+        lastErr = e;
+        if (!(e.status === 404 || e.status === 400)) break;
+      }
     }
   }
   throw lastErr || new Error('Kein LLM-Anbieter verfügbar (kein Groq- oder Gemini-Key gesetzt)');
 }
 
-module.exports = { chatComplete, callGroq, callGemini, GROQ_URL, GEMINI_BASE };
+module.exports = { chatComplete, callGroq, callGemini, GROQ_URL, GEMINI_BASE, DEFAULT_GEMINI_MODEL, DEFAULT_GROQ_MODEL, GEMINI_FALLBACK_MODELS };

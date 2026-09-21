@@ -22,6 +22,19 @@ class ChunkAccumulator {
     this.emittedBytes = 0;
   }
 
+  /**
+   * Stellt Stille voran (Startlücke: das Mikro/der System-Tap liefert erst einige hundert ms bis
+   * Sekunden nach dem Sessionstart). Nur VOR dem ersten echten Paket wirksam, damit die Zeitachse
+   * des Kanals beim Sessionstart (t = 0) beginnt. Liefert die eingefügte Byte-Länge.
+   */
+  padSilence(ms) {
+    if (this.buf.length > 0 || this.emittedBytes > 0 || !(ms > 0)) return 0;
+    const bytes = Math.round((ms / 1000) * this.sampleRate) * 2;
+    if (bytes <= 0) return 0;
+    this.push(Buffer.alloc(bytes));
+    return bytes;
+  }
+
   push(int16Buffer) {
     this.buf = Buffer.concat([this.buf, int16Buffer]);
     while (this.buf.length >= this.minBytes) {

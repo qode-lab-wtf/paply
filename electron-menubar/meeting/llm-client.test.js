@@ -24,14 +24,24 @@ describe('callGemini', () => {
 });
 
 describe('chatComplete Anbieter-Routing', () => {
-  it('auto: nutzt Groq, wenn Groq-Key da ist und antwortet', async () => {
+  it('auto: nutzt Gemini zuerst (Groq-Kontingent bleibt dem Diktat), Groq mit order', async () => {
     const r = await chatComplete({ user: 'x', provider: 'auto', groqApiKey: 'g', geminiApiKey: 'gem', fetchImpl: makeFetch({ groq: { text: 'GROQ' }, gemini: { text: 'GEM' } }) });
+    expect(r.text).toBe('GEM');
+    const r2 = await chatComplete({ user: 'x', provider: 'auto', order: ['groq', 'gemini'], groqApiKey: 'g', geminiApiKey: 'gem', fetchImpl: makeFetch({ groq: { text: 'GROQ' }, gemini: { text: 'GEM' } }) });
+    expect(r2.text).toBe('GROQ');
+  });
+
+  it('auto: fällt bei Gemini-429 auf Groq zurück', async () => {
+    const r = await chatComplete({ user: 'x', provider: 'auto', groqApiKey: 'g', geminiApiKey: 'gem', fetchImpl: makeFetch({ groq: { text: 'GROQ' }, gemini: { status: 429 } }) });
     expect(r.text).toBe('GROQ');
   });
 
-  it('auto: fällt bei Groq-429 auf Gemini zurück', async () => {
-    const r = await chatComplete({ user: 'x', provider: 'auto', groqApiKey: 'g', geminiApiKey: 'gem', fetchImpl: makeFetch({ groq: { status: 429 }, gemini: { text: 'GEM' } }) });
-    expect(r.text).toBe('GEM');
+  it('gemini: 404 für das Modell → Fallback-Modell', async () => {
+    const seen = [];
+    const f = async (url) => { seen.push(String(url)); return seen.length === 1 ? { ok: false, status: 404 } : { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'LITE' }] } }] }) }; };
+    const r = await chatComplete({ user: 'x', provider: 'gemini', geminiApiKey: 'gem', fetchImpl: f });
+    expect(r.text).toBe('LITE');
+    expect(r.model).toBe('gemini-2.5-flash-lite');
   });
 
   it('auto: nutzt Gemini, wenn nur Gemini-Key gesetzt ist', async () => {

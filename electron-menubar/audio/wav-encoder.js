@@ -67,4 +67,32 @@ function concatWavFiles(inputWavPaths, outPath, { sampleRate = 16000, channels =
   return dataLength;
 }
 
-module.exports = { wavHeader, encodeWav, concatWav, concatWavFiles };
+/** Liest einen Zeitausschnitt (reines PCM, ohne Header) aus einer 16-bit-Mono-WAV (44-Byte-Header). */
+function readWavSlice(wavPath, startSec, endSec, sampleRate = 16000) {
+  const size = fs.statSync(wavPath).size;
+  const dataBytes = Math.max(0, size - 44);
+  const a = Math.min(dataBytes, Math.max(0, Math.floor(startSec * sampleRate) * 2));
+  const b = Math.min(dataBytes, Math.max(a, Math.floor(endSec * sampleRate) * 2));
+  const buf = Buffer.alloc(b - a);
+  if (b > a) {
+    const fd = fs.openSync(wavPath, 'r');
+    try { fs.readSync(fd, buf, 0, b - a, 44 + a); } finally { fs.closeSync(fd); }
+  }
+  return buf;
+}
+
+/** Dauer einer 16-bit-Mono-WAV in Sekunden (0, wenn nicht vorhanden). */
+function wavDurationSec(wavPath, sampleRate = 16000) {
+  try { return Math.max(0, fs.statSync(wavPath).size - 44) / 2 / sampleRate; } catch { return 0; }
+}
+
+/** Liest Format-Infos aus dem 44-Byte-Header (für Prüfungen im CLI). */
+function wavInfo(wavPath) {
+  const fd = fs.openSync(wavPath, 'r');
+  try {
+    const h = Buffer.alloc(44); fs.readSync(fd, h, 0, 44, 0);
+    return { channels: h.readUInt16LE(22), sampleRate: h.readUInt32LE(24), bitsPerSample: h.readUInt16LE(34), format: h.readUInt16LE(20) };
+  } finally { fs.closeSync(fd); }
+}
+
+module.exports = { wavHeader, encodeWav, concatWav, concatWavFiles, readWavSlice, wavDurationSec, wavInfo };

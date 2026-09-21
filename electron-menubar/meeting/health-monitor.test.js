@@ -25,3 +25,16 @@ describe('evaluateHealth', () => {
     expect(r.reason).toContain('Mac');
   });
 });
+
+describe('health-monitor: Mikrofon-Bereitschaft', () => {
+  const base = { micWriteOk: true, systemProcessAlive: true, systemPermissionDenied: false, diskError: false, micLevel: 0, systemLevel: 0, secondsSinceSystemAudio: 0 };
+  it('gelb, wenn das Mikro nach 4 s noch nicht bereit ist', () => {
+    expect(evaluateHealth({ ...base, micReady: false, secondsSinceStart: 5 }).color).toBe('yellow');
+    expect(evaluateHealth({ ...base, micReady: false, secondsSinceStart: 2 }).color).toBe('green');
+  });
+  it('gelb mit Klartext bei verspätetem Mikro-Start', () => {
+    const h = evaluateHealth({ ...base, micReady: true, micStartGapMs: 3993, secondsSinceStart: 6 });
+    expect(h.color).toBe('yellow');
+    expect(h.reason).toContain('4.0 s');
+  });
+});

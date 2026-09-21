@@ -145,15 +145,12 @@ function getStore() {
         meetings: [],
         meetingHotkey: 'Command+Shift+X',
         meetingSummaryModel: 'llama-3.3-70b-versatile',
-        // Lokale Sprecher-Trennung (kostenlos, kein Cloud-Dienst) — siehe meeting/diarize-local.js
-        diarizationEnabled: false,
         // System-Audio (Gegenstelle eines Anrufs): 'auto' = automatisch erkennen (empfohlen).
         systemAudioMode: 'auto',
-        // LLM für Protokoll + Sprecher-Korrektur: Google Gemini als Alternative/Fallback zu Groq
-        // (großzügigeres Free-Tier). 'auto' = Groq zuerst, bei Limit automatisch Gemini.
+        // Google Gemini: Meeting-Auswertung (Audio → Wortlaut + Sprecher) und Bericht; Groq als Fallback.
+        // 'auto' = Gemini zuerst, bei Limit automatisch Groq (Groq-Kontingent bleibt dem Diktat).
         geminiApiKey: '',
         llmProvider: 'auto', // 'auto' | 'groq' | 'gemini'
-        geminiModel: 'gemini-2.5-flash',
       },
     });
   }
@@ -1174,17 +1171,16 @@ function createRecordingWindow() {
   return recordingWindow;
 }
 
-function createMeetingOverlayWindow() {
-  if (meetingOverlayWindow && !meetingOverlayWindow.isDestroyed()) {
-    meetingOverlayWindow.showInactive();
-    return meetingOverlayWindow;
-  }
+// Overlay-Fenster wird beim App-Start versteckt vorgeladen (HTML/React/AudioWorklet), damit
+// beim Shortcut nur noch getUserMedia anläuft → Aufnahmestart ohne Sekunden-Lücke.
+function ensureMeetingOverlayWindow() {
+  if (meetingOverlayWindow && !meetingOverlayWindow.isDestroyed()) return meetingOverlayWindow;
 
   const { screen } = require('electron');
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width } = primaryDisplay.workAreaSize;
 
-  const widgetWidth = 200;
+  const widgetWidth = 240;
   const widgetHeight = 64;
 
   const windowOptions = {
@@ -1198,6 +1194,7 @@ function createMeetingOverlayWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // Audio-Handler im versteckten Fenster nicht drosseln
     },
   };
 
@@ -1215,12 +1212,18 @@ function createMeetingOverlayWindow() {
   meetingOverlayWindow = new BrowserWindow(windowOptions);
   meetingOverlayWindow.loadFile(path.join(__dirname, 'renderer', 'meeting-overlay.html'));
   meetingOverlayWindow.on('closed', () => { meetingOverlayWindow = null; });
-
-  // Position: oben rechts
   meetingOverlayWindow.setPosition(width - widgetWidth - 24, 24);
-  meetingOverlayWindow.showInactive();
-
   return meetingOverlayWindow;
+}
+
+function showMeetingOverlay() {
+  const w = ensureMeetingOverlayWindow();
+  try { w.showInactive(); } catch { /* egal */ }
+  return w;
+}
+
+function hideMeetingOverlay() {
+  try { if (meetingOverlayWindow && !meetingOverlayWindow.isDestroyed()) meetingOverlayWindow.hide(); } catch { /* egal */ }
 }
 
 function showAboutDialog() {
@@ -2139,27 +2142,28 @@ function setupIpcHandlers() {
   ipcMain.handle('meeting:start', () => (meetingController ? meetingController.start() : null));
   ipcMain.handle('meeting:stop', () => (meetingController ? meetingController.stop() : null));
   ipcMain.handle('meeting:get-status', () => (meetingController ? meetingController.getStatus() : { active: false, id: null }));
-  ipcMain.on('meeting:overlay-expand', (_e, expanded) => {
-    if (!meetingOverlayWindow || meetingOverlayWindow.isDestroyed()) return;
-    const { screen } = require('electron');
-    const { width } = screen.getPrimaryDisplay().workAreaSize;
-    const w = expanded ? 360 : 200;
-    const h = expanded ? 240 : 64;
-    meetingOverlayWindow.setBounds({ x: width - w - 24, y: 24, width: w, height: h });
-  });
+  // Renderer meldet den Wandzeit-Stempel des ersten Mikro-Samples (VOR dem ersten PCM, gleiche geordnete IPC-Kette).
+  ipcMain.on('meeting:mic-capture-started', (_e, d) => { if (meetingController) meetingController.onMicCaptureStarted(d || {}); });
   ipcMain.on('meeting:mic-pcm', (_e, buf) => { if (meetingController) meetingController.onMicPcm(Buffer.from(buf)); });
   ipcMain.on('meeting:mic-level', (_e, lvl) => { if (meetingController) meetingController.onMicLevel(lvl); });
   // Windows: System-Loopback-PCM kommt aus dem Overlay-Renderer (macOS nutzt AudioTee).
   ipcMain.on('meeting:system-pcm', (_e, buf) => { windowsAudioManager.onSystemPcm(Buffer.from(buf)); });
-  // Pro-Session-Override der Sprecher-Trennung (Overlay-Toggle), ändert nicht den globalen Default.
-  ipcMain.handle('meeting:set-diarization', (_e, enabled) => (meetingController ? meetingController.setSessionDiarization(enabled) : false));
+  // Stop-Handshake: Renderer hat Restpuffer gesendet und Capture beendet.
+  ipcMain.handle('meeting:capture-flushed', () => { if (meetingController) meetingController.onCaptureFlushed(); return true; });
   ipcMain.handle('meetings:list', () => (meetingStore ? meetingStore.list() : []));
   ipcMain.handle('meetings:get', (_e, id) => (meetingStore ? meetingStore.get(id) : null));
   ipcMain.handle('meetings:delete', (_e, id) => (meetingStore ? meetingStore.remove(id) : false));
-  ipcMain.handle('meetings:retranscribe', (_e, id) => (meetingController ? meetingController.retranscribe(id) : false));
+  ipcMain.handle('meetings:reanalyze', (_e, id) => (meetingController ? meetingController.reanalyze(id) : { error: 'unavailable' }));
   ipcMain.handle('meetings:regenerateSummary', (_e, id) => (meetingController ? meetingController.regenerateSummary(id) : null));
-  ipcMain.handle('meetings:updateSpeakerName', (_e, id, channel, name) => (meetingStore ? meetingStore.updateSpeakerName(id, channel, name) : false));
   ipcMain.handle('meetings:renameSpeaker', (_e, id, fromSpeaker, toName) => (meetingStore ? meetingStore.renameSpeaker(id, fromSpeaker, toName) : false));
+  // Export: Markdown-Datei über Speichern-Dialog
+  ipcMain.handle('meetings:export', async (_e, { title, markdown }) => {
+    const safe = String(title || 'Meeting').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'Meeting';
+    const r = await dialog.showSaveDialog({ defaultPath: path.join(app.getPath('documents'), `${safe}.md`), filters: [{ name: 'Markdown', extensions: ['md'] }] });
+    if (r.canceled || !r.filePath) return false;
+    fs.writeFileSync(r.filePath, String(markdown || ''), 'utf8');
+    return true;
+  });
   ipcMain.handle('meetings:toggleTodo', (_e, id, idx) => (meetingStore ? meetingStore.toggleTodo(id, idx) : false));
 
   // Settings
@@ -2178,7 +2182,6 @@ function setupIpcHandlers() {
       activeProfile: s.get('activeProfile'),
       pttThreshold: s.get('pttThreshold', 350),
       meetingHotkey: s.get('meetingHotkey', 'Command+Shift+X'),
-      diarizationEnabled: s.get('diarizationEnabled', false),
       systemAudioMode: s.get('systemAudioMode', 'auto'),
       geminiApiKey: s.get('geminiApiKey', ''),
       llmProvider: s.get('llmProvider', 'auto'),
@@ -2206,7 +2209,6 @@ function setupIpcHandlers() {
       registerHotkey();
     }
 
-    if (settings.diarizationEnabled !== undefined) s.set('diarizationEnabled', settings.diarizationEnabled);
     if (settings.systemAudioMode !== undefined) s.set('systemAudioMode', settings.systemAudioMode);
 
     if (settings.pttThreshold !== undefined) {
@@ -2540,21 +2542,26 @@ app.whenReady().then(() => {
     meetingStore,
     audioTee: systemAudioManager,
     callDetector: callDetectorManager,
-    getOverlayWindow: () => createMeetingOverlayWindow(),
+    showOverlay: () => showMeetingOverlay(),
+    hideOverlay: () => hideMeetingOverlay(),
     getMainWindow: () => mainWindow,
     fetchImpl: (...args) => globalThis.fetch(...args),
     // WICHTIG: KEIN excludeProcesses — AudioTee scheitert bei der Tap-Erstellung,
     // wenn die PID kein Audio-Objekt hat (der Main-Prozess spielt kein Audio ab).
     // Daher das gesamte System-Audio aufnehmen.
     // Intelligentes Chunking: Schnitt bevorzugt an Sprechpausen zwischen 20–40 s
-    // (statt hart bei 30 s), spätestens hart bei 40 s.
+    // (statt hart bei 30 s), spätestens hart bei 40 s. Die Chunk-Grenzen dienen der
+    // Auswertung auch als Fenstergrenzen (≤ 25 min je Gemini-Aufruf).
     chunkMinSeconds: 20,
     chunkMaxSeconds: 40,
-    // Audio wird nach dem Meeting gelöscht (Transkript ist der Deliverable). Für
-    // Debug/Loopback-Validierung: PAPLY_KEEP_AUDIO=1 oder Store-Flag keepMeetingAudioDebug
-    // behält die finalen Spuren (z.B. um Transkriptions-Qualität zu analysieren).
-    keepAudio: !!process.env.PAPLY_KEEP_AUDIO || !!getStore().get('keepMeetingAudioDebug'),
   });
+  // Overlay vorladen (versteckt), damit der Meeting-Start keine Sekunden-Lücke hat.
+  try { ensureMeetingOverlayWindow(); } catch (e) { console.error('Overlay preload failed:', e); }
+  // Unterbrochene Aufnahmen/Auswertungen (App-Neustart, Absturz) wieder aufnehmen;
+  // abgelaufenes Audio (7 Tage) löschen — jetzt und täglich.
+  try { meetingController.resumePending(); } catch (e) { console.error('resumePending failed:', e); }
+  try { meetingController.runRetention(); } catch { /* best effort */ }
+  setInterval(() => { try { meetingController.runRetention(); } catch { /* best effort */ } }, 24 * 60 * 60 * 1000);
 
   registerHotkey();
   updateAutoLaunch();

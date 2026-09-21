@@ -1,8 +1,10 @@
 import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
+  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   test: {
     environment: 'node',
-    include: ['test/**/*.test.js', 'audio/**/*.test.js', 'meeting/**/*.test.js'],
+    include: ['test/**/*.test.js', 'audio/**/*.test.js', 'meeting/**/*.test.js', 'src/lib/**/*.test.ts'],
   },
 });

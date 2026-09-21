@@ -14,7 +14,10 @@ export function MeetingsView() {
 
   useEffect(() => {
     load();
-    window.electronAPI.onMeetingStopped(() => load());
+    // Liste aktualisiert sich bei Stop UND bei jedem Statuswechsel der Auswertung (processing → ready).
+    const u1 = window.electronAPI.onMeetingStopped(() => load());
+    const u2 = window.electronAPI.onMeetingsUpdated(() => load());
+    return () => { try { u1(); u2(); } catch { /* egal */ } };
   }, []);
 
   const handleDelete = async (id: string) => {

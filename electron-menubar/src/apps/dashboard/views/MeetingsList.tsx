@@ -1,4 +1,4 @@
-import { Trash2, Headphones } from 'lucide-react';
+import { Trash2, Headphones, RefreshCw, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +33,7 @@ export function MeetingsList({ items, onSelect, onDelete }: MeetingsListProps) {
   return (
     <ScrollArea className="h-[calc(100vh-200px)]">
       <div className="space-y-2 pr-2">
-        {items.map((item) => (
+        {[...items].reverse().map((item) => (
           <Card
             key={item.id}
             className="group cursor-pointer hover:border-primary/50 transition-colors"
@@ -44,14 +44,23 @@ export function MeetingsList({ items, onSelect, onDelete }: MeetingsListProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-sm truncate">{item.title}</span>
-                    <Badge variant="secondary" className="shrink-0 text-xs">
-                      {(() => {
-                        const names = item.speakerNames || [];
-                        const allDefault = names.length === 0 || names.every((n) => /^Sprecher \d+$/.test(n));
-                        if (allDefault) return `${item.speakerCount} Sprecher`;
-                        return names.length === 2 ? `${names[0]} und ${names[1]}` : names.join(', ');
-                      })()}
-                    </Badge>
+                    {item.status === 'processing' ? (
+                      <Badge variant="outline" className="shrink-0 text-xs gap-1 font-normal"><RefreshCw className="w-3 h-3 animate-spin" />wird ausgewertet …</Badge>
+                    ) : item.status === 'recording' ? (
+                      <Badge variant="outline" className="shrink-0 text-xs gap-1 font-normal text-red-600 border-red-300">Aufnahme läuft</Badge>
+                    ) : item.status === 'failed' ? (
+                      <Badge variant="destructive" className="shrink-0 text-xs font-normal">fehlgeschlagen</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="shrink-0 text-xs">
+                        {(() => {
+                          const names = item.speakerNames || [];
+                          const allDefault = names.length === 0 || names.every((n) => /^(Sprecher \d+|Gegenstelle( \d+)?)$/.test(n));
+                          if (allDefault) return `${item.speakerCount} Sprecher`;
+                          return names.length === 2 ? `${names[0]} und ${names[1]}` : names.join(', ');
+                        })()}
+                      </Badge>
+                    )}
+                    {item.callDetected && <Phone className="w-3 h-3 text-muted-foreground shrink-0" />}
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
                     {item.preview}
@@ -67,7 +76,7 @@ export function MeetingsList({ items, onSelect, onDelete }: MeetingsListProps) {
                     </span>
                     <span>{formatDuration(item.durationMs)}</span>
                     {item.hasSummary && (
-                      <Badge variant="outline" className="text-xs py-0">Protokoll</Badge>
+                      <Badge variant="outline" className="text-xs py-0">Bericht</Badge>
                     )}
                   </div>
                 </div>

@@ -202,8 +202,8 @@ export function SettingsApp() {
             <CardHeader>
               <CardTitle className="text-base">Google Gemini API Key</CardTitle>
               <CardDescription>
-                Für das Meeting-Protokoll & die Sprecher-Korrektur — als Alternative/Fallback zu Groq
-                (großzügigeres Gratis-Kontingent). Kostenlosen Key holen auf{' '}
+                Nötig für die Meeting-Auswertung mit Sprechertrennung (Gemini hört die Aufnahme und
+                liefert Wortlaut, Sprecher und Zeitmarken) und für den Bericht. Kostenlos. Key holen auf{' '}
                 <a
                   href="https://aistudio.google.com/apikey"
                   className="text-primary underline"
@@ -481,19 +481,6 @@ export function SettingsApp() {
                 <Switch
                   checked={settings.enablePolish}
                   onCheckedChange={(checked) => handleSave('enablePolish', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Sprecher trennen (Meetings)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Mehrere Personen an einem Mikrofon lokal trennen (kostenlos, kein Key)
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.diarizationEnabled}
-                  onCheckedChange={(checked) => handleSave('diarizationEnabled', checked)}
                 />
               </div>
 

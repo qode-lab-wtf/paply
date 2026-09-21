@@ -16,7 +16,6 @@ const SETTINGS_APP = path.join(ROOT, 'src/apps/settings/SettingsApp.tsx');
 // Kanonische, in BEIDEN UIs bedienbare Einstellungen.
 const CANONICAL_KEYS = [
   'groqApiKey',
-  'diarizationEnabled',
   'meetingHotkey',
   'shortcut',
   'autopaste',

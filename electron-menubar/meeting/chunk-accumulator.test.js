@@ -53,3 +53,19 @@ describe('ChunkAccumulator', () => {
     expect(chunks.map((c) => c.tOffset)).toEqual([0, 2, 4, 6]);
   });
 });
+
+describe('ChunkAccumulator.padSilence', () => {
+  it('stellt sample-genaue Stille nur vor dem ersten Paket voran', () => {
+    const chunks = [];
+    const acc = new ChunkAccumulator({ sampleRate: 1000, windowSeconds: 1, onChunk: (c) => chunks.push(c) });
+    expect(acc.padSilence(250)).toBe(500); // 0.25 s * 1000 Hz * 2 Byte
+    acc.push(Buffer.alloc(2500, 1));
+    acc.flush();
+    expect(chunks.length).toBe(2);
+    expect(chunks[0].pcm.length).toBe(2000);
+    // Erste 500 Byte sind Stille, danach Signal
+    expect(chunks[0].pcm.subarray(0, 500).every((b) => b === 0)).toBe(true);
+    expect(chunks[0].pcm[500]).toBe(1);
+    expect(acc.padSilence(100)).toBe(0); // nachträglich wirkungslos
+  });
+});

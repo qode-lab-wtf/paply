@@ -1,20 +1,27 @@
 // MeetingController — orchestriert eine Meeting-Aufnahme im Main-Prozess. CommonJS.
-// Verdrahtet: AudioTee (System-Audio) + Mic-PCM (vom Overlay-Renderer) →
-// ChunkAccumulator (30 s) → crash-sichere Chunk-Dateien → TranscriptionQueue
-// (Groq Whisper) → TranscriptMerger → MeetingStore + Live-Events + HealthMonitor.
-// Beim Stop: finale Audio-Dateien + KI-Protokoll (Groq Llama).
+//
+// Phase 1 (Aufnahme, live): AudioTee (System-Audio) + Mic-PCM (vom Overlay-Renderer) →
+//   ChunkAccumulator (Schnitt an Sprechpausen) → crash-sichere Chunk-Dateien. KEINE Live-
+//   Transkription mehr. Startlücken beider Spuren werden mit Stille aufgefüllt, damit die
+//   Zeitachse beider Spuren beim Sessionstart beginnt.
+// Phase 2 (nach dem Stop, asynchron, seriell): Chunks → audio_mic.wav / audio_system.wav →
+//   Gemini-Audio-Auswertung (Wortlaut + Sprecher + Zeitmarken; Fallback Groq Whisper ohne Sprecher)
+//   → Bericht v2 → Index-Status ready/failed → 'meetings:updated' ans Dashboard.
+// Audio bleibt 7 Tage (Nachhören, Neu-Auswerten), danach löscht audio-retention.js.
 'use strict';
 
 const fs = require('node:fs');
-const { encodeWav, concatWavFiles } = require('../audio/wav-encoder');
-const { rms, maxFrameRms } = require('../audio/pcm-utils');
+const path = require('node:path');
+const { encodeWav, concatWavFiles, wavDurationSec } = require('../audio/wav-encoder');
+const { rms } = require('../audio/pcm-utils');
 const { ChunkAccumulator } = require('./chunk-accumulator');
-const { TranscriptionQueue } = require('./transcription-queue');
-const { mergeSegments, suppressBleed, canonicalizeSpeakerLabels } = require('./transcript-merger');
 const { evaluateHealth } = require('./health-monitor');
 const { generateMeetingSummary } = require('./summary');
-const { diarizeLocal } = require('./diarize-local');
-const { refineSpeakers } = require('./diarize-refine');
+const { transcribeWithGemini } = require('./gemini-audio');
+const { transcribeWithGroq } = require('./groq-fallback');
+const { cleanExpiredAudio, RETENTION_MS } = require('./audio-retention');
+
+const MAX_ANALYSIS_ATTEMPTS = 3;
 
 function speakerLabel(s) {
   if (s === 'me') return 'Ich';
@@ -22,39 +29,63 @@ function speakerLabel(s) {
   return s;
 }
 
+function fmtTime(sec) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Transkript als Text für den Bericht: „[mm:ss] Sprecher: Text“ je Zeile. */
 function transcriptToText(segments) {
-  return segments.map((s) => `${speakerLabel(s.speaker)}: ${s.text}`).join('\n');
+  return (segments || []).map((s) => `[${fmtTime(s.tStart)}] ${speakerLabel(s.speaker)}: ${s.text}`).join('\n');
+}
+
+function describeError(e) {
+  if (!e) return 'Unbekannter Fehler';
+  if (e.code === 'no_key') return e.message || 'API-Key fehlt';
+  if (e.code === 'rate_limit') return 'Kontingent erschöpft (429) — später „Neu auswerten“';
+  if (e.code === 'blocked') return e.message;
+  return (e.message || String(e)).slice(0, 300);
 }
 
 /**
  * @param {{
  *   store: { get: Function, set?: Function },
- *   meetingStore: object,           // createMeetingStore(...)
+ *   meetingStore: object,                // createMeetingStore(...)
  *   audioTee: import('events').EventEmitter & { start: Function, stop: Function, isRunning: boolean },
- *   getOverlayWindow: () => any,    // öffnet/liefert das Overlay-Fenster
+ *   showOverlay?: () => any,             // zeigt das (vorgeladene) Overlay-Fenster, liefert es
+ *   hideOverlay?: () => void,
+ *   getOverlayWindow?: () => any,        // Abwärtskompatibel: erzeugt/zeigt das Overlay
  *   getMainWindow: () => any,
  *   fetchImpl?: Function,
- *   windowSeconds?: number,
- *   sampleRate?: number,
- *   excludePid?: number,
- *   now?: () => number,             // injizierbar für Tests
+ *   sampleRate?: number, windowSeconds?: number, chunkMinSeconds?: number, chunkMaxSeconds?: number, silenceRms?: number,
+ *   callDetector?: object|null,          // nativer Anruf-Detektor (macOS); null = Signal-Fallback
+ *   analyzeAudio?: Function,             // Default: Gemini (injizierbar für Tests)
+ *   fallbackAnalyze?: Function,          // Default: Groq Whisper
+ *   summarize?: Function,                // Default: generateMeetingSummary
+ *   cleanRetention?: Function,           // Default: cleanExpiredAudio
+ *   captureStopTimeoutMs?: number, systemChunkMs?: number, analysisWindowSeconds?: number,
+ *   now?: () => number, sleep?: Function,
  * }} deps
  */
 function createMeetingController(deps) {
   const {
-    store, meetingStore, audioTee, getOverlayWindow, getMainWindow,
-    fetchImpl, windowSeconds = 30, sampleRate = 16000, excludePid,
+    store, meetingStore, audioTee, getMainWindow, fetchImpl,
+    windowSeconds = 30, sampleRate = 16000, excludePid,
     chunkMinSeconds, chunkMaxSeconds, silenceRms,
-    speechGate = 0.0008, // Stille-Gate: tief genug, dass leise Stimmen bleiben, hoch genug für Digital-Stille
-    diarizeSegments = diarizeLocal, // lokale Sprecher-Trennung (injizierbar für Tests)
-    refineSegments = refineSpeakers, // LLM-Korrektur der Sprecher-Zuordnung (injizierbar für Tests)
-    callDetector = null, // nativer Anruf-Detektor (macOS); null = nicht verfügbar → Signal-Fallback
-    keepAudio = false, // true = finale Audiodateien NICHT löschen (Debug/Test/Loopback-Validierung)
+    callDetector = null,
+    analyzeAudio = transcribeWithGemini,
+    fallbackAnalyze = transcribeWithGroq,
+    summarize = generateMeetingSummary,
+    cleanRetention = cleanExpiredAudio,
+    captureStopTimeoutMs = 1500,
+    systemChunkMs = 200,
+    analysisWindowSeconds = 1500,
     now = () => Date.now(),
+    sleep,
   } = deps;
+  const showOverlay = deps.showOverlay || deps.getOverlayWindow || (() => null);
+  const hideOverlay = deps.hideOverlay || ((w) => { try { if (w && typeof w.hide === 'function') w.hide(); } catch { /* egal */ } });
 
-  // Baut einen ChunkAccumulator: VAD-Schnitt (an Sprechpausen) wenn min/max gesetzt,
-  // sonst fester Schnitt bei windowSeconds (Abwärtskompatibilität / Tests).
   function makeAccumulator(onChunk) {
     const opts = { sampleRate, onChunk };
     if (chunkMinSeconds != null || chunkMaxSeconds != null) {
@@ -67,21 +98,21 @@ function createMeetingController(deps) {
     return new ChunkAccumulator(opts);
   }
 
+  // ---------------- Aufnahme-Zustand ----------------
   let active = false;
-  let stopping = false;   // true während der async-Finalisierung in stop()
+  let stopping = false;
   let sessionId = null;
   let startedAtMs = 0;
-  let micSegs = [];
-  let sysSegs = [];
-  // Bisheriger Transkript-Kontext je Kanal (als Whisper-prompt für Kontinuität)
-  let lastTextByChannel = { mic: '', system: '' };
   let micAcc = null;
   let sysAcc = null;
-  let queue = null;
   let healthTimer = null;
   let overlayWin = null;
+  let micChunkEnds = [];   // Sekunden-Positionen der Mikro-Chunk-Enden (Fenstergrenzen für die Auswertung)
 
-  // Health-/Pegel-Zustand
+  let micReady = false;    // erstes Mikro-Paket eingetroffen
+  let sysReady = false;
+  let micGapMs = 0;
+  let sysGapMs = 0;
   let lastSystemPcmMs = 0;
   let micLevel = 0;
   let systemLevel = 0;
@@ -90,29 +121,16 @@ function createMeetingController(deps) {
   let permissionDenied = false;
   let systemAudioError = null;
   let gotSystemPcm = false;
-  // Pro-Session-Entscheidung zur Sprecher-Trennung (Snapshot des globalen Defaults
-  // beim Start, per Overlay-Toggle für DIESE Aufnahme überschreibbar).
-  let sessionDiarization = false;
-  // Anruf-Erkennung: callActive = aktueller Zustand (für die Live-Anzeige im Overlay);
-  // callDetectedEver = ob WÄHREND der Aufnahme je ein Anruf lief (für die Stop-Auswertung);
-  // callDetectorRan = ob der native Detektor lief (sonst Signal-Präsenz-Fallback).
   let callActive = false;
   let callDetectedEver = false;
   let callDetectorRan = false;
+  let captureFlushResolve = null;
 
-  // Finale Audiodateien werden beim Stop aus den Chunk-Dateien gestreamt (RAM-schonend).
+  let onTeePcm = null; let onTeeError = null; let onTeeLog = null;
+  let onDetectorState = null; let onDetectorError = null;
 
-  // AudioTee-Listener-Referenzen (zum Entfernen)
-  let onTeePcm = null;
-  let onTeeError = null;
-  let onTeeLog = null;
-  let onDetectorState = null;
-  let onDetectorError = null;
-
-  // Wird der System-Kanal als „Gegenstelle" gewertet? Eine einzige Regel statt zweier Modi:
-  // - Einstellung 'always'/'never' überschreibt.
-  // - 'auto' (Default): lief der native Detektor, ihm vertrauen (anderer Prozess nutzt Mikro =
-  //   echter Anruf, nicht nur Musik); sonst Fallback auf Signal-Präsenz (System-Kanal hatte Audio).
+  // Wird der System-Kanal als „Gegenstelle“ gewertet? Einstellung 'always'/'never' überschreibt;
+  // 'auto': lief der native Detektor, ihm vertrauen; sonst Signal-Präsenz.
   function systemIsRemote() {
     const mode = store.get('systemAudioMode') || 'auto';
     if (mode === 'always') return true;
@@ -120,12 +138,7 @@ function createMeetingController(deps) {
     return callDetectorRan ? callDetectedEver : gotSystemPcm;
   }
 
-  // LLM-Konfiguration für Protokoll + Sprecher-Korrektur: Groq + Gemini mit Auto-Fallback.
-  // So kommt das Protokoll auch zustande, wenn Groqs Tageslimit erschöpft ist (dann Gemini).
   function llmConfig() {
-    // geminiModel BEWUSST nicht aus dem Store lesen: es gibt kein UI dafür, und ein früher
-    // persistierter Wert ('gemini-2.0-flash', Quota 0 → 429) würde den Code-Default überschreiben.
-    // chatComplete nutzt fest 'gemini-2.5-flash' (funktioniert im Free-Tier).
     return {
       groqApiKey: store.get('groqApiKey'),
       geminiApiKey: store.get('geminiApiKey'),
@@ -135,54 +148,34 @@ function createMeetingController(deps) {
     };
   }
 
+  function _sendTo(w, channel, payload) {
+    try {
+      if (w && w.webContents && (typeof w.isDestroyed !== 'function' || !w.isDestroyed())) w.webContents.send(channel, payload);
+    } catch { /* Fenster evtl. zerstört */ }
+  }
   function _emit(channel, payload) {
-    const wins = [overlayWin, getMainWindow ? getMainWindow() : null];
-    for (const w of wins) {
-      try {
-        if (w && w.webContents && (typeof w.isDestroyed !== 'function' || !w.isDestroyed())) {
-          w.webContents.send(channel, payload);
-        }
-      } catch { /* Fenster evtl. zerstört — ignorieren */ }
-    }
+    _sendTo(overlayWin, channel, payload);
+    _sendTo(getMainWindow ? getMainWindow() : null, channel, payload);
+  }
+  function _emitUpdated(id, status, extra) {
+    _sendTo(getMainWindow ? getMainWindow() : null, 'meetings:updated', { id, status, ...(extra || {}) });
   }
 
-  function _handleChunk(channel, { pcm, seq, tOffset }) {
-    // 1) Crash-sicher: WAV sofort auf Platte, VOR der Transkription
+  function _handleChunk(channel, { pcm, tOffset }) {
     const wav = encodeWav(pcm, { sampleRate, channels: 1 });
     try {
-      fs.writeFileSync(meetingStore.chunkPath(sessionId, channel, seq), wav);
+      fs.writeFileSync(meetingStore.chunkPath(sessionId, channel, _seq[channel]++), wav);
       micWriteOk = true;
     } catch {
       diskError = true;
       micWriteOk = false;
     }
-    // 2) Stille-Gate: nur Chunks mit echtem Signal transkribieren. Auf reiner Stille
-    //    halluziniert Whisper Phrasen ("Vielen Dank"). Schwelle liegt deutlich unter
-    //    Stimm-Pegel, damit leise/entfernte Stimmen NICHT als Rauschen wegfallen.
-    //    Die Audiodatei (Chunk) wird trotzdem gesichert — nur die STT wird übersprungen.
-    if (maxFrameRms(pcm, { sampleRate }) >= speechGate) {
-      queue.enqueue({ channel, wavBuffer: wav, tOffset });
-    }
+    if (channel === 'mic') micChunkEnds.push(Math.round((tOffset + pcm.length / 2 / sampleRate) * 10) / 10);
   }
-
-  function _onSegments({ channel, segments }) {
-    if (!segments || segments.length === 0) return;
-    (channel === 'mic' ? micSegs : sysSegs).push(...segments);
-    // Kontext für den nächsten Chunk dieses Kanals fortschreiben (letzte ~800 Zeichen)
-    const added = segments.map((s) => s.text).join(' ');
-    lastTextByChannel[channel] = ((lastTextByChannel[channel] || '') + ' ' + added).slice(-800).trimStart();
-    // Einheitliche Regel (kein Modus mehr): ist der System-Kanal eine Gegenstelle, kommt er
-    // dazu und das Lautsprecher-Echo wird aus dem Mic-Kanal gefiltert; sonst nur Mikrofon.
-    const merged = systemIsRemote()
-      ? mergeSegments(suppressBleed(micSegs, sysSegs), sysSegs)
-      : mergeSegments(micSegs, []);
-    _emit('meeting:transcript-chunk', merged);
-    try {
-      meetingStore.saveTranscript(sessionId, { segments: merged, language: store.get('language') });
-    } catch { diskError = true; }
-  }
+  let _seq = { mic: 0, system: 0 };
 
   function _emitHealth() {
+    const secondsSinceStart = (now() - startedAtMs) / 1000;
     const secondsSinceSystemAudio = lastSystemPcmMs ? (now() - lastSystemPcmMs) / 1000 : 0;
     const health = evaluateHealth({
       micWriteOk,
@@ -194,7 +187,9 @@ function createMeetingController(deps) {
       systemLevel,
       secondsSinceSystemAudio,
       gotSystemPcm,
-      secondsSinceStart: (now() - startedAtMs) / 1000,
+      secondsSinceStart,
+      micReady,
+      micStartGapMs: secondsSinceStart < 20 ? micGapMs : 0,
     });
     _emit('meeting:status', {
       color: health.color,
@@ -202,250 +197,342 @@ function createMeetingController(deps) {
       durationMs: now() - startedAtMs,
       micLevel,
       systemLevel,
+      micReady,
     });
   }
+
+  // ---------------- Phase 1: Aufnahme ----------------
 
   function start() {
     if (active || stopping) return { id: sessionId };
     active = true;
     startedAtMs = now();
     sessionId = meetingStore.create(new Date(startedAtMs).toISOString());
+    try { meetingStore.finalizeIndex(sessionId, { status: 'recording' }); } catch { /* best effort */ }
 
-    micSegs = []; sysSegs = []; lastTextByChannel = { mic: '', system: '' };
+    micChunkEnds = []; _seq = { mic: 0, system: 0 };
+    micReady = false; sysReady = false; micGapMs = 0; sysGapMs = 0;
     micLevel = 0; systemLevel = 0; micWriteOk = true; diskError = false; permissionDenied = false; systemAudioError = null; gotSystemPcm = false;
-    lastSystemPcmMs = startedAtMs; // Stille-Erkennung erst nach Schwelle
-    sessionDiarization = !!store.get('diarizationEnabled');
+    lastSystemPcmMs = startedAtMs;
     callActive = false; callDetectedEver = false; callDetectorRan = false;
-
-    queue = new TranscriptionQueue({
-      apiKey: store.get('groqApiKey'),
-      language: store.get('language'),
-      fetchImpl,
-      getPrompt: (ch) => lastTextByChannel[ch] || '',
-    });
-    queue.on('segments', _onSegments);
-    queue.on('error', () => { /* Audio bleibt gesichert; Status bleibt grün/gelb */ });
+    captureFlushResolve = null;
 
     micAcc = makeAccumulator((c) => _handleChunk('mic', c));
     sysAcc = makeAccumulator((c) => _handleChunk('system', c));
 
     onTeePcm = (buf) => {
+      if (!active) return;
+      if (!sysReady) {
+        sysReady = true;
+        sysGapMs = Math.max(0, now() - startedAtMs - systemChunkMs);
+        if (sysGapMs > 50) sysAcc.padSilence(sysGapMs);
+      }
       systemLevel = rms(buf);
-      // Nur ECHTES Signal (mit Energie) zählt als „System-Audio empfangen".
-      // Reine Stille (rms ~0) bedeutet meist: Berechtigung fehlt -> AudioTee tappt lautlos.
       if (systemLevel > 0.005) { lastSystemPcmMs = now(); gotSystemPcm = true; }
       sysAcc.push(buf);
     };
     onTeeError = (err) => {
       const msg = err && err.message ? err.message : 'unbekannter Fehler';
       const m = msg.toLowerCase();
-      if (m.includes('permission') || m.includes('berechtigung') || m.includes('not authorized') || m.includes('tcc')) {
-        permissionDenied = true;
-      } else {
-        systemAudioError = msg;
-      }
+      if (m.includes('permission') || m.includes('berechtigung') || m.includes('not authorized') || m.includes('tcc')) permissionDenied = true;
+      else systemAudioError = msg;
     };
     onTeeLog = () => {};
     audioTee.on('pcm', onTeePcm);
     audioTee.on('error', onTeeError);
     audioTee.on('log', onTeeLog);
-    audioTee.start({ sampleRate, chunkDurationMs: 200, excludeProcesses: excludePid ? [excludePid] : undefined });
+    audioTee.start({ sampleRate, chunkDurationMs: systemChunkMs, excludeProcesses: excludePid ? [excludePid] : undefined });
 
-    // Nativer Anruf-Detektor (macOS): erkennt, ob ein ANDERER Prozess gerade das Mikrofon
-    // nutzt (= Zwei-Wege-Anruf auf diesem Mac). Treibt die Live-Anzeige + die 'auto'-Regel.
     if (callDetector && callDetector.isSupported) {
       callDetectorRan = true;
       onDetectorState = (a) => onCallState(a);
-      // Scheitert der Detektor (Binary fehlt/unsigniert/Crash), NICHT die System-Audio-Einbindung
-      // verlieren: callDetectorRan zurücknehmen → systemIsRemote('auto') fällt auf gotSystemPcm zurück.
       onDetectorError = () => { callDetectorRan = false; };
       callDetector.on('call-state', onDetectorState);
       callDetector.on('error', onDetectorError);
-      try { callDetector.start({ excludePid }); } catch { callDetectorRan = false; }
+      try { callDetector.start(); } catch { callDetectorRan = false; }
     }
 
-    overlayWin = getOverlayWindow ? getOverlayWindow() : null;
-    _emit('meeting:started', {
-      id: sessionId,
-      diarization: sessionDiarization,
-      callActive,
-    });
+    overlayWin = showOverlay() || null;
+    _emit('meeting:started', { id: sessionId, callActive });
+    _emitUpdated(sessionId, 'recording');
     healthTimer = setInterval(_emitHealth, 1000);
-
     return { id: sessionId };
+  }
+
+  /** Renderer meldet den Wandzeit-Stempel des ersten Mikro-Samples (vor dem ersten PCM). */
+  function onMicCaptureStarted({ firstSampleAtMs } = {}) {
+    if (!active || micReady || !micAcc) return;
+    micReady = true;
+    const t = typeof firstSampleAtMs === 'number' ? firstSampleAtMs : now();
+    micGapMs = Math.max(0, t - startedAtMs);
+    if (micGapMs > 50) micAcc.padSilence(micGapMs);
+    _emit('meeting:capture-ready', { id: sessionId, micGapMs });
   }
 
   function onMicPcm(buf) {
     if (!active || !micAcc) return;
+    if (!micReady) {
+      // Kein Start-Stempel erhalten (alter Renderer) → aus Ankunftszeit schätzen
+      onMicCaptureStarted({ firstSampleAtMs: now() - (buf.length / 2 / sampleRate) * 1000 });
+    }
     micLevel = rms(buf);
     micAcc.push(buf);
   }
 
-  function onMicLevel(lvl) {
-    if (typeof lvl === 'number') micLevel = lvl;
+  function onMicLevel(lvl) { if (typeof lvl === 'number') micLevel = lvl; }
+
+  /** Windows-Loopback: System-PCM kommt aus dem Renderer. */
+  function onSystemPcm(buf) { if (onTeePcm) onTeePcm(buf); }
+
+  /** Renderer bestätigt: Restpuffer gesendet, Capture gestoppt. */
+  function onCaptureFlushed() { if (captureFlushResolve) { captureFlushResolve(); captureFlushResolve = null; } }
+
+  function _requestCaptureFlush(id) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+      captureFlushResolve = finish;
+      const timer = setTimeout(finish, captureStopTimeoutMs);
+      _emit('meeting:capture-stop', { id });
+    });
+  }
+
+  function _concatChannel(id, channel) {
+    const files = meetingStore.listChunkFiles(id, channel);
+    if (!files.length) return null;
+    const out = path.join(meetingStore.meetingDir(id), `audio_${channel}.wav`);
+    concatWavFiles(files, out, { sampleRate, channels: 1 });
+    return out;
+  }
+
+  function _chunkBoundariesFromFiles(id) {
+    const ends = [];
+    let acc = 0;
+    for (const f of meetingStore.listChunkFiles(id, 'mic')) {
+      try { acc += Math.max(0, fs.statSync(f).size - 44) / 2 / sampleRate; ends.push(Math.round(acc * 10) / 10); } catch { /* egal */ }
+    }
+    return ends;
   }
 
   async function stop() {
-    if (!active) return { id: null };
-    active = false;
-    stopping = true; // blockiert start() bis die Finalisierung abgeschlossen ist
+    if (!active || stopping) return { id: null };
+    stopping = true; // blockiert start()/erneutes stop(); onMicPcm nimmt Restpuffer noch an
     const id = sessionId;
     try {
       if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
-
+      // Renderer: Restpuffer senden + Tracks stoppen (Ack oder Timeout), erst dann flushen
+      await _requestCaptureFlush(id);
+      active = false;
       micAcc.flush();
       sysAcc.flush();
       audioTee.stop();
       if (onTeePcm) audioTee.removeListener('pcm', onTeePcm);
       if (onTeeError) audioTee.removeListener('error', onTeeError);
       if (onTeeLog) audioTee.removeListener('log', onTeeLog);
-      if (callDetector) { try { callDetector.stop(); } catch { /* best effort */ } if (onDetectorState) callDetector.removeListener('call-state', onDetectorState); if (onDetectorError) callDetector.removeListener('error', onDetectorError); }
-
-      await queue.idle();
-
-      const language = store.get('language');
-      // Finale Audiodateien aus den crash-sicher geschriebenen Chunk-Dateien
-      // zusammenfügen (streaming, konstanter RAM — auch bei mehrstündigen Meetings).
-      const nodePath = require('node:path');
-      const chunksDir = nodePath.dirname(meetingStore.chunkPath(id, 'mic', 0));
-      const meetingDir = nodePath.dirname(chunksDir);
-      try {
-        for (const ch of ['mic', 'system']) {
-          const files = fs.readdirSync(chunksDir)
-            .filter((f) => f.startsWith(ch + '_') && f.endsWith('.wav'))
-            .sort()
-            .map((f) => nodePath.join(chunksDir, f));
-          if (files.length) concatWavFiles(files, nodePath.join(meetingDir, `audio_${ch}.wav`), { sampleRate, channels: 1 });
-        }
-      } catch { /* Audio-Finalisierung fehlgeschlagen — Chunk-Dateien bleiben als Fallback */ }
-
-      // EINHEITLICHE Pipeline (kein Modus mehr): Immer beide Quellen aufgenommen. Eine Regel —
-      // ist der System-Kanal eine Gegenstelle (systemIsRemote: Anruf erkannt bzw. Signal-Fallback),
-      // wird er einbezogen und sein Lautsprecher-Echo aus dem Mic-Kanal gefiltert; sonst weggelassen.
-      // Sprecher-Trennung (lokal, ohne Cloud): IMMER der Mikrofon-Kanal (lautester = „Ich", weitere
-      // = Raum-/Telefon-Sprecher) UND — falls Gegenstelle aktiv — der System-Kanal („Gegenstelle"…).
-      // Groqs Transkript-TEXT bleibt vollständig erhalten; nur das Sprecher-Label wird gesetzt.
-      const remote = systemIsRemote();
-      let micForMerge = remote && sysSegs.length ? suppressBleed(micSegs, sysSegs) : micSegs;
-      let sysForMerge = remote ? sysSegs : [];
-      let diarizationInfo = { diarizationUsed: false, diarizationSeconds: 0, diarizationCostUsd: 0, diarizationSpeakers: 0 };
-      if (sessionDiarization) {
-        const readPcm = (ch) => {
-          try {
-            const p = nodePath.join(meetingDir, `audio_${ch}.wav`);
-            if (!fs.existsSync(p)) return null;
-            const buf = fs.readFileSync(p);
-            return new Int16Array(buf.buffer, buf.byteOffset + 44, Math.max(0, (buf.length - 44) >> 1));
-          } catch { return null; }
-        };
-        let used = false;
-        try {
-          if (micForMerge.length) {
-            const micPcm = readPcm('mic');
-            if (micPcm) { const l = diarizeSegments(micForMerge, micPcm, { sampleRate, channel: 'mic' }); if (Array.isArray(l) && l.length) { micForMerge = l; used = true; } }
-          }
-          if (remote && sysForMerge.length) {
-            const sysPcm = readPcm('system');
-            if (sysPcm) { const l = diarizeSegments(sysForMerge, sysPcm, { sampleRate, channel: 'system' }); if (Array.isArray(l) && l.length) { sysForMerge = l; used = true; } }
-          }
-        } catch { /* lokale Diarisierung fehlgeschlagen — Groqs Transkript bleibt erhalten */ }
-        if (used) diarizationInfo.diarizationUsed = true;
+      if (callDetector) {
+        try { callDetector.stop(); } catch { /* best effort */ }
+        if (onDetectorState) callDetector.removeListener('call-state', onDetectorState);
+        if (onDetectorError) callDetector.removeListener('error', onDetectorError);
       }
 
-      let merged = mergeSegments(micForMerge, sysForMerge);
-      // LLM-KORREKTUR (Groq Llama): die akustische Trennung verrutscht bei kurzen, ähnlichen Stimmen
-      // gelegentlich EIN Segment. Ein LLM korrigiert die Zuordnung anhand des Gesprächsverlaufs
-      // (Anrede „du", Frage→Antwort) — Text bleibt unangetastet, keine neuen Sprecher. Best effort:
-      // scheitert es (z.B. Tageslimit), bleiben die akustischen Labels. Läuft VOR Protokoll, damit
-      // auch die Zusammenfassung die korrigierten Sprecher nutzt.
-      if (sessionDiarization && new Set(merged.map((s) => s.speaker)).size >= 2) {
-        try {
-          const refined = await refineSegments(merged, llmConfig());
-          if (Array.isArray(refined) && refined.length === merged.length) merged = refined;
-        } catch { /* Korrektur best effort — akustische Labels behalten */ }
-      }
-      // „Ich" deterministisch auf den zuerst sprechenden Mikro-Sprecher verankern (Gerätebesitzer),
-      // unabhängig davon, welche Labels die LLM-Gruppierung gewählt hat.
-      merged = canonicalizeSpeakerLabels(merged);
-      if (diarizationInfo.diarizationUsed) diarizationInfo.diarizationSpeakers = new Set(merged.map((s) => s.speaker)).size;
-      try { meetingStore.saveTranscript(id, { segments: merged, language }); } catch { /* Disk-Fehler */ }
+      try { _concatChannel(id, 'mic'); _concatChannel(id, 'system'); } catch { diskError = true; }
 
       const durationMs = now() - startedAtMs;
-      const preview = (merged[0] && merged[0].text ? merged[0].text : '').slice(0, 120);
-      const speakerNames = [...new Set(merged.map((s) => s.speaker))];
-      const speakerCount = speakerNames.length || 1;
-      // Titel: ein KI-Protokoll setzt gleich ein echtes Thema. Kommt KEIN Protokoll zustande,
-      // lieber den ersten gesprochenen Satz als Titel verwenden — nicht nur Datum/Uhrzeit.
-      const firstSentence = (merged.find((s) => (s.text || '').trim().length > 8)?.text || '').trim().slice(0, 70);
-      const title = firstSentence || new Date(startedAtMs).toLocaleString('de-DE');
-      try { meetingStore.finalizeIndex(id, { durationMs, preview, speakerCount, speakerNames, title, ...diarizationInfo }); } catch { /* Disk-Fehler */ }
-
-      // KI-Protokoll (best effort)
+      const remote = systemIsRemote();
       try {
-        const text = transcriptToText(merged);
-        if (text.trim()) {
-          const summary = await generateMeetingSummary(text, { ...llmConfig(), language });
-          meetingStore.saveSummary(id, summary);
-          const sumTitle = (summary.kurzzusammenfassung || '').slice(0, 60);
-          meetingStore.finalizeIndex(id, { hasSummary: true, title: sumTitle || title, summaryError: null });
-        }
-      } catch (e) {
-        // Protokoll später per Button nachholbar; Grund merken, damit die UI z.B. das
-        // Groq-Tageslimit klar anzeigt statt nur „kein Protokoll".
-        try { meetingStore.finalizeIndex(id, { summaryError: e && e.code === 'rate_limit' ? 'rate_limit' : 'error' }); } catch { /* Disk best effort */ }
-      }
-
-      // Speicher: Das Transkript IST der Deliverable (Allans Entscheidung). Die volle
-      // Audioqualität wurde live für Groq-STT + Deepgram-Diarisierung genutzt; danach wird
-      // die Audio NICHT mehr aufbewahrt. Kein Opus mehr (16 kbit/s zerstörte Wiedergabe/
-      // Re-Processing). 'keepAudio' (Debug/Test/Loopback) behält die finalen WAV-Spuren.
-      if (!keepAudio) {
-        for (const ch of ['mic', 'system']) {
-          try { fs.rmSync(nodePath.join(meetingDir, `audio_${ch}.wav`)); } catch { /* nicht vorhanden / best effort */ }
-        }
-      }
-      // Redundante Chunk-Dateien entfernen (nur Absturzsicherung während der Aufnahme).
-      try { fs.rmSync(chunksDir, { recursive: true, force: true }); } catch { /* best effort */ }
+        meetingStore.saveTranscript(id, { segments: [], language: store.get('language') || 'de' });
+        meetingStore.finalizeIndex(id, {
+          status: 'processing',
+          durationMs,
+          title: new Date(startedAtMs).toLocaleString('de-DE'),
+          audioExpiresAt: new Date(now() + RETENTION_MS).toISOString(),
+          systemRemote: remote,
+          callDetected: callDetectedEver,
+          captureStartGapMs: { mic: Math.round(micGapMs), system: Math.round(sysGapMs) },
+          chunkBoundariesSec: micChunkEnds.slice(),
+          analysisAttempts: 0,
+          analysisError: diskError ? 'Speicherproblem während der Aufnahme' : null,
+        });
+      } catch { /* Disk best effort */ }
 
       _emit('meeting:stopped', { id });
-      try { if (overlayWin && typeof overlayWin.hide === 'function') overlayWin.hide(); } catch { /* Fake/zerstört */ }
+      _emitUpdated(id, 'processing');
+      hideOverlay(overlayWin);
       overlayWin = null;
     } finally {
       sessionId = null;
       stopping = false;
     }
+    enqueue(id);
     return { id };
   }
 
-  function isActive() {
-    return active;
+  // ---------------- Phase 2: serielle Auswertung ----------------
+  const queue = [];
+  let running = false;
+  let idleResolvers = [];
+
+  function enqueue(id) {
+    if (!id || queue.includes(id)) return;
+    queue.push(id);
+    _drain();
+  }
+  function whenIdle() {
+    if (!running && queue.length === 0) return Promise.resolve();
+    return new Promise((r) => idleResolvers.push(r));
+  }
+  async function _drain() {
+    if (running) return;
+    running = true;
+    try {
+      while (queue.length) {
+        const id = queue.shift();
+        try { await processMeeting(id); } catch (e) {
+          try { meetingStore.finalizeIndex(id, { status: 'failed', analysisError: describeError(e) }); } catch { /* egal */ }
+          _emitUpdated(id, 'failed');
+        }
+      }
+    } finally {
+      running = false;
+      const rs = idleResolvers; idleResolvers = [];
+      rs.forEach((r) => r());
+    }
   }
 
-  // Pull-Modell: das Overlay fragt beim Mount den aktuellen Zustand ab,
-  // falls das 'meeting:started'-Push-Event verloren ging (Fenster noch nicht geladen).
-  function getStatus() {
-    return {
-      active,
-      id: sessionId,
-      diarization: active ? sessionDiarization : !!store.get('diarizationEnabled'),
-      callActive,
-    };
+  async function processMeeting(id) {
+    const full = meetingStore.get(id);
+    if (!full) return; // gelöscht, während es in der Warteschlange stand
+    const entry = full.index;
+    const attempts = (entry.analysisAttempts || 0) + 1;
+    meetingStore.finalizeIndex(id, { status: 'processing', analysisAttempts: attempts, analysisError: null, progress: 'Auswertung startet …' });
+    _emitUpdated(id, 'processing');
+
+    let micPath = meetingStore.audioPath(id, 'mic');
+    if (!micPath) { try { micPath = _concatChannel(id, 'mic'); } catch { /* egal */ } }
+    let sysPath = entry.systemRemote ? meetingStore.audioPath(id, 'system') : null;
+    if (entry.systemRemote && !sysPath) { try { sysPath = _concatChannel(id, 'system'); } catch { /* egal */ } }
+    if (!micPath && !sysPath) {
+      meetingStore.finalizeIndex(id, { status: 'failed', analysisError: 'Keine Aufnahme gefunden (Audio fehlt oder wurde bereits gelöscht)', progress: null });
+      _emitUpdated(id, 'failed');
+      return;
+    }
+    if (!micPath) { micPath = sysPath; sysPath = null; } // nur System-Spur vorhanden → als Hauptspur
+    const boundaries = Array.isArray(entry.chunkBoundariesSec) && entry.chunkBoundariesSec.length ? entry.chunkBoundariesSec : _chunkBoundariesFromFiles(id);
+    const language = (full.transcript && full.transcript.language) || store.get('language') || 'de';
+
+    let result = null; let analysis = null; let analysisError = null;
+    const geminiKey = store.get('geminiApiKey');
+    if (geminiKey) {
+      try {
+        result = await analyzeAudio({
+          micWavPath: micPath, systemWavPath: sysPath, chunkBoundariesSec: boundaries, apiKey: geminiKey, fetchImpl, sleep, language,
+          maxWindowSeconds: analysisWindowSeconds,
+          onProgress: (p) => {
+            const txt = p.stage === 'retry' ? `Warte auf Gemini (Abschnitt ${p.windowIndex + 1}/${p.windowCount}) …` : `Auswertung Abschnitt ${p.windowIndex + 1} von ${p.windowCount} …`;
+            try { meetingStore.finalizeIndex(id, { progress: txt }); } catch { /* egal */ }
+            _emitUpdated(id, 'processing', { progress: txt });
+          },
+        });
+        analysis = 'gemini';
+      } catch (e) { analysisError = 'Gemini: ' + describeError(e); }
+    } else {
+      analysisError = 'Kein Gemini-Key hinterlegt';
+    }
+    if (!result) {
+      const groqKey = store.get('groqApiKey');
+      if (groqKey) {
+        try {
+          try { meetingStore.finalizeIndex(id, { progress: 'Fallback: Groq Whisper (ohne Sprechertrennung) …' }); } catch { /* egal */ }
+          result = await fallbackAnalyze({ micWavPath: micPath, systemWavPath: sysPath, apiKey: groqKey, language, fetchImpl, sampleRate });
+          analysis = 'groq-fallback';
+        } catch (e2) { analysisError = `${analysisError} · Groq: ${describeError(e2)}`; }
+      } else {
+        analysisError = `${analysisError} · kein Groq-Key für den Fallback`;
+      }
+    }
+    if (!result) {
+      meetingStore.finalizeIndex(id, { status: 'failed', analysisError, progress: null });
+      _emitUpdated(id, 'failed');
+      return;
+    }
+
+    const segments = result.segments || [];
+    meetingStore.saveTranscript(id, { segments, language, speakers: result.speakers || [] });
+    const speakerNames = [...new Set(segments.map((s) => s.speaker))];
+    const preview = (segments[0] && segments[0].text ? segments[0].text : '').slice(0, 120);
+    const firstSentence = (segments.find((s) => (s.text || '').trim().length > 8)?.text || '').trim().slice(0, 70);
+    const title = firstSentence || entry.title;
+    meetingStore.finalizeIndex(id, {
+      status: 'ready', analysis, analysisError, progress: segments.length ? 'Bericht wird erstellt …' : null,
+      speakerCount: speakerNames.length || 1, speakerNames, preview, title, analysisModel: result.model || null,
+    });
+    _emitUpdated(id, 'ready');
+
+    // Bericht (best effort; Kontingent-Fehler verständlich merken)
+    const text = transcriptToText(segments);
+    if (text.trim()) {
+      try {
+        const summary = await summarize(text, { ...llmConfig(), language });
+        meetingStore.saveSummary(id, summary);
+        const sumTitle = (summary.titel || summary.kurzfassung || '').slice(0, 60);
+        meetingStore.finalizeIndex(id, { hasSummary: true, title: sumTitle || title, summaryError: null, progress: null });
+      } catch (e) {
+        try { meetingStore.finalizeIndex(id, { summaryError: e && e.code === 'rate_limit' ? 'rate_limit' : 'error', progress: null }); } catch { /* egal */ }
+      }
+    } else {
+      meetingStore.finalizeIndex(id, { progress: null });
+    }
+    _emitUpdated(id, 'ready');
+
+    // Chunk-Dateien (Absturzsicherung) sind nach erfolgreicher Auswertung redundant
+    try { fs.rmSync(path.join(meetingStore.meetingDir(id), 'chunks'), { recursive: true, force: true }); } catch { /* egal */ }
+    try { cleanRetention(meetingStore, { now: now() }); } catch { /* egal */ }
   }
 
-  // Pro-Session-Override der Sprecher-Trennung (Overlay-Toggle): gilt nur für die
-  // laufende Aufnahme, ändert den globalen Default (diarizationEnabled) nicht.
-  function setSessionDiarization(enabled) {
-    sessionDiarization = !!enabled;
-    return sessionDiarization;
+  /** Beim App-Start: unterbrochene Aufnahmen/Auswertungen wieder aufnehmen. */
+  function resumePending() {
+    const resumed = [];
+    for (const entry of meetingStore.list()) {
+      if (!entry || (entry.status !== 'recording' && entry.status !== 'processing')) continue;
+      if ((entry.analysisAttempts || 0) >= MAX_ANALYSIS_ATTEMPTS) {
+        try { meetingStore.finalizeIndex(entry.id, { status: 'failed', analysisError: entry.analysisError || 'Auswertung mehrfach abgebrochen', progress: null }); } catch { /* egal */ }
+        continue;
+      }
+      if (entry.status === 'recording') {
+        // Absturz während der Aufnahme: aus den Chunks retten
+        let mic = null; let sys = null;
+        try { mic = _concatChannel(entry.id, 'mic'); sys = _concatChannel(entry.id, 'system'); } catch { /* egal */ }
+        if (!mic && !sys) {
+          try { meetingStore.finalizeIndex(entry.id, { status: 'failed', analysisError: 'Aufnahme abgebrochen, keine Audiodaten gefunden' }); } catch { /* egal */ }
+          continue;
+        }
+        const durationMs = Math.round(Math.max(mic ? wavDurationSec(mic, sampleRate) : 0, sys ? wavDurationSec(sys, sampleRate) : 0) * 1000);
+        const mode = store.get('systemAudioMode') || 'auto';
+        try {
+          meetingStore.finalizeIndex(entry.id, {
+            status: 'processing', durationMs,
+            audioExpiresAt: entry.audioExpiresAt || new Date(now() + RETENTION_MS).toISOString(),
+            systemRemote: mode === 'always' ? true : mode === 'never' ? false : !!entry.systemRemote,
+            chunkBoundariesSec: _chunkBoundariesFromFiles(entry.id),
+            analysisError: 'Aufnahme wurde unterbrochen (App beendet) — Audio bis dahin gerettet',
+          });
+        } catch { /* egal */ }
+      }
+      enqueue(entry.id);
+      resumed.push(entry.id);
+    }
+    return resumed;
   }
 
-  // Anruf-Zustand vom nativen Detektor (oder von Tests). Setzt die Live-Anzeige + merkt sich,
-  // dass während der Aufnahme ein Anruf lief (für die 'auto'-Auswertung beim Stop).
-  function onCallState(activeFlag) {
-    callActive = !!activeFlag;
-    if (callActive) callDetectedEver = true;
-    if (active) _emit('meeting:call-state', { active: callActive });
-    return callActive;
+  /** „Neu auswerten“ (Gemini erneut, Fallback Groq) — braucht vorhandenes Audio. */
+  function reanalyze(id) {
+    const full = meetingStore.get(id);
+    if (!full) return { error: 'not_found' };
+    if (!full.audio.mic && !full.audio.system) return { error: 'no_audio' };
+    try { meetingStore.finalizeIndex(id, { status: 'processing', analysisAttempts: 0, analysisError: null, summaryError: null }); } catch { /* egal */ }
+    _emitUpdated(id, 'processing');
+    enqueue(id);
+    return { ok: true };
   }
 
   async function regenerateSummary(id) {
@@ -455,86 +542,40 @@ function createMeetingController(deps) {
     if (!text.trim()) return null;
     let summary;
     try {
-      summary = await generateMeetingSummary(text, { ...llmConfig(), language: (full.transcript.language) || store.get('language') });
+      summary = await summarize(text, { ...llmConfig(), language: (full.transcript.language) || store.get('language') });
     } catch (e) {
-      // Tageslimit verständlich an die UI zurückgeben statt nur zu scheitern.
       if (e && e.code === 'rate_limit') return { error: 'rate_limit' };
       throw e;
     }
     meetingStore.saveSummary(id, summary);
-    // Titel aus dem (neu erzeugten) Protokoll-Thema aktualisieren — behebt Alt-Meetings,
-    // deren Titel noch Datum/Uhrzeit ist (z.B. wenn das Protokoll beim Stop fehlschlug).
-    const sumTitle = (summary.kurzzusammenfassung || '').slice(0, 60);
+    const sumTitle = (summary.titel || summary.kurzfassung || '').slice(0, 60);
     meetingStore.finalizeIndex(id, sumTitle ? { hasSummary: true, title: sumTitle, summaryError: null } : { hasSummary: true, summaryError: null });
+    _emitUpdated(id, 'ready');
     return summary;
   }
 
-  async function retranscribe(id) {
-    const path = require('node:path');
-    // 'Neu transkribieren' funktioniert nur, solange noch eine finale WAV existiert
-    // (ältere Meetings oder keepAudio). Standardmäßig wird Audio nach dem Stop gelöscht
-    // (Transkript ist der Deliverable) → dann liefert retranscribe false (UI deaktiviert
-    // den Button entsprechend, da meeting.audio dann null ist).
-    const meetingDir = path.dirname(path.dirname(meetingStore.chunkPath(id, 'mic', 0)));
-    const mic = []; const sys = [];
-    const lastText = { mic: '', system: '' };
-    const q = new TranscriptionQueue({
-      apiKey: store.get('groqApiKey'), language: store.get('language'), fetchImpl,
-      getPrompt: (ch) => lastText[ch] || '',
-    });
-    q.on('segments', ({ channel, segments }) => {
-      (channel === 'mic' ? mic : sys).push(...segments);
-      const added = segments.map((s) => s.text).join(' ');
-      lastText[channel] = ((lastText[channel] || '') + ' ' + added).slice(-800).trimStart();
-    });
-
-    const windowBytes = (windowSeconds || 30) * sampleRate * 2;
-    let any = false;
-    const channelPcm = {}; // Int16-PCM je Kanal (für die lokale Diarisierung wiederverwendet)
-    for (const channel of ['mic', 'system']) {
-      const wavPath = path.join(meetingDir, `audio_${channel}.wav`);
-      if (!fs.existsSync(wavPath)) continue; // Audio wurde nach dem Stop gelöscht
-      any = true;
-      const buf = fs.readFileSync(wavPath);
-      const pcm = buf.subarray(44); // WAV-Header (44 Bytes) überspringen
-      channelPcm[channel] = new Int16Array(buf.buffer, buf.byteOffset + 44, Math.max(0, (buf.length - 44) >> 1));
-      let cumOffset = 0;
-      for (let off = 0; off < pcm.length; off += windowBytes) {
-        const slice = pcm.subarray(off, Math.min(off + windowBytes, pcm.length));
-        // Stille-Gate (wie bei der Live-Transkription): leere Fenster nicht senden.
-        if (maxFrameRms(slice, { sampleRate }) >= speechGate) {
-          const chunkWav = encodeWav(Buffer.from(slice), { sampleRate, channels: 1 });
-          q.enqueue({ channel, wavBuffer: chunkWav, tOffset: cumOffset });
-        }
-        cumOffset += slice.length / 2 / sampleRate;
-      }
-    }
-    if (!any) return false;
-    await q.idle();
-    // Dieselbe einheitliche Regel wie live: gab es System-Segmente, war es eine Gegenstelle →
-    // einbeziehen + Echo aus dem Mic-Kanal filtern; sonst nur Mikrofon. Diarisierung (wenn aktiv):
-    // immer Mikrofon (lautester = „Ich"), bei Gegenstelle auch der System-Kanal.
-    const remote = sys.length > 0;
-    let micF = remote ? suppressBleed(mic, sys) : mic;
-    let sysF = remote ? sys : [];
-    if (store.get('diarizationEnabled')) {
-      try { if (channelPcm.mic && micF.length) micF = diarizeSegments(micF, channelPcm.mic, { sampleRate, channel: 'mic' }); } catch { /* best effort */ }
-      try { if (remote && channelPcm.system && sysF.length) sysF = diarizeSegments(sysF, channelPcm.system, { sampleRate, channel: 'system' }); } catch { /* best effort */ }
-    }
-    let merged = mergeSegments(micF, sysF);
-    if (store.get('diarizationEnabled') && new Set(merged.map((s) => s.speaker)).size >= 2) {
-      try {
-        const refined = await refineSegments(merged, llmConfig());
-        if (Array.isArray(refined) && refined.length === merged.length) merged = refined;
-      } catch { /* best effort */ }
-    }
-    merged = canonicalizeSpeakerLabels(merged);
-    const full = meetingStore.get(id);
-    meetingStore.saveTranscript(id, { segments: merged, language: (full && full.transcript.language) || store.get('language') });
-    return true;
+  function runRetention() {
+    try { return cleanRetention(meetingStore, { now: now() }); } catch { return []; }
   }
 
-  return { start, stop, isActive, getStatus, setSessionDiarization, onCallState, onMicPcm, onMicLevel, regenerateSummary, retranscribe };
+  function isActive() { return active && !stopping; }
+
+  function getStatus() {
+    return { active, id: sessionId, callActive, micReady };
+  }
+
+  function onCallState(activeFlag) {
+    callActive = !!activeFlag;
+    if (callActive) callDetectedEver = true;
+    if (active) _emit('meeting:call-state', { active: callActive });
+    return callActive;
+  }
+
+  return {
+    start, stop, isActive, getStatus, onCallState,
+    onMicPcm, onMicLevel, onMicCaptureStarted, onSystemPcm, onCaptureFlushed,
+    processMeeting, enqueue, whenIdle, resumePending, reanalyze, regenerateSummary, runRetention,
+  };
 }
 
 module.exports = { createMeetingController, transcriptToText, speakerLabel };

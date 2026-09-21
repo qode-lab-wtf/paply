@@ -5,6 +5,8 @@
 //   systemPermissionDenied            → rot  "Systemaudio-Berechtigung fehlt"
 //   !systemProcessAlive               → rot  "System-Audio gestoppt"
 //   !micWriteOk                       → rot  "Aufnahme wird nicht gesichert"
+//   !micReady nach 4 s                → gelb "Mikrofon startet noch"
+//   micStartGapMs > 1500              → gelb "Mikro startete verspätet"
 //   secondsSinceSystemAudio > 60      → gelb "System-Audio still"
 //   sonst                             → gruen "Aufnahme läuft & wird gesichert"
 
@@ -31,6 +33,8 @@ function evaluateHealth({
   secondsSinceSystemAudio,
   gotSystemPcm = true,
   secondsSinceStart = 0,
+  micReady = true,
+  micStartGapMs = 0,
 }) {
   if (diskError) {
     return { color: 'red', reason: 'Speicherproblem' };
@@ -46,6 +50,13 @@ function evaluateHealth({
   }
   if (!micWriteOk) {
     return { color: 'red', reason: 'Aufnahme wird nicht gesichert' };
+  }
+  // Mikrofon: noch nicht bereit (getUserMedia/Worklet) oder deutlich verspätet gestartet.
+  if (!micReady && secondsSinceStart > 4) {
+    return { color: 'yellow', reason: 'Mikrofon startet noch … (Berechtigung erteilt?)' };
+  }
+  if (micStartGapMs > 1500) {
+    return { color: 'yellow', reason: `Mikro startete ${(micStartGapMs / 1000).toFixed(1)} s verspätet — Anfang evtl. unvollständig` };
   }
   // Frühe Diagnose: kam noch NIE System-Audio an, ist das meist ein Setup-Problem
   // (Anruf nicht über den Mac, oder Berechtigung „Systemaudioaufnahme" fehlt).

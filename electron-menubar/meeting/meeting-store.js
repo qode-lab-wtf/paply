@@ -58,11 +58,13 @@ function createMeetingStore({ baseDir, store }) {
       preview: '',
       hasSummary: false,
       favorite: false,
-      // Deepgram-Diarization-Tracking (gesetzt beim Stop, nur bei Erfolg)
-      diarizationUsed: false,
-      diarizationSeconds: 0,
-      diarizationCostUsd: 0,
-      diarizationSpeakers: 0,
+      // v2: Lebenszyklus + Auswertung + Audio-Aufbewahrung
+      status: 'recording',
+      analysis: null,
+      analysisError: null,
+      analysisAttempts: 0,
+      audioExpiresAt: null,
+      audioDeleted: false,
     };
 
     const entries = _indexList();
@@ -79,6 +81,23 @@ function createMeetingStore({ baseDir, store }) {
   function chunkPath(id, channel, seq) {
     const padded = String(seq).padStart(6, '0');
     return path.join(_meetingDir(id), 'chunks', `${channel}_${padded}.wav`);
+  }
+
+  /** Absoluter Meeting-Ordner (für Audio-Dateien, Retention, Auswertung). */
+  function meetingDir(id) { return _meetingDir(id); }
+
+  /** Pfad der finalen Audio-Spur (existiert erst nach dem Stop; null nach Löschung). */
+  function audioPath(id, channel) {
+    const wav = path.join(_meetingDir(id), `audio_${channel}.wav`);
+    return fs.existsSync(wav) ? wav : null;
+  }
+
+  /** Sortierte Chunk-Dateien eines Kanals (Absturzsicherung während der Aufnahme). */
+  function listChunkFiles(id, channel) {
+    const dir = path.join(_meetingDir(id), 'chunks');
+    try {
+      return fs.readdirSync(dir).filter((f) => f.startsWith(channel + '_') && f.endsWith('.wav')).sort().map((f) => path.join(dir, f));
+    } catch { return []; }
   }
 
   /**
@@ -147,9 +166,8 @@ function createMeetingStore({ baseDir, store }) {
       }
     }
 
-    // Audio-Pfade. Seit v1.11.0 wird Audio nach dem Meeting verworfen (Transkript ist der
-    // Deliverable) → i.d.R. null. .opus existiert nur noch bei Alt-Meetings (vor v1.11.0,
-    // damals komprimiert) und bleibt rückwärtskompatibel abspielbar; sonst .wav (keepAudio).
+    // Audio-Pfade: seit v1.13 bleiben die WAV-Spuren 7 Tage erhalten (Nachhören, Neu-Auswerten),
+    // danach null. .opus existiert nur bei sehr alten Meetings (vor v1.11.0).
     const audioPath = (channel) => {
       const opus = path.join(_meetingDir(id), `audio_${channel}.opus`);
       if (fs.existsSync(opus)) return opus;
@@ -288,6 +306,9 @@ function createMeetingStore({ baseDir, store }) {
   return {
     create,
     chunkPath,
+    meetingDir,
+    audioPath,
+    listChunkFiles,
     saveTranscript,
     loadTranscript,
     saveSummary,

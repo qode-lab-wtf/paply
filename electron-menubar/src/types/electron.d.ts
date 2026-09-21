@@ -1,4 +1,4 @@
-import type { MeetingIndexEntry, MeetingFull, MeetingSummary, MeetingSegment } from './meeting';
+import type { MeetingIndexEntry, MeetingFull, MeetingSummary } from './meeting';
 
 export interface Settings {
   groqApiKey: string;
@@ -13,11 +13,10 @@ export interface Settings {
   activeProfile: string;
   pttThreshold: number;
   meetingHotkey: string;
-  diarizationEnabled: boolean;
   // System-Audio (Gegenstelle eines Anrufs auf diesem Computer): 'auto' = automatisch erkennen
   // (empfohlen), 'always' = immer einbeziehen, 'never' = nie. Default 'auto'.
   systemAudioMode: 'auto' | 'always' | 'never';
-  // LLM für Protokoll + Sprecher-Korrektur. 'auto' = Groq, bei Limit Gemini-Fallback.
+  // Gemini: Meeting-Auswertung (Audio → Sprecher/Wortlaut) + Bericht. 'auto' = Gemini, bei Limit Groq.
   geminiApiKey: string;
   llmProvider: 'auto' | 'groq' | 'gemini';
 }
@@ -166,25 +165,26 @@ export interface ElectronAPI {
   // Meeting-Recorder
   startMeeting: () => Promise<{ id: string } | null>;
   stopMeeting: () => Promise<{ id: string | null } | null>;
-  getMeetingStatus: () => Promise<{ active: boolean; id: string | null; diarization: boolean; callActive: boolean }>;
-  setOverlayExpanded: (expanded: boolean) => void;
+  getMeetingStatus: () => Promise<{ active: boolean; id: string | null; callActive: boolean; micReady?: boolean }>;
+  sendMicCaptureStarted: (d: { firstSampleAtMs: number }) => void;
   sendMicPcm: (buf: ArrayBuffer) => void;
   sendMicLevel: (lvl: number) => void;
   sendSystemPcm: (buf: ArrayBuffer) => void;
-  setMeetingDiarization: (enabled: boolean) => Promise<boolean>;
+  captureFlushed: () => Promise<boolean>;
   listMeetings: () => Promise<MeetingIndexEntry[]>;
   getMeeting: (id: string) => Promise<MeetingFull | null>;
   deleteMeeting: (id: string) => Promise<boolean>;
-  retranscribeMeeting: (id: string) => Promise<boolean>;
+  reanalyzeMeeting: (id: string) => Promise<{ ok?: boolean; error?: string }>;
   regenerateSummary: (id: string) => Promise<MeetingSummary | { error: string } | null>;
-  updateSpeakerName: (id: string, channel: 'mic' | 'system', name: string) => Promise<boolean>;
   renameSpeaker: (id: string, fromSpeaker: string, toName: string) => Promise<boolean>;
   toggleMeetingTodo: (id: string, idx: number) => Promise<boolean>;
-  onMeetingStatus: (cb: (s: { color: 'green' | 'yellow' | 'red'; reason: string; durationMs: number; micLevel: number; systemLevel: number }) => void) => void;
-  onMeetingTranscriptChunk: (cb: (segs: MeetingSegment[]) => void) => void;
-  onMeetingStarted: (cb: (d: { id: string; diarization?: boolean; callActive?: boolean }) => void) => void;
-  onMeetingStopped: (cb: (d: { id: string }) => void) => void;
-  onMeetingCallState: (cb: (d: { active: boolean }) => void) => void;
+  exportMeeting: (payload: { title: string; markdown: string }) => Promise<boolean>;
+  onMeetingStatus: (cb: (s: { color: 'green' | 'yellow' | 'red'; reason: string; durationMs: number; micLevel: number; systemLevel: number; micReady?: boolean }) => void) => () => void;
+  onMeetingStarted: (cb: (d: { id: string; callActive?: boolean }) => void) => () => void;
+  onMeetingStopped: (cb: (d: { id: string }) => void) => () => void;
+  onMeetingCallState: (cb: (d: { active: boolean }) => void) => () => void;
+  onMeetingCaptureStop: (cb: (d: { id: string }) => void) => () => void;
+  onMeetingsUpdated: (cb: (d: { id: string; status: string; progress?: string }) => void) => () => void;
 
   // Platform
   getPlatform: () => Promise<Platform>;
