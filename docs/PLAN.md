@@ -85,3 +85,15 @@ Keine kostenlose Kombination besteht: konkrete Grenze dokumentieren, keine
 Produktivfreigabe oder Verschlechterung der installierten App. Arbeit in separater
 Testversion mit eigenen Daten. Geprüfte Zwischenstände samt Plan/Belegen committen
 und auf Arbeitsbranch pushen; Remote frisch vergleichen. Instinct-Empfang separat prüfen.
+
+## 6. Bestätigte Weiterführung / Übergabe vom 21.09.2026
+
+Die bisherigen Kandidaten sind keine verbindliche Endauswahl. Allan erlaubt radikale
+Änderungen des Meeting-Modus bei erhaltenem Diktat und kostenloser Betriebsgrundlage.
+Der Alltag soll ohne Teilnehmerkonfiguration aus Shortcut → Gespräch → Stop bestehen.
+Ausgabe: klarer, schön aufgebauter inhaltsgerechter Bericht, Todos am Ende, darunter
+vollständige erkannte Konversation mit Nachhörmöglichkeit. Größere Ansichtänderungen
+weiter zunächst als Vorschau zeigen. Bisherige Versuche und konkrete Fehlschläge in
+[UEBERGABE-CLAUDE.md](UEBERGABE-CLAUDE.md) vor weiterer Umsetzung berücksichtigen.
+Die realen Qualitätsziele sind nicht bestanden; keine Freigabe allein aus Sprecheranzahl,
+Stabilitätsmessung oder automatisierten Softwaretests ableiten.

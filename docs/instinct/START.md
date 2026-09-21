@@ -5,6 +5,7 @@ Repository: https://github.com/qode-lab-wtf/paply
 Hauptbranch: `main`; aktuelle Arbeit: `codex/local-meeting-quality`.
 
 - Bestätigte Richtung: [ZIEL.md](ZIEL.md)
+- Übergabe an Claude (Momentaufnahme 21.09.2026): [../UEBERGABE-CLAUDE.md](../UEBERGABE-CLAUDE.md)
 - Kanonischer Stand: [../STAND.md](../STAND.md)
 - Vollständiger aktueller Plan: [../PLAN.md](../PLAN.md)
 - Entscheidungen: [../ENTSCHEIDUNGEN.md](../ENTSCHEIDUNGEN.md)

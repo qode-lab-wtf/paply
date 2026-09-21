@@ -2,6 +2,22 @@
 
 2026-09-21 · Phase: Entwicklung/Prüfung · Branch `codex/local-meeting-quality`
 
+## Aktuelle Übergabe an Claude
+
+Allan hat am 21.09.2026 eine vollständige Übergabe angefordert und radikale Änderungen
+am Meeting-Modus ausdrücklich erlaubt. Ziel: Shortcut starten/stoppen ohne Vorbereitung,
+mehrere Personen in Raum/Telefon/Hybrid, danach verständlicher schön aufgebauter Bericht
+mit Todos und darunter vollständige Konversation. Diktat bleibt erhalten.
+[Übergabe mit Versuchen, Pfaden und Grenzen](UEBERGABE-CLAUDE.md).
+
+**Aktueller installierter Test-Build: `0d98a52`. Die schädliche pauschale Aufbereitung,
+die Startverzögerung und Sprechergrenzprobleme sind noch nicht behoben.** Die letzten
+Audits änderten die App nicht. 140 App-Tests und zuletzt 41 Python-Tests bestanden;
+keine Freigabe der realen Gesprächsqualität. Ältere Testzahlen unten dokumentieren
+Zwischenstände. Aktueller Worktree: `/Users/allanha/Vibe/paply-local-meetings`, Branch
+`codex/local-meeting-quality`; `paply-main`/GitHub main bleiben auf der älteren Basis.
+Diese Übergabe ändert nur Dokumentation, keine App und keine gespeicherten Ergebnisse.
+
 ## Bestätigtes Ziel und aktuelle Grenze
 
 [Plan](PLAN.md), [Entscheidungen](ENTSCHEIDUNGEN.md). Kostenloser lokaler

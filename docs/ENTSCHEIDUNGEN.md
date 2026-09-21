@@ -35,3 +35,15 @@ Bestätigt sind weitere vorhandene Beispiele und eigenständige Produktumsetzung
 Technische Auslegung: isolierte Testintegration jetzt voranbringen, ohne die
 installierte App auszutauschen oder die ursprünglichen Qualitätsziele als erfüllt
 zu behaupten. Die Testversion darf bekannte Grenzen sichtbar machen.
+
+## 2026-09-21 — Übergabe und erneute Zielklarstellung
+
+Allan verlangt eine aktuelle vollständige Übergabe an Claude einschließlich bisheriger
+Versuche. Radikale Änderungen am Meeting-Modus sind ausdrücklich erwünscht, wenn sie
+das Ziel erreichen. Die funktionierende Diktierfunktion bleibt unverändert.
+Bedienziel: Shortcut starten, ohne Konfiguration mit mehreren Personen sprechen,
+Shortcut stoppen; anschließend schön und verständlich aufgebauter Bericht mit Todos,
+darunter vollständige Konversation. Vorhandene Architektur/Modelle dürfen ersetzt werden;
+kostenloser Betrieb, Datenerhalt und bisherige Qualitätsgrenzen bleiben bestehen.
+Die genannte Claude-Modellbezeichnung „Fable 5.1“ ist Nutzerwunsch, nicht verifiziert
+und keine Festlegung für Paplys lokale Modelle. Kein Modellwechsel/Release durch diese Übergabe.
