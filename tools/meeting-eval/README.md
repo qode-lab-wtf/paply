@@ -31,8 +31,17 @@ werden; ein beweglicher Download-Branch reicht nicht als Produktiv-Pin.
 
 Originales pyannote Community-1 braucht eine persönliche Hugging-Face-Freigabe.
 Kein Zugang: als blockiert ausweisen, nicht heimlich einen anderen Kandidaten so nennen.
-Seine separate Python-Laufzeit wird erst nach geklärtem Zugang installiert; sie ist
-absichtlich nicht Teil der MLX-Lockdatei.
+Seine separate Python-Laufzeit ist absichtlich nicht Teil der MLX-Lockdatei:
+
+```sh
+uv venv work/pyannote-venv --python 3.12.13
+uv pip sync --python work/pyannote-venv/bin/python tools/meeting-eval/requirements-pyannote.lock
+```
+
+Nach genehmigtem Download das vollständige Modell (config.yaml, embedding/,
+segmentation/, plda/) unter `work/models/pyannote` ablegen. Der Worker lädt
+ausschließlich diesen lokalen Ordner, deaktiviert pyannote-Telemetrie und decodiert
+Audio mit soundfile. Keine Zugangsdaten in Argumente oder Git-Dateien schreiben.
 
 ## Private Referenz
 
@@ -109,6 +118,12 @@ work/venv/bin/python tools/meeting-eval/report.py gemma3:4b work/results/qwen-a-
 work/venv/bin/python tools/meeting-eval/report.py qwen3:8b work/results/qwen-a-mic.json work/results/report-qwen-a.json
 ```
 
+Die aktuelle Fassung erzwingt zusätzlich wörtliche `sourceQuote`-Belege pro Eintrag;
+der Validator verwirft erfundene Zitate, Quellen-IDs, fehlende Felder und abgeschnittene
+Antworten. Mit `--thinking` Qwens Analysemodus separat vergleichen. Beide Modelle
+müssen für einen Vergleich dieselbe Eingabedatei und Schemafassung bekommen.
+Auch ein vorhandenes Zitat beweist nicht, dass die Interpretation korrekt ist.
+
 ## Freigabegrenze
 
 `unreviewed` ist kein Erfolg. Leere Referenzen sind kein Erfolg. Dateihashes müssen
@@ -121,3 +136,13 @@ Ein bestandener Einzeltest gibt niemals die App frei. Die vollständigen Gates
 einschließlich aller Gesprächsarten, Berichtstreue und App-Regression stehen in
 `docs/PLAN.md`. Private Modelllogs/Referenzen verbleiben lokal; nur bereinigte
 Messwerte und bekannte Lücken dürfen nach `docs/validation/` und GitHub.
+
+## Vergleich ohne neue Aufnahme
+
+`compare.py MANIFEST RESULT... --output work/comparison.html` stellt mehrere
+Modelle mit demselben Audiodateihash nebeneinander. Sprecher-IDs gelten nur innerhalb
+eines Ergebnisses, nicht modell- oder kanalübergreifend. Keine automatische Freigabe.
+
+`node tools/meeting-eval/legacy_replay.js MIC_WHISPER_JSON SYSTEM_WHISPER_JSON`
+misst den Eingriff der bisherigen zeitbasierten Echo-Unterdrückung auf den
+Kandidatensegmenten. Unterdrückte Dauer ist keine bestätigte verlorene Gesprächsdauer.

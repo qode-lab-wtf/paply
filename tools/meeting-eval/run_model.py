@@ -76,10 +76,18 @@ def main():
                 result['segments'] = normalize_turns(out['segments'], m['durationSeconds'])
             result['runtimeRevision'] = subprocess.check_output(['git', '-C', str(ROOT/'work/FluidAudio'), 'rev-parse', 'HEAD'], text=True).strip()
         else:
+            os.environ['PYANNOTE_METRICS_ENABLED'] = 'false'
             from pyannote.audio import Pipeline
-            pipe = Pipeline.from_pretrained('pyannote/speaker-diarization-community-1', token=os.environ.get('HF_TOKEN'))
-            out = pipe(str(audio))
+            import soundfile as sf
+            import torch
+            model_dir = ROOT / 'work/models/pyannote'
+            if not (model_dir / 'config.yaml').exists():
+                raise FileNotFoundError('Original pyannote model requires approved local download')
+            pipe = Pipeline.from_pretrained(str(model_dir))
+            waveform, rate = sf.read(str(audio), dtype='float32', always_2d=True)
+            out = pipe({'waveform': torch.from_numpy(waveform.T.copy()), 'sample_rate': rate})
             result['task'] = 'diarization'
+            result['model'] = 'pyannote/speaker-diarization-community-1@3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
             result['segments'] = [{'start': t.start, 'end': t.end, 'speaker': speaker}
                                   for t, speaker in out.speaker_diarization]
         result['status'] = 'completed'
