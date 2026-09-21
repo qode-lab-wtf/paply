@@ -24,7 +24,7 @@ Cmd+Shift+X ─► MeetingController.start()
    „startet …“ bis das erste Mikro-Paket da ist. Chunks (20–40 s, an Sprechpausen) = Absturzsicherung.
 Cmd+Shift+X ─► stop() Phase 1 (schnell): Capture-Handshake (Restpuffer) → audio_mic.wav / audio_system.wav
    → Index status 'processing' → Overlay zu. Hotkey ist sofort wieder frei.
-   Phase 2 (seriell, im Hintergrund): Fenster ≤ 25 min an Chunk-Grenzen → Gemini 2.5 Flash bekommt
+   Phase 2 (seriell, im Hintergrund): Fenster ≤ 25 min an Chunk-Grenzen → Gemini Flash (Alias `gemini-flash-latest`; 2.5 ist für neue Keys abgeschaltet) bekommt
    Spur A (Mikro) und ggf. Spur B (System, nur wenn Anruf erkannt / systemAudioMode) als Audio →
    JSON {sprecher, segmente} mit Zeitmarken → lokale Energieprüfung der Spurzuordnung, Echo-Dedupe →
    Labels „Sprecher 1..N“ / „Gegenstelle“ → transcript.json → Bericht v2 → status 'ready'

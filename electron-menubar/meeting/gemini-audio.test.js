@@ -167,7 +167,7 @@ describe('transcribeWithGemini (Fake-Netz)', () => {
       { tStart: 1.5, tEnd: 3, speaker: 'Sprecher 2', channel: 'mic', text: 'Hallo!' },
     ]);
     expect(r.speakers[0]).toMatchObject({ label: 'Sprecher 1', beschreibung: 'tief' });
-    expect(log[0].model).toBe('gemini-2.5-flash');
+    expect(log[0].model).toBe('gemini-flash-latest');
     expect(log[0].gen.responseMimeType).toBe('application/json');
     expect(log[0].gen.responseSchema.required).toEqual(['sprecher', 'segmente']);
     expect(log[0].gen.thinkingConfig.thinkingBudget).toBe(0);
@@ -238,7 +238,7 @@ describe('transcribeWithGemini (Fake-Netz)', () => {
     const log = [];
     const f404 = fakeGemini([() => ({ ok: false, status: 404, text: async () => 'no model' }), { json: { sprecher: [], segmente: [{ start: 0, ende: 1, sprecher: 'S1', spur: 'A', text: 'ok' }] } }], log);
     const r = await transcribeWithGemini({ micWavPath: mic, apiKey: 'k', fetchImpl: f404, sleep: async () => {} });
-    expect(r.model).toBe('gemini-2.5-flash-lite');
+    expect(r.model).toBe('gemini-flash-lite-latest');
     expect(r.segments[0].text).toBe('ok');
   });
 

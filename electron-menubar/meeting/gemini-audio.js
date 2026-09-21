@@ -12,8 +12,8 @@ const { encodeWav, readWavSlice, wavDurationSec } = require('../audio/wav-encode
 const { rms } = require('../audio/pcm-utils');
 const { uploadFile, deleteFile, GEMINI_BASE } = require('./gemini-files');
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
-const FALLBACK_MODELS = ['gemini-2.5-flash-lite'];
+const DEFAULT_MODEL = 'gemini-flash-latest';
+const FALLBACK_MODELS = ['gemini-flash-lite-latest'];
 const INLINE_LIMIT_BYTES = 9 * 1024 * 1024;      // pro Spur inline (Base64), sonst Files API
 const RETRY_DELAYS_MS = [5000, 20000, 60000];    // 429/5xx-Backoff
 const MIN_SPLIT_SECONDS = 120;                   // kleiner wird ein Fenster bei MAX_TOKENS nicht mehr geteilt

@@ -8,8 +8,8 @@
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash-lite'];
+const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
+const GEMINI_FALLBACK_MODELS = ['gemini-flash-lite-latest'];
 const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey, model, fetchImpl }) {
@@ -95,14 +95,14 @@ async function chatComplete({
       try { return await callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey: groqApiKey, model: groqModel, fetchImpl }); } catch (e) { lastErr = e; }
       continue;
     }
-    // Gemini: Modell-Fallback bei 404/400 (Modell nicht verfügbar); sonst nächster Anbieter
+    // Gemini: Modell-Fallback bei 404/400 (Modell nicht verfügbar) und 500/503 (überlastet); sonst nächster Anbieter
     const models = [geminiModel, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== geminiModel)];
     for (const m of models) {
       try {
         return await callGemini({ system, user, jsonMode, responseSchema, thinkingBudget, maxTokens, temperature, apiKey: geminiApiKey, model: m, fetchImpl });
       } catch (e) {
         lastErr = e;
-        if (!(e.status === 404 || e.status === 400)) break;
+        if (![400, 404, 500, 503].includes(e.status)) break;
       }
     }
   }

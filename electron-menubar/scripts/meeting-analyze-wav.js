@@ -17,10 +17,10 @@ function fmt(sec) { const s = Math.floor(sec); return `${String(Math.floor(s / 6
 
 async function main() {
   const args = process.argv.slice(2);
-  const files = args.filter((a) => !a.startsWith('--'));
   const wantReport = args.includes('--report');
   const outIdx = args.indexOf('--out');
   const outPath = outIdx >= 0 ? args[outIdx + 1] : null;
+  const files = args.filter((a, i) => !a.startsWith('--') && !(outIdx >= 0 && i === outIdx + 1));
   const apiKey = process.env.GEMINI_API_KEY;
   if (!files.length || !apiKey) {
     console.error('Aufruf: GEMINI_API_KEY=… node scripts/meeting-analyze-wav.js mic.wav [system.wav] [--report] [--out datei.json]');

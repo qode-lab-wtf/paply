@@ -41,7 +41,7 @@ describe('summary v2', () => {
     };
     const s = await generateMeetingSummary('T', { groqApiKey: 'k', geminiApiKey: 'g', language: 'de', fetchImpl: fakeFetch });
     expect(s.kurzfassung).toBe('Z');
-    expect(s.model).toBe('gemini-2.5-flash');
+    expect(s.model).toBe('gemini-flash-latest');
     expect(calls[0]).toContain('generativelanguage');
 
     // Gemini 429 → Groq
