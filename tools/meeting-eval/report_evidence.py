@@ -42,7 +42,7 @@ Keine neuen Ratschläge, Fragen, Vereinbarungen oder Termine ergänzen. Beschaff
 Angerufenen nicht verwechseln. Mehrdeutige Namen nicht normalisieren oder ergänzen.
 Jede Aussage einschließlich overview braucht die IDs genau der Textstellen, die ihren Inhalt tragen.
 Gib nur das geforderte JSON aus. Quellenzitate werden danach unverändert aus den referenzierten Stellen
-angefügt; schreibe selbst keine Zitate. Leere Listen sind erlaubt.''' 
+angefügt; schreibe selbst keine Zitate. Leere Listen sind erlaubt.'''
 
 
 def validate_and_attach(report, sources, done_reason):
