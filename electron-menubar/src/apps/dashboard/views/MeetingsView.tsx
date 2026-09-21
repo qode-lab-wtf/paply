@@ -14,7 +14,9 @@ export function MeetingsView() {
 
   useEffect(() => {
     load();
-    window.electronAPI.onMeetingStopped(() => load());
+    const stop = window.electronAPI.onMeetingStopped(() => load());
+    const update = window.electronAPI.onMeetingsUpdated(() => load());
+    return () => { stop(); update(); };
   }, []);
 
   const handleDelete = async (id: string) => {

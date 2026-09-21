@@ -1,0 +1,105 @@
+{
+  "historicalSessionCount": 3,
+  "trackCount": 6,
+  "networkDenied": true,
+  "referenceReviewed": false,
+  "accuracyApproved": false,
+  "runs": [
+    {
+      "sampleId": "conversation-c-mic",
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 96.71424375008792,
+      "peakRssBytes": 4423745536,
+      "speakerLabelCount": 2
+    },
+    {
+      "sampleId": "conversation-e-system",
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 14.373330625006929,
+      "peakRssBytes": 3767615488,
+      "speakerLabelCount": null
+    },
+    {
+      "sampleId": "conversation-d-system",
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 8.929191624978557,
+      "peakRssBytes": 3725230080,
+      "speakerLabelCount": null
+    },
+    {
+      "sampleId": "conversation-c-system",
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 23.591020582942292,
+      "peakRssBytes": 3727605760,
+      "speakerLabelCount": null
+    },
+    {
+      "sampleId": "conversation-c-mic",
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 82.36838454194367,
+      "peakRssBytes": 3749232640,
+      "speakerLabelCount": null
+    },
+    {
+      "sampleId": "conversation-e-system",
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 67.11745299980976,
+      "peakRssBytes": 3932717056,
+      "speakerLabelCount": 1
+    },
+    {
+      "sampleId": "conversation-d-mic",
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 25.081050457898527,
+      "peakRssBytes": 3779182592,
+      "speakerLabelCount": null
+    },
+    {
+      "sampleId": "conversation-d-system",
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 69.40652291686274,
+      "peakRssBytes": 3932356608,
+      "speakerLabelCount": 1
+    },
+    {
+      "sampleId": "conversation-e-mic",
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 67.85277683287859,
+      "peakRssBytes": 3931783168,
+      "speakerLabelCount": 2
+    },
+    {
+      "sampleId": "conversation-c-system",
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 87.18782466696575,
+      "peakRssBytes": 5117263872,
+      "speakerLabelCount": 2
+    },
+    {
+      "sampleId": "conversation-e-mic",
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 21.637392750009894,
+      "peakRssBytes": 3767468032,
+      "speakerLabelCount": null
+    },
+    {
+      "sampleId": "conversation-d-mic",
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 67.39442587504163,
+      "peakRssBytes": 3932340224,
+      "speakerLabelCount": 2
+    }
+  ]
+}

@@ -304,5 +304,12 @@
         "sha256": "7ad24338d844fb95985486eb1a464e32d229f6d7a03c9abe60f978bacf3f816e"
       }
     ]
+  },
+  "qwen35ReportCandidate": {
+    "model": "qwen3.5:9b",
+    "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "runtime": "ollama 0.20.3",
+    "source": "https://ollama.com/library/qwen3.5",
+    "qualityApproved": false
   }
 }

@@ -22,7 +22,8 @@
     "compile:bin": "npm run compile:globe && npm run compile:audio-tee && npm run compile:call-detector",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "echo \"no lint configured\""
+    "lint": "echo \"no lint configured\"",
+    "build:meeting-test": "node scripts/build-local-test.cjs"
   },
   "keywords": [
     "transcription",
@@ -162,6 +163,9 @@
       "icon.ico",
       "iconTemplate.png",
       "iconTemplate@2x.png"
+    ],
+    "asarUnpack": [
+      "meeting/local/*.py"
     ]
   }
 }

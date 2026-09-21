@@ -111,6 +111,8 @@ class AudioTeeManager extends EventEmitter {
 
     this.process.on('error', (err) => { this.emit('error', err); this.process = null; });
     this.process.on('exit', () => { this.process = null; this.emit('stopped'); });
+    // close follows final stdout delivery; meeting stop must await this boundary.
+    this.process.on('close', () => this.emit('closed'));
   }
 
   stop() {

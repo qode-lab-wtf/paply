@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw, Mic2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,11 @@ interface MeetingDetailProps {
 }
 
 export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
+  const micAudio = useRef<HTMLAudioElement>(null);
+  const systemAudio = useRef<HTMLAudioElement>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editSpeaker, setEditSpeaker] = useState('');
   const [meeting, setMeeting] = useState<MeetingFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
@@ -23,7 +28,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
   const [regenMsg, setRegenMsg] = useState<string | null>(null);
 
   const load = async () => {
-    setLoading(true);
+    if (!meeting) setLoading(true);
     try {
       const data = await window.electronAPI.getMeeting(id);
       setMeeting(data);
@@ -36,6 +41,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
 
   useEffect(() => {
     load();
+    return window.electronAPI.onMeetingsUpdated(data => { if (data.id === id) load(); });
   }, [id]);
 
   const handleToggleTodo = async (idx: number) => {
@@ -78,6 +84,10 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
     await load();
   };
 
+  const playAt = (channel: 'mic' | 'system', seconds: number) => {
+    const audio = (channel === 'mic' ? micAudio : systemAudio).current;
+    if (audio) { audio.currentTime = Math.max(0, seconds - (meeting?.audioOffsets?.[channel] || 0)); audio.play().catch(() => {}); }
+  };
   const speakerLabel = (speaker: string): string => {
     if (speaker === 'me') return 'Ich';
     if (speaker === 'other') return 'Gegenstelle';
@@ -106,8 +116,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
   }
 
   const { index, transcript, summary, audio } = meeting;
-  // Audio wird nach dem Meeting nicht mehr aufbewahrt (Transkript ist der Deliverable).
-  // 'Neu transkribieren' braucht aber die Audiodatei → nur verfügbar, solange Audio existiert.
+  // Reprocessing and playback require a retained audio file.
   const hasAudio = !!(audio.mic || audio.system);
 
   // Sprecher-Farben: jeder Sprecher bekommt eine eigene, bleibende Farbe (nicht grau, auch nach
@@ -147,6 +156,18 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
         </div>
       </div>
 
+      {index.schemaVersion === 2 && (
+        <div className="text-sm space-y-2">
+          <p>Lokaler Gesprächstest · {{ recording: 'Aufnahme läuft', queued: 'Wartet auf Auswertung', processing: 'Wird lokal ausgewertet', failed: 'Auswertung unterbrochen – erneut starten möglich', ready: 'Transkript verfügbar' }[index.processingStatus || ''] || index.processingStatus}</p>
+          {index.captureWarning && <p className="text-amber-600">{index.captureWarning}</p>}
+          {index.processingError && <p className="text-amber-600">{index.processingError}</p>}
+          {index.audioExpiresAt && <p className="text-xs text-muted-foreground">Originalton bis {new Date(index.audioExpiresAt).toLocaleString('de-DE')}. Text bleibt erhalten.</p>}
+          {!!transcript.unmatchedCorrections?.length && <p className="text-amber-600">{transcript.unmatchedCorrections.length} frühere Korrekturen sind gespeichert, konnten aber nicht sicher neu zugeordnet werden.</p>}
+          {!!transcript.unmatchedSpeakerNames?.length && <p className="text-amber-600">Frühere Sprechernamen sind gespeichert. Nach veränderter Stimmenanalyse bitte erneut zuordnen.</p>}
+          {index.reportNeedsRefresh && <p className="text-amber-600">Korrekturen gespeichert. Gesprächsübersicht bitte neu erzeugen.</p>}
+        </div>
+      )}
+      <div className="flex gap-2">{(['txt','html','pdf'] as const).map(format => <Button key={format} size="sm" variant="outline" onClick={() => window.electronAPI.exportMeeting(id, format).catch(() => setRegenMsg('Export fehlgeschlagen.'))}>{format.toUpperCase()} exportieren</Button>)}</div>
       {/* Summary / Protokoll */}
       <Card>
         <CardHeader className="pb-3">
@@ -187,6 +208,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
                 <p className="text-sm">{summary.kurzzusammenfassung}</p>
               </div>
 
+              {summary.sections?.map((section, i) => <details key={i} className="text-sm"><summary className="cursor-pointer font-medium">{section.title}</summary>{section.claims?.map((claim, n) => <div key={n} className="my-3"><p>{claim.text}</p><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Textbelege anzeigen</summary>{claim.sources.map(source => <p key={source.id} className="my-2"><a className="underline" href={'#segment-' + source.id}>{Math.floor(source.tStart / 60)}:{String(Math.floor(source.tStart % 60)).padStart(2, '0')}</a> {source.speaker}: {source.text}</p>)}</details></div>)}{section.sources.map(source => <p key={source.id} className="my-2"><a className="underline" href={'#segment-' + source.id}>{Math.floor(source.tStart / 60)}:{String(Math.floor(source.tStart % 60)).padStart(2, '0')}</a> {source.speaker}: {source.text}</p>)}</details>)}
               {/* Kernpunkte */}
               {summary.kernpunkte.length > 0 && (
                 <div>
@@ -266,7 +288,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
         <CardContent className="space-y-4">
           {/* Sprecher umbenennen / zusammenführen (gleicher Name = Merge) */}
           {(() => {
-            const uniq = Array.from(new Set(transcript.segments.map((s) => s.speaker)));
+            const uniq = Array.from(new Set(transcript.segments.filter(s => index.schemaVersion !== 2 || (s.speakerId && !s.speakerId.endsWith('-unclear'))).map(s => s.speaker)));
             if (uniq.length === 0) return null;
             return (
               <div className="p-3 bg-muted/40 rounded-lg space-y-2">
@@ -304,11 +326,22 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
           <ScrollArea className="h-72">
             <div className="space-y-3 pr-2">
               {transcript.segments.map((seg, i) => (
-                <div key={i} className="flex gap-3 text-sm">
+                <div key={seg.id || i} id={"segment-" + (seg.id || i)} className="flex gap-3 text-sm">
                   <span className={cn('shrink-0 w-24 text-xs mt-0.5', speakerClass(seg.speaker))}>
                     {speakerLabel(seg.speaker)}
+                    <button className="block underline mt-1" onClick={() => playAt(seg.channel, seg.tStart)} disabled={!audio[seg.channel]}>{Math.floor(seg.tStart / 60)}:{String(Math.floor(seg.tStart % 60)).padStart(2, '0')} ▶</button>
                   </span>
-                  <p className="flex-1 leading-relaxed">{seg.text}</p>
+                  <div className="flex-1 leading-relaxed">
+                    <p>{seg.text}</p>
+                    {seg.uncertain && <span className="text-xs text-amber-600">Zuordnung / Wortlaut prüfen</span>}
+                    {seg.possibleEchoOf && <span className="block text-xs text-amber-600">Mögliches Lautsprecher-Echo – Beitrag erhalten</span>}
+                    {seg.id && (editing === seg.id ? <div className="space-y-2 mt-2">
+                      <Input aria-label="Text korrigieren" value={editText} onChange={e => setEditText(e.target.value)} />
+                      <select aria-label="Sprecher zuordnen" value={editSpeaker} onChange={e => setEditSpeaker(e.target.value)} className="border rounded p-1 bg-background">{Array.from(new Map(transcript.segments.filter(s => s.speakerId).map(s => [s.speakerId, s.speaker])).entries()).map(([speakerId, name]) => <option key={speakerId} value={speakerId}>{name}</option>)}</select>
+                      <Button size="sm" onClick={async () => { await window.electronAPI.correctMeetingSegment(id, seg.id!, { text: editText, speakerId: editSpeaker }); setEditing(null); await load(); }}>Speichern</Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditing(null)}>Abbrechen</Button>
+                    </div> : <button className="block text-xs underline mt-1" onClick={() => { setEditing(seg.id!); setEditText(seg.text); setEditSpeaker(seg.speakerId || ''); }}>Korrigieren</button>)}
+                  </div>
                 </div>
               ))}
             </div>
@@ -326,13 +359,13 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
             {audio.mic && (
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">Mikrofon</Label>
-                <audio controls src={`file://${audio.mic}`} className="w-full" />
+                <audio ref={micAudio} controls src={`file://${audio.mic.split("/").map(encodeURIComponent).join("/")}`} className="w-full" />
               </div>
             )}
             {audio.system && (
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">System-Audio</Label>
-                <audio controls src={`file://${audio.system}`} className="w-full" />
+                <audio ref={systemAudio} controls src={`file://${audio.system.split("/").map(encodeURIComponent).join("/")}`} className="w-full" />
               </div>
             )}
           </CardContent>

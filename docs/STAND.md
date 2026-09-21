@@ -2,74 +2,75 @@
 
 2026-09-21 · Phase: Entwicklung/Prüfung · Branch `codex/local-meeting-quality`
 
-## Bestätigtes Ziel
+## Bestätigtes Ziel und aktuelle Grenze
 
-[Kostenloser Gesprächsmodus](PLAN.md), [Entscheidungen](ENTSCHEIDUNGEN.md).
-Erst isolierter lokaler Qualitätsvergleich, danach Integration bei bestandenem Gate.
+[Plan](PLAN.md), [Entscheidungen](ENTSCHEIDUNGEN.md). Kostenloser lokaler
+Gesprächsmodus; Diktat unverändert. Allan hat nach den Vergleichen ausdrücklich
+Produktumsetzung und weitere vorhandene Beispiele angefordert. Deshalb wird eine
+getrennte lokale Test-App gebaut. **Keine Qualitäts- oder Produktivfreigabe.**
+Die installierte `/Applications/paply.app` und ihre Daten bleiben unverändert.
 
-## Nachgewiesen
+## Implementiert in der getrennten Testversion
 
-- Basis `736f5aa` stimmt mit GitHub main überein, ursprünglicher Checkout sauber.
-- Vier relevante Meeting-Module der installierten v1.12.5 stimmen byteweise mit Basis überein.
-- Basis: 129 Tests in 17 Dateien bestanden (21.09.2026); kein Nachweis echter Sprecherqualität.
-- Apple M5, 32 GB, macOS 26.2. Lokale historische Audiodateien vorhanden.
-- Keine offenen GitHub-Issues beim Sitzungsstart.
+- Eigene App-ID, eigener Datenordner und Shortcut Cmd+Option+Shift+X.
+- Mikrofon und Systemton separat in atomaren Zwei-Sekunden-Dateien gesichert.
+  Fortlaufende Abtastratenumrechnung statt Rundungsverlust je Audioblock;
+  Endstücke werden vor Stop bestätigt und gespeichert.
+- Lokales Whisper Large v3 und originales pyannote Community-1 in getrennten,
+  sequenziellen Prozessen mit gesperrtem Netzwerk. Checkpoints/Wiederaufnahme.
+- Neutrale Sprecher, Wortzeit-Zuordnung und sichtbare Unsicherheit. Erkannte Stimme
+  ohne ASR-Text als Lücke sichtbar. Keine pauschale Löschung bei Zeitüberlappung;
+  Audio-Korrelation markiert mögliches Echo, löscht keine Beiträge.
+- Textstellen-Wiedergabe, unabhängige gespeicherte Text-/Sprecherkorrekturen,
+  unverknüpfbare frühere Korrekturen sichtbar, TXT/HTML/PDF-Export.
+- Versionierte Sitzung mit Aufnahmezeit, Modellversionen, Fehlern und Ablaufdatum.
+  LaunchAgent für neue Audioaufnahmen nach sieben Tagen einschließlich Zwischenkopien.
+  Historische Daten werden nicht rückwirkend bereinigt.
+- Quellenübersicht als transparenter Ersatz, solange kein Berichtsmodell qualifiziert
+  ist. Optionaler abschnittsweiser lokaler Berichtsentwurf in Arbeit, mit echten
+  Quellenverweisen und eigener Modellversion. Quellenbezug beweist keine Faktentreue.
 
-## Aktuelle Arbeit / nächster Schritt
+## Nachgewiesen am 21.09.2026
 
-Isolierte Laufzeiten und reproduzierbares Vergleichswerkzeug in `tools/meeting-eval/` angelegt.
-Qwen-ASR, Whisper, Parakeet und FluidAudio auf echten lokalen Ausschnitten ausgeführt.
-Alle vier bestanden einen 21-s-Probelauf mit gesperrtem Netzwerk; Messwerte in
-[`validation/2026-09-21-local-smoke.json`](validation/2026-09-21-local-smoke.json).
-Das ist kein Genauigkeitsnachweis. 18 Harness-Tests bestanden; Referenzprüfung
-verweigert ohne menschliche Bestätigung ausdrücklich eine Freigabe.
-Private selbstenthaltene Hörprobe erzeugt und im In-App-Browser geprüft.
-Modellrevisionen/Digests in `tools/meeting-eval/models.lock.json` festgehalten.
+- Ursprungsbasis `736f5aa` identisch mit damaligem GitHub main; vier relevante Module
+  der installierten v1.12.5 bytegleich. M5/32 GB/macOS26.2.
+- Fünf historische Gesprächsausschnitte, neun Tonspuren. Zusätzliche drei Gespräche
+  mit zwölf erfolgreichen netzgesperrten Modellläufen:
+  [Zusatzaufnahmen](validation/2026-09-21-additional-recordings.json).
+- Der neue Zusammenführungscode erhält den gesamten erkannten ASR-Text auf allen
+  neun Spuren: [Erhaltungsprüfung](validation/2026-09-21-product-text-preservation.json).
+  Das beweist weder vollständige Spracherkennung noch richtige Sprecherzuordnung.
+- Reale 21-s-Aufnahme mit dem neuen App-Backend vollständig offline verarbeitet:
+  ASR → Sprecheranalyse → Zusammenführung → Quellenübersicht, Status ready.
+- 137 App-Tests/18 Dateien; 31 Python-Tests. Fehler/Wiederaufnahme, Korrekturen,
+  Aufnahme-Endstücke, Löschung während Verarbeitung, Erhalt überlappender Texte.
+- Vite-Build erfolgreich. Vier bekannte TypeScript-Fehler Profile/CustomAgent in
+  Dashboard bestehen auch auf der unveränderten Basis; nicht als grüner Typecheck ausgeben.
+- Test-App lokal gepackt/ad-hoc signiert und gestartet. Nicht-ASCII-Executable-Name
+  verursachte Startabsturz; ASCII-Bündelname `Paply Meeting Test` behebt ihn auf diesem Mac.
+- In echter App-Oberfläche fünf Testgespräche geöffnet; Textstelle startet Audio bei
+  17,64 s; Korrektur gespeichert; PDF aus der App als Datei erzeugt.
+- LaunchAgent geladen, letzter Exit 0. Bei geschlossener Test-App abgelaufene Test-
+  Audiodatei entfernt, Transkript und historische Testaufnahme erhalten.
 
-Original-pyannote-Zugang freigegeben, begrenzter Leseschlüssel nach Allans explizitem
-Ja erstellt und zum Download benutzt. Kein Schlüssel in Projekt/CLI-Konfiguration
-abgelegt; Zwischenablage anschließend geleert. Originalmodell lokal vorhanden,
-Revision und sieben Artefakthashes festgeschrieben. Erster netzgesperrter 21-s-Lauf
-erfolgreich (28,17 s, 4,07 GB Einzelprozess-RSS), ohne Teilnehmerzahl-Vorgabe.
-Auch beide 90-s-Spuren wurden erfolgreich netzgesperrt verarbeitet.
-[Messwerte](validation/2026-09-21-pyannote-offline.json). Auf der Mikrofonspur
-findet pyannote zwei, FluidAudio drei Sprechergruppen; richtige Zuordnung ungeprüft.
-Alle drei privaten Hörvergleiche um pyannote ergänzt. Kein Zugangshindernis mehr.
-Berichtsvergleich Gemma3-4B / Qwen3-8B durchgeführt: beide produzieren mit einem
-JSON-Schema strukturell gültige Ergebnisse, aber beim Quellenvergleich fallen
-unbelegte Ergänzungen bzw. vertauschte Rollen auf. Zweiter Vergleich mit identischem
-Whisper-Text, exakten Belegzitaten und Qwen-Analysemodus wird von der Zitatprüfung
-bei beiden Modellen abgelehnt. Kein Berichtsmodell freigegeben.
-Die separate originale pyannote-Laufzeit und das Modell sind installiert.
-Die installierte App, produktive Aufnahmen und Diktierfunktion bleiben unverändert.
+## Offen / nächster Schritt
 
-## Offen
+- Qwen3.5-9B mit Ollama0.34.2 liefert jetzt strukturell gültige Berichte auf zwei
+  Beispielen; inhaltlich weiterhin unzulässige Vereinfachungen/Zuordnungen. Nicht
+  aktiviert. Größerer Kandidat Qwen3.8-27B wird lokal vorbereitet. Qwen3-8B und Gemma3-4B
+  hatten Rollen-/Bedeutungsfehler und bleiben ungeeignet für eine Freigabe.
+- Erneute UI-Prüfung bestanden: zwei Sprecher ohne Mitzählen unklarer Zuordnung;
+  Wiedergabe auch nach gespeicherter Korrektur bei 17,64 s. PDF vollständig und lesbar
+  auf zwei A4-Seiten geprüft. Mikrofon-Neuverbindung erhält erkannte Zeitlücken mit
+  Stille; automatischer Test bestanden, echte Gerätewechsel noch ausstehend.
+- Echte Aufnahmeberechtigungen, Gerätewechsel, lange Aufnahmen und Raum/Telefon/
+  Mischsituation praktisch abnehmen. Systemtonbeginn derzeit aus erster Ankunft
+  geschätzt; keine nachgewiesene hardwareübergreifende Langzeitsynchronität.
+- Menschlich bestätigte Referenz fehlt: 95 % Sprecherzeit, ≤10 % WER und vollständige
+  faktentreue Berichte sind weiterhin Prüfziele. Kurze Anisa-Aufnahme kann TV enthalten.
+- Größere Modelle/weitere Sprecherverfahren nur anhand realer Qualitätsverbesserung
+  auswählen. Keine Umstellung auf kostenpflichtige Dienste.
+- Instinct-Empfang weiterhin nicht nachgewiesen; GitHub-Sichtbarkeit reicht nicht.
 
-Menschlich bestätigte Referenz für Sprecher/Inhalt und Abdeckung Raum/Telefon/Hybrid.
-Allan kann Hintergrund-TV bei der 21-s-Aufnahme nicht ausschließen. Sie bleibt
-unklassifiziert. Auf seinen Wunsch vorhandene Aufnahmen weiterverwenden; keine neue
-Aufnahme oder QuickTime-Bedienung erforderlich. Zusätzlich 90 s Systemton mit
-Whisper, Parakeet und FluidAudio bei gesperrtem Netzwerk erfolgreich ausgewertet.
-Private Hörvergleiche für Mikrofon/Systemton erstellt. Diagnose mit der bisherigen
-Zeitüberlappungsregel verwirft 28 von 36 neuen Whisper-Mikrofonsegmenten; das beweist
-noch nicht, wie viel davon Echo bzw. echter Gesprächsbeitrag ist.
-Noch keine Modellkombination qualifiziert; Integration/Ansicht/Retention/Export stehen
-hinter diesem Qualitätsgate. Instinct-Empfang nicht nachgewiesen.
-
-## Nächster Prüfstand: verständliche Zuordnung
-
-`conversation_preview.py` verknüpft vorhandene Whisper-Wortzeiten mit jeder
-Sprecheranalyse getrennt. Kein Löschen als Echo; Überlappung/zu wenig zeitliche
-Abdeckung bleiben unklar. Unvollständige Wortausrichtung erhält den Originaltext.
-Die kurze Antwort am Ende wird in beiden Kandidaten Sprecher 2 zugeordnet.
-Stimmspannen ohne erkannten Text sind separat markiert; weiterhin keine bestätigte
-Referenz. Private Vorschau im lokalen outputs-Ordner, 26 Harness-Tests bestanden.
-Automatisches Öffnen der file-URL wurde durch die Browser-URL-Prüfung blockiert;
-kein Umweg versucht, Dateilink für Allan verfügbar.
-
-Berichtsexperiment `--evidence-v2`: einzelne Textstellen mit stabilen IDs und Zeiten,
-belegte Übersicht, Quellenzitate deterministisch aus Originaltext ergänzt, keine
-selbst erfundenen Zitate des Modells. Vollständigkeit der Quellsegmentierung geprüft.
-Erneuter Vergleich abgeschlossen: Qwen3-8B strukturell gültig (199 s), aber bei
-Textprüfung weiterhin falsche Rollen-/Bedeutungszuordnung und überbreite Beleglisten.
-Gemma3-4B-Ausgabe nach 104 s vom Validator abgelehnt. Kein Berichtsmodell freigegeben.
+Private Rohaufnahmen, Transkripte, Modellartefakte und Laufzeitprotokolle bleiben
+lokal in ignoriertem `work/` bzw. im separaten Test-App-Datenordner.

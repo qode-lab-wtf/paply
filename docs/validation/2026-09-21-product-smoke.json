@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-21",
+  "appTests": {
+    "passed": 137,
+    "files": 18
+  },
+  "pythonTests": {
+    "passed": 31
+  },
+  "realOfflinePipeline": {
+    "audioSeconds": 21,
+    "status": "ready",
+    "segments": 12,
+    "report": "source-overview"
+  },
+  "nativeUI": {
+    "launched": true,
+    "historicalSamples": 5,
+    "seekSeconds": 17.64,
+    "correctionSaved": true,
+    "pdfFileWritten": true,
+    "audioAfterCorrection": true,
+    "speakerCountExcludesUnknown": true,
+    "pdfPages": 2,
+    "pdfTextComplete": true,
+    "pdfVisuallyReviewed": true
+  },
+  "retentionWithAppClosed": {
+    "launchAgentExit": 0,
+    "expiredTestAudioRemoved": true,
+    "transcriptPreserved": true,
+    "historicalAudioPreserved": true
+  },
+  "productionAppReplaced": false,
+  "qualityApproved": false,
+  "limits": [
+    "No reviewed speaker reference",
+    "No WER/DER acceptance",
+    "No live hybrid capture acceptance",
+    "Generative report model not approved",
+    "Four pre-existing TypeScript errors"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "tracks": [
+    {
+      "sample": "eval-a",
+      "channel": "mic",
+      "sourceSegments": 36,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 4
+    },
+    {
+      "sample": "eval-a",
+      "channel": "system",
+      "sourceSegments": 31,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 3
+    },
+    {
+      "sample": "eval-b",
+      "channel": "mic",
+      "sourceSegments": 4,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 3
+    },
+    {
+      "sample": "eval-c",
+      "channel": "mic",
+      "sourceSegments": 74,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 1
+    },
+    {
+      "sample": "eval-c",
+      "channel": "system",
+      "sourceSegments": 4,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 23
+    },
+    {
+      "sample": "eval-d",
+      "channel": "mic",
+      "sourceSegments": 45,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 3
+    },
+    {
+      "sample": "eval-d",
+      "channel": "system",
+      "sourceSegments": 7,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 2
+    },
+    {
+      "sample": "eval-e",
+      "channel": "mic",
+      "sourceSegments": 15,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 3
+    },
+    {
+      "sample": "eval-e",
+      "channel": "system",
+      "sourceSegments": 9,
+      "preservedAllRecognizedText": true,
+      "untranscribedSpeechMarkers": 0
+    }
+  ],
+  "qualityApproved": false,
+  "scope": "Preservation of ASR output only, not correctness or completeness relative to audio"
+}

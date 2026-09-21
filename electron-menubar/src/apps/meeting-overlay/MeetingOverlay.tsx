@@ -13,40 +13,7 @@ interface MeetingStatus {
   systemLevel: number;
 }
 
-// Resampling auf die Zielrate (16 kHz). Läuft auf einem Default-AudioContext
-// (Geräterate) — ein erzwungener 16-kHz-Context lieferte in Electron/Chromium mit
-// MediaStreamSource teils STILLE (Capture-Regression).
-// - fromRate > toRate: Downsampling per MITTELUNG (Box-Filter) = leichtes Anti-Aliasing.
-// - fromRate < toRate: Upsampling per linearer Interpolation. WICHTIG, weil sonst ein
-//   Sub-16k-Gerät (z.B. Bluetooth-Headset im SCO-Profil mit 8 kHz) unverändert als
-//   16 kHz weiterverarbeitet würde → doppeltes Tempo/Tonhöhe + kaputtes Transkript.
-function downsample(f32: Float32Array, fromRate: number, toRate: number): Float32Array {
-  if (fromRate === toRate) return f32;
-  const ratio = fromRate / toRate;
-  const outLen = Math.max(1, Math.floor(f32.length / ratio));
-  const out = new Float32Array(outLen);
-  if (fromRate < toRate) {
-    // Upsampling: linear zwischen den Stützstellen interpolieren
-    for (let i = 0; i < outLen; i++) {
-      const pos = i * ratio;
-      const i0 = Math.floor(pos);
-      const frac = pos - i0;
-      const a = f32[i0] ?? 0;
-      const b = f32[i0 + 1] ?? a;
-      out[i] = a + (b - a) * frac;
-    }
-    return out;
-  }
-  // Downsampling: über das Quell-Fenster mitteln
-  for (let i = 0; i < outLen; i++) {
-    const start = Math.floor(i * ratio);
-    const end = Math.min(f32.length, Math.floor((i + 1) * ratio));
-    let s = 0;
-    for (let j = start; j < end; j++) s += f32[j];
-    out[i] = s / Math.max(1, end - start);
-  }
-  return out;
-}
+import { MeetingResampler } from '@/lib/meeting-resampler';
 
 function floatToInt16(f32: Float32Array): Int16Array {
   const out = new Int16Array(f32.length);
@@ -67,19 +34,9 @@ function rms(int16: Int16Array): number {
   return Math.sqrt(sum / int16.length);
 }
 
-// Mikrofon-Constraints — IDENTISCH zum normalen Diktat-Modus (Command+X), der bei Allan auch
-// in lauter Umgebung (TV) zuverlässig funktioniert: EchoCancellation + NoiseSuppression +
-// AutoGainControl AN. AGC hebt leise Sprache automatisch an (gemessen: ohne AGC nur ~−30 dBFS →
-// Whisper rät), NS entfernt Raum-/TV-Lärm. Die lokale Sprecher-Trennung läuft über die TONHÖHE,
-// die NS/AGC übersteht; die „Ich"-Erkennung nutzt „wer zuerst spricht" (nicht Lautstärke), daher
-// kein Konflikt mit AGC. So: gute Transkription UND Sprecher-Trennung.
+// Preserve voices and overlapping speech for offline diarization; dictation is separate.
 function micConstraints(): MediaTrackConstraints {
-  return {
-    channelCount: 1,
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-  };
+  return { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
 }
 
 function formatDuration(ms: number): string {
@@ -117,10 +74,33 @@ export function MeetingOverlay() {
   const sysPcmBufferRef = useRef<Float32Array>(new Float32Array(0));
   const isWindows = typeof navigator !== 'undefined' && /windows/i.test(navigator.userAgent);
 
+  const sessionIdRef = useRef<string | null>(null);
+  const captureGenerationRef = useRef(0);
+  const captureRequestedRef = useRef(false);
+  const micStartingRef = useRef(false);
+  const micResamplerRef = useRef<MeetingResampler | null>(null);
+  const sysResamplerRef = useRef<MeetingResampler | null>(null);
+  const micEpochRef = useRef(0);
+  const micSamplesRef = useRef(0);
   const TARGET_RATE = 16000;
   const CHUNK_SAMPLES = TARGET_RATE; // ~1 second
 
+  const sendMic = (samples: Float32Array) => {
+    if (!samples.length) return;
+    const int16 = floatToInt16(samples);
+    micSamplesRef.current += samples.length;
+    window.electronAPI.sendMicPcm(int16.buffer as ArrayBuffer, { sessionId: sessionIdRef.current,
+      endAtMs: micEpochRef.current + micSamplesRef.current / TARGET_RATE * 1000 });
+    window.electronAPI.sendMicLevel(rms(int16));
+  };
   const stopCapture = () => {
+    captureGenerationRef.current++;
+    micStartingRef.current = false;
+    const tail = micResamplerRef.current?.flush() || new Float32Array(0);
+    const final = new Float32Array(pcmBufferRef.current.length + tail.length);
+    final.set(pcmBufferRef.current); final.set(tail, pcmBufferRef.current.length);
+    sendMic(final);
+    micResamplerRef.current = null;
     workletNodeRef.current?.disconnect();
     srcNodeRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -133,18 +113,29 @@ export function MeetingOverlay() {
   };
 
   const startCapture = async () => {
-    if (audioCtxRef.current) return; // bereits aktiv — Doppelstart (Push+Pull) vermeiden
+    if (audioCtxRef.current || micStartingRef.current) return;
+    micStartingRef.current = true;
+    const generation = captureGenerationRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: micConstraints(),
       });
+      if (generation !== captureGenerationRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
+      stream.getAudioTracks().forEach(track => { track.onended = () => {
+        if (captureRequestedRef.current && generation === captureGenerationRef.current) {
+          window.electronAPI.reportMeetingCaptureError('Mikrofon unterbrochen – Standardgerät wird neu verbunden; Aufnahme bitte prüfen.');
+          stopCapture(); startCapture();
+        }
+      }; });
 
       // Default-AudioContext (Geräterate). KEIN erzwungenes sampleRate:16000 — das lieferte
       // mit MediaStreamSource in Electron/Chromium teils eine STILLE Spur. Auf 16 kHz wird
       // in JS per Mittelung heruntergerechnet (downsample()).
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
+      micResamplerRef.current = new MeetingResampler(ctx.sampleRate, TARGET_RATE);
+      micSamplesRef.current = 0;
 
       await ctx.audioWorklet.addModule(new URL('./mic-worklet.js', import.meta.url));
 
@@ -154,11 +145,14 @@ export function MeetingOverlay() {
       const node = new AudioWorkletNode(ctx, 'mic-processor');
       workletNodeRef.current = node;
 
+      micEpochRef.current = Date.now();
+      if (generation !== captureGenerationRef.current) { stream.getTracks().forEach(t => t.stop()); ctx.close(); return; }
       srcNode.connect(node);
 
       node.port.onmessage = (e: MessageEvent<Float32Array>) => {
         const f32: Float32Array = e.data;
-        const downsampled = downsample(f32, ctx.sampleRate, TARGET_RATE);
+        if (!micResamplerRef.current) return;
+        const downsampled = micResamplerRef.current.push(f32);
 
         const prev = pcmBufferRef.current;
         const merged = new Float32Array(prev.length + downsampled.length);
@@ -170,18 +164,19 @@ export function MeetingOverlay() {
           const chunk = pcmBufferRef.current.slice(0, CHUNK_SAMPLES);
           pcmBufferRef.current = pcmBufferRef.current.slice(CHUNK_SAMPLES);
 
-          const int16 = floatToInt16(chunk);
-          // int16 ist frisch alloziert → sein buffer ist immer ein normaler ArrayBuffer
-          window.electronAPI.sendMicPcm(int16.buffer as ArrayBuffer);
-          window.electronAPI.sendMicLevel(rms(int16));
+          sendMic(chunk);
         }
       };
     } catch (err) {
       console.error('MeetingOverlay: mic error', err);
-    }
+      window.electronAPI.reportMeetingCaptureError(String(err));
+    } finally { micStartingRef.current = false; }
   };
 
   const stopSystemCapture = () => {
+    const pending = sysPcmBufferRef.current;
+    if (pending.length) window.electronAPI.sendSystemPcm(floatToInt16(pending).buffer as ArrayBuffer);
+    sysResamplerRef.current = null;
     sysWorkletRef.current?.disconnect();
     sysSrcRef.current?.disconnect();
     sysStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -210,6 +205,7 @@ export function MeetingOverlay() {
 
       const ctx = new AudioContext();
       sysAudioCtxRef.current = ctx;
+      sysResamplerRef.current = new MeetingResampler(ctx.sampleRate, TARGET_RATE);
 
       await ctx.audioWorklet.addModule(new URL('./mic-worklet.js', import.meta.url));
 
@@ -223,7 +219,8 @@ export function MeetingOverlay() {
 
       node.port.onmessage = (e: MessageEvent<Float32Array>) => {
         const f32: Float32Array = e.data;
-        const downsampled = downsample(f32, ctx.sampleRate, TARGET_RATE);
+        if (!sysResamplerRef.current) return;
+        const downsampled = sysResamplerRef.current.push(f32);
 
         const prev = sysPcmBufferRef.current;
         const merged = new Float32Array(prev.length + downsampled.length);
@@ -246,7 +243,16 @@ export function MeetingOverlay() {
   };
 
   useEffect(() => {
-    window.electronAPI.onMeetingStarted((d) => {
+    let mounted = true;
+    const unsubs: (() => void)[] = [];
+    unsubs.push(window.electronAPI.onMeetingCaptureStop((d) => {
+      captureRequestedRef.current = false;
+      stopCapture(); stopSystemCapture();
+      window.electronAPI.acknowledgeMeetingCaptureStop(d.id);
+    }));
+    unsubs.push(window.electronAPI.onMeetingStarted((d) => {
+      captureRequestedRef.current = true;
+      sessionIdRef.current = d.id;
       setActive(true);
       setHealth('green');
       setReason('');
@@ -257,9 +263,10 @@ export function MeetingOverlay() {
       if (d) { setDiarization(!!d.diarization); const ca = !!d.callActive; callActiveRef.current = ca; setCallActive(ca); }
       startCapture();
       startSystemCapture();
-    });
+    }));
 
-    window.electronAPI.onMeetingStopped(() => {
+    unsubs.push(window.electronAPI.onMeetingStopped(() => {
+      captureRequestedRef.current = false;
       stopCapture();
       stopSystemCapture();
       setActive(false);
@@ -268,33 +275,36 @@ export function MeetingOverlay() {
       setSystemLevel(0);
       callActiveRef.current = false;
       setCallActive(false);
-    });
+    }));
 
     // Anruf-Erkennung (live): ein anderer Prozess nutzt das Mikro → Gegenstelle wird mitgenommen.
-    // (Die Mikro-Constraints sind konstant — EC/NS/AGC immer an —, daher nur die Anzeige setzen.)
-    window.electronAPI.onMeetingCallState((d) => {
+    // Capture constraints stay unchanged during a session; update only the indicator.
+    unsubs.push(window.electronAPI.onMeetingCallState((d) => {
       const ca = !!(d && d.active);
       callActiveRef.current = ca;
       setCallActive(ca);
-    });
+    }));
 
-    window.electronAPI.onMeetingStatus((s: MeetingStatus) => {
+    unsubs.push(window.electronAPI.onMeetingStatus((s: MeetingStatus) => {
       setHealth(s.color);
       setReason(s.reason);
       setDurationMs(s.durationMs);
       setMicLevel(s.micLevel);
       setSystemLevel(s.systemLevel);
-    });
+    }));
 
     // Live-Transkript (R5): bei jedem fertigen Chunk die gemergten Segmente anzeigen
-    window.electronAPI.onMeetingTranscriptChunk((segs: MeetingSegment[]) => {
+    unsubs.push(window.electronAPI.onMeetingTranscriptChunk((segs: MeetingSegment[]) => {
       setLiveSegments(segs);
-    });
+    }));
 
     // Pull-Modell gegen die Start-Race: falls das 'meeting:started'-Push-Event
     // verloren ging (Fenster beim ersten Start noch nicht geladen), Status aktiv abfragen.
     window.electronAPI.getMeetingStatus().then((st) => {
+      if (!mounted) return;
       if (st && st.active) {
+        captureRequestedRef.current = true;
+        sessionIdRef.current = st.id;
         setActive(true);
         setDiarization(!!st.diarization);
         const ca = !!st.callActive; callActiveRef.current = ca; setCallActive(ca);
@@ -304,6 +314,8 @@ export function MeetingOverlay() {
     });
 
     return () => {
+      captureRequestedRef.current = false;
+      mounted = false; unsubs.forEach(unsub => unsub());
       stopCapture();
       stopSystemCapture();
     };

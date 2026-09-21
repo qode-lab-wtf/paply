@@ -73,6 +73,7 @@ export function Dashboard() {
           window.electronAPI.getSnippets(),
         ]);
         setSettings(settingsData);
+        if (settingsData.localMeetingTest) setActiveNav("meetings");
         setHistory(historyData);
         setStats(statsData);
         setProfiles(profilesData.profiles);
@@ -185,11 +186,11 @@ export function Dashboard() {
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-sm">
             <Mic className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-sidebar-foreground">paply</span>
+          <span className="font-semibold text-sidebar-foreground">{settings?.localMeetingTest ? 'Paply · Gesprächstest' : 'paply'}</span>
         </div>
 
         <nav className="flex-1 p-2 space-y-1">
-          {navItems.map((item) => (
+          {navItems.filter(item => !settings?.localMeetingTest || item.id === 'meetings').map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveNav(item.id)}

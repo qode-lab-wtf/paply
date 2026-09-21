@@ -1,6 +1,7 @@
 import type { MeetingIndexEntry, MeetingFull, MeetingSummary, MeetingSegment } from './meeting';
 
 export interface Settings {
+  localMeetingTest?: boolean;
   groqApiKey: string;
   enablePolish: boolean;
   shortcut: string;
@@ -168,7 +169,13 @@ export interface ElectronAPI {
   stopMeeting: () => Promise<{ id: string | null } | null>;
   getMeetingStatus: () => Promise<{ active: boolean; id: string | null; diarization: boolean; callActive: boolean }>;
   setOverlayExpanded: (expanded: boolean) => void;
-  sendMicPcm: (buf: ArrayBuffer) => void;
+  sendMicPcm: (buf: ArrayBuffer, meta?: { sessionId: string | null; endAtMs: number }) => void;
+  reportMeetingCaptureError: (error: string) => void;
+  acknowledgeMeetingCaptureStop: (id: string) => void;
+  onMeetingCaptureStop: (cb: (data: { id: string }) => void) => () => void;
+  correctMeetingSegment: (id: string, segmentId: string, patch: { text?: string; speakerId?: string }) => Promise<boolean>;
+  exportMeeting: (id: string, format: 'txt' | 'html' | 'pdf') => Promise<boolean>;
+  onMeetingsUpdated: (cb: (data: { id: string }) => void) => () => void;
   sendMicLevel: (lvl: number) => void;
   sendSystemPcm: (buf: ArrayBuffer) => void;
   setMeetingDiarization: (enabled: boolean) => Promise<boolean>;
@@ -180,11 +187,11 @@ export interface ElectronAPI {
   updateSpeakerName: (id: string, channel: 'mic' | 'system', name: string) => Promise<boolean>;
   renameSpeaker: (id: string, fromSpeaker: string, toName: string) => Promise<boolean>;
   toggleMeetingTodo: (id: string, idx: number) => Promise<boolean>;
-  onMeetingStatus: (cb: (s: { color: 'green' | 'yellow' | 'red'; reason: string; durationMs: number; micLevel: number; systemLevel: number }) => void) => void;
-  onMeetingTranscriptChunk: (cb: (segs: MeetingSegment[]) => void) => void;
-  onMeetingStarted: (cb: (d: { id: string; diarization?: boolean; callActive?: boolean }) => void) => void;
-  onMeetingStopped: (cb: (d: { id: string }) => void) => void;
-  onMeetingCallState: (cb: (d: { active: boolean }) => void) => void;
+  onMeetingStatus: (cb: (s: { color: 'green' | 'yellow' | 'red'; reason: string; durationMs: number; micLevel: number; systemLevel: number }) => void) => () => void;
+  onMeetingTranscriptChunk: (cb: (segs: MeetingSegment[]) => void) => () => void;
+  onMeetingStarted: (cb: (d: { id: string; diarization?: boolean; callActive?: boolean }) => void) => () => void;
+  onMeetingStopped: (cb: (d: { id: string }) => void) => () => void;
+  onMeetingCallState: (cb: (d: { active: boolean }) => void) => () => void;
 
   // Platform
   getPlatform: () => Promise<Platform>;

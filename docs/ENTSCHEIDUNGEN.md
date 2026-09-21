@@ -26,3 +26,12 @@ eines begrenzten Download-Schlüssels. Erlaubt wurden Leserechte für dieses Mod
 keine Schreibrechte oder kostenpflichtigen Inferenzdienste. Der Schlüssel wurde
 nur für den Download verwendet, nicht in Git oder der CLI-Konfiguration abgelegt.
 Vorhandene Aufnahmen weiterverwenden; keine neue QuickTime-Aufnahme verlangen.
+
+## 2026-09-21 — Umsetzung ausdrücklich fortsetzen
+
+Allan: „vllt auch andere beispiele nehmen, nicht nur das eine … ich brauche einfach
+nur ein fertiges zuverlässiges … produkt … GO!“ (Schreibweise gekürzt).
+Bestätigt sind weitere vorhandene Beispiele und eigenständige Produktumsetzung.
+Technische Auslegung: isolierte Testintegration jetzt voranbringen, ohne die
+installierte App auszutauschen oder die ursprünglichen Qualitätsziele als erfüllt
+zu behaupten. Die Testversion darf bekannte Grenzen sichtbar machen.

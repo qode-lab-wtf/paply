@@ -2,6 +2,12 @@
 // Siehe docs/superpowers/specs/2026-06-08-meeting-recorder-design.md
 
 export interface MeetingIndexEntry {
+  schemaVersion?: number;
+  processingStatus?: string;
+  processingError?: string | null;
+  captureWarning?: string | null;
+  audioExpiresAt?: number;
+  reportNeedsRefresh?: boolean;
   id: string; // `${startEpochMs}-${shortId}`
   startTime: string; // ISO
   durationMs: number;
@@ -20,6 +26,11 @@ export interface MeetingIndexEntry {
 }
 
 export interface MeetingSegment {
+  id?: string;
+  speakerId?: string;
+  uncertain?: boolean;
+  possibleEchoOf?: string;
+  corrected?: boolean;
   tStart: number; // Sekunden ab Sessionstart
   tEnd: number;
   speaker: 'me' | 'other' | string; // Phase 2: 'other-1', ...
@@ -28,6 +39,9 @@ export interface MeetingSegment {
 }
 
 export interface MeetingTranscript {
+  provisional?: boolean;
+  unmatchedCorrections?: string[];
+  unmatchedSpeakerNames?: string[];
   segments: MeetingSegment[];
   language: string;
 }
@@ -39,6 +53,8 @@ export interface MeetingTodo {
 }
 
 export interface MeetingSummary {
+  reportStatus?: string;
+  sections?: { title: string; claims?: { text: string; sources: { id: string; tStart: number; speaker: string; text: string }[] }[]; sources: { id: string; tStart: number; speaker: string; text: string }[] }[];
   kurzzusammenfassung: string;
   kernpunkte: string[];
   todos: MeetingTodo[];
@@ -48,6 +64,7 @@ export interface MeetingSummary {
 }
 
 export interface MeetingFull {
+  audioOffsets?: { mic?: number; system?: number };
   index: MeetingIndexEntry;
   transcript: MeetingTranscript;
   summary: MeetingSummary | null;

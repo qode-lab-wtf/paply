@@ -15,6 +15,16 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { spawn, exec } = require('node:child_process');
 
+// A packaged test build has its own runtime pointer and identity, never production keys.
+const bundledLocalConfig = path.join(process.resourcesPath || __dirname, 'local-runtime.json');
+if (!process.env.PAPLY_LOCAL_MEETINGS_CONFIG && fs.existsSync(bundledLocalConfig)) {
+  process.env.PAPLY_LOCAL_MEETINGS_CONFIG = bundledLocalConfig;
+  app.setName('Paply Gespräch Test');
+  process.env.PAPLY_USER_DATA = path.join(app.getPath('appData'), 'Paply Gespräch Test');
+}
+const localMeetingTest = !!process.env.PAPLY_LOCAL_MEETINGS_CONFIG;
+if (localMeetingTest && !process.env.PAPLY_USER_DATA) throw new Error('Lokaler Gesprächstest benötigt einen getrennten Datenordner');
+
 // ============================================================================
 // ISOLIERTER TEST-MODUS
 // Wenn PAPLY_USER_DATA gesetzt ist, nutzt die App einen separaten Daten-Ordner.
@@ -655,6 +665,7 @@ function setupAutoUpdater() {
 }
 
 async function checkForUpdates(silent = false) {
+  if (localMeetingTest) return;
   if (updateCheckInProgress || downloadInProgress) {
     console.log('Update check already in progress');
     return;
@@ -685,6 +696,7 @@ async function checkForUpdates(silent = false) {
 
 // Fallback manual update check (for unsigned builds)
 async function checkForUpdatesManual() {
+  if (localMeetingTest) return;
   try {
     const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
     if (!response.ok) {
@@ -1830,6 +1842,15 @@ function acceleratorToUioKeycode(accelerator) {
 }
 
 function registerHotkey() {
+  if (localMeetingTest) {
+    const key = 'Command+Option+Shift+X';
+    globalShortcut.unregister(key);
+    globalShortcut.register(key, () => {
+      if (meetingController?.isActive()) meetingController.stop().catch(console.error);
+      else { try { meetingController?.start(); } catch (e) { dialog.showErrorBox('Aufnahme nicht gestartet', e.message); } }
+    });
+    return;
+  }
   const shortcut = getStore().get('shortcut');
 
   // Unregister previous shortcut
@@ -2147,7 +2168,7 @@ function setupIpcHandlers() {
     const h = expanded ? 240 : 64;
     meetingOverlayWindow.setBounds({ x: width - w - 24, y: 24, width: w, height: h });
   });
-  ipcMain.on('meeting:mic-pcm', (_e, buf) => { if (meetingController) meetingController.onMicPcm(Buffer.from(buf)); });
+  ipcMain.on('meeting:mic-pcm', (_e, buf, meta) => { if (meetingController) meetingController.onMicPcm(Buffer.from(buf), meta); });
   ipcMain.on('meeting:mic-level', (_e, lvl) => { if (meetingController) meetingController.onMicLevel(lvl); });
   // Windows: System-Loopback-PCM kommt aus dem Overlay-Renderer (macOS nutzt AudioTee).
   ipcMain.on('meeting:system-pcm', (_e, buf) => { windowsAudioManager.onSystemPcm(Buffer.from(buf)); });
@@ -2155,20 +2176,43 @@ function setupIpcHandlers() {
   ipcMain.handle('meeting:set-diarization', (_e, enabled) => (meetingController ? meetingController.setSessionDiarization(enabled) : false));
   ipcMain.handle('meetings:list', () => (meetingStore ? meetingStore.list() : []));
   ipcMain.handle('meetings:get', (_e, id) => (meetingStore ? meetingStore.get(id) : null));
-  ipcMain.handle('meetings:delete', (_e, id) => (meetingStore ? meetingStore.remove(id) : false));
+  ipcMain.handle('meetings:delete', (_e, id) => {
+    if (meetingController?.getStatus().id === id) throw new Error('Laufende Aufnahme zuerst stoppen');
+    meetingController?.pipeline?.cancel(id);
+    return meetingStore ? meetingStore.remove(id) : false;
+  });
   ipcMain.handle('meetings:retranscribe', (_e, id) => (meetingController ? meetingController.retranscribe(id) : false));
   ipcMain.handle('meetings:regenerateSummary', (_e, id) => (meetingController ? meetingController.regenerateSummary(id) : null));
   ipcMain.handle('meetings:updateSpeakerName', (_e, id, channel, name) => (meetingStore ? meetingStore.updateSpeakerName(id, channel, name) : false));
   ipcMain.handle('meetings:renameSpeaker', (_e, id, fromSpeaker, toName) => (meetingStore ? meetingStore.renameSpeaker(id, fromSpeaker, toName) : false));
   ipcMain.handle('meetings:toggleTodo', (_e, id, idx) => (meetingStore ? meetingStore.toggleTodo(id, idx) : false));
 
+  ipcMain.on('meeting:capture-stopped', (_e, id) => meetingController?.acknowledgeStop?.(id));
+  ipcMain.on('meeting:capture-error', (_e, message) => meetingController?.onCaptureError?.(String(message)));
+  ipcMain.handle('meetings:correct-segment', (_e, id, segmentId, patch) => meetingStore?.correctSegment?.(id, segmentId, patch) || false);
+  ipcMain.handle('meetings:export', async (_e, id, format) => {
+    if (!['txt', 'html', 'pdf'].includes(format)) throw new Error('Unbekanntes Exportformat');
+    const meeting = meetingStore?.get(id); if (!meeting) return false;
+    const destination = await dialog.showSaveDialog({ defaultPath: `Paply-Gespraech.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] });
+    if (destination.canceled || !destination.filePath) return false;
+    const { textExport, htmlExport } = require('./meeting/local-export');
+    if (format !== 'pdf') fs.writeFileSync(destination.filePath, format === 'txt' ? textExport(meeting) : htmlExport(meeting));
+    else {
+      const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false } });
+      try { await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlExport(meeting))); fs.writeFileSync(destination.filePath, await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4' })); }
+      finally { win.destroy(); }
+    }
+    return true;
+  });
+
   // Settings
   ipcMain.handle('settings:get', () => {
     const s = getStore();
     return {
+      localMeetingTest,
       groqApiKey: s.get('groqApiKey'),
       enablePolish: s.get('enablePolish'),
-      shortcut: s.get('shortcut'),
+      shortcut: localMeetingTest ? 'Command+Option+Shift+X' : s.get('shortcut'),
       autoStart: s.get('autoStart'),
       language: s.get('language'),
       autopaste: s.get('autopaste'),
@@ -2215,7 +2259,7 @@ function setupIpcHandlers() {
 
     if (settings.autoStart !== undefined) {
       s.set('autoStart', settings.autoStart);
-      updateAutoLaunch();
+      if (!localMeetingTest) updateAutoLaunch();
     }
 
     if (settings.hideDock !== undefined) {
@@ -2506,7 +2550,7 @@ app.whenReady().then(() => {
   loadBackupFromDisk();
 
   // Setup auto-updater
-  setupAutoUpdater();
+  if (!localMeetingTest) setupAutoUpdater();
 
   setupIpcHandlers();
 
@@ -2535,7 +2579,19 @@ app.whenReady().then(() => {
     baseDir: path.join(app.getPath('userData'), 'meetings'),
     store: getStore(),
   });
-  meetingController = createMeetingController({
+  if (localMeetingTest) {
+    const baseDir = path.join(app.getPath('userData'), 'meetings');
+    meetingStore = require('./meeting/local-store').createLocalStore(baseDir, meetingStore);
+    meetingController = require('./meeting/local-controller').createLocalController({
+      meetingStore, baseDir, configPath: process.env.PAPLY_LOCAL_MEETINGS_CONFIG,
+      audioTee: systemAudioManager, getOverlayWindow: () => createMeetingOverlayWindow(), getMainWindow: () => mainWindow,
+    });
+    meetingController.resume();
+    if (app.isPackaged && process.platform === 'darwin') {
+      try { require('./meeting/local-retention-agent').installRetentionAgent({ userData: app.getPath('userData'), executable: process.execPath, home: app.getPath('home'), uid: process.getuid() }); }
+      catch (error) { dialog.showErrorBox('Audio-Bereinigung nicht eingerichtet', error.message); }
+    }
+  } else meetingController = createMeetingController({
     store: getStore(),
     meetingStore,
     audioTee: systemAudioManager,
@@ -2557,7 +2613,7 @@ app.whenReady().then(() => {
   });
 
   registerHotkey();
-  updateAutoLaunch();
+  if (!localMeetingTest) updateAutoLaunch();
 
   // Reset daily/weekly stats if needed
   resetStatsIfNeeded();
@@ -2569,7 +2625,7 @@ app.whenReady().then(() => {
   console.log('Polish:', s.get('enablePolish') ? 'Enabled' : 'Disabled');
 
   // Auto-open dashboard (or settings on first run if no API key)
-  if (!s.get('groqApiKey')) {
+  if (!localMeetingTest && !s.get('groqApiKey')) {
     setTimeout(() => {
       createMainWindow();
       dialog.showMessageBox({
@@ -2587,8 +2643,19 @@ app.whenReady().then(() => {
 
   // Check for updates silently on startup (after 5 seconds)
   setTimeout(() => {
-    checkForUpdates(true);
+    if (!localMeetingTest) checkForUpdates(true);
   }, 5000);
+});
+
+let quittingAfterCapture = false;
+app.on('before-quit', event => {
+  if (localMeetingTest && meetingController?.isActive()) {
+    event.preventDefault();
+    if (!quittingAfterCapture) {
+      quittingAfterCapture = true;
+      meetingController.stop().catch(() => {}).finally(() => app.quit());
+    }
+  }
 });
 
 app.on('will-quit', () => {
@@ -2599,6 +2666,7 @@ app.on('will-quit', () => {
   if (meetingController && meetingController.isActive()) {
     Promise.resolve(meetingController.stop()).catch(() => {});
   }
+  meetingController?.shutdown?.();
   stopUioHook();
 });
 app.on('window-all-closed', (e) => { e.preventDefault(); });
