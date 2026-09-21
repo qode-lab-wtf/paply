@@ -87,6 +87,31 @@ describe('Local capture and durable processing', () => {
     expect(store.list().find(item=>item.id===id).speakerNames).toEqual(['Sprecher 2']);
     release();expect(await job).toBe(true);
   });
+  it('resumes microphone enhancement separately and expires its derived audio', async () => {
+    const {root,store,id}=fixture();const dir=store.dir(id);
+    fs.writeFileSync(path.join(dir,'audio_mic.wav'),encodeWav(Buffer.alloc(3200,1)));
+    const configPath=path.join(root,'runtime.json');
+    const config={asrPython:'x',diarizationPython:'x',whisperModel:'x',pyannoteModel:'x',enhancementPython:'x',enhancementModel:'x',models:{enhancementRevision:'pinned'}};
+    atomicJson(configPath,config);const calls=[];let fail=true;
+    const pipeline=createLocalPipeline({store,configPath,now:()=>100,runner:async(stage,session,channel)=>{
+      calls.push(stage);
+      if(stage==='enhancement' && fail)throw new Error('enhancement interrupted');
+      if(['asr','enhancement','diarization'].includes(stage))atomicJson(path.join(dir,'processing',`${channel}-${stage}.json`),{});
+      if(stage==='enhancement')fs.writeFileSync(path.join(dir,'processing','mic-enhanced.wav'),encodeWav(Buffer.alloc(3200,2)));
+      if(stage==='merge')store.saveTranscript(session,{segments:[],language:'de'});
+      if(stage==='report')store.saveSummary(session,{});
+    }});
+    expect(await pipeline.enqueue(id)).toBe(false);fail=false;
+    expect(await pipeline.enqueue(id)).toBe(true);
+    expect(calls).toEqual(['asr','enhancement','enhancement','diarization','merge','report']);
+    calls.length=0;
+    fs.unlinkSync(path.join(dir,'processing','mic-enhanced.wav'));
+    expect(await pipeline.enqueue(id)).toBe(true);
+    expect(calls).toEqual(['enhancement','merge','report']);
+    cleanExpiredAudio(root,604800000);
+    expect(fs.existsSync(path.join(dir,'processing','mic-enhanced.wav'))).toBe(false);
+    expect(fs.existsSync(path.join(dir,'transcript.json'))).toBe(true);
+  });
   it('does not resurrect a deleted meeting after a running stage finishes', async () => {
     const { root, store, id } = fixture();
     fs.writeFileSync(path.join(store.dir(id), 'audio_mic.wav'), encodeWav(Buffer.alloc(3200, 1)));

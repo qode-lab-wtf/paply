@@ -1,0 +1,85 @@
+{
+  "date": "2026-09-21",
+  "scope": "Experimental local test app; production dictation unchanged",
+  "sample": {
+    "durationSeconds": 106.237125,
+    "userConfirmedPeople": 3,
+    "differentDistances": true
+  },
+  "models": {
+    "Systran/faster-whisper-large-v3": {
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "files": [
+        ".gitattributes",
+        "README.md",
+        "config.json",
+        "model.bin",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "vocabulary.json"
+      ]
+    },
+    "alibabasglab/MossFormerGAN_SE_16K": {
+      "revision": "dcb1b20e1e44d435090072ab9b223c792ea1f624",
+      "files": [
+        ".gitattributes",
+        "README.md",
+        "last_best_checkpoint",
+        "last_best_checkpoint.disc.pt",
+        "last_best_checkpoint.pt"
+      ]
+    }
+  },
+  "modelFiles": {
+    "faster-whisper": {
+      "sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1",
+      "bytes": 3087284237
+    },
+    "mossformer": {
+      "sha256": "04bf00db575389e1ea8b1fcca48d9efcf073e50ad170e6dd5230df3bac98be27",
+      "bytes": 38845593
+    }
+  },
+  "baseline": {
+    "asrWords": 128,
+    "automaticSpeakerGroups": 2,
+    "fullyUntranscribedTurnSeconds": 30.74625
+  },
+  "chosenCombination": {
+    "asr": "faster-whisper large-v3 int8 CPU beam5, VAD, original audio",
+    "diarization": "Community-1 MPS on MossFormerGAN 16k enhanced microphone",
+    "automaticSpeakerGroups": 3,
+    "asrWords": 203,
+    "fullyUntranscribedTurnSeconds": 5.653125000000017,
+    "speakerCountWasNotProvided": true
+  },
+  "rejectedCombination": {
+    "enhancedAudioForAsr": "Additional word distortions observed; not enabled"
+  },
+  "control": {
+    "sample": "historical-b-mic",
+    "durationSeconds": 21,
+    "fasterWhisperCompleted": true,
+    "humanGroundTruth": false
+  },
+  "validation": {
+    "appTests": 140,
+    "pythonTests": 37,
+    "buildAndAdHocSignature": true,
+    "typecheck": "Same four pre-existing Profile/CustomAgent errors",
+    "originalAudioUnchanged": true,
+    "productAsrMatchesExperiment": true,
+    "productEnhancedAudioMatchesExperiment": true,
+    "realPipelineStatus": "ready",
+    "nativeUiVerified": true,
+    "nativeUiSpeakerCount": 3,
+    "reportStatus": "local-draft"
+  },
+  "limitations": [
+    "No reviewed word or speaker identity reference",
+    "Word counts and missing-turn duration do not measure word accuracy",
+    "Automatic three groups do not prove identity consistency",
+    "Report factuality and full release gates remain open"
+  ],
+  "qualityApproved": false
+}

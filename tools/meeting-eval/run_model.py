@@ -31,7 +31,7 @@ def normalize_turns(segments, duration):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('candidate', choices=['qwen-asr', 'whisper', 'parakeet', 'fluid-diarization', 'pyannote'])
+    p.add_argument('candidate', choices=['qwen-asr', 'whisper', 'faster-whisper', 'parakeet', 'fluid-diarization', 'pyannote'])
     p.add_argument('manifest', type=Path)
     p.add_argument('output', type=Path)
     args = p.parse_args()
@@ -61,6 +61,21 @@ def main():
                                         language='de', word_timestamps=True, verbose=False)
             result.update(text=out['text'], segments=out['segments'])
             result['model'] = 'mlx-community/whisper-large-v3-mlx@49e6aa286ad60c14352c404340ded53710378a11'
+        elif args.candidate == 'faster-whisper':
+            from dataclasses import asdict
+            from faster_whisper import WhisperModel
+            model = WhisperModel(str(ROOT / 'work/models/faster-whisper-large-v3'),
+                                 device='cpu', compute_type='int8', cpu_threads=8,
+                                 local_files_only=True)
+            segments, info = model.transcribe(str(audio), language='de', beam_size=5,
+                                             vad_filter=True, word_timestamps=True,
+                                             condition_on_previous_text=False)
+            result['segments'] = [asdict(segment) for segment in segments]
+            result['text'] = ''.join(segment['text'] for segment in result['segments'])
+            result['model'] = 'Systran/faster-whisper-large-v3@edaa852ec7e145841d8ffdb056a99866b5f0a478'
+            result['parameters'] = {'beam_size': 5, 'vad_filter': True,
+                                    'condition_on_previous_text': False, 'compute_type': 'int8'}
+            result['vadDurationSeconds'] = info.duration_after_vad
         elif args.candidate in ('parakeet', 'fluid-diarization'):
             if args.candidate == 'parakeet':
                 cmd = [str(FLUID), 'transcribe', str(audio), '--model-version', 'v3', '--word-timestamps', '--output-json', str(raw)]

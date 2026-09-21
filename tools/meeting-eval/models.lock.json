@@ -320,5 +320,15 @@
     "runtimeArchiveSha256": "f33b2a5aa59bc6c961ed3ec23ba9dc646ca6d99ced8d2a0d46eb3a522167dd3f",
     "source": "https://ollama.com/library/qwen3.8:27b",
     "qualityApproved": false
+  },
+  "acousticCandidates": {
+    "Systran/faster-whisper-large-v3": {
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "qualityApproved": false
+    },
+    "alibabasglab/MossFormerGAN_SE_16K": {
+      "revision": "dcb1b20e1e44d435090072ab9b223c792ea1f624",
+      "qualityApproved": false
+    }
   }
 }

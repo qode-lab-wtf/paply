@@ -17,14 +17,17 @@ const pythonBase=execFileSync(config.asrPython,['-c','import sys;print(sys.base_
 const diarBase=execFileSync(config.diarizationPython,['-c','import sys;print(sys.base_prefix)'],{encoding:'utf8'}).trim();
 if(pythonBase!==diarBase)throw new Error('Runtime preparation requires the same pinned base Python');
 const base=path.join(destination,'python-base-3.12.13');clone(pythonBase,base);
-for(const [key,folder] of [['asrPython','asr-python'],['diarizationPython','diarization-python']]){
+const pythonRuntimes=[['asrPython',config.asrBackend === 'faster-whisper' ? 'asr-faster-whisper-1.2.1' : 'asr-python'],['diarizationPython','diarization-python'],...(config.enhancementPython ? [['enhancementPython','enhancement-clearvoice-0.1.2']] : [])];
+for(const [key,folder] of pythonRuntimes){
+  const actualBase=execFileSync(config[key],['-c','import sys;print(sys.base_prefix)'],{encoding:'utf8'}).trim();
+  if(actualBase!==pythonBase)throw new Error('Runtime preparation requires the same pinned base Python');
   const venv=path.join(destination,folder);clone(path.dirname(path.dirname(config[key])),venv);
   const cfg=path.join(venv,'pyvenv.cfg');fs.writeFileSync(cfg,fs.readFileSync(cfg,'utf8').replace(/^home = .*$/m,'home = '+path.join(base,'bin')));
   const python=path.join(venv,'bin/python');if(fs.lstatSync(python).isSymbolicLink())fs.unlinkSync(python);
   if(!fs.existsSync(python))fs.symlinkSync(path.join(base,'bin/python3.12'),python);
   config[key]=python;
 }
-for(const [key,folder] of [['whisperModel','whisper-'+config.models.whisperRevision],['pyannoteModel','pyannote-'+config.models.pyannoteRevision]]){
+for(const [key,folder] of [['whisperModel','whisper-'+config.models.whisperRevision],['pyannoteModel','pyannote-'+config.models.pyannoteRevision],...(config.fasterWhisperModel ? [['fasterWhisperModel','faster-whisper-'+config.models.fasterWhisperRevision]] : []),...(config.enhancementModel ? [['enhancementModel','mossformer-'+config.models.enhancementRevision]] : [])]){
   const target=path.join(destination,'models',folder);clone(config[key],target);config[key]=target;
 }
 if(config.fluidBinary){const target=path.join(destination,'fluidaudio','fluidaudiocli');clone(config.fluidBinary,target);config.fluidBinary=target;}
@@ -43,6 +46,6 @@ if(config.reporter){
   }
   reporter.modelsPath=models;
 }
-for(const key of ['asrPython','diarizationPython'])execFileSync(config[key],['-c','import sys; assert sys.base_prefix.startswith('+JSON.stringify(destination)+')']);
+for(const [key] of pythonRuntimes)execFileSync(config[key],['-c','import sys; assert sys.base_prefix.startswith('+JSON.stringify(destination)+')']);
 atomicJson(path.join(destination,'runtime.json'),config);
 console.log(path.join(destination,'runtime.json'));

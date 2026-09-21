@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 import tempfile
 import json
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[2]
 def load(name):
@@ -12,6 +13,29 @@ def load(name):
 worker=load('worker');reporter=load('reporter')
 
 class ProductContracts(unittest.TestCase):
+    def test_enhancement_only_changes_diarization_input_and_is_hash_checked(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp);processing=directory/'processing';processing.mkdir()
+            original=directory/'audio_mic.wav';original.write_bytes(b'original')
+            enhanced=processing/'mic-enhanced.wav';enhanced.write_bytes(b'enhanced')
+            (directory/'local-state.json').write_text(json.dumps({'schemaVersion':2,'tracks':{'mic':{'sha256':worker.digest(original)}}}))
+            config=directory/'config.json';config.write_text(json.dumps({'enhancementModel':'enabled'}))
+            evidence=processing/'mic-enhancement.json';evidence.write_text(json.dumps({'sourceSha256':worker.digest(original),'sha256':worker.digest(enhanced)}))
+            for stage,expected in [('asr',original),('diarization',enhanced)]:
+                with patch('sys.argv',['worker',stage,str(directory),str(config),'--channel','mic']),patch.object(worker,'transcribe',return_value={'segments':[]}) as asr,patch.object(worker,'diarize',return_value=[]) as diar:
+                    worker.main()
+                    (asr if stage=='asr' else diar).assert_called_once_with(expected,{'enhancementModel':'enabled'})
+            enhanced.write_bytes(b'tampered')
+            with patch('sys.argv',['worker','diarization',str(directory),str(config),'--channel','mic']),patch.object(worker,'diarize') as diar:
+                with self.assertRaisesRegex(ValueError,'Enhanced audio changed'):worker.main()
+                diar.assert_not_called()
+    def test_expired_audio_cannot_start_a_model(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)
+            (directory/'local-state.json').write_text(json.dumps({'schemaVersion':2,'audioExpiresAt':1}))
+            config=directory/'config.json';config.write_text('{}')
+            with patch('sys.argv',['worker','enhancement',str(directory),str(config),'--channel','mic']):
+                with self.assertRaisesRegex(ValueError,'Aufbewahrungszeit'):worker.main()
     def test_incomplete_word_alignment_preserves_original_text(self):
         asr={'segments':[{'text':'one two three','start':0,'end':3,'words':[{'word':'one','start':0,'end':1}]}]}
         rows=worker.assign(asr,[{'start':0,'end':3,'speaker':'a'}],'mic','hash')

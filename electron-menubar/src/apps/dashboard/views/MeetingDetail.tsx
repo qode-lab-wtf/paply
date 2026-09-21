@@ -159,7 +159,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
 
       {index.schemaVersion === 2 && (
         <div className="text-sm space-y-2">
-          <p>Lokaler Gesprächstest · {{ recording: 'Aufnahme läuft', queued: 'Wartet auf Auswertung', processing: index.processingStage === 'report' ? 'Transkript ausgewertet · Bericht wird erstellt' : 'Wird lokal ausgewertet', failed: 'Auswertung unterbrochen – erneut starten möglich', ready: 'Transkript verfügbar' }[index.processingStatus || ''] || index.processingStatus}</p>
+          <p>Lokaler Gesprächstest · {{ recording: 'Aufnahme läuft', queued: 'Wartet auf Auswertung', processing: index.processingStage === 'report' ? 'Transkript ausgewertet · Bericht wird erstellt' : index.processingStage === 'mic-enhancement' ? 'Mikrofonton wird für die Sprechererkennung aufbereitet' : 'Wird lokal ausgewertet', failed: 'Auswertung unterbrochen – erneut starten möglich', ready: 'Transkript verfügbar' }[index.processingStatus || ''] || index.processingStatus}</p>
           {transcript.provisional && <p className="text-amber-600">Vorläufiger Live-Text – Stimmen sind noch nicht zugeordnet.</p>}
           {index.captureWarning && <p className="text-amber-600">{index.captureWarning}</p>}
           {index.processingError && <p className="text-amber-600">{index.processingError}</p>}

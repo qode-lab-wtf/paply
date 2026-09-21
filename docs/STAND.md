@@ -114,8 +114,39 @@ Bericht für dieselbe Aufnahme per UI neu angefordert: `needs-transcript-review`
 Hinweis auf fehlende Sprache und zwei automatisch erkannte Sprecher sichtbar.
 Die Listen-Sprecherzahl wird jetzt ebenfalls vor dem Bericht aktualisiert. [Befund](validation/2026-09-21-room-three-failure.json).
 Originalaufnahme bleibt unter der bestätigten Sieben-Tage-Regel; keine neuen
-Audio-Kopien außerhalb der Sitzung. Die Frage nach Abstand/Lautstärke der Personen
-ist an Allan gestellt. Keine weitere Aufnahme angefordert.
+Audio-Kopien außerhalb der Sitzung. Allan bestätigte danach unterschiedliche Abstände: er direkt vor dem MacBook,
+eine Person weiter weg, die dritte noch weiter. Neue Anweisung: andere Modelle
+oder Aufbereitung für bessere Erkennung von Anfang an prüfen und umsetzen.
+Keine weitere Aufnahme angefordert. Ein isolierter Vergleich mit anderer
+Whisper-Decodierung und Sprachverbesserung nutzt dieselbe Originalaufnahme.
+
+## Raumtest: neue experimentelle Verarbeitung
+
+Auf derselben 106-s-Aufnahme arbeitet faster-whisper Large-v3 (CPU/int8, Beam 5,
+VAD) auf dem Originalton. Es liefert 203 statt 128 Wörter; die zuvor weitgehend
+fehlende Passage ist teilweise wieder enthalten. Das ist ein Vollständigkeits-
+hinweis, keine nachgewiesene Wortfehlerrate. Ein zweiter historischer 21-s-Ausschnitt
+wurde ebenfalls verglichen, ohne menschlich bestätigte Referenz.
+
+MossFormerGAN SE 16K bereitet ausschließlich den Mikrofonton für Community-1 auf.
+Die Analyse findet damit automatisch drei statt zwei Gruppen, ohne vorgegebene
+Teilnehmerzahl. Identitätsrichtigkeit bleibt ungeprüft. Derselbe aufbereitete Ton
+verschlechterte teils die Worterkennung; daher bleiben ASR und Wiedergabe beim
+Original. Systemton bleibt unbearbeitet. Vorbereitung, ASR und Sprecheranalyse
+laufen nacheinander in getrennten, netzgesperrten Prozessen. Modellrevisionen und
+Python-Pakete sind festgeschrieben; die normale Paply-App bleibt unverändert.
+
+Neue Zwischen-WAVs bleiben unter derselben Sieben-Tage-Frist. Unterbrechung und
+Wiederaufnahme der Aufbereitung, fehlende Zwischenkopie, abgelaufene Audiodaten,
+Original-/Ableitungshashes und unveränderte ASR-Quelle sind automatisiert geprüft.
+140 App- und 37 Python-Tests bestanden. Test-App gebaut und ad-hoc-Signatur geprüft;
+die vier vorhandenen TypeScript-Fehler bleiben unverändert. Der echte Durchlauf
+reproduziert den Vergleichstext und die aufbereitete Audiodatei identisch.
+Vollständiger Durchlauf abgeschlossen (`ready`), Bericht als `local-draft`.
+Aktualisierte Test-App geöffnet und das echte Gespräch darin geprüft: drei Sprecher,
+Transkript verfügbar, Quellenbelege und sichtbare unklare Zuordnungen. Die Aufnahme
+bleibt zur Prüfung geöffnet; Allan muss nichts installieren oder neu aufnehmen.
+[Messung und Grenzen](validation/2026-09-21-room-acoustic-improvement.json).
 
 ## Offen / nächster Schritt
 

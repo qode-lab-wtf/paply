@@ -158,3 +158,23 @@ Darstellungsheuristik, keine validierte Sprecher-Pipeline.
 einzigen Gesamtreferenz. Belegzitate werden erst nach Schema-/ID-Prüfung aus
 Originaltext eingefügt. Das verhindert erfundene Zitate, nicht falsche Interpretation.
 Alte Berichtsfassung bleibt für reproduzierbare Vergleiche verfügbar.
+
+## Raumtest: alternative Auswertung und Sprachaufbereitung
+
+Separater Python-3.12-Vergleich, keine neue Standardauswahl für die produktive App:
+`requirements-acoustic.lock` enthält faster-whisper 1.2.1 und ClearVoice 0.1.2.
+Modelle und Revisionen stehen unter `acousticCandidates` in `models.lock.json`.
+`run_model.py faster-whisper MANIFEST OUTPUT` nutzt CPU/int8, Beam 5, Silero-VAD,
+Wortzeitmarken und keinen vorherigen Textkontext. Modellordner:
+`work/models/faster-whisper-large-v3`. Kein Modell-Download im Worker.
+
+`enhance_audio.py MANIFEST OUTPUT_MANIFEST` nutzt das lokale
+`work/models/mossformer-gan` und denselben Aufbereitungscode wie die Test-App.
+Es akzeptiert nur noch nicht abgelaufene neue Sitzungen. Der abgeleitete Ton bleibt
+im Sitzungsordner und unterliegt dessen ursprünglicher Sieben-Tage-Frist.
+
+Im Raumtest vom 21.09. verbesserte die Aufbereitung die automatisch gefundene
+Sprecherzahl von zwei auf drei, verfälschte aber teils die ASR-Wörter. Deshalb nutzt
+nur die **Sprecheranalyse** den aufbereiteten Mikrofonton. ASR und Wiedergabe behalten
+den Originalton. Systemton bleibt unbearbeitet. Das ist eine experimentelle
+Testkonfiguration; die Identitäts- und Wortfehlerraten sind noch nicht bestätigt.

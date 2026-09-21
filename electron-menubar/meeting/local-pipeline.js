@@ -16,12 +16,14 @@ function hashFile(file) { return new Promise((resolve, reject) => {
 function createLocalPipeline({ store, configPath, emit = () => {}, runner, now = Date.now }) {
   const config = readJson(configPath);
   if (!config?.asrPython || !config?.diarizationPython || !config?.whisperModel || !config?.pyannoteModel) throw new Error('Lokale Modelle noch nicht eingerichtet');
+  if (config.enhancementModel && (!config.enhancementPython || !config.models?.enhancementRevision)) throw new Error('Sprachaufbereitung unvollständig eingerichtet');
+  if (config.asrBackend === 'faster-whisper' && !config.fasterWhisperModel) throw new Error('Alternative Transkription unvollständig eingerichtet');
   const worker = path.join(__dirname, 'local', 'worker.py').replace('app.asar/', 'app.asar.unpacked/');
   let chain = Promise.resolve(), currentChild = null, currentId = null;
   const scheduled = new Map(), cancelled = new Set();
   const assertPresent = id => { if (cancelled.has(id) || !store.readState(id)) throw new Error('Gespräch wurde gelöscht'); };
   const run = runner || ((stage, id, channel) => new Promise((resolve, reject) => {
-    const python = stage === 'asr' ? config.asrPython : config.diarizationPython;
+    const python = stage === 'enhancement' ? config.enhancementPython : stage === 'asr' ? config.asrPython : config.diarizationPython;
     const args = [python, worker, stage, store.dir(id), configPath, ...(channel ? ['--channel', channel] : [])];
     // Enforcement rather than a convention: final model workers cannot use any network.
     const command = process.platform === 'darwin' ? '/usr/bin/sandbox-exec' : python;
@@ -63,13 +65,13 @@ function createLocalPipeline({ store, configPath, emit = () => {}, runner, now =
       assertPresent(id);
       if (!reportOnly) {
         const tracks = await prepare(id);
-        for (const channel of Object.keys(tracks)) for (const stage of ['asr', 'diarization']) {
+        for (const channel of Object.keys(tracks)) for (const stage of ['asr', ...(config.enhancementModel && channel === 'mic' ? ['enhancement'] : []), 'diarization']) {
           const key = `${channel}-${stage}`;
           const state = store.readState(id);
           if (state.audioExpiresAt && now() >= state.audioExpiresAt) throw new Error('Audio-Aufbewahrungszeit abgelaufen');
           const checkpoint = state.completed?.[key];
-          const signature = crypto.createHash('sha256').update(JSON.stringify([tracks[channel].sha256, config.models, stage, ...(stage === 'diarization' ? [config.diarizationDevice || 'cpu'] : [])])).digest('hex');
-          if (force || checkpoint !== signature || !fs.existsSync(path.join(dir, 'processing', key + '.json'))) {
+          const signature = crypto.createHash('sha256').update(JSON.stringify([tracks[channel].sha256, config.models, stage, config.asrBackend || 'mlx-whisper', Boolean(config.enhancementModel), ...(stage === 'diarization' ? [config.diarizationDevice || 'cpu'] : [])])).digest('hex');
+          if (force || checkpoint !== signature || !fs.existsSync(path.join(dir, 'processing', key + '.json')) || (stage === 'enhancement' && !fs.existsSync(path.join(dir, 'processing', `${channel}-enhanced.wav`)))) {
             store.writeState(id, { stage: key }); emit('meetings:updated', { id, stage: key });
             await run(stage, id, channel);
             assertPresent(id);

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 
 os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', PYANNOTE_METRICS_ENABLED='false', HF_HUB_DISABLE_TELEMETRY='1')
 
@@ -27,13 +28,22 @@ def digest(path):
 def transcribe(audio, config):
     import soundfile as sf
     import numpy as np
-    import mlx_whisper
     with sf.SoundFile(audio) as f:
         if f.frames==0:return {'text':'','segments':[]}
         # Only digital near-silence can be skipped. Never gate quiet voices by a coarse RMS.
         peak=0
         for block in f.blocks(blocksize=16000):peak=max(peak,float(np.max(np.abs(block))))
     if peak<1/32768:return {'text':'','segments':[]}
+    if config.get('asrBackend', 'mlx-whisper') == 'faster-whisper':
+        from dataclasses import asdict
+        from faster_whisper import WhisperModel
+        model=WhisperModel(config['fasterWhisperModel'],device='cpu',compute_type='int8',cpu_threads=8,local_files_only=True)
+        segments,_=model.transcribe(str(audio),language='de',beam_size=5,vad_filter=True,
+                                   word_timestamps=True,condition_on_previous_text=False)
+        segments=[asdict(s) for s in segments]
+        return {'text':''.join(s['text'] for s in segments),'segments':segments}
+    if config.get('asrBackend', 'mlx-whisper') != 'mlx-whisper':raise ValueError('Unsupported ASR backend')
+    import mlx_whisper
     return mlx_whisper.transcribe(str(audio),path_or_hf_repo=config['whisperModel'],language='de',
                                  word_timestamps=True,condition_on_previous_text=False,temperature=0,verbose=False)
 
@@ -156,13 +166,27 @@ def untranscribed_seconds(transcript):
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('stage',choices=['asr','diarization','merge','report']);p.add_argument('directory',type=Path);p.add_argument('config',type=Path);p.add_argument('--channel',choices=['mic','system']);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('stage',choices=['enhancement','asr','diarization','merge','report']);p.add_argument('directory',type=Path);p.add_argument('config',type=Path);p.add_argument('--channel',choices=['mic','system']);a=p.parse_args()
     config=json.loads(a.config.read_text());state=json.loads((a.directory/'local-state.json').read_text())
     if state['schemaVersion']!=2:raise ValueError('Unsupported session version')
-    if a.stage in ['asr','diarization']:
+    if a.stage in ['enhancement','asr','diarization']:
+        if state.get('audioExpiresAt') and time.time()*1000>=state['audioExpiresAt']:raise ValueError('Audio-Aufbewahrungszeit abgelaufen')
         audio=a.directory/f'audio_{a.channel}.wav'
         if digest(audio)!=state['tracks'][a.channel]['sha256']:raise ValueError('Audio changed since capture')
-        out=transcribe(audio,config) if a.stage=='asr' else diarize(audio,config)
+        if a.stage=='enhancement':
+            from enhancer import enhance
+            output=a.directory/'processing'/f'{a.channel}-enhanced.wav'
+            enhance(audio,output,config,state)
+            out={'sourceSha256':digest(audio),'sha256':digest(output),'model':config['models']['enhancementRevision']}
+        else:
+            # Enhancement improves clustering here but can distort recognized words.
+            # Transcription therefore always uses the untouched original recording.
+            if config.get('enhancementModel') and a.channel=='mic' and a.stage=='diarization':
+                evidence=json.loads((a.directory/'processing'/'mic-enhancement.json').read_text())
+                if evidence['sourceSha256']!=digest(audio):raise ValueError('Enhancement source mismatch')
+                audio=a.directory/'processing'/'mic-enhanced.wav'
+                if evidence['sha256']!=digest(audio):raise ValueError('Enhanced audio changed')
+            out=transcribe(audio,config) if a.stage=='asr' else diarize(audio,config)
         target=a.directory/'processing'/f'{a.channel}-{a.stage}.json'
     elif a.stage=='merge':out=merge(a.directory,state);target=a.directory/'transcript.json'
     else:
