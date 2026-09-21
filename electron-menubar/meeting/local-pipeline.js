@@ -82,8 +82,12 @@ function createLocalPipeline({ store, configPath, emit = () => {}, runner, now =
       if (!transcript?.segments) throw new Error('Transkript fehlt');
       // Apply persistent user corrections to the report input; the worker never overwrites corrections.
       atomicJson(path.join(dir, 'report-input.json'), transcript);
-      store.writeState(id, { stage: 'report' }); await run('report', id); assertPresent(id);
-      const speakers = [...new Set(transcript.segments.map(s => s.speaker))];
+      const speakers = [...new Set(transcript.segments.filter(s => s.speakerId && !s.speakerId.endsWith('-unclear')).map(s => s.speaker))];
+      store.finalizeIndex(id, { speakerCount: speakers.length, speakerNames: speakers, diarizationUsed: true, diarizationCostUsd: 0 });
+      store.writeState(id, { stage: 'report' });
+      // Publish the completed transcript before the much slower report stage.
+      emit('meetings:updated', { id, stage: 'report', transcriptReady: true });
+      await run('report', id); assertPresent(id);
       store.finalizeIndex(id, { hasSummary: true, preview: transcript.segments[0]?.text.slice(0, 120) || '',
         speakerCount: speakers.length, speakerNames: speakers, diarizationUsed: true, diarizationCostUsd: 0 });
       store.writeState(id, { status: 'ready', stage: null, error: null, reportNeedsRefresh: false });

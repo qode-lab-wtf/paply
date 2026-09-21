@@ -145,6 +145,16 @@ def source_report(transcript):
         'model':'deterministic-source-overview','generatedAt':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()}
 
 
+def untranscribed_seconds(transcript):
+    total=0
+    for channel in {s.get('channel') for s in transcript['segments']}:
+        end=0
+        for row in sorted((s for s in transcript['segments'] if s.get('channel')==channel and s.get('kind')=='audio-gap'),key=lambda s:s['tStart']):
+            total+=max(0,row['tEnd']-max(end,row['tStart']))
+            end=max(end,row['tEnd'])
+    return total
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('stage',choices=['asr','diarization','merge','report']);p.add_argument('directory',type=Path);p.add_argument('config',type=Path);p.add_argument('--channel',choices=['mic','system']);a=p.parse_args()
     config=json.loads(a.config.read_text());state=json.loads((a.directory/'local-state.json').read_text())
@@ -157,7 +167,10 @@ def main():
     elif a.stage=='merge':out=merge(a.directory,state);target=a.directory/'transcript.json'
     else:
         transcript=json.loads((a.directory/'report-input.json').read_text())
-        if config.get('reporter'):
+        if untranscribed_seconds(transcript)>=10:
+            out=source_report(transcript)
+            out.update(reportStatus='needs-transcript-review',qualityApproved=False,kurzzusammenfassung='Bericht zurückgestellt: Mindestens zehn Sekunden erkannte Sprache fehlen im Transkript. Zuerst die gekennzeichneten Tonstellen prüfen; daraus wird keine scheinbar vollständige Zusammenfassung erzeugt.')
+        elif config.get('reporter'):
             from reporter import generate
             out=generate(transcript,config,a.directory/'processing')
         else:out=source_report(transcript)

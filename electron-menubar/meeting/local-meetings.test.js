@@ -71,6 +71,22 @@ describe('Local capture and durable processing', () => {
     expect(calls).toEqual(['asr','diarization','diarization','merge','report']);
     expect(await hashFile(file)).toBe(hash);
   });
+  it('publishes the final transcript while the report is still running', async () => {
+    const {root,store,id}=fixture();fs.writeFileSync(path.join(store.dir(id),'audio_mic.wav'),encodeWav(Buffer.alloc(3200,1)));
+    const configPath=path.join(root,'runtime.json');atomicJson(configPath,{asrPython:'x',diarizationPython:'x',whisperModel:'x',pyannoteModel:'x'});
+    let release, entered;const started=new Promise(resolve=>{entered=resolve;});const events=[];
+    const pipeline=createLocalPipeline({store,configPath,now:()=>100,emit:(event,data)=>events.push({event,data}),runner:async(stage,session,channel)=>{
+      if(stage==='asr'||stage==='diarization')atomicJson(path.join(store.dir(session),'processing',`${channel}-${stage}.json`),{});
+      if(stage==='merge')store.saveTranscript(session,{provisional:false,language:'de',segments:[{id:'s',text:'final text',speaker:'Sprecher 2',speakerId:'speaker-two',tStart:0,tEnd:1,channel:'mic'}]});
+      if(stage==='report'){entered();await new Promise(resolve=>{release=resolve;});store.saveSummary(session,{});}
+    }});
+    const job=pipeline.enqueue(id);await started;
+    expect(events.some(e=>e.data.transcriptReady===true)).toBe(true);
+    expect(store.get(id).transcript.segments[0].text).toBe('final text');
+    expect(store.get(id).index.processingStage).toBe('report');
+    expect(store.list().find(item=>item.id===id).speakerNames).toEqual(['Sprecher 2']);
+    release();expect(await job).toBe(true);
+  });
   it('does not resurrect a deleted meeting after a running stage finishes', async () => {
     const { root, store, id } = fixture();
     fs.writeFileSync(path.join(store.dir(id), 'audio_mic.wav'), encodeWav(Buffer.alloc(3200, 1)));

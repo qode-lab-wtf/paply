@@ -47,6 +47,9 @@ class ProductContracts(unittest.TestCase):
         report={'topics':[{'text':'one'},{'text':'two'}]}
         for checks in [[],[{'id':0,'supported':True}]*2,[{'id':0,'supported':'yes'},{'id':1,'supported':True}]]:
             with self.assertRaises(ValueError):reporter.apply_review(report,{'checks':checks})
+    def test_untranscribed_time_counts_overlap_once_and_ignores_normal_text(self):
+        rows=[{'channel':'mic','kind':'audio-gap','tStart':1,'tEnd':9},{'channel':'mic','kind':'audio-gap','tStart':3,'tEnd':6},{'channel':'mic','text':'recognized','tStart':10,'tEnd':50}]
+        self.assertEqual(worker.untranscribed_seconds({'segments':rows}),8)
     def test_unknown_report_references_rejected(self):
         report={k:[] for k in reporter.schema(['s1'])['required']}
         report['tasks']=[{'text':'unsupported','sourceIds':['made-up']}]

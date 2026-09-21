@@ -3,6 +3,7 @@
 
 export interface MeetingIndexEntry {
   schemaVersion?: number;
+  processingStage?: string | null;
   processingStatus?: string;
   processingError?: string | null;
   captureWarning?: string | null;

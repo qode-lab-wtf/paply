@@ -89,6 +89,34 @@ Die installierte `/Applications/paply.app` und ihre Daten bleiben unverändert.
   über Cmd+Option+Shift+X: zwei bekannte Personen, zunächst ohne zusätzliche Tonquelle.
   Die inhaltlichen Qualitätsgrenzen unten bleiben bestehen.
 
+## Aktueller fehlgeschlagener Raumtest
+
+Allan meldete am 21.09.2026 drei Personen im Raum, stark falschen Text und nur eine
+sichtbare Stimme. Die neue 106-s-Aufnahme ist kein bestandener Test. Original-ASR
+übersprang ungefähr 11–52 s trotz dort erkannter Sprache; die akustische Analyse
+fand automatisch zwei statt drei Gruppen. Der Bericht war noch in Arbeit und wurde
+zur Untersuchung angehalten. Kein Polishing des Originaltranskripts.
+
+Ein Anzeigeproblem hielt den vorläufigen Text bis zum Abschluss des langen Berichts
+sichtbar: korrigiert durch Aktualisierung unmittelbar nach Zusammenführung. Live-Text
+wird ausdrücklich als noch nicht sprecherzugeordnet markiert. Bei mindestens zehn
+Sekunden erkannter, aber untranskribierter Sprache bleibt ein generativer Bericht
+zurückgestellt; die Quellenübersicht und Aufnahme bleiben verfügbar. Diese Schwelle
+ist ein konservativer Vollständigkeitshinweis, kein Qualitätsnachweis.
+
+Whisper auf isolierter Lücke liefert zusätzlichen, weiterhin teils fraglichen Text.
+Nur Abschalten des Stille-Schwellwerts behebt es nicht; Verstärkung verschlechterte
+den Ausschnitt. Parakeet und Qwen-ASR zeigen ebenfalls erkennbare Abweichungen. Mit
+bekannter Anzahl drei erhält Community-1 drei Gruppen; Identitätsrichtigkeit bleibt
+unbewiesen, deshalb nicht als automatisch behobene Sprechererkennung übernommen.
+139 App-Tests und 35 Python-Tests bestanden. Neu gepackte Test-App geöffnet;
+Bericht für dieselbe Aufnahme per UI neu angefordert: `needs-transcript-review`,
+Hinweis auf fehlende Sprache und zwei automatisch erkannte Sprecher sichtbar.
+Die Listen-Sprecherzahl wird jetzt ebenfalls vor dem Bericht aktualisiert. [Befund](validation/2026-09-21-room-three-failure.json).
+Originalaufnahme bleibt unter der bestätigten Sieben-Tage-Regel; keine neuen
+Audio-Kopien außerhalb der Sitzung. Die Frage nach Abstand/Lautstärke der Personen
+ist an Allan gestellt. Keine weitere Aufnahme angefordert.
+
 ## Offen / nächster Schritt
 
 - Qwen3.5-9B mit Ollama0.34.2 liefert jetzt strukturell gültige Berichte auf zwei

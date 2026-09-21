@@ -12,7 +12,7 @@ function createLocalStore(baseDir, legacy) {
     const state = readState(id); if (!state) return full;
     const edits = readJson(path.join(dir(id), 'corrections.json'), { names: {}, segments: {} });
     full.audioOffsets = Object.fromEntries(Object.entries(state.tracks || {}).map(([channel, track]) => [channel, track.offsetSeconds || 0]));
-    full.index = { ...full.index, processingStatus: state.status, processingError: state.error || null, captureWarning: state.captureWarning || null, audioExpiresAt: state.audioExpiresAt, schemaVersion: 2, reportNeedsRefresh: !!state.reportNeedsRefresh };
+    full.index = { ...full.index, processingStatus: state.status, processingStage: state.stage || null, processingError: state.error || null, captureWarning: state.captureWarning || null, audioExpiresAt: state.audioExpiresAt, schemaVersion: 2, reportNeedsRefresh: !!state.reportNeedsRefresh };
     full.transcript.segments = (full.transcript.segments || []).map(s => {
       const correction = edits.segments[s.id];
       const speakerId = correction?.speakerId || s.speakerId;
