@@ -148,6 +148,38 @@ Transkript verfügbar, Quellenbelege und sichtbare unklare Zuordnungen. Die Aufn
 bleibt zur Prüfung geöffnet; Allan muss nichts installieren oder neu aufnehmen.
 [Messung und Grenzen](validation/2026-09-21-room-acoustic-improvement.json).
 
+## Erneuter Raumtest: Ursachenprüfung statt weiterer Umbau
+
+Allan bestätigte nach erneutem Fehlschlag: zunächst beide neuen Aufnahmen prüfen,
+keine weiteren blinden Modellwechsel und keine neue Nutzeraufnahme verlangen.
+Der Programmstand und die Test-App wurden bei dieser Ursachenprüfung nicht verändert.
+
+Der 30-s-Test hat im gespeicherten Original mit unverändertem Community-1 automatisch
+**drei** Gruppen. Die aktivierte Aufbereitung reduziert sie auf **zwei**; die zweite
+Gruppe liegt ausschließlich in vom Modell als überlappend markierten Bereichen. Die konservative Wortzuordnung
+zeigt deshalb nur **eine** eindeutig zugeordnete Stimme. Im 106-s-Test gilt das Gegenteil:
+Original zwei, aufbereitet drei. Damit ist die pauschale Aufbereitung als verlässlicher
+Standard nicht bestätigt und zeigt einen konkreten Rückschritt. Gruppenanzahl allein beweist weiterhin keine Identitätsrichtigkeit.
+
+Zusätzlich startet der gespeicherte Mikrofonton im zweiten Test 3,993 s nach dem
+App-Startzeitpunkt; keine Warnung gespeichert. Der Code meldet Aufnahme schon vor
+abgeschlossenem getUserMedia/AudioWorklet-Start; seine Endzeitprüfung erkennt diesen
+Anfangsverlust nicht. Das beweist eine Startverzögerung, nicht welche Worte davor
+gesprochen wurden. Keine Übersteuerung festgestellt, Systemspur in beiden Raumtests
+vollständig digital still. Hörverständlichkeit ist damit nicht menschlich bestätigt.
+
+Der gesamte erkannte Wortlaut bleibt bei beiden Zusammenführungen erhalten.
+Die frühere MLX-Erkennung auf demselben 30-s-Original benötigt isoliert 10,3 s;
+die aktuelle Pipeline hatte Text nach 26,5 s, zugeordnete Ausgabe nach 83,1 s und
+Bericht nach 246,9 s ab Stop. Unterschiedliche Wörter, keine bestätigte WER-Referenz:
+kein bewiesener Genauigkeitsgewinn der langsameren Erkennung.
+
+Nächste technische Korrekturen: pauschale Aufbereitung zurücknehmen, Aufnahmebereitschaft
+und Startlücken sichtbar/prüfbar machen; danach Sprecher- und Textqualität an denselben
+Referenzen vergleichen. Vor einer erneuten Testfreigabe konkrete Sprecherreferenz prüfen.
+Allan wurde nur um Zuordnung dreier bereits vorhandener Äußerungen gebeten.
+[Ursachenbeleg](validation/2026-09-21-two-room-root-cause.json).
+
 ## Offen / nächster Schritt
 
 - Qwen3.5-9B mit Ollama0.34.2 liefert jetzt strukturell gültige Berichte auf zwei

@@ -1,0 +1,77 @@
+{
+  "date": "2026-09-21",
+  "scope": "Read-only product audit; isolated local model comparisons",
+  "results": [
+    {
+      "sample": "room-long",
+      "userConfirmedPeople": 3,
+      "micOffsetSeconds": 0.10099999999999998,
+      "captureWarning": null,
+      "variants": {
+        "originalAudio": {
+          "acousticGroups": 2,
+          "groupsWithAssignedText": 2,
+          "summedTurnSeconds": [
+            29.98687499999997,
+            48.43125
+          ],
+          "unassignedWords": 37
+        },
+        "enhancedAudio": {
+          "acousticGroups": 3,
+          "groupsWithAssignedText": 3,
+          "summedTurnSeconds": [
+            26.240624999999973,
+            31.286249999999995,
+            19.558125000000015
+          ],
+          "unassignedWords": 43
+        }
+      },
+      "allRecognizedWordsPreserved": true
+    },
+    {
+      "sample": "room-short",
+      "userConfirmedPeople": 3,
+      "micOffsetSeconds": 3.9930000000000003,
+      "captureWarning": null,
+      "variants": {
+        "originalAudio": {
+          "acousticGroups": 3,
+          "groupsWithAssignedText": 3,
+          "summedTurnSeconds": [
+            8.825624999999997,
+            3.8812500000000023,
+            7.340624999999996
+          ],
+          "unassignedWords": 24
+        },
+        "enhancedAudio": {
+          "acousticGroups": 2,
+          "groupsWithAssignedText": 1,
+          "summedTurnSeconds": [
+            19.018124999999994,
+            1.5524999999999984
+          ],
+          "unassignedWords": 20
+        }
+      },
+      "allRecognizedWordsPreserved": true
+    }
+  ],
+  "latestTimingsSeconds": {
+    "stopToAsr": 26.54,
+    "stopToTranscript": 83.15,
+    "stopToReport": 246.85,
+    "isolatedPriorMlxAsr": 10.323276959126815
+  },
+  "findings": [
+    "Enhancement is not a reliable default: raw three groups collapse to two, only one assigned in latest sample",
+    "A 3.993-second capture-start delay was not surfaced as a warning",
+    "No recognized words lost during transcript merge on either sample",
+    "ASR variants disagree; no human word reference, no accuracy winner",
+    "Three raw acoustic groups still do not prove correct identity assignment"
+  ],
+  "qualityApproved": false,
+  "appChanged": false
+}
