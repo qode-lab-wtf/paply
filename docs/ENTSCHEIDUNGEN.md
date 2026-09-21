@@ -18,3 +18,11 @@
 - 95 % korrekte Sprecherzeit und höchstens 10 % Wortfehler sind Prüfziele, keine nachgewiesenen Resultate.
 - Ohne menschlich bestätigte Referenz ist keine Qualitätsfreigabe möglich.
 - Keine rückwirkende Löschung historischer Audioaufnahmen bei Einführung.
+
+## 2026-09-21 — Modellzugang separat bestätigt
+
+Allan bestätigte die kostenlose Community-1-Modellfreigabe und danach das Erstellen
+eines begrenzten Download-Schlüssels. Erlaubt wurden Leserechte für dieses Modell,
+keine Schreibrechte oder kostenpflichtigen Inferenzdienste. Der Schlüssel wurde
+nur für den Download verwendet, nicht in Git oder der CLI-Konfiguration abgelegt.
+Vorhandene Aufnahmen weiterverwenden; keine neue QuickTime-Aufnahme verlangen.

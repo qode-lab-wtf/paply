@@ -25,10 +25,9 @@ Vergleichswerkzeug implementiert, nicht die produktive Meeting-Pipeline ersetzt.
 
 ## Konkrete Grenzen
 
-- Originales pyannote Community-1: anonymer Download wurde mit „Access denied“
-  abgewiesen. Allan hat danach die kostenlose Browserfreigabe bestätigt; Zugriff
-  ist auf der Modellseite sichtbar gewährt. Browserdownload liefert bisher keine
-  lokal zugänglichen Dateien. Begrenzter Leseschlüssel vorbereitet, nicht erstellt.
+- Originales pyannote Community-1: ursprüngliche Downloadblockade aufgehoben.
+  Allan bestätigte Modellfreigabe und separaten begrenzten Leseschlüssel. Modell
+  heruntergeladen, sieben Artefakte per SHA-256 dokumentiert. Keine laufenden API-Kosten.
 - Beide lokalen Berichtsmodelle liefern bei der ersten Quellenkontrolle
   unbelegte Ergänzungen bzw. verwechselte Rollen. Ein korrektes JSON ist kein
   Qualitätsnachweis. Beim zweiten Vergleich werden nicht wortgetreue Belegzitate
@@ -43,7 +42,7 @@ Vergleichswerkzeug implementiert, nicht die produktive Meeting-Pipeline ersetzt.
 
 ## Fortsetzung
 
-Nach bestätigter Modellfreigabe originales pyannote mit denselben Dateien prüfen.
+Originales pyannote mit denselben Dateien vergleichen (Zugang inzwischen vorhanden).
 Die ausgewählte Hörprobe gemeinsam zur belastbaren Referenz machen und weitere
 Gesprächsarten abdecken. Erst bei erfülltem Qualitätsgate die eigentliche App-Pipeline,
 Report-Ansicht/Exporte, Wiederherstellung und automatische Sieben-Tage-Löschung
@@ -70,3 +69,14 @@ rein zeitliche Regel in diesem Ausschnitt eingreift.
 und ausdrücklich ungeprüften Sprecherlisten. Bestehende Originalaufnahmen unverändert.
 Allan erinnert die genaue Situation der kurzen Aufnahme nicht sicher; mögliches
 Hintergrund-TV verhindert deren Einordnung als bestätigtes Zwei-Personen-Gespräch.
+
+## Originales pyannote abgeschlossen
+
+Alle drei ausgewählten Ausschnitte mit gesperrtem Netzwerk erfolgreich verarbeitet,
+Telemetrie deaktiviert und ohne vorgegebene Teilnehmerzahl.
+[Messwerte](2026-09-21-pyannote-offline.json). Die Laufzeit meldet eine Warnung zur
+Standardabweichung sehr kurzer Segmente; die Ausgaben enthalten endliche Zeitmarken.
+Pyannote liefert auf der kurzen Aufnahme zwei zusätzliche Sprachintervalle gegenüber
+FluidAudio; dies ist eine Modellabweichung, keine bestätigte Verbesserung. Auf dem
+90-s-Mikrofon bildet pyannote zwei statt FluidAudios drei Gruppen. Referenz bleibt
+ungesichert, also keine Qualitätsfreigabe. Zugriff blockiert die Fortsetzung nicht mehr.

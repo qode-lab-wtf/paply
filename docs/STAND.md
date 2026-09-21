@@ -26,17 +26,21 @@ verweigert ohne menschliche Bestätigung ausdrücklich eine Freigabe.
 Private selbstenthaltene Hörprobe erzeugt und im In-App-Browser geprüft.
 Modellrevisionen/Digests in `tools/meeting-eval/models.lock.json` festgehalten.
 
-Original-pyannote-Zugang: Allan hat die kostenlose Freigabe ausdrücklich bestätigt;
-Hugging Face zeigt den Zugriff als gewährt. Browserdownloads liefern bisher keine
-lokal zugängliche Datei. Ein ausschließlich lesender, auf dieses Modell begrenzter
-Download-Schlüssel ist vorbereitet, aber noch nicht erstellt; Bestätigung angefragt.
+Original-pyannote-Zugang freigegeben, begrenzter Leseschlüssel nach Allans explizitem
+Ja erstellt und zum Download benutzt. Kein Schlüssel in Projekt/CLI-Konfiguration
+abgelegt; Zwischenablage anschließend geleert. Originalmodell lokal vorhanden,
+Revision und sieben Artefakthashes festgeschrieben. Erster netzgesperrter 21-s-Lauf
+erfolgreich (28,17 s, 4,07 GB Einzelprozess-RSS), ohne Teilnehmerzahl-Vorgabe.
+Auch beide 90-s-Spuren wurden erfolgreich netzgesperrt verarbeitet.
+[Messwerte](validation/2026-09-21-pyannote-offline.json). Auf der Mikrofonspur
+findet pyannote zwei, FluidAudio drei Sprechergruppen; richtige Zuordnung ungeprüft.
+Alle drei privaten Hörvergleiche um pyannote ergänzt. Kein Zugangshindernis mehr.
 Berichtsvergleich Gemma3-4B / Qwen3-8B durchgeführt: beide produzieren mit einem
 JSON-Schema strukturell gültige Ergebnisse, aber beim Quellenvergleich fallen
 unbelegte Ergänzungen bzw. vertauschte Rollen auf. Zweiter Vergleich mit identischem
 Whisper-Text, exakten Belegzitaten und Qwen-Analysemodus wird von der Zitatprüfung
 bei beiden Modellen abgelehnt. Kein Berichtsmodell freigegeben.
-Die separate originale pyannote-Laufzeit ist installiert; der autorisierte
-Modell-Download ist noch offen (siehe Zugangsstatus oben).
+Die separate originale pyannote-Laufzeit und das Modell sind installiert.
 Die installierte App, produktive Aufnahmen und Diktierfunktion bleiben unverändert.
 
 ## Offen

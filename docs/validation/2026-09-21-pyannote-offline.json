@@ -1,0 +1,37 @@
+{
+  "environment": "Apple M5 32GB macOS 26.2; CPU; network denied; telemetry disabled",
+  "referenceReviewed": false,
+  "pipelineApproved": false,
+  "runs": [
+    {
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 28.16648704209365,
+      "peakRssBytes": 4069654528,
+      "model": "pyannote/speaker-diarization-community-1@3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+      "sample": "pyannote-b-offline",
+      "segmentCount": 7,
+      "speakerLabelCount": 2
+    },
+    {
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 107.3285973330494,
+      "peakRssBytes": 3774447616,
+      "model": "pyannote/speaker-diarization-community-1@3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+      "sample": "pyannote-a-mic-offline",
+      "segmentCount": 28,
+      "speakerLabelCount": 2
+    },
+    {
+      "candidate": "pyannote",
+      "status": "completed",
+      "wallSeconds": 103.83614125009626,
+      "peakRssBytes": 3933847552,
+      "model": "pyannote/speaker-diarization-community-1@3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+      "sample": "pyannote-a-system-offline",
+      "segmentCount": 18,
+      "speakerLabelCount": 2
+    }
+  ]
+}
