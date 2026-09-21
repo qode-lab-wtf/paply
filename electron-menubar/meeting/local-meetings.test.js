@@ -115,6 +115,13 @@ describe('Local capture and durable processing', () => {
     expect(pcm.length).toBe(96000);expect([...pcm.subarray(32000,64000)].every(b=>b===0)).toBe(true);
     expect(store.readState(id).tracks.mic.gaps[0].seconds).toBe(1);
   });
+  it('flags impossible capture duration without discarding samples', async () => {
+    const {root,store}=fixture();const tee=new EventEmitter();tee.start=()=>{};tee.stop=()=>tee.emit('closed');let controller;let clock=1000;
+    const win={isDestroyed:()=>false,webContents:{send:(event,p)=>{if(event==='meeting:capture-stop')controller.acknowledgeStop(p.id);}}};
+    controller=createLocalController({meetingStore:store,audioTee:tee,baseDir:root,now:()=>clock,getOverlayWindow:()=>win,pipeline:{enqueue:()=>{}}});
+    const {id}=controller.start();tee.emit('pcm',Buffer.alloc(128000,1));clock=2000;await controller.stop();
+    const state=store.readState(id);expect(state.tracks.system.durationSeconds).toBe(4);expect(state.tracks.system.timingUncertain).toBe(true);expect(state.captureWarning).toContain('Aufnahmeuhr');
+  });
   it('rejects path traversal and exports hostile transcript as text', () => {
     const {store}=fixture();expect(()=>store.get('../outside')).toThrow();
     const output=htmlExport({index:{title:'<script>bad()</script>',startTime:''},transcript:{segments:[{tStart:0,speaker:'<img>',text:'<script>run()</script>'}]}});

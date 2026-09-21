@@ -29,6 +29,7 @@ export interface MeetingSegment {
   id?: string;
   speakerId?: string;
   uncertain?: boolean;
+  timingUncertain?: boolean;
   possibleEchoOf?: string;
   corrected?: boolean;
   tStart: number; // Sekunden ab Sessionstart

@@ -115,11 +115,8 @@ class AudioTeeManager extends EventEmitter {
     this.process.on('close', () => this.emit('closed'));
   }
 
-  stop() {
-    if (this.process) {
-      this.process.kill('SIGTERM');
-      this.process = null;
-    }
+  stop(force = false) {
+    if (this.process) this.process.kill(force ? 'SIGKILL' : 'SIGTERM');
   }
 
   get isRunning() {

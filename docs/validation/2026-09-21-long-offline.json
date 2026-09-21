@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "status": "ready",
+  "offline": true,
+  "interruptionResumed": true,
+  "device": "mps",
+  "tracks": [
+    {
+      "channel": "mic",
+      "audioSeconds": 1655.0,
+      "asrSegments": 428,
+      "mergedSegments": 395,
+      "textAndOrderPreserved": true
+    },
+    {
+      "channel": "system",
+      "audioSeconds": 3342.6,
+      "asrSegments": 250,
+      "mergedSegments": 312,
+      "textAndOrderPreserved": true
+    }
+  ],
+  "qualityApproved": false,
+  "limitations": [
+    "Historical source has different track durations and legacy index duration 0; does not prove synchronization of fresh capture",
+    "No reviewed speaker/text reference"
+  ],
+  "equalTimestampOrderingRegressionFixed": true
+}

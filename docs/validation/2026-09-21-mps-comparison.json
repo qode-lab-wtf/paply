@@ -1,0 +1,79 @@
+{
+  "qualityApproved": false,
+  "notes": "Runtime equivalence comparison, not speaker ground truth. Concurrent CPU long-meeting test.",
+  "results": [
+    {
+      "sample": "b",
+      "channel": "mic",
+      "wallSeconds": 7.367394666885957,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 7,
+      "mpsTurnCount": 7,
+      "includesModelLoad": true
+    },
+    {
+      "sample": "a",
+      "channel": "mic",
+      "wallSeconds": 10.2091340420302,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 28,
+      "mpsTurnCount": 28
+    },
+    {
+      "sample": "a",
+      "channel": "system",
+      "wallSeconds": 8.979495292063802,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 18,
+      "mpsTurnCount": 18
+    },
+    {
+      "sample": "c",
+      "channel": "mic",
+      "wallSeconds": 12.71081987512298,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 14,
+      "mpsTurnCount": 14
+    },
+    {
+      "sample": "c",
+      "channel": "system",
+      "wallSeconds": 12.401908708037809,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 26,
+      "mpsTurnCount": 26
+    },
+    {
+      "sample": "d",
+      "channel": "mic",
+      "wallSeconds": 9.114124791929498,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 16,
+      "mpsTurnCount": 16
+    },
+    {
+      "sample": "d",
+      "channel": "system",
+      "wallSeconds": 9.060317667201161,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 6,
+      "mpsTurnCount": 6
+    },
+    {
+      "sample": "e",
+      "channel": "mic",
+      "wallSeconds": 9.27659675013274,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 17,
+      "mpsTurnCount": 17
+    },
+    {
+      "sample": "e",
+      "channel": "system",
+      "wallSeconds": 9.30692133307457,
+      "exactlyMatchesCpu": true,
+      "cpuTurnCount": 10,
+      "mpsTurnCount": 10
+    }
+  ]
+}

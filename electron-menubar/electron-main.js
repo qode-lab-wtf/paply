@@ -42,6 +42,13 @@ if (process.env.PAPLY_USER_DATA) {
   }
 }
 
+// Prevent two local workers from writing the same meeting or loading models twice.
+// Electron scopes this lock to the already-isolated userData directory.
+if (localMeetingTest) {
+  if (!app.requestSingleInstanceLock()) app.exit(0);
+  else app.on('second-instance', () => { if (app.isReady()) showMainWindow(); });
+}
+
 // ============================================================================
 // PLATFORM HELPERS
 // ============================================================================

@@ -53,7 +53,7 @@ function createLocalPipeline({ store, configPath, emit = () => {}, runner, now =
     }
     if (!Object.keys(tracks).length) throw new Error('Keine gespeicherten Audiospuren vorhanden');
     assertPresent(id);
-    store.writeState(id, { tracks, models: config.models || {}, status: 'processing', error: null });
+    store.writeState(id, { tracks, models: { ...config.models, diarizationDevice: config.diarizationDevice || 'cpu' }, status: 'processing', error: null });
     return tracks;
   }
   async function processMeeting(id, { force = false, reportOnly = false } = {}) {
@@ -68,7 +68,7 @@ function createLocalPipeline({ store, configPath, emit = () => {}, runner, now =
           const state = store.readState(id);
           if (state.audioExpiresAt && now() >= state.audioExpiresAt) throw new Error('Audio-Aufbewahrungszeit abgelaufen');
           const checkpoint = state.completed?.[key];
-          const signature = crypto.createHash('sha256').update(JSON.stringify([tracks[channel].sha256, config.models, stage])).digest('hex');
+          const signature = crypto.createHash('sha256').update(JSON.stringify([tracks[channel].sha256, config.models, stage, ...(stage === 'diarization' ? [config.diarizationDevice || 'cpu'] : [])])).digest('hex');
           if (force || checkpoint !== signature || !fs.existsSync(path.join(dir, 'processing', key + '.json'))) {
             store.writeState(id, { stage: key }); emit('meetings:updated', { id, stage: key });
             await run(stage, id, channel);

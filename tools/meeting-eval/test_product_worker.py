@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+import json
 
 ROOT=Path(__file__).resolve().parents[2]
 def load(name):
@@ -21,11 +23,30 @@ class ProductContracts(unittest.TestCase):
     def test_detected_untranscribed_voice_is_visible(self):
         rows=worker.assign({'segments':[]},[{'start':1,'end':2,'speaker':'a'}],'mic','hash')
         self.assertEqual(rows[0]['kind'],'audio-gap')
+    def test_equal_word_timestamps_preserve_original_text_order(self):
+        asr={'segments':[{'text':'first second','start':0,'end':1,'words':[{'word':'first','start':0,'end':0},{'word':' second','start':0,'end':1}]}]}
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp);(directory/'processing').mkdir()
+            (directory/'processing/mic-asr.json').write_text(json.dumps(asr))
+            (directory/'processing/mic-diarization.json').write_text(json.dumps([{'start':0,'end':1,'speaker':'a'}]))
+            result=worker.merge(directory,{'tracks':{'mic':{'sha256':'source-order'}},'models':{}})
+            self.assertEqual(''.join(s['text'] for s in result['segments']),'first second')
     def test_long_report_chunks_cover_every_segment(self):
         sources=[{'id':str(i),'tStart':i,'speaker':'Sprecher 1','text':'content '*100} for i in range(100)]
         groups=list(reporter.chunks(sources))
         self.assertGreater(len(groups),1)
         self.assertEqual([s['id'] for group in groups for s in group],[s['id'] for s in sources])
+    def test_rejected_claim_becomes_exact_source_not_a_decision(self):
+        source={'id':'s','text':'If yes, I know I was deceived.','speaker':'S1'}
+        report={'decisions':[{'text':'Matter is closed.','sourceIds':['s'],'sources':[source]}]}
+        approved,fallback=reporter.apply_review(report,{'checks':[{'id':0,'supported':False}]})
+        self.assertEqual(approved['decisions'],[])
+        self.assertIn(source['text'],fallback[0]['text'])
+        self.assertNotIn('Matter is closed.',fallback[0]['text'])
+    def test_incomplete_or_duplicate_review_cannot_approve_claims(self):
+        report={'topics':[{'text':'one'},{'text':'two'}]}
+        for checks in [[],[{'id':0,'supported':True}]*2,[{'id':0,'supported':'yes'},{'id':1,'supported':True}]]:
+            with self.assertRaises(ValueError):reporter.apply_review(report,{'checks':checks})
     def test_unknown_report_references_rejected(self):
         report={k:[] for k in reporter.schema(['s1'])['required']}
         report['tasks']=[{'text':'unsupported','sourceIds':['made-up']}]

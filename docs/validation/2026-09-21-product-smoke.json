@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "date": "2026-09-21",
   "appTests": {
-    "passed": 137,
+    "passed": 138,
     "files": 18
   },
   "pythonTests": {
-    "passed": 31
+    "passed": 34
   },
   "realOfflinePipeline": {
     "audioSeconds": 21,
@@ -24,7 +24,8 @@
     "speakerCountExcludesUnknown": true,
     "pdfPages": 2,
     "pdfTextComplete": true,
-    "pdfVisuallyReviewed": true
+    "pdfVisuallyReviewed": true,
+    "latestBuildLaunched": true
   },
   "retentionWithAppClosed": {
     "launchAgentExit": 0,
@@ -40,5 +41,17 @@
     "No live hybrid capture acceptance",
     "Generative report model not approved",
     "Four pre-existing TypeScript errors"
-  ]
+  ],
+  "ownedRuntimePrepared": true,
+  "packagedOfflinePipeline": {
+    "audioSeconds": 21,
+    "status": "ready",
+    "ownedRuntime": true,
+    "asr": "whisper-large-v3",
+    "diarization": "community-1 mps",
+    "report": "qwen3.8:27b local-draft",
+    "sourceLinkVisuallyVerified": true,
+    "network": "OS sandbox: no network for ASR/diarization; loopback only for report",
+    "qualityApproved": false
+  }
 }

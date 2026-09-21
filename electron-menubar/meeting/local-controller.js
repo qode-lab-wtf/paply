@@ -78,23 +78,36 @@ function createLocalController({ meetingStore: store, audioTee, getOverlayWindow
   function acknowledgeStop(sessionId) { if (sessionId === id) stopResolve?.(); }
   async function stop() {
     if (!active || stopping) return { id: null };
-    stopping = true; const capturedId = id;
+    stopping = true; const capturedId = id, stoppedAt = now();
     try {
       // Ask renderer to send the partial final audio block before acknowledging stop.
-      await new Promise(resolve => {
+      const micStopped = new Promise(resolve => {
         const deadline = setTimeout(() => { store.writeState(capturedId, { captureWarning: 'Mikrofon-Ende nicht bestätigt; letzter Teilblock möglicherweise unvollständig.' }); resolve(); }, 2000);
         stopResolve = () => { clearTimeout(deadline); resolve(); };
         emit('meeting:capture-stop', { id: capturedId });
       });
+      // Stop both sources immediately, then wait for their final buffered data.
+      const systemStopped = new Promise(resolve => {
+        let deadline, forceDeadline;
+        const done = () => { clearTimeout(deadline); clearTimeout(forceDeadline); audioTee.removeListener('closed', done); resolve(); };
+        deadline = setTimeout(() => { audioTee.stop(true); forceDeadline = setTimeout(done, 1000); }, 1000);
+        audioTee.once('closed', done); audioTee.stop();
+      });
+      await Promise.all([micStopped, systemStopped]);
       stopResolve = null;
-      // Keep PCM listener until native process closes, including its final buffered stdout.
-      await new Promise(resolve => { let deadline; const done = () => { clearTimeout(deadline); audioTee.removeListener('closed', done); resolve(); }; deadline = setTimeout(done, 1000); audioTee.once('closed', done); audioTee.stop(); });
       active = false; clearInterval(timer);
       audioTee.removeListener('pcm', listeners.pcm); audioTee.removeListener('error', listeners.error);
       micAcc.flush(); sysAcc.flush();
-      const durationMs = now() - startMs;
+      const durationMs = stoppedAt - startMs;
+      let timingWarning = null;
+      for (const track of Object.values(tracks)) {
+        track.durationSeconds = (track.receivedSamples || 0) / 16000;
+        track.timingUncertain = Math.abs(track.offsetSeconds + track.durationSeconds - durationMs / 1000) > 2;
+        if (track.timingUncertain) timingWarning = 'Tonspur und Aufnahmeuhr weichen voneinander ab; zeitliche Zuordnung bitte prüfen.';
+      }
+      if (timingWarning) store.writeState(capturedId, { captureWarning: timingWarning });
       store.finalizeIndex(capturedId, { durationMs, title: 'Gespräch ' + new Date(startMs).toLocaleString('de-DE') });
-      store.writeState(capturedId, { status: 'queued', captureStoppedAt: now(), tracks });
+      store.writeState(capturedId, { status: 'queued', captureStoppedAt: stoppedAt, tracks });
       pipeline.enqueue(capturedId);
       emit('meeting:stopped', { id: capturedId }); overlay?.hide?.();
       return { id: capturedId };

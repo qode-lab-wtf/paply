@@ -202,13 +202,14 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
             )
           ) : (
             <>
+              {summary.reportStatus === 'local-draft' && <p className="text-xs text-amber-600">Automatischer Berichtsentwurf. Aussagen lassen sich über die Textbelege prüfen.</p>}
               {/* Kurzzusammenfassung */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">Zusammenfassung</Label>
                 <p className="text-sm">{summary.kurzzusammenfassung}</p>
               </div>
 
-              {summary.sections?.map((section, i) => <details key={i} className="text-sm"><summary className="cursor-pointer font-medium">{section.title}</summary>{section.claims?.map((claim, n) => <div key={n} className="my-3"><p>{claim.text}</p><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Textbelege anzeigen</summary>{claim.sources.map(source => <p key={source.id} className="my-2"><a className="underline" href={'#segment-' + source.id}>{Math.floor(source.tStart / 60)}:{String(Math.floor(source.tStart % 60)).padStart(2, '0')}</a> {source.speaker}: {source.text}</p>)}</details></div>)}{section.sources.map(source => <p key={source.id} className="my-2"><a className="underline" href={'#segment-' + source.id}>{Math.floor(source.tStart / 60)}:{String(Math.floor(source.tStart % 60)).padStart(2, '0')}</a> {source.speaker}: {source.text}</p>)}</details>)}
+              {summary.sections?.map((section, i) => <details key={i} open={summary.reportStatus === 'local-draft'} className="text-sm"><summary className="cursor-pointer font-medium">{section.title}</summary>{section.claims?.map((claim, n) => <div key={n} className="my-3"><p>{claim.text}</p><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Textbelege anzeigen</summary>{claim.sources.map(source => <p key={source.id} className="my-2"><a className="underline" href={'#segment-' + source.id}>{Math.floor(source.tStart / 60)}:{String(Math.floor(source.tStart % 60)).padStart(2, '0')}</a> {source.speaker}: {source.text}</p>)}</details></div>)}{section.sources.map(source => <p key={source.id} className="my-2"><a className="underline" href={'#segment-' + source.id}>{Math.floor(source.tStart / 60)}:{String(Math.floor(source.tStart % 60)).padStart(2, '0')}</a> {source.speaker}: {source.text}</p>)}</details>)}
               {/* Kernpunkte */}
               {summary.kernpunkte.length > 0 && (
                 <div>
@@ -333,6 +334,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
                   </span>
                   <div className="flex-1 leading-relaxed">
                     <p>{seg.text}</p>
+                    {seg.timingUncertain && <span className="block text-xs text-amber-600">Zeitliche Zuordnung prüfen</span>}
                     {seg.uncertain && <span className="text-xs text-amber-600">Zuordnung / Wortlaut prüfen</span>}
                     {seg.possibleEchoOf && <span className="block text-xs text-amber-600">Mögliches Lautsprecher-Echo – Beitrag erhalten</span>}
                     {seg.id && (editing === seg.id ? <div className="space-y-2 mt-2">

@@ -46,6 +46,10 @@ def diarize(audio, config):
     duration=len(signal)/rate
     if not len(signal):return []
     pipeline=Pipeline.from_pretrained(config['pyannoteModel'])
+    device=config.get('diarizationDevice','cpu')
+    if device not in ('cpu','mps'):raise ValueError('Unsupported diarization device')
+    if device=='mps' and not torch.backends.mps.is_available():raise RuntimeError('Apple GPU nicht verfügbar; CPU kann ausdrücklich konfiguriert werden')
+    pipeline.to(torch.device(device))
     output=pipeline({'waveform':torch.from_numpy(signal.T.copy()),'sample_rate':rate})
     return [{'start':max(0,t.start),'end':min(duration,t.end),'speaker':speaker}
             for t,speaker in output.speaker_diarization if min(duration,t.end)>max(0,t.start)]
@@ -96,8 +100,10 @@ def merge(directory,state):
     for channel,track in state['tracks'].items():
         asr=json.loads((directory/'processing'/f'{channel}-asr.json').read_text())
         turns=json.loads((directory/'processing'/f'{channel}-diarization.json').read_text())
-        segments.extend(assign(asr,turns,channel,track['sha256'],track.get('offsetSeconds',0)))
-    segments.sort(key=lambda s:(s['tStart'],s['channel'],s['id']))
+        rows=assign(asr,turns,channel,track['sha256'],track.get('offsetSeconds',0))
+        for row in rows:row['timingUncertain']=track.get('timingUncertain',False)
+        segments.extend(rows)
+    segments.sort(key=lambda s:(s['tStart'],s['channel']))
     labels=list(dict.fromkeys(s['speakerId'] for s in segments if not s['speakerId'].endswith('-unclear')))
     for s in segments:
         s['speaker']='Zuordnung unklar' if s['speakerId'].endswith('-unclear') else f'Sprecher {labels.index(s["speakerId"])+1}'

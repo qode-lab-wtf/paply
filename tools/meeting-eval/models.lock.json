@@ -311,5 +311,14 @@
     "runtime": "ollama 0.20.3",
     "source": "https://ollama.com/library/qwen3.5",
     "qualityApproved": false
+  },
+  "qwen38ReportCandidate": {
+    "model": "qwen3.8:27b",
+    "digest": "22130167c4c20e20c7b71454612966ca8e8171e9b3cc8ab6ce8aa6cbfec79643",
+    "runtime": "ollama 0.34.2",
+    "runtimeBinarySha256": "e57700f3d7cf3a222e0b899bf4f30e171359e18d2c8a9771f3b77420798b00f3",
+    "runtimeArchiveSha256": "f33b2a5aa59bc6c961ed3ec23ba9dc646ca6d99ced8d2a0d46eb3a522167dd3f",
+    "source": "https://ollama.com/library/qwen3.8:27b",
+    "qualityApproved": false
   }
 }

@@ -26,9 +26,12 @@ Die installierte `/Applications/paply.app` und ihre Daten bleiben unverändert.
 - Versionierte Sitzung mit Aufnahmezeit, Modellversionen, Fehlern und Ablaufdatum.
   LaunchAgent für neue Audioaufnahmen nach sieben Tagen einschließlich Zwischenkopien.
   Historische Daten werden nicht rückwirkend bereinigt.
-- Quellenübersicht als transparenter Ersatz, solange kein Berichtsmodell qualifiziert
-  ist. Optionaler abschnittsweiser lokaler Berichtsentwurf in Arbeit, mit echten
-  Quellenverweisen und eigener Modellversion. Quellenbezug beweist keine Faktentreue.
+- Historische Testkopien behalten zunächst ihre Quellenübersicht. Neu berechnete
+  Testgespräche erhalten einen abschnittsweisen lokalen Berichtsentwurf mit echten
+  Quellenverweisen, zusätzlicher Aussagenprüfung und eigener Modellversion. Quellenbezug
+  und Modellprüfung beweisen keine Faktentreue. Qwen3.8-27B bleibt ausdrücklich
+  experimentell, keine zuverlässige Produktfreigabe. Abgelehnte Aussagen werden durch die
+  Originalstellen ersetzt, statt unbelegte Beschlüsse/Aufgaben stehenzulassen.
 
 ## Nachgewiesen am 21.09.2026
 
@@ -42,7 +45,7 @@ Die installierte `/Applications/paply.app` und ihre Daten bleiben unverändert.
   Das beweist weder vollständige Spracherkennung noch richtige Sprecherzuordnung.
 - Reale 21-s-Aufnahme mit dem neuen App-Backend vollständig offline verarbeitet:
   ASR → Sprecheranalyse → Zusammenführung → Quellenübersicht, Status ready.
-- 137 App-Tests/18 Dateien; 31 Python-Tests. Fehler/Wiederaufnahme, Korrekturen,
+- 138 App-Tests/18 Dateien; 34 Python-Tests. Fehler/Wiederaufnahme, Korrekturen,
   Aufnahme-Endstücke, Löschung während Verarbeitung, Erhalt überlappender Texte.
 - Vite-Build erfolgreich. Vier bekannte TypeScript-Fehler Profile/CustomAgent in
   Dashboard bestehen auch auf der unveränderten Basis; nicht als grüner Typecheck ausgeben.
@@ -53,17 +56,42 @@ Die installierte `/Applications/paply.app` und ihre Daten bleiben unverändert.
 - LaunchAgent geladen, letzter Exit 0. Bei geschlossener Test-App abgelaufene Test-
   Audiodatei entfernt, Transkript und historische Testaufnahme erhalten.
 
+- Apple-MPS-Sprecheranalyse: neun Tonspuren identisch zur CPU-Ausgabe; bei der
+  Kurzaufnahme 7,37 statt 28,17 Sekunden. Kein Nachweis korrekter Sprecherlabels:
+  [MPS-Vergleich](validation/2026-09-21-mps-comparison.json).
+- Vollständige historische Aufnahme mit 1.655 s Mikrofon und 3.342,6 s Systemton
+  offline verarbeitet, nach absichtlichem Prozessabbruch mit Checkpoint fortgesetzt.
+  Alle erkannten Texte beider Spuren inklusive Wortreihenfolge erhalten. Ein Fehler
+  bei gleichen Wortzeitstempeln wurde dabei behoben und als Regressionstest ergänzt:
+  [Langtest](validation/2026-09-21-long-offline.json).
+- Diese historische Quelle hat ungleiche Spurlängen und Indexdauer 0; sie beweist
+  keine korrekte neue Aufnahmesynchronisierung. Neue Aufnahmen markieren Abweichungen
+  zwischen Audio- und Aufnahmeuhr. Beide Quellen werden beim Stop sofort gestoppt.
+- Die Test-App verhindert einen zweiten gleichzeitigen Prozess mit demselben
+  Datenordner, damit keine doppelten Modellläufe/Sitzungsschreibvorgänge entstehen.
+- Ausgewählte Python-Laufzeiten, Modelle und Berichtsprozess im eigenen Supportordner
+  vorbereitet, keine Abhängigkeit der Test-App von Entwicklungs-Venv-Pfaden.
+- Neu gepackte App: 21-s-Testkopie per UI vollständig neu verarbeitet, Status ready;
+  Whisper → Community-1/MPS → Qwen3.8-27B-Entwurf mit Aussagenprüfung. Bericht und
+  Quellenverknüpfung zu Sprecher 2 in der echten Oberfläche geprüft. Frühere
+  Testkorrektur blieb gespeichert und wurde bei geänderten IDs als unverknüpft gezeigt.
+
 ## Offen / nächster Schritt
 
 - Qwen3.5-9B mit Ollama0.34.2 liefert jetzt strukturell gültige Berichte auf zwei
   Beispielen; inhaltlich weiterhin unzulässige Vereinfachungen/Zuordnungen. Nicht
-  aktiviert. Größerer Kandidat Qwen3.8-27B wird lokal vorbereitet. Qwen3-8B und Gemma3-4B
+  aktiviert. Qwen3.8-27B lokal geprüft: bessere Kontrollfälle, aber auf echtem Gespräch
+  ebenfalls eine unzulässig veränderte Bedingung. Zusätzliche Aussagenprüfung wird
+  praktisch überprüft: Selbstprüfung übersah den Fehler; Denkmodus mit strukturierten
+  Ausgaben scheiterte zusätzlich am lokalen Ollama-Fehler. Kein Fakten-Gate daraus
+  ableiten. Berichte bleiben als Entwurf gekennzeichnet:
+  [Berichtsgrenzen](validation/2026-09-21-report-review.json). Qwen3-8B und Gemma3-4B
   hatten Rollen-/Bedeutungsfehler und bleiben ungeeignet für eine Freigabe.
 - Erneute UI-Prüfung bestanden: zwei Sprecher ohne Mitzählen unklarer Zuordnung;
   Wiedergabe auch nach gespeicherter Korrektur bei 17,64 s. PDF vollständig und lesbar
   auf zwei A4-Seiten geprüft. Mikrofon-Neuverbindung erhält erkannte Zeitlücken mit
   Stille; automatischer Test bestanden, echte Gerätewechsel noch ausstehend.
-- Echte Aufnahmeberechtigungen, Gerätewechsel, lange Aufnahmen und Raum/Telefon/
+- Echte Aufnahmeberechtigungen, Gerätewechsel, neue lange Aufnahmen und Raum/Telefon/
   Mischsituation praktisch abnehmen. Systemtonbeginn derzeit aus erster Ankunft
   geschätzt; keine nachgewiesene hardwareübergreifende Langzeitsynchronität.
 - Menschlich bestätigte Referenz fehlt: 95 % Sprecherzeit, ≤10 % WER und vollständige
