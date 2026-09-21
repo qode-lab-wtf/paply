@@ -180,6 +180,39 @@ Referenzen vergleichen. Vor einer erneuten Testfreigabe konkrete Sprecherreferen
 Allan wurde nur um Zuordnung dreier bereits vorhandener Äußerungen gebeten.
 [Ursachenbeleg](validation/2026-09-21-two-room-root-cause.json).
 
+## Akustische Stabilität ohne Nutzerzuordnung geprüft
+
+Allan möchte keine Namen oder manuelle Sprecherreferenz liefern. Bestätigter nächster
+Schritt: akustische Stimmenmerkmale, Wiedererkennung und Verfahrenswidersprüche prüfen;
+kein Zuordnen anhand des Gesprächsinhalts. Diese Prüfung ist abgeschlossen, ohne die
+App erneut zu ändern und ohne neue Aufnahme oder Audio-Kopien anzulegen.
+
+Originalton beider neuen Aufnahmen mit Community-1 sowie FluidAudio offline verglichen.
+Community-1 zusätzlich bei halber Amplitude und einer Sekunde vorangestellter Stille
+(in RAM, Zeitversatz korrigiert) geprüft: kurzer Test durchgehend drei Gruppen,
+langer durchgehend zwei. Zuordnungen auf beidseitig als Einzelstimme erkannten
+Zeitabschnitten stimmen nach Abgleich der neutralen Kennungen zu etwa 98,6–99,9 %
+überein. Das ist Stabilität, ausdrücklich KEINE Sprecher-Genauigkeit.
+
+FluidAudio findet in beiden Aufnahmen zwei Gruppen. Auf vergleichbaren Abschnitten
+stimmen die beiden Verfahren nur zu rund 67–69 % überein; abweichende Sprachaktivität
+und Überlappungen sind separat erfasst. Widersprüchliche Zeitintervalle gespeichert.
+Im kurzen Original sind 13 von 26 ausgegebenen Sprecherabschnitten kürzer als 0,2 s.
+Diese kurzzeitigen Sprünge erklären einen Teil der zerstückelten Zuordnung; sie dürfen
+nicht einfach durch kontextbasiertes Umsortieren verdeckt werden.
+
+Stimmenmerkmale aus sechs bzw. 19 separat extrahierten, mindestens einsekündigen,
+modellseitig nicht überlappten Ausschnitten verglichen. Ähnlichkeitsbereiche derselben
+und unterschiedlicher zugeordneter Gruppen überlappen deutlich. Der Merkmalsextraktor
+ist zudem Teil der ursprünglichen Gruppierung, also kein unabhängiger Richtigkeitsbeweis.
+Keine kalibrierte Identitätswahrscheinlichkeit, keine Namensbestimmung, keine Freigabe.
+
+Praktische Konsequenz bleibt: Originalton als Grundlage, pauschale Aufbereitung nicht
+als Standard, kurzfristige Grenzwechsel und Verfahrenswidersprüche gezielt prüfen.
+Keine weiteren Nutzeraufnahmen oder Namensangaben für diese technischen Schritte nötig.
+Der Benchmark hat eine getrennte Übereinstimmungsmessung mit exakten Zeitintervallen;
+41 Python-Tests bestanden. [Belege](validation/2026-09-21-acoustic-stability.json).
+
 ## Offen / nächster Schritt
 
 - Qwen3.5-9B mit Ollama0.34.2 liefert jetzt strukturell gültige Berichte auf zwei

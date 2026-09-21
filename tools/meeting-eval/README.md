@@ -178,3 +178,12 @@ Sprecherzahl von zwei auf drei, verfälschte aber teils die ASR-Wörter. Deshalb
 nur die **Sprecheranalyse** den aufbereiteten Mikrofonton. ASR und Wiedergabe behalten
 den Originalton. Systemton bleibt unbearbeitet. Das ist eine experimentelle
 Testkonfiguration; die Identitäts- und Wortfehlerraten sind noch nicht bestätigt.
+
+## Stabilität ohne menschliche Sprecherreferenz
+
+`stability.agreement(first, second, duration)` vergleicht zwei akustische Ausgaben
+nach optimaler Zuordnung ihrer neutralen Kennungen. Die Zeitintegration erfolgt
+an sämtlichen Intervallgrenzen. Vergleichbar sind nur beidseitig einzelne Stimmen;
+Sprachaktivitätsabweichung und ausgeschlossene Zeit bleiben sichtbar. Abweichende
+Zeitintervalle dienen der gezielten Prüfung. Dieses Ergebnis ist weder DER noch
+Sprecher-Genauigkeit und setzt niemals `qualityApproved` auf wahr.
