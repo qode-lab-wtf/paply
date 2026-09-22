@@ -125,7 +125,7 @@ describe('withRetry', () => {
   it('gibt nach allen Versuchen den letzten Fehler weiter; 400 wird nicht wiederholt', async () => {
     let n = 0;
     await expect(withRetry(async () => { n++; const e = new Error('x'); e.status = 429; e.code = 'rate_limit'; throw e; }, { sleep: async () => {} })).rejects.toMatchObject({ code: 'rate_limit' });
-    expect(n).toBe(4);
+    expect(n).toBe(3);
     n = 0;
     await expect(withRetry(async () => { n++; const e = new Error('bad'); e.status = 400; throw e; }, { sleep: async () => {} })).rejects.toThrow('bad');
     expect(n).toBe(1);
@@ -238,7 +238,7 @@ describe('transcribeWithGemini (Fake-Netz)', () => {
     const log = [];
     const f404 = fakeGemini([() => ({ ok: false, status: 404, text: async () => 'no model' }), { json: { sprecher: [], segmente: [{ start: 0, ende: 1, sprecher: 'S1', spur: 'A', text: 'ok' }] } }], log);
     const r = await transcribeWithGemini({ micWavPath: mic, apiKey: 'k', fetchImpl: f404, sleep: async () => {} });
-    expect(r.model).toBe('gemini-flash-lite-latest');
+    expect(r.model).toBe('gemini-3.6-flash');
     expect(r.segments[0].text).toBe('ok');
   });
 

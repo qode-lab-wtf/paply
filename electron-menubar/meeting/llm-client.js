@@ -9,7 +9,9 @@
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
-const GEMINI_FALLBACK_MODELS = ['gemini-flash-lite-latest'];
+// Ausweich-Reihenfolge bei nicht verfügbar/überlastet/Kontingent. Kein -lite: lehnt thinkingBudget 0 mit 400 ab.
+const GEMINI_FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
+const GEMINI_RETRY_MS = 4000;                    // eine Wiederholung je Modell bei 5xx, bevor gewechselt wird
 const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey, model, fetchImpl }) {
@@ -84,7 +86,7 @@ async function chatComplete({
   provider = 'auto', order = ['gemini', 'groq'],
   groqApiKey, groqModel = DEFAULT_GROQ_MODEL,
   geminiApiKey, geminiModel = DEFAULT_GEMINI_MODEL,
-  fetchImpl,
+  fetchImpl, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
 } = {}) {
   const seq = provider === 'groq' ? ['groq'] : provider === 'gemini' ? ['gemini'] : order;
   let lastErr = null;
@@ -97,13 +99,20 @@ async function chatComplete({
     }
     // Gemini: Modell-Fallback bei 404/400 (Modell nicht verfügbar) und 500/503 (überlastet); sonst nächster Anbieter
     const models = [geminiModel, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== geminiModel)];
+    let stop = false;
     for (const m of models) {
-      try {
-        return await callGemini({ system, user, jsonMode, responseSchema, thinkingBudget, maxTokens, temperature, apiKey: geminiApiKey, model: m, fetchImpl });
-      } catch (e) {
-        lastErr = e;
-        if (![400, 404, 500, 503].includes(e.status)) break;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await callGemini({ system, user, jsonMode, responseSchema, thinkingBudget, maxTokens, temperature, apiKey: geminiApiKey, model: m, fetchImpl });
+        } catch (e) {
+          lastErr = e;
+          const overloaded = [500, 502, 503].includes(e.status);
+          if (overloaded && attempt === 0) { await sleep(GEMINI_RETRY_MS); continue; }
+          if (![400, 404, 429].includes(e.status) && !overloaded) stop = true;
+          break;
+        }
       }
+      if (stop) break;
     }
   }
   throw lastErr || new Error('Kein LLM-Anbieter verfügbar (kein Groq- oder Gemini-Key gesetzt)');

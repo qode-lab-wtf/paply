@@ -41,7 +41,7 @@ describe('chatComplete Anbieter-Routing', () => {
     const f = async (url) => { seen.push(String(url)); return seen.length === 1 ? { ok: false, status: 404 } : { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'LITE' }] } }] }) }; };
     const r = await chatComplete({ user: 'x', provider: 'gemini', geminiApiKey: 'gem', fetchImpl: f });
     expect(r.text).toBe('LITE');
-    expect(r.model).toBe('gemini-flash-lite-latest');
+    expect(r.model).toBe('gemini-3.6-flash');
   });
 
   it('auto: nutzt Gemini, wenn nur Gemini-Key gesetzt ist', async () => {

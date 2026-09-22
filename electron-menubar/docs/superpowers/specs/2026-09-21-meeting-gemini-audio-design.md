@@ -1,6 +1,6 @@
 # Meeting-Modus v2 — Gemini-Audio-Auswertung, Nachhören, Bericht v2
 
-**Datum:** 2026-09-21 · **Version:** 1.13.0 · **Status:** umgesetzt auf Branch `claude/funny-hypatia-86wimp`, wartet auf Praxistest auf Allans Mac
+**Datum:** 2026-09-21 · **Version:** 1.13.1 · **Status:** umgesetzt auf Branch `claude/funny-hypatia-86wimp`, wartet auf Praxistest auf Allans Mac
 
 ## Warum
 
@@ -24,7 +24,7 @@ Cmd+Shift+X ─► MeetingController.start()
    „startet …“ bis das erste Mikro-Paket da ist. Chunks (20–40 s, an Sprechpausen) = Absturzsicherung.
 Cmd+Shift+X ─► stop() Phase 1 (schnell): Capture-Handshake (Restpuffer) → audio_mic.wav / audio_system.wav
    → Index status 'processing' → Overlay zu. Hotkey ist sofort wieder frei.
-   Phase 2 (seriell, im Hintergrund): Fenster ≤ 25 min an Chunk-Grenzen → Gemini Flash (Alias `gemini-flash-latest`; 2.5 ist für neue Keys abgeschaltet) bekommt
+   Phase 2 (seriell, im Hintergrund): Fenster ≤ 25 min an Chunk-Grenzen → Gemini Flash (Alias `gemini-flash-latest`, bei 404/429/5xx Ausweichen auf `gemini-3.6-flash` → `gemini-3.5-flash`; 2.5 ist für neue Keys abgeschaltet) bekommt
    Spur A (Mikro) und ggf. Spur B (System, nur wenn Anruf erkannt / systemAudioMode) als Audio →
    JSON {sprecher, segmente} mit Zeitmarken → lokale Energieprüfung der Spurzuordnung, Echo-Dedupe →
    Labels „Sprecher 1..N“ / „Gegenstelle“ → transcript.json → Bericht v2 → status 'ready'

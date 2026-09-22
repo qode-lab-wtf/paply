@@ -1,6 +1,6 @@
 # Paply — Stand
 
-**Zeitpunkt:** 22.09.2026, früh · **Phase:** Betrieb (v1.13.0 veröffentlicht) + Entwicklung (Stimmerkennung)
+**Zeitpunkt:** 22.09.2026, nachmittags · **Phase:** Betrieb (v1.13.1) + Entwicklung (Stimmerkennung)
 
 ## Bestätigtes Ziel
 
@@ -18,7 +18,11 @@ per Stimmerkennung.
 - Prüfung 21.09.2026 (Allans Mac, echte 3-Personen-Aufnahme, `scripts/meeting-analyze-wav.js`):
   Wortlaut gut, Bericht inhaltlich richtig; Sprecherzahl schwankt (3–4), Zuordnung wechselt zwischen
   Durchläufen. 140 automatische Tests grün.
-- Praxistest in der Alltags-App (Cmd+X, Cmd+Shift+X) steht bei Allan aus.
+- Praxistest v1.13.0 in der Alltags-App (22.09.2026, Allan, 2 Personen, 2 Aufnahmen): Gemini gab beide Male
+  HTTP 503 (überlastet, alle -latest-Modelle), die App fiel auf Groq Whisper zurück → 1 Sprecher, schlechterer Wortlaut.
+  **v1.13.1:** bei 5xx/429 wechselt Auswertung und Bericht auf `gemini-3.6-flash` → `gemini-3.5-flash`; kürzere
+  Wartezeiten je Modell. Nachgeprüft an Allans Aufnahme 1790089914117-192z9h: 2 Sprecher (richtig), Wortlaut gut,
+  Bericht über gemini-3.6-flash. Auto-Update in der App scheitert bei unsignierter App (bekannt) → DMG + `xattr -cr`.
 
 ## In Arbeit
 

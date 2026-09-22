@@ -13,9 +13,12 @@ const { rms } = require('../audio/pcm-utils');
 const { uploadFile, deleteFile, GEMINI_BASE } = require('./gemini-files');
 
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const FALLBACK_MODELS = ['gemini-flash-lite-latest'];
+// Reihenfolge beim Ausweichen: nicht verfügbar (404/400), überlastet (5xx nach Retry) oder Kontingent (429)
+// → nächstes Modell. Feste Versionen als Zwischenstufen, weil die -latest-Aliase gemeinsam überlastet sein können.
+const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
+const SWITCH_MODEL_STATUS = new Set([400, 404, 429, 500, 502, 503]);
 const INLINE_LIMIT_BYTES = 9 * 1024 * 1024;      // pro Spur inline (Base64), sonst Files API
-const RETRY_DELAYS_MS = [5000, 20000, 60000];    // 429/5xx-Backoff
+const RETRY_DELAYS_MS = [5000, 15000];           // 429/5xx-Backoff je Modell, danach nächstes Modell
 const MIN_SPLIT_SECONDS = 120;                   // kleiner wird ein Fenster bei MAX_TOKENS nicht mehr geteilt
 
 // ----------------------------- Fensterplanung -----------------------------
@@ -369,13 +372,13 @@ async function transcribeWithGemini(opts) {
     if (hasSystem) { parts.push({ text: 'Spur B (Systemaudio):' }); parts.push(await _audioPart({ apiKey, pcm: sysPcm, name: `system-${idx}`, fetchImpl, sleep, uploaded })); }
 
     let result;
-    // Modell-Fallback bei 404/400 (Modell nicht verfügbar), sonst Retry-Backoff
+    // Retry-Backoff je Modell; danach bei 404/400/429/5xx nächstes Modell, sonst Fehler
     for (;;) {
       try {
         result = await withRetry(() => _generate({ apiKey, model: models[modelIdx], parts, fetchImpl }), { sleep, onRetry: () => onProgress && onProgress({ windowIndex: idx, windowCount: windows.length, stage: 'retry' }) });
         break;
       } catch (e) {
-        if ((e.status === 404 || e.status === 400) && modelIdx < models.length - 1) { modelIdx++; continue; }
+        if (SWITCH_MODEL_STATUS.has(e.status) && modelIdx < models.length - 1) { modelIdx++; continue; }
         throw e;
       }
     }
