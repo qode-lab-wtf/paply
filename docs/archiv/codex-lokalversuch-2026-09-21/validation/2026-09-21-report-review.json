@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "model": "qwen3.8:27b",
+  "runtime": "ollama 0.34.2",
+  "privateSamples": [
+    "B",
+    "C"
+  ],
+  "generationSucceeded": true,
+  "semanticAcceptance": false,
+  "findings": [
+    "Short school response retained with second speaker",
+    "Longer sample changed a conditional outcome into an unsupported conclusion",
+    "Non-thinking model self-review accepted all 17 claims including the unsupported conclusion"
+  ],
+  "qualityApproved": false,
+  "consequence": "Test-only report drafts; self-review is not a factuality gate",
+  "thinkingReview": {
+    "success": false,
+    "error": "Ollama HTTP 500: no user query found in messages during structured output application"
+  }
+}

@@ -1,0 +1,325 @@
+{
+  "date": "2026-09-21",
+  "method": "Original audio only; automatic counts; no text/context, names, pitch heuristic, or human speaker labels. Half amplitude and one-second prepended silence tested in memory. Different offline implementation compared after optimal label mapping. Exact interval integration on both-single-speaker portions; exclusions reported.",
+  "results": {
+    "short": {
+      "durationSeconds": 30.1279375,
+      "counts": {
+        "original": 3,
+        "half-gain": 3,
+        "leading-silence": 3
+      },
+      "fluidCount": 2,
+      "comparisons": {
+        "half-gain": {
+          "comparableSeconds": 16.824375,
+          "mappedAgreement": 0.9859578736208628,
+          "singleVoiceFirstSeconds": 16.9425,
+          "speechPresenceDisagreementSeconds": 0.1687500000000004,
+          "disagreementIntervals": [
+            {
+              "start": 1.12784375,
+              "end": 1.14471875
+            },
+            {
+              "start": 10.965968750000002,
+              "end": 11.016593750000002
+            },
+            {
+              "start": 27.48659375,
+              "end": 27.50346875
+            },
+            {
+              "start": 27.53721875,
+              "end": 27.55409375
+            },
+            {
+              "start": 27.97596875,
+              "end": 28.00971875
+            },
+            {
+              "start": 28.06034375,
+              "end": 28.07721875
+            },
+            {
+              "start": 28.094093750000003,
+              "end": 28.12784375
+            },
+            {
+              "start": 29.106593750000002,
+              "end": 29.12346875
+            },
+            {
+              "start": 29.157218750000002,
+              "end": 29.17409375
+            },
+            {
+              "start": 29.190968750000003,
+              "end": 29.207843750000002
+            }
+          ],
+          "isAccuracy": false,
+          "qualityApproved": false
+        },
+        "leading-silence": {
+          "comparableSeconds": 16.831874999999993,
+          "mappedAgreement": 0.995878355798151,
+          "singleVoiceFirstSeconds": 16.9425,
+          "speechPresenceDisagreementSeconds": 0.33062500000000705,
+          "disagreementIntervals": [
+            {
+              "start": 1.0265937500000002,
+              "end": 1.0390937500000001
+            },
+            {
+              "start": 1.1234687500000002,
+              "end": 1.12784375
+            },
+            {
+              "start": 1.14034375,
+              "end": 1.14471875
+            },
+            {
+              "start": 15.669718750000001,
+              "end": 15.67409375
+            },
+            {
+              "start": 15.68659375,
+              "end": 15.69096875
+            },
+            {
+              "start": 27.54971875,
+              "end": 27.55409375
+            },
+            {
+              "start": 28.00534375,
+              "end": 28.00971875
+            },
+            {
+              "start": 28.05596875,
+              "end": 28.06034375
+            },
+            {
+              "start": 28.07284375,
+              "end": 28.07721875
+            },
+            {
+              "start": 28.089718750000003,
+              "end": 28.094093750000003
+            },
+            {
+              "start": 28.96721875,
+              "end": 28.97159375
+            },
+            {
+              "start": 29.11909375,
+              "end": 29.12346875
+            },
+            {
+              "start": 29.152843750000002,
+              "end": 29.157218750000002
+            },
+            {
+              "start": 29.203468750000003,
+              "end": 29.207843750000002
+            }
+          ],
+          "isAccuracy": false,
+          "qualityApproved": false
+        },
+        "fluid": {
+          "comparableSeconds": 12.411659,
+          "mappedAgreement": 0.6717035168304253,
+          "singleVoiceFirstSeconds": 16.9425,
+          "speechPresenceDisagreementSeconds": 4.605470499999999,
+          "disagreementIntervals": [
+            {
+              "start": 19.847198,
+              "end": 23.921902
+            }
+          ],
+          "isAccuracy": false,
+          "qualityApproved": false
+        }
+      },
+      "cleanExcerptCount": 6,
+      "excerptsPerAssignedGroup": [
+        1,
+        1,
+        4
+      ],
+      "embeddingCosines": {
+        "sameAssignedGroup": {
+          "pairs": 6,
+          "min": 0.19369934725799237,
+          "max": 0.47768866549384237
+        },
+        "differentAssignedGroups": {
+          "pairs": 9,
+          "min": 0.11498071229139087,
+          "max": 0.4458510171598237
+        }
+      },
+      "sub200msTurns": 13,
+      "totalTurns": 26
+    },
+    "long": {
+      "durationSeconds": 106.237125,
+      "counts": {
+        "original": 2,
+        "half-gain": 2,
+        "leading-silence": 2
+      },
+      "fluidCount": 2,
+      "comparisons": {
+        "half-gain": {
+          "comparableSeconds": 70.419375,
+          "mappedAgreement": 0.9988018212317277,
+          "singleVoiceFirstSeconds": 70.520625,
+          "speechPresenceDisagreementSeconds": 0.08437499999999432,
+          "disagreementIntervals": [
+            {
+              "start": 97.21409375,
+              "end": 97.28159375
+            },
+            {
+              "start": 97.29846875000001,
+              "end": 97.31534375000001
+            }
+          ],
+          "isAccuracy": false,
+          "qualityApproved": false
+        },
+        "leading-silence": {
+          "comparableSeconds": 70.3575,
+          "mappedAgreement": 0.9993959421525781,
+          "singleVoiceFirstSeconds": 70.52062499999998,
+          "speechPresenceDisagreementSeconds": 0.36562500000000275,
+          "disagreementIntervals": [
+            {
+              "start": 51.782218750000006,
+              "end": 51.78659375
+            },
+            {
+              "start": 70.09596875,
+              "end": 70.10846875
+            },
+            {
+              "start": 92.67471875000001,
+              "end": 92.68721875
+            },
+            {
+              "start": 97.27721875,
+              "end": 97.28159375
+            },
+            {
+              "start": 97.29409375,
+              "end": 97.29846875000001
+            },
+            {
+              "start": 99.72409375000001,
+              "end": 99.72846875
+            }
+          ],
+          "isAccuracy": false,
+          "qualityApproved": false
+        },
+        "fluid": {
+          "comparableSeconds": 65.34851375000004,
+          "mappedAgreement": 0.6859423830431033,
+          "singleVoiceFirstSeconds": 70.520625,
+          "speechPresenceDisagreementSeconds": 5.501341999999916,
+          "disagreementIntervals": [
+            {
+              "start": 16.56846875,
+              "end": 17.68221875
+            },
+            {
+              "start": 33.10696,
+              "end": 34.142616
+            },
+            {
+              "start": 36.27846875,
+              "end": 36.61596875
+            },
+            {
+              "start": 51.752843750000004,
+              "end": 51.78659375
+            },
+            {
+              "start": 55.50085,
+              "end": 55.515968750000006
+            },
+            {
+              "start": 70.90596875,
+              "end": 72.34296
+            },
+            {
+              "start": 72.4618,
+              "end": 84.19355
+            },
+            {
+              "start": 88.87784375000001,
+              "end": 89.95784375000001
+            },
+            {
+              "start": 92.68251,
+              "end": 92.70846875000001
+            },
+            {
+              "start": 92.72534375000001,
+              "end": 92.74221875
+            },
+            {
+              "start": 92.89409375000001,
+              "end": 95.10471875
+            },
+            {
+              "start": 95.93159375,
+              "end": 97.28159375
+            },
+            {
+              "start": 97.29846875000001,
+              "end": 97.41659375
+            },
+            {
+              "start": 99.71137,
+              "end": 99.72846875
+            }
+          ],
+          "isAccuracy": false,
+          "qualityApproved": false
+        }
+      },
+      "cleanExcerptCount": 19,
+      "excerptsPerAssignedGroup": [
+        6,
+        13
+      ],
+      "embeddingCosines": {
+        "sameAssignedGroup": {
+          "pairs": 93,
+          "min": -0.04480522642224287,
+          "max": 0.498130421578184
+        },
+        "differentAssignedGroups": {
+          "pairs": 78,
+          "min": -0.0751801901047304,
+          "max": 0.2909596337235992
+        }
+      },
+      "sub200msTurns": 7,
+      "totalTurns": 39
+    }
+  },
+  "limitations": [
+    "Agreement is not speaker accuracy",
+    "Embedding extractor also participates in original clustering; not an independent validation",
+    "Short excerpts and cosine scores are not calibrated identity probabilities",
+    "FluidAudio and Community-1 are different pipelines, not independent ground truth",
+    "No reviewed reference: no accuracy gate passed"
+  ],
+  "qualityApproved": false,
+  "appChanged": false,
+  "testsPassed": 41
+}

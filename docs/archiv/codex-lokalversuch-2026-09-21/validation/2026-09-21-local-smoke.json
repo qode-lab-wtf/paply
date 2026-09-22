@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-21",
+  "environment": "Apple M5 / 32 GB / macOS 26.2",
+  "audioSeconds": 21,
+  "network": "sandbox-exec deny network*",
+  "qualityReferenceReviewed": false,
+  "productionApproved": false,
+  "results": [
+    {
+      "candidate": "qwen-asr",
+      "status": "completed",
+      "wallSeconds": 7.588438916020095,
+      "peakRssBytes": 2055995392
+    },
+    {
+      "candidate": "whisper",
+      "status": "completed",
+      "wallSeconds": 15.094383291900158,
+      "peakRssBytes": 3700998144
+    },
+    {
+      "candidate": "parakeet",
+      "status": "completed",
+      "wallSeconds": 0.8395027499645948,
+      "peakRssBytes": 99942400
+    },
+    {
+      "candidate": "fluid-diarization",
+      "status": "completed",
+      "wallSeconds": 0.5332925419788808,
+      "peakRssBytes": 154992640
+    }
+  ]
+}

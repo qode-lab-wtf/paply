@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "userConfirmedPeopleInRoom": 3,
+  "audioSeconds": 106.237125,
+  "autoDetectedSpeakers": 2,
+  "systemAudioDigitalSilence": true,
+  "untranscribedSeconds": 30.746249999999996,
+  "originalASRGap": [
+    10.88,
+    52
+  ],
+  "polishingCausedMissingTranscript": false,
+  "isolatedGapDecodeRecoversText": true,
+  "disableNoSpeechAloneFixesGap": false,
+  "gainIncreaseFixesGap": false,
+  "otherASRCandidatesTested": [
+    "Parakeet v3",
+    "Qwen3-ASR 1.7B"
+  ],
+  "otherCandidatesStillShowDisagreements": true,
+  "knownCountDiagnostic": {
+    "numSpeakers": 3,
+    "groups": 3,
+    "identityAccuracyVerified": false
+  },
+  "inputAtInspection": {
+    "device": "MacBook Pro built-in microphone",
+    "gainScalar": 0.45490196,
+    "changed": false
+  },
+  "changes": [
+    "publish merged transcript before report",
+    "label provisional text explicitly",
+    "withhold generative report when detected untranscribed speech totals at least ten seconds"
+  ],
+  "qualityApproved": false,
+  "packagedUIVerified": {
+    "reportStatus": "needs-transcript-review",
+    "speakerCountShown": 2,
+    "recordingPreserved": true
+  }
+}
