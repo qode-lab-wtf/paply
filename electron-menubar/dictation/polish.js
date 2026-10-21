@@ -16,7 +16,13 @@ function contentWords(text) {
     .filter(word => !FILLERS.has(word));
 }
 
-function polishRejection(raw, result) {
+const NEGATIONS = /^(?:nicht|nichts|nie|niemals|niemand|nirgends|kein|keine|keinen|keinem|keiner|keines|no|not|never)$/;
+
+function negationCount(text) {
+  return (text.normalize('NFC').toLocaleLowerCase('de').match(/\p{L}+/gu) || []).filter(word => NEGATIONS.test(word)).length;
+}
+
+function polishRejection(raw, result, { vocabulary = '' } = {}) {
   if (!result) return 'empty';
   if (/^(?:hier\s+(?:ist|sind|der|das)|(?:der\s+)?(?:poliert|korrigiert|überarbeitet)(?:er|e|es)\s+text\s*:|here\s+(?:is|are)|(?:polished|corrected)\s+text\s*:)/iu.test(result)
     || /^(?:"[\s\S]*"|„[\s\S]*[“”]|“[\s\S]*”|«[\s\S]*»|'[\s\S]*'|‚[\s\S]*‘)$/u.test(result)) return 'meta';
@@ -31,7 +37,15 @@ function polishRejection(raw, result) {
     if (count) remaining.set(word, count - 1);
     else missing++;
   }
-  return before.length && missing / before.length > 0.3 ? 'content' : null;
+  if (before.length && missing / before.length > 0.3) return 'content';
+  // Verneinung verschwunden oder hinzugekommen → Sinn gekippt, Rohtext behalten.
+  if (negationCount(raw) !== negationCount(result)) return 'negation';
+  // Neue Inhaltswörter (z. B. aus dem Hintergrund älterer Diktate) begrenzen; Wörter der
+  // eigenen Begriffsliste dürfen als Hörfehler-Korrektur auftauchen.
+  const allowed = new Set([...contentWords(raw), ...contentWords(vocabulary)]);
+  const added = contentWords(result).filter(word => !allowed.has(word)).length;
+  // Netto-Zuwachs zählt (Ersetzungen sind schon über „missing“ begrenzt).
+  return added - missing > Math.max(2, Math.ceil(before.length * 0.15)) ? 'added' : null;
 }
 
-module.exports = { finalPolishText, contentWords, polishRejection };
+module.exports = { finalPolishText, contentWords, polishRejection, negationCount };

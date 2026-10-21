@@ -36,7 +36,7 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
     }
     return state.pending;
   }
-  return async function polish({ text, apiKey, messages, custom = false }) {
+  return async function polish({ text, apiKey, messages, custom = false, vocabulary = '' }) {
     if (!apiKey) return null;
     const deadline = now() + 30000;
     if (!session || session.apiKey !== apiKey) session = { apiKey };
@@ -63,7 +63,7 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
       }
       const result = finalPolishText(completePolish(JSON.parse(res.body)));
       // Eigene Agenten dürfen absichtlich umformen/erweitern; ihr Vertrag bleibt erhalten.
-      const reason = custom ? (!result ? 'empty' : null) : polishRejection(text, result);
+      const reason = custom ? (!result ? 'empty' : null) : polishRejection(text, result, { vocabulary });
       if (reason) { log(reason); return null; }
       return result;
     } catch {

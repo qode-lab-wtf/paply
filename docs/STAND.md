@@ -1,6 +1,18 @@
 # Paply — Stand
 
-**Zeitpunkt:** 21.10.2026, nachmittags · **Phase:** Betrieb v1.14.0 (veröffentlicht: https://github.com/qode-lab-wtf/paply/releases/tag/v1.14.0)
+**Zeitpunkt:** 21.10.2026, abends · **Phase:** Betrieb v1.14.1
+
+## v1.14.1 (21.10.2026)
+
+- Diktat-Benchmark mit 16 echten Aufnahmen von Allan (Werkzeug `electron-menubar/tools/benchmark/`, Aufnahme nur
+  wenn Ordner `benchmark` im Datenordner existiert). Ergebnis: Whisper turbo bleibt (schnell, gut; Fehler fast nur
+  bei Fachbegriffen/Namen und Genuscheltem); large-v3 nicht besser, Gemini zu langsam/zu wenig Freikontingent.
+- Polieren repariert: P2 „Kontext-Korrektur“ mit `qwen/qwen3.8-27b` (2,2 % riskante Änderungen bei freien
+  Diktaten), letzte 3 Roh-Diktate (≤ 30 min) als Hintergrund, unsichere Whisper-Segmente markiert,
+  Sicherheitsnetz (Länge, Inhaltswörter, Verneinung, Netto-Zusätze → Rohtext). Hörfehler wie „Push-to-Torque“
+  behebt Polieren nicht — dafür optionale Wortliste „Eigene Begriffe“.
+- Pille ~70 % mit CSS-Glas-Look, wärmerer Ton; Meeting-LLM `openai/gpt-oss-120b`.
+
 
 ## v1.14.0 — Abrunden für Mac + Windows (21.10.2026)
 

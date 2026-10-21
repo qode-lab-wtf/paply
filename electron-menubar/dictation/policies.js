@@ -1,6 +1,6 @@
 // Großzügiges Ausgabebudget; abgeschnittene Antworten werden vollständig verworfen.
 function polishTokenBudget(text) {
-  return Math.min(32768, Math.max(1024, Math.ceil(text.length / 3) * 2));
+  return Math.min(32768, Math.max(4096, Math.ceil(text.length / 3) * 2));
 }
 function completePolish(json) {
   const choice = json?.choices?.[0];

@@ -12,7 +12,10 @@ function selectPolishModel(models) {
 }
 
 function groqReasoningOptions(model) {
-  return model.startsWith('openai/gpt-oss-') ? { reasoning_format: 'hidden', reasoning_effort: 'low' } : {};
+  if (model.startsWith('openai/gpt-oss-')) return { reasoning_format: 'hidden', reasoning_effort: 'low' };
+  // Qwen: kein Nachdenk-Modus fürs Polieren (schneller, kein abgeschnittener <think>-Block).
+  if (model.startsWith('qwen/')) return { reasoning_effort: 'none' };
+  return {};
 }
 
 function migrateMeetingModel(store) {

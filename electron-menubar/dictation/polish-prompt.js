@@ -16,6 +16,15 @@ function vocabularyPrompt(value) {
   return typeof value === 'string' ? Array.from(value.trim()).slice(0, 200).join('') : '';
 }
 
+// Whisper gibt bei sehr kurzem/leisem Ton gern den prompt (eigene Begriffe) wörtlich zurück.
+function isVocabularyEcho(text, vocabulary) {
+  const words = value => (value.normalize('NFC').toLocaleLowerCase('de').match(/[\p{L}\p{N}]+/gu) || []);
+  const spoken = words(text);
+  if (!spoken.length) return false;
+  const listed = new Set(words(vocabulary));
+  return spoken.filter(word => listed.has(word)).length / spoken.length >= 0.8;
+}
+
 function uncertainSegments(transcript) {
   return (Array.isArray(transcript?.segments) ? transcript.segments : [])
     .filter(s => s && typeof s.text === 'string' && Number.isFinite(s.avg_logprob) && s.avg_logprob < -0.5)
@@ -43,4 +52,4 @@ function buildPolishMessages(text, { history = [], segments = [], customVocabula
   ];
 }
 
-module.exports = { POLISH_SYSTEM_PROMPT, buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt };
+module.exports = { POLISH_SYSTEM_PROMPT, buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt, isVocabularyEcho };

@@ -44,7 +44,7 @@ const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order
 const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
 const { captureMacApp, pasteMac } = require('./dictation/mac-paste');
 const { createWindowsFocus, pasteWindows } = require('./dictation/windows-paste');
-const { buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt } = require('./dictation/polish-prompt');
+const { buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt, isVocabularyEcho } = require('./dictation/polish-prompt');
 const { getCustomAgentPrompt } = require('./dictation/custom-agent-prompt');
 const { createPolishClient } = require('./dictation/polish-client');
 const { MEETING_MODEL, migrateMeetingModel } = require('./dictation/groq-models');
@@ -519,6 +519,11 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
 
       const json = JSON.parse(res.body);
       const filtered = filterTranscription(json, voiceActivity, options);
+      // Whisper gibt bei sehr kurzem/leisem Ton gern den prompt (eigene Begriffe) wörtlich zurück.
+      if (vocabulary && filtered.text && isVocabularyEcho(filtered.text, vocabulary)) {
+        filtered.text = '';
+        filtered.reason ||= 'vocabulary-echo';
+      }
       options.onFiltered?.(filtered);
       if (filtered.droppedSegments || filtered.reason) {
         console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',
@@ -789,7 +794,7 @@ async function polishText(text, language = 'de', flavor = 'code', customSettings
     segments,
     customVocabulary: s.get('customVocabulary'),
   });
-  return runPolish({ text, apiKey: s.get('groqApiKey'), messages, custom });
+  return runPolish({ text, apiKey: s.get('groqApiKey'), messages, custom, vocabulary: s.get('customVocabulary') || '' });
 }
 
 // ============================================================================

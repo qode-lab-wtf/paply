@@ -9,7 +9,7 @@ it('gibt bei Längen-Abbruch immer das Original frei, auch bei scheinbar langer 
   expect(completePolish({ choices: [{ finish_reason: 'stop', message: { content: ' Ganzer Text ' } }] })).toBe('Ganzer Text');
   expect(polishTokenBudget('a'.repeat(30000))).toBe(20000);
   expect(polishTokenBudget('a'.repeat(1000000))).toBe(32768);
-  expect(polishTokenBudget('kurz')).toBe(1024);
+  expect(polishTokenBudget('kurz')).toBe(4096);
 });
 
 it.each([true, false])('Timeout bleibt auch während langsamem Antwort-Body aktiv (HTTP ok=%s)', async ok => {
