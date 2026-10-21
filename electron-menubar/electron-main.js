@@ -14,6 +14,7 @@ const {
 const path = require('node:path');
 const fs = require('node:fs');
 const { spawn, exec } = require('node:child_process');
+const { filterTranscription, shouldSkipTranscription, validateVoiceActivity } = require('./audio/silence-filter');
 
 // ============================================================================
 // ISOLIERTER TEST-MODUS
@@ -433,20 +434,7 @@ const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GITHUB_REPO = 'qode-lab-wtf/paply';
 const CURRENT_VERSION = require('./package.json').version;
 
-// Verwirf reine Satzzeichen/Stille-Ergebnisse (z.B. "." oder "..." von Whisper bei Stille)
-function isTrivialTranscript(input) {
-  if (!input) return true;
-  const trimmed = input.trim();
-  if (!trimmed) return true;
-  // Entferne alle Nicht-Buchstaben/Nicht-Ziffern
-  const lettersOrDigits = trimmed.replace(/[^\p{L}\p{N}]+/gu, '');
-  if (!lettersOrDigits) return true;
-  // Sehr kurze Transkripte (1 Zeichen mit max 3 Gesamtlänge) sind trivial
-  if (lettersOrDigits.length < 2 && trimmed.length <= 3) return true;
-  return false;
-}
-
-async function transcribeAudio(audioBuffer, language = 'de', retries = 3) {
+async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceActivity) {
   const apiKey = getStore().get('groqApiKey');
   if (!apiKey) {
     throw new Error('Groq API Key nicht konfiguriert');
@@ -459,7 +447,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3) {
       formData.append('file', audioBlob, 'audio.webm');
       formData.append('model', 'whisper-large-v3-turbo');
       formData.append('language', language);
-      formData.append('response_format', 'json');
+      formData.append('response_format', 'verbose_json');
 
       console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
 
@@ -500,14 +488,12 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3) {
       }
 
       const json = await res.json();
-      const rawText = json?.text?.trim() ?? '';
-
-      if (isTrivialTranscript(rawText)) {
-        console.log('Transcript discarded (trivial):', rawText);
-        return '';
+      const filtered = filterTranscription(json, voiceActivity);
+      if (filtered.droppedSegments || filtered.reason) {
+        console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',
+          'verworfene Segmente:', filtered.droppedSegments);
       }
-
-      return rawText;
+      return filtered.text;
     } catch (error) {
       // Besseres Logging mit Ursache
       console.error(`Transcription attempt ${i + 1} failed:`, error.message);
@@ -1510,6 +1496,7 @@ function handleHotkeyUp() {
 // AUDIO BACKUP SYSTEM (RAM + Disk persistence for crash-safe recovery)
 // ============================================================================
 let lastAudioBackup = null;
+let lastAudioVoiceActivity;
 let backupTimestamp = null;
 const BACKUP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -1522,7 +1509,8 @@ function getBackupDir() {
   return _backupDir;
 }
 
-function saveAudioBackup(audioData) {
+async function saveAudioBackup(audioData, voiceActivity) {
+  lastAudioVoiceActivity = validateVoiceActivity(voiceActivity);
   // Store as proper Buffer to avoid serialization issues
   if (Buffer.isBuffer(audioData)) {
     lastAudioBackup = audioData;
@@ -1536,18 +1524,18 @@ function saveAudioBackup(audioData) {
   backupTimestamp = Date.now();
   console.log('Audio backup saved:', lastAudioBackup.length, 'bytes');
 
-  // Persist to disk asynchronously
+  // Vor der Verarbeitung fertig sichern: Ein sofortiges Stille-Ergebnis darf
+  // nicht vor einem noch laufenden Schreibvorgang das Backup löschen.
   try {
     const dir = getBackupDir();
     fs.mkdirSync(dir, { recursive: true });
     const filename = `backup_${backupTimestamp}.webm`;
-    fs.writeFile(path.join(dir, filename), lastAudioBackup, (err) => {
-      if (err) {
-        console.error('Failed to write audio backup to disk:', err);
-      } else {
-        console.log('Audio backup persisted to disk:', filename);
-      }
-    });
+    const metadata = lastAudioVoiceActivity;
+    await fs.promises.writeFile(path.join(dir, filename), lastAudioBackup);
+    if (metadata) {
+      await fs.promises.writeFile(path.join(dir, `${filename}.json`), JSON.stringify(metadata));
+    }
+    console.log('Audio backup persisted to disk:', filename);
   } catch (err) {
     console.error('Failed to persist audio backup:', err);
   }
@@ -1570,6 +1558,12 @@ function loadBackupFromDisk() {
 
       if (age < BACKUP_EXPIRY_MS) {
         lastAudioBackup = fs.readFileSync(path.join(dir, latest));
+        lastAudioVoiceActivity = undefined;
+        try {
+          lastAudioVoiceActivity = validateVoiceActivity(JSON.parse(fs.readFileSync(path.join(dir, `${latest}.json`), 'utf8')));
+        } catch {
+          // Alte Backups haben keine Metadaten; Schichten 2+3 bleiben verfügbar.
+        }
         backupTimestamp = timestamp;
         console.log('Audio backup restored from disk:', latest, '(' + lastAudioBackup.length + ' bytes)');
       }
@@ -1597,6 +1591,7 @@ function getAudioBackup() {
 
 function clearAudioBackup() {
   lastAudioBackup = null;
+  lastAudioVoiceActivity = undefined;
   backupTimestamp = null;
   console.log('Audio backup cleared');
 
@@ -1661,10 +1656,10 @@ async function retryLastRecording() {
   win.webContents.send('status:update', { status: 'transcribing', detail: 'Wiederhole...' });
 
   // Process the backup audio
-  await processAudioData(backup, true);
+  await processAudioData(backup, true, lastAudioVoiceActivity);
 }
 
-async function processAudioData(audioData, isRetry = false) {
+async function processAudioData(audioData, isRetry = false, voiceActivity) {
   const updateStatus = (status, detail = '') => {
     recordingWindow?.webContents.send('status:update', { status, detail });
   };
@@ -1696,14 +1691,17 @@ async function processAudioData(audioData, isRetry = false) {
 
     console.log('Audio buffer type:', typeof audioData, 'Buffer size:', audioBuffer.length);
 
-    const transcript = await transcribeAudio(audioBuffer, language);
+    const skipTranscription = shouldSkipTranscription(voiceActivity);
+    if (skipTranscription) console.log('[Diktat-Stillefilter] Aufnahme ohne Sprachaktivität, Groq übersprungen');
+    const transcript = skipTranscription ? '' : await transcribeAudio(audioBuffer, language, 3, voiceActivity);
     console.log('Transcript:', transcript);
 
     // Bei leerer Transkription (Stille) einfach beenden - nichts ausgeben
     if (!transcript) {
       console.log('Empty transcript - nothing to paste');
-      updateStatus('done');
-      setTimeout(() => recordingWindow?.hide(), 300);
+      clearAudioBackup();
+      updateStatus('empty');
+      setTimeout(() => recordingWindow?.hide(), 900);
       return { success: true, empty: true };
     }
 
@@ -2463,15 +2461,15 @@ function setupIpcHandlers() {
     isRecording,
   }));
 
-  ipcMain.on('recording:audio', async (_event, audioData) => {
+  ipcMain.on('recording:audio', async (_event, audioData, voiceActivity) => {
     console.log('Received audio:', audioData.byteLength, 'bytes');
     isRecording = false;
 
     // Save backup immediately
-    saveAudioBackup(audioData);
+    await saveAudioBackup(audioData, voiceActivity);
 
     // Process the audio
-    await processAudioData(audioData, false);
+    await processAudioData(audioData, false, voiceActivity);
   });
 
   ipcMain.on('open:accessibility', () => {

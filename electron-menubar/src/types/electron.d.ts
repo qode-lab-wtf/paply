@@ -1,4 +1,5 @@
 import type { MeetingIndexEntry, MeetingFull, MeetingSummary } from './meeting';
+import type { VoiceActivityMeta } from '../lib/voice-activity';
 
 export interface Settings {
   groqApiKey: string;
@@ -116,9 +117,9 @@ export interface ElectronAPI {
   // Recording
   onRecordingStart: (cb: () => void) => void;
   onRecordingStop: (cb: () => void) => void;
-  onStatusUpdate: (cb: (status: { status: string; detail?: string }) => void) => void;
+  onStatusUpdate: (cb: (status: { status: 'transcribing' | 'polishing' | 'done' | 'empty' | 'error'; detail?: string }) => void) => void;
   onErrorRetry: (cb: (data: { message: string; hotkey: string }) => void) => void;
-  sendAudio: (audioData: ArrayBuffer) => void;
+  sendAudio: (audioData: ArrayBuffer, voiceActivity?: VoiceActivityMeta) => void;
 
   // Transcription control
   startTranscription: () => Promise<boolean>;

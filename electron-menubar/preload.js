@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRecordingStop: (cb) => ipcRenderer.on('recording:stop', cb),
   onStatusUpdate: (cb) => ipcRenderer.on('status:update', (_e, status) => cb(status)),
   onErrorRetry: (cb) => ipcRenderer.on('error:retry', (_e, data) => cb(data)),
-  sendAudio: (audioData) => ipcRenderer.send('recording:audio', audioData),
+  sendAudio: (audioData, voiceActivity) => ipcRenderer.send('recording:audio', audioData, voiceActivity),
 
   // Transcription control (from dashboard)
   startTranscription: () => ipcRenderer.invoke('transcription:start'),

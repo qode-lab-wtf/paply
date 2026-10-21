@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Mic, Check, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { startVoiceActivityMeasurement } from '@/lib/voice-activity-recorder';
 
-type Status = 'idle' | 'recording' | 'processing' | 'polishing' | 'done' | 'error';
+type Status = 'idle' | 'recording' | 'processing' | 'polishing' | 'done' | 'empty' | 'error';
 
 export function RecordingWidget() {
   const [status, setStatus] = useState<Status>('idle');
@@ -16,6 +17,7 @@ export function RecordingWidget() {
   const animationIdRef = useRef<number | null>(null);
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
   const beepEnabledRef = useRef(true);
+  const voiceActivityRef = useRef<ReturnType<typeof startVoiceActivityMeasurement> | null>(null);
 
   useEffect(() => {
     // Init platform-specific hotkey
@@ -44,6 +46,7 @@ export function RecordingWidget() {
       if (newStatus === 'transcribing') setStatus('processing');
       else if (newStatus === 'polishing') setStatus('polishing');
       else if (newStatus === 'done') setStatus('done');
+      else if (newStatus === 'empty') setStatus('empty');
       else if (newStatus === 'error') setStatus('error');
     });
 
@@ -132,6 +135,8 @@ export function RecordingWidget() {
       };
 
       recorder.onstop = async () => {
+        const voiceActivity = voiceActivityRef.current?.();
+        voiceActivityRef.current = null;
         stream.getTracks().forEach((t) => t.stop());
         stopVisualization();
 
@@ -139,10 +144,11 @@ export function RecordingWidget() {
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const arrayBuffer = await audioBlob.arrayBuffer();
-        window.electronAPI.sendAudio(arrayBuffer);
+        window.electronAPI.sendAudio(arrayBuffer, voiceActivity);
       };
 
       recorder.start(1000);
+      voiceActivityRef.current = startVoiceActivityMeasurement(analyserRef.current!);
       mediaRecorderRef.current = recorder;
     } catch (err) {
       console.error('Mic error:', err);
@@ -155,6 +161,7 @@ export function RecordingWidget() {
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state !== 'inactive'
     ) {
+      voiceActivityRef.current?.();
       mediaRecorderRef.current.stop();
       if (beepEnabledRef.current) playBeep(400, 0.12);
       setStatus('processing');
@@ -187,6 +194,7 @@ export function RecordingWidget() {
             'w-8 h-8 rounded-lg flex items-center justify-center',
             'bg-gradient-to-br from-primary to-primary/80',
             status === 'processing' && 'animate-pulse',
+            status === 'empty' && 'opacity-40',
             status === 'error' && 'bg-gradient-to-br from-destructive to-destructive/80'
           )}
         >
