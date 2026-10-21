@@ -68,11 +68,11 @@ for (const platform of ['mac', 'win'] as const) describe(`Echter Recorder-Hook $
     expect(late.stop).toHaveBeenCalledOnce(); expect(api.recordingStarted).not.toHaveBeenCalled();
     expect(FakeRecorder.all).toHaveLength(0);
   });
-  it('verweigerter Mikrofonzugriff wird mit Plattformhinweis und ID an Main gemeldet', async () => {
+  it('verweigerter Mikrofonzugriff wird mit kurzem Pillentext und ID an Main gemeldet', async () => {
     const { api, handlers, getUserMedia } = setup(platform);
     getUserMedia.mockRejectedValueOnce(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
     await handlers.start({ jobId: 'one' });
-    expect(api.recordingFailed).toHaveBeenCalledWith('one', expect.stringContaining(platform === 'mac' ? 'Systemeinstellungen' : 'Windows-Einstellungen'));
+    expect(api.recordingFailed).toHaveBeenCalledWith('one', 'Mikrofon gesperrt');
     expect(react.states).toContain('error');
     getUserMedia.mockResolvedValueOnce(stream().stream); await handlers.start({ jobId: 'two' });
     expect(api.recordingStarted).toHaveBeenCalledWith('two');
@@ -110,4 +110,10 @@ for (const platform of ['mac', 'win'] as const) describe(`Echter Recorder-Hook $
     expect(mic.stop).toHaveBeenCalledOnce(); expect(api.recordingFailed).toHaveBeenCalledWith('one', expect.any(String));
     expect(api.sendAudio).not.toHaveBeenCalled();
   });
+});
+
+it('reicht den Kein-Mikrofonsignal-Hinweis bei empty an die Pille weiter', () => {
+  const { handlers } = setup('mac');
+  handlers.status({ status: 'empty', detail: 'Kein Mikrofonsignal', jobId: 'silent' });
+  expect(react.states).toContain('Kein Mikrofonsignal');
 });

@@ -1,5 +1,8 @@
 const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 // One process + one Add-Type per application lifetime. Only numeric handles cross
 // stdin/stdout; no dictated text or dynamically evaluated commands reach PowerShell.
 const script = `
@@ -31,9 +34,11 @@ while ($null -ne ($line = [Console]::ReadLine())) {
  } catch { [Console]::WriteLine($id + ' 0') }
 }
 `;
-function createWindowsFocus({ spawnImpl = spawn, timeoutMs = 2000 } = {}) {
+function createWindowsFocus({ spawnImpl = spawn, timeoutMs = 2000, coldTimeoutMs = 6000,
+  scriptDirectory = () => path.join(os.tmpdir(), 'paply-focus') } = {}) {
   let child = null;
   let sequence = 0;
+  let coldRequest = true;
   const pending = new Map();
   function stop() {
     const old = child;
@@ -44,8 +49,15 @@ function createWindowsFocus({ spawnImpl = spawn, timeoutMs = 2000 } = {}) {
   }
   function start() {
     if (child) return;
-    const proc = spawnImpl('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    // A plain local script avoids EncodedCommand heuristics in antivirus tools.
+    // stdin remains exclusively the numeric request protocol.
+    const directory = scriptDirectory();
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const scriptPath = path.join(directory, 'dictation-focus.ps1');
+    fs.writeFileSync(scriptPath, script, { encoding: 'utf8', mode: 0o600 });
+    const proc = spawnImpl('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     child = proc;
+    coldRequest = true;
     const fail = () => { if (child === proc) stop(); };
     proc.on('error', fail); proc.on('exit', fail);
     proc.stdin.on('error', fail);
@@ -63,21 +75,33 @@ function createWindowsFocus({ spawnImpl = spawn, timeoutMs = 2000 } = {}) {
     try { start(); } catch { return null; }
     return new Promise(resolve => {
       const id = String(++sequence);
-      const timer = setTimeout(() => { stop(); }, timeoutMs);
+      const duration = coldRequest ? coldTimeoutMs : timeoutMs;
+      coldRequest = false;
+      const timer = setTimeout(() => {
+        // A slow request must not kill the shared helper or unrelated requests.
+        pending.get(id)?.(null);
+        pending.delete(id);
+      }, duration);
       pending.set(id, value => { clearTimeout(timer); resolve(value); });
       try { child.stdin.write(`${id} ${command}\n`, error => { if (error) stop(); }); }
       catch { stop(); }
     });
   }
   return { start, stop, capture: () => request('get'),
-    restore: handle => /^\d+$/.test(String(handle)) && handle !== '0' ? request(`focus ${handle}`).then(value => value === '1') : Promise.resolve(false) };
+    restore: handle => /^\d+$/.test(String(handle)) && handle !== '0' ? request(`focus ${handle}`).then(value => value === null ? null : value === '1') : Promise.resolve(false) };
 }
 async function pasteWindows({ text, target, clipboard, focus, hook }) {
   clipboard.writeText(text);
   try {
-    if (!await focus.restore(target) || !hook) return false;
-    // Recheck the captured handle immediately before generating Ctrl+V.
-    if (await focus.capture() !== target) return false;
+    if (!hook) return false;
+    if (target != null && target !== '0') {
+      // One restore request includes SetForegroundWindow + verification in the
+      // helper. No second capture (and no retry loop) on the paste path.
+      let restored = null;
+      try { restored = await focus.restore(target); } catch { /* helper unavailable: current-window fallback */ }
+      if (restored === false) return false;
+    }
+    // Without a captured target, retain the established current-window paste.
     hook.keyTap(47, [29]); // UiohookKey.V, UiohookKey.Ctrl
     return true; // OS dispatch succeeded; target app consumption cannot be observed.
   } catch { return false; }

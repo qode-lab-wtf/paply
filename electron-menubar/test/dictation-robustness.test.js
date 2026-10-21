@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { EventEmitter } from 'node:events';
 import { makeMain, speech, deferred, tick, source } from './helpers/dictation-main.js';
 const fixtures = [];
 function main(...args) { const fixture = makeMain(...args); fixtures.push(fixture); return fixture; }
@@ -36,8 +37,9 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     ipc['recording:failed'](event, { jobId: id, message: 'NotAllowedError: microphone' });
     expect(state()).toBe(false);
     expect(c.dictationJobs.get(id)).toBeUndefined();
-    const error = win.webContents.send.mock.calls.find(([, data]) => data?.status === 'error')[1].detail;
-    expect(error).toContain(platform === 'darwin' ? 'Systemeinstellungen' : 'Windows-Einstellungen');
+    const errors = win.webContents.send.mock.calls.filter(([, data]) => data?.status === 'error').map(([, data]) => data.detail);
+    expect(errors).toContain('Mikrofon gesperrt');
+    expect(errors.some(error => error.includes(platform === 'darwin' ? 'Systemeinstellungen' : 'Windows-Einstellungen'))).toBe(true);
     c.handleHotkeyDown(); await tick();
     expect(state()).toBe(true);
     expect(c.dictationJobs.current.id).not.toBe(id);
@@ -93,7 +95,8 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     await c.processAudioData(Buffer.from('audio'), false, speech);
     const done = win.webContents.send.mock.calls.filter(([, data]) => data?.status === 'done').at(-1)[1];
     expect(done.detail).toContain(platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V');
-    expect(done.detail).toContain('In Zwischenablage kopiert');
+    const details = win.webContents.send.mock.calls.filter(([, data]) => data?.status === 'done').map(([, data]) => data.detail);
+    expect(details).toContain(platform === 'darwin' ? 'Kopiert – ⌘V drücken' : 'Kopiert – Strg+V drücken');
   });
 
   it('ignoriert normales Key-up nach kurzem Hotkey-Tippen', async () => {
@@ -217,4 +220,85 @@ it('zeigt Mac-Fallback erneut, wenn osascript erst nach dem Ausblenden scheitert
   expect(win.hide).toHaveBeenCalledOnce();
   paste.resolve(false); await work;
   expect(win.showInactive).toHaveBeenCalledOnce();
+});
+
+for (const platform of ['darwin', 'win32']) it(`übernimmt Agent-Wechsel während der Aufnahme auf ${platform}, hält Einstellungen danach fest`, async () => {
+  const { context: c, values, ipc, event } = main(platform);
+  values.profiles = { dictation: { polishFlavor: 'plain' } };
+  await c.beginRecording(); const job = c.dictationJobs.current;
+  expect(job.settings).toBeNull();
+  ipc['recording:started'](event, { jobId: job.id });
+  values.activeProfile = 'dictation'; values.language = 'en'; values.autopaste = false; values.copyToClipboard = true;
+  c.stopRecording();
+  values.activeProfile = 'coding'; values.language = 'de'; values.autopaste = true;
+  await ipc['recording:audio'](event, Buffer.from('audio'), speech, job.id);
+  expect(c.polishText).toHaveBeenCalledWith('Gesprochener Text', 'en', 'plain', null);
+  expect(c.autopasteText).not.toHaveBeenCalled();
+  expect(c.clipboard.writeText).toHaveBeenCalledWith('Gesprochener Text');
+});
+
+it('Erfolg löscht auch ältere Fehler aus vorherigen App-Läufen, Retry holt sie nicht zurück', async () => {
+  const { context: c, directory } = main();
+  const dir = path.join(directory, 'audio-backups'); fs.mkdirSync(dir);
+  const old = `backup_${Date.now() - 10000}.webm`;
+  fs.writeFileSync(path.join(dir, old), 'old failure'); fs.writeFileSync(path.join(dir, old + '.json'), '{}');
+  const job = c.dictationJobs.create(); job.backupId = job.id;
+  await c.saveAudioBackup(Buffer.from('success'), speech, job.id);
+  await c.processAudioData(Buffer.from('success'), false, speech, job);
+  expect(fs.readdirSync(dir)).toEqual([]); expect(c.getAudioBackup()).toBeNull();
+  const fetchCount = c.fetch.mock.calls.length;
+  await c.retryLastRecording(); expect(c.fetch).toHaveBeenCalledTimes(fetchCount);
+  expect(c.dialog.showMessageBox).toHaveBeenCalledOnce();
+});
+
+it('Erfolg bereinigt nach Aufnahmestart statt verspätetem Audio-Eingang und schützt neuere Backups', async () => {
+  const { context: c } = main(); const time = Date.now();
+  const olderId = `${time}-1`; const newerId = `${time}-2`;
+  await c.saveAudioBackup(Buffer.from('new'), speech, newerId);
+  await c.saveAudioBackup(Buffer.from('old'), speech, olderId);
+  expect(c.getAudioBackup()).toEqual(Buffer.from('new'));
+  c.clearSuccessfulBackups(olderId);
+  expect(c.getAudioBackup()).toEqual(Buffer.from('new'));
+  c.clearSuccessfulBackups(newerId);
+  expect(c.getAudioBackup()).toBeNull();
+});
+
+it('Retry ist schon während der Ziel-Ermittlung processing und wird von failRecording nicht doppelt beendet', async () => {
+  const { context: c } = main(); await c.saveAudioBackup(Buffer.from('audio'), speech);
+  const target = deferred(); c.savePreviousApp.mockReturnValueOnce(target.promise);
+  const retry = c.retryLastRecording(); const job = c.dictationJobs.current;
+  const finish = vi.fn(job.finish); job.finish = finish;
+  expect(job.phase).toBe('processing');
+  c.failRecording(job, 'Aufnahme neu gestartet');
+  expect(c.dictationJobs.get(job.id)).toBe(job); expect(finish).not.toHaveBeenCalled();
+  target.resolve('Editor'); await retry;
+  expect(job.phase).toBe('finished'); expect(finish).toHaveBeenCalledOnce();
+});
+
+for (const platform of ['darwin', 'win32']) it(`ersetzt abgestürzten Renderer auf ${platform} und startet nächstes Diktat ohne 30-s-Timeout`, async () => {
+  const { context: c, win, ipc, event, state } = main(platform);
+  await c.beginRecording(); const failed = c.dictationJobs.current;
+  ipc['recording:started'](event, { jobId: failed.id });
+  const webContents = new EventEmitter(); webContents.send = vi.fn(); webContents.isLoading = () => false;
+  const replacement = { webContents, showInactive: vi.fn() };
+  c.createRecordingWindow = vi.fn(() => { c.recordingWindow = replacement; return replacement; });
+  c.restartRecordingWindow(win);
+  expect(win.destroy).toHaveBeenCalledOnce(); expect(c.createRecordingWindow).toHaveBeenCalledOnce();
+  expect(state()).toBe(false); expect(c.dictationJobs.get(failed.id)).toBeUndefined();
+  webContents.emit('did-finish-load');
+  expect(webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'error', detail: 'Aufnahme neu gestartet' }));
+  await c.beginRecording();
+  expect(state()).toBe(true); expect(c.dictationJobs.current.phase).toBe('requested');
+  expect(webContents.send).toHaveBeenCalledWith('recording:start', { jobId: c.dictationJobs.current.id });
+  // A stale crash notification cannot destroy the fresh renderer.
+  c.restartRecordingWindow(win); expect(c.createRecordingWindow).toHaveBeenCalledTimes(2);
+});
+
+it('stellt nach Neustart das jüngste Diktat statt den zuletzt geschriebenen älteren Auftrag wieder her', () => {
+  const { context: c, directory } = main();
+  const dir = path.join(directory, 'audio-backups'); fs.mkdirSync(dir);
+  const time = Date.now();
+  fs.writeFileSync(path.join(dir, `backup_${time}-${time - 1000}-1.webm`), 'older');
+  fs.writeFileSync(path.join(dir, `backup_${time - 100}-${time - 500}-2.webm`), 'newer');
+  expect(c.getAudioBackup()).toEqual(Buffer.from('newer'));
 });

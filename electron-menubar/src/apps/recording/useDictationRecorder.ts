@@ -4,7 +4,7 @@ import { createRecordingGeneration } from '@/lib/recording-generation';
 import { playStartSound, playStopSound, warmUpSounds } from '@/lib/sounds';
 import type { RecordingPillProps, PillStatus } from './RecordingPill';
 
-const MIC_ERROR = 'Kein Mikrofonzugriff';
+const MIC_ERROR = 'Mikrofon gesperrt';
 
 export function useDictationRecorder(): RecordingPillProps {
   const [status, setStatus] = useState<PillStatus>('empty');
@@ -46,11 +46,6 @@ export function useDictationRecorder(): RecordingPillProps {
     void api.getPlatform().then(value => {
       if (!mounted) return;
       setPlatform(value.isMac ? 'mac' : value.isWin ? 'win' : 'linux');
-      micError = value.isMac
-        ? 'Kein Mikrofonzugriff — Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon'
-        : value.isWin
-          ? 'Kein Mikrofonzugriff — Windows-Einstellungen → Datenschutz & Sicherheit → Mikrofon'
-          : 'Kein Mikrofonzugriff — Mikrofon und Zugriffsrechte prüfen';
       setRetryHotkey(value.isMac ? '⌥⇧⌘R' : 'Ctrl+Alt+Shift+R');
     });
 
@@ -114,7 +109,7 @@ export function useDictationRecorder(): RecordingPillProps {
             const audio = await new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }).arrayBuffer();
             if (mounted) api.sendAudio(audio, voiceActivity, id);
           } catch {
-            api.recordingFailed(id, 'Aufnahme konnte nicht gelesen werden');
+            api.recordingFailed(id, 'Aufnahme nicht lesbar');
           }
         };
         recorder.onerror = () => {
@@ -152,7 +147,7 @@ export function useDictationRecorder(): RecordingPillProps {
       if (update.jobId) jobId = update.jobId;
       setStatus(update.status === 'transcribing' ? 'processing' : update.status);
       setErrorText(update.status === 'error' ? update.detail || 'Diktat fehlgeschlagen' : null);
-      setInfoText(update.status === 'done' ? update.detail || null : null);
+      setInfoText(update.status === 'done' || update.status === 'empty' ? update.detail || null : null);
     });
     const offRetry = api.onErrorRetry(data => {
       if (data.jobId && data.jobId !== jobId) return;

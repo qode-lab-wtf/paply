@@ -40,11 +40,12 @@ app.on('second-instance', () => { app.whenReady().then(() => { const win = creat
 const path = require('node:path');
 const fs = require('node:fs');
 const { createDictationJobs } = require('./dictation/jobs');
-const { polishTokenBudget, completePolish, friendlyError, readResponse, replaceShortcut, ensureGlobeReady } = require('./dictation/policies');
+const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order');
+const { polishTokenBudget, completePolish, friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
 const { captureMacApp, pasteMac } = require('./dictation/mac-paste');
 const { createWindowsFocus, pasteWindows } = require('./dictation/windows-paste');
 const dictationJobs = createDictationJobs();
-const windowsFocus = createWindowsFocus();
+const windowsFocus = createWindowsFocus({ scriptDirectory: () => path.join(app.getPath('userData'), 'helpers') });
 
 const { filterTranscription, shouldSkipTranscription, validateVoiceActivity } = require('./audio/silence-filter');
 
@@ -452,7 +453,7 @@ const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GITHUB_REPO = 'qode-lab-wtf/paply';
 const CURRENT_VERSION = require('./package.json').version;
 
-async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceActivity) {
+async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceActivity, options = {}) {
   const apiKey = getStore().get('groqApiKey');
   if (!apiKey) {
     throw new Error('Groq API Key nicht konfiguriert');
@@ -503,7 +504,8 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
       }
 
       const json = JSON.parse(res.body);
-      const filtered = filterTranscription(json, voiceActivity);
+      const filtered = filterTranscription(json, voiceActivity, options);
+      options.onFiltered?.(filtered);
       if (filtered.droppedSegments || filtered.reason) {
         console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',
           'verworfene Segmente:', filtered.droppedSegments);
@@ -1192,20 +1194,44 @@ function createRecordingWindow() {
   recordingWindow.setIgnoreMouseEvents(true);
 
   recordingWindow.loadFile(path.join(__dirname, 'renderer', 'recording.html'), opaque ? { query: { opaque: '1' } } : undefined);
-  recordingWindow.webContents.on('render-process-gone', () => {
-    for (const job of dictationJobs.pending()) {
-      if (['starting', 'requested', 'recording', 'stopped'].includes(job.phase)) failRecording(job, 'Aufnahmefenster geschlossen — bitte erneut versuchen');
-    }
-  });
-  recordingWindow.on('closed', () => {
+  const win = recordingWindow;
+  win.webContents.on('render-process-gone', () => restartRecordingWindow(win));
+  win.on('closed', () => {
+    if (recordingWindow !== win) return;
     recordingWindow = null;
     for (const job of dictationJobs.pending()) {
-      if (['starting', 'requested', 'recording', 'stopped'].includes(job.phase)) failRecording(job, 'Aufnahmefenster geschlossen — bitte erneut versuchen');
+      if (['starting', 'requested', 'recording', 'stopped'].includes(job.phase)) failRecording(job, 'Aufnahmefenster geschlossen');
     }
   });
 
   positionRecordingWindow(recordingWindow);
   return recordingWindow;
+}
+
+function restartRecordingWindow(crashedWindow) {
+  if (recordingWindow !== crashedWindow) return;
+  // Detach first: sending IPC into the crashed renderer may throw, and its closed
+  // callback must not clear the replacement window or affect a later recording.
+  recordingWindow = null;
+  const message = 'Aufnahme neu gestartet';
+  let failedJob = null;
+  for (const job of dictationJobs.pending()) {
+    if (['starting', 'requested', 'recording', 'stopped'].includes(job.phase)) {
+      failRecording(job, message);
+      if (dictationJobs.isCurrent(job)) failedJob = job;
+    }
+  }
+  if (!crashedWindow.isDestroyed()) crashedWindow.destroy();
+  try {
+    const replacement = createRecordingWindow();
+    if (failedJob) replacement.webContents.once('did-finish-load', () => {
+      if (recordingWindow !== replacement || isRecording || !dictationJobs.isCurrent(failedJob)) return;
+      positionRecordingWindow(replacement);
+      replacement.showInactive();
+      sendJobStatus(failedJob, 'error', message);
+      hideRecordingWindow(5000, failedJob);
+    });
+  } catch { console.error('Aufnahmefenster konnte nicht neu gestartet werden'); }
 }
 
 // Overlay-Fenster wird beim App-Start versteckt vorgeladen (HTML/React/AudioWorklet), damit
@@ -1425,7 +1451,7 @@ function publishRecordingState() {
 function sendJobStatus(job, status, detail = '') {
   if (dictationJobs.isCurrent(job)) {
     recordingWindow?.webContents.send('status:update', { status, detail, jobId: job.id });
-    mainWindow?.webContents.send('status:update', { status, detail, jobId: job.id });
+    mainWindow?.webContents.send('status:update', { status, detail: explainDictationStatus(detail, process.platform), jobId: job.id });
   }
 }
 
@@ -1445,7 +1471,7 @@ function hideRecordingWindow(delayMs = 0, job = dictationJobs.current) {
 
 async function beginRecording() {
   if (isRecording) return;
-  const job = dictationJobs.create(null, { ...getStore().store });
+  const job = dictationJobs.create();
   job.startTimer = setTimeout(() => failRecording(job, friendlyError('microphone', process.platform)), 30000);
   try {
     isRecording = true;
@@ -1463,7 +1489,7 @@ async function beginRecording() {
     positionRecordingWindow(win);
     win.showInactive();
     win.webContents.send('recording:start', { jobId: job.id });
-  } catch { failRecording(job, 'Aufnahme konnte nicht gestartet werden'); }
+  } catch { failRecording(job, 'Aufnahme nicht gestartet'); }
 }
 
 function failRecording(job, message) {
@@ -1486,10 +1512,13 @@ function stopRecording() {
   const job = dictationJobs.current;
   clearTimeout(job?.startTimer);
   const wasStarted = job?.phase === 'recording';
-  if (job) job.phase = wasStarted ? 'stopped' : 'cancelled';
+  if (job) {
+    job.phase = wasStarted ? 'stopped' : 'cancelled';
+    if (wasStarted) job.settings = { ...getStore().store };
+  }
   recordingWindow?.webContents.send('recording:stop', { jobId: job?.id });
   if (!wasStarted) { job?.finish(); hideRecordingWindow(0, job); }
-  else job.startTimer = setTimeout(() => failRecording(job, 'Aufnahme konnte nicht gelesen werden'), 10000);
+  else job.startTimer = setTimeout(() => failRecording(job, 'Aufnahme nicht lesbar'), 10000);
 }
 
 // ============================================================================
@@ -1581,22 +1610,21 @@ function getBackupDir() {
 
 async function saveAudioBackup(audioData, voiceActivity, id = `${Date.now()}-${++backupSequence}`) {
   cleanupOldBackups();
-  lastAudioVoiceActivity = validateVoiceActivity(voiceActivity);
-  // Store as proper Buffer to avoid serialization issues
-  if (Buffer.isBuffer(audioData)) {
-    lastAudioBackup = audioData;
-  } else if (audioData instanceof Uint8Array || audioData instanceof ArrayBuffer) {
-    lastAudioBackup = Buffer.from(audioData);
-  } else if (typeof audioData === 'object' && audioData.type === 'Buffer') {
-    lastAudioBackup = Buffer.from(audioData.data);
-  } else {
-    lastAudioBackup = Buffer.from(audioData);
-  }
-  backupTimestamp = Date.now();
-  backupId = id;
-  const record = { audio: lastAudioBackup, metadata: lastAudioVoiceActivity, timestamp: backupTimestamp, filename: `backup_${backupTimestamp}-${id}.webm` };
+  const metadata = validateVoiceActivity(voiceActivity);
+  const audioBuffer = typeof audioData === 'object' && audioData.type === 'Buffer'
+    ? Buffer.from(audioData.data) : Buffer.from(audioData);
+  const timestamp = Date.now();
+  const record = { audio: audioBuffer, metadata, timestamp, filename: `backup_${timestamp}-${id}.webm` };
+  const latest = audioBackups.get(backupId);
   audioBackups.set(id, record);
-  console.log('Audio backup saved:', lastAudioBackup.length, 'bytes');
+  // Late audio IPC from an older recording must not replace the newest retry.
+  if (!latest || isBackupAtOrBefore(latest.filename, record.filename)) {
+    lastAudioBackup = record.audio;
+    lastAudioVoiceActivity = record.metadata;
+    backupTimestamp = record.timestamp;
+    backupId = id;
+  }
+  console.log('Audio backup saved:', record.audio.length, 'bytes');
 
   // Vor der Verarbeitung fertig sichern: Ein sofortiges Stille-Ergebnis darf
   // nicht vor einem noch laufenden Schreibvorgang das Backup löschen.
@@ -1623,8 +1651,7 @@ function loadBackupFromDisk() {
 
     const files = fs.readdirSync(dir)
       .filter(f => f.endsWith('.webm'))
-      .sort()
-      .reverse();
+      .sort((first, second) => compareBackups(second, first) || 0);
 
     if (files.length > 0) {
       const latest = files[0];
@@ -1683,6 +1710,27 @@ function clearAudioBackup(id = backupId) {
   }
 }
 
+// A completed recording supersedes earlier failures, but never newer audio.
+function clearSuccessfulBackups(id) {
+  const completed = audioBackups.get(id);
+  if (!completed) return;
+  for (const [candidateId, record] of audioBackups) {
+    if (isBackupAtOrBefore(record.filename, completed.filename)) clearAudioBackup(candidateId);
+  }
+  // Include failures from earlier app runs, which may not have been loaded into RAM.
+  try {
+    const dir = getBackupDir();
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (!isBackupAtOrBefore(name, completed.filename)) continue;
+      for (const file of [name, `${name}.json`]) {
+        try { fs.unlinkSync(path.join(dir, file)); }
+        catch (error) { if (error.code !== 'ENOENT') console.error('Backup löschen fehlgeschlagen:', error.code); }
+      }
+    }
+  } catch (error) { console.error('Ältere Backups löschen fehlgeschlagen:', error.code); }
+}
+
 function cleanupOldBackups() {
   for (const [id, record] of audioBackups) {
     if (Date.now() - record.timestamp > BACKUP_EXPIRY_MS) clearAudioBackup(id);
@@ -1727,6 +1775,7 @@ async function retryLastRecording() {
   const metadata = lastAudioVoiceActivity;
   const job = dictationJobs.create();
   job.backupId = id;
+  job.phase = 'processing';
   retryingBackups.add(id);
   job.target = await savePreviousApp();
   console.log('Retrying last recording from backup...');
@@ -1774,17 +1823,23 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
 
     console.log('Audio buffer type:', typeof audioData, 'Buffer size:', audioBuffer.length);
 
-    const skipTranscription = shouldSkipTranscription(voiceActivity);
+    const measurement = validateVoiceActivity(voiceActivity);
+    console.log('[Diktat] voiceActivity:', voiceActivity == null ? 'fehlt' : measurement ? 'gültig' : 'ungültig');
+    const skipTranscription = !isRetry && shouldSkipTranscription(voiceActivity);
+    let locallyFiltered = skipTranscription;
     if (skipTranscription) console.log('[Diktat-Stillefilter] Aufnahme ohne Sprachaktivität, Groq übersprungen');
-    const transcript = skipTranscription ? '' : await transcribeAudio(audioBuffer, language, 3, voiceActivity);
+    const transcript = skipTranscription ? '' : await transcribeAudio(audioBuffer, language, 3, voiceActivity, {
+      bypassLocalFilters: isRetry,
+      onFiltered: result => { locallyFiltered ||= result.reason === 'known-silence-phrase'; },
+    });
     console.log('Transcript length:', transcript.length);
     if (process.env.PAPLY_DEBUG_TEXT === '1') console.log('Transcript:', transcript);
 
     // Bei leerer Transkription (Stille) einfach beenden - nichts ausgeben
     if (!transcript) {
       console.log('Empty transcript - nothing to paste');
-      clearAudioBackup(job.backupId);
-      updateStatus('empty');
+      if (!locallyFiltered) clearSuccessfulBackups(job.backupId);
+      updateStatus('empty', measurement?.peakDbfs <= -100 ? 'Kein Mikrofonsignal' : '');
       hideRecordingWindow(900, job);
       return { success: true, empty: true };
     }
@@ -1838,11 +1893,11 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
       clipboard.writeText(finalText);
     }
 
-    // Success - clear backup
-    clearAudioBackup(job.backupId);
+    // Success supersedes this recording and all earlier failures.
+    clearSuccessfulBackups(job.backupId);
 
     if (!isMac || !autopaste || pasted === false) {
-      updateStatus('done', pasted === false ? 'In Zwischenablage kopiert — mit ' + (isMac ? 'Cmd+V' : 'Ctrl+V') + ' einfügen' : '');
+      updateStatus('done', pasted === false ? (isMac ? 'Kopiert – ⌘V drücken' : 'Kopiert – Strg+V drücken') : '');
       if (pasted === false && dictationJobs.isCurrent(job)) recordingWindow?.showInactive();
       hideRecordingWindow(pasted === false ? 5000 : 300, job);
     }
@@ -1929,7 +1984,7 @@ function acceleratorToUioKeycode(accelerator) {
 
 // Only the dictation binding is changed here; meeting bindings keep their own path.
 async function changeDictationShortcut(shortcut) {
-  if (shortcut === currentShortcut) return true;
+  if (sameShortcut(shortcut, currentShortcut, process.platform)) return true;
   if (shortcut === 'GLOBE' && (!isMac || !await ensureGlobeReady(globeKeyManager))) return false;
   const old = currentShortcut;
   const ok = replaceShortcut(old, shortcut, {

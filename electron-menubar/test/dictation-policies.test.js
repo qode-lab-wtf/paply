@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDictationJobs } from '../dictation/jobs.js';
-import { completePolish, polishTokenBudget, readResponse, replaceShortcut, friendlyError, ensureGlobeReady } from '../dictation/policies.js';
+import { completePolish, polishTokenBudget, readResponse, replaceShortcut, friendlyError, explainDictationStatus, ensureGlobeReady, sameShortcut } from '../dictation/policies.js';
 import { deferred, tick } from './helpers/dictation-main.js';
 afterEach(() => vi.useRealTimers());
 
@@ -63,11 +63,11 @@ it('registriert zuerst das neue Kürzel und entfernt erst danach das alte', () =
   expect(calls).toEqual(['register new', 'activate new', 'unregister old']);
 });
 for (const platform of ['darwin', 'win32']) describe(`Fehlertexte ${platform}`, () => {
-  it.each([['401', 'API-Key'], ['429', 'Limit'], ['fetch failed', 'Netzwerk'], ['ENOTFOUND', 'Netzwerk'], ['NotAllowedError', 'Mikrofon']])('%s ist verständlich', (error, text) => {
+  it.each([['401', 'Groq-Schlüssel'], ['429', 'Limit'], ['fetch failed', 'Verbindung'], ['ENOTFOUND', 'Verbindung'], ['NotAllowedError', 'Mikrofon']])('%s ist verständlich', (error, text) => {
     expect(friendlyError(error, platform)).toContain(text);
   });
   it('benennt das plattformgerechte Einstellungsfenster', () => {
-    expect(friendlyError('microphone', platform)).toContain(platform === 'darwin' ? 'Systemeinstellungen → Datenschutz & Sicherheit' : 'Windows-Einstellungen');
+    expect(explainDictationStatus(friendlyError('microphone'), platform)).toContain(platform === 'darwin' ? 'Systemeinstellungen → Datenschutz & Sicherheit' : 'Windows-Einstellungen');
   });
 });
 
@@ -82,4 +82,18 @@ it.each(['spawn', 'error', 'exit', 'timeout'])('Globe-Wechsel wartet auf Helfers
   expect(await result).toBe(event === 'spawn');
   expect(manager.stop).toHaveBeenCalledTimes(event === 'spawn' ? 0 : 1);
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it.each(['microphone', '401', '429', 'fetch failed', 'Unknown failure'])('hält Pillenfehler kurz: %s', error => {
+  expect(friendlyError(error).length).toBeLessThanOrEqual(28);
+  expect(friendlyError(error)).not.toContain('Einstellungen');
+});
+
+it.each([
+  ['darwin', 'Alt+Command+K', 'Command+Alt+K'],
+  ['darwin', 'Option+Cmd+K', 'Command+Alt+K'],
+  ['win32', 'Control+Alt+K', 'Ctrl+Alt+K'],
+])('erkennt das bereits aktive Kürzel trotz anderer Modifier-Reihenfolge auf %s', (platform, active, captured) => {
+  expect(sameShortcut(active, captured, platform)).toBe(true);
+  expect(sameShortcut(active, captured.replace('+K', '+X'), platform)).toBe(false);
 });

@@ -3,7 +3,6 @@
 // https://console.groq.com/docs/speech-to-text#understanding-metadata-fields
 const NO_SPEECH_PROB = 0.6;
 const LOW_LOGPROB = -1.0;
-const MIN_PHRASE_SPEECH_MS = 250;
 
 function normalizeTranscript(text) {
   return text.normalize('NFKC').toLowerCase()
@@ -44,14 +43,16 @@ function hasReliableMeasurement(meta) {
 }
 
 function hasLowSpeechActivity(meta) {
-  return hasReliableMeasurement(meta) && meta.speechMs < MIN_PHRASE_SPEECH_MS;
+  return hasReliableMeasurement(meta) && (meta.peakDbfs - meta.floorDbfs < 12
+    || (meta.floorDbfs < -45 && meta.speechMs < 120));
 }
 
 function shouldSkipTranscription(input) {
   const meta = validateVoiceActivity(input);
   // Nur sehr stationäre Signale überspringen, unabhängig von ihrem absoluten
   // Pegel. Deutliche Spitzen (auch Klicks) werden zunächst transkribiert.
-  return Boolean(hasReliableMeasurement(meta) && meta.speechMs < 80 && meta.peakDbfs < meta.floorDbfs + 10);
+  return Boolean(meta && (meta.peakDbfs <= -100
+    || (hasReliableMeasurement(meta) && meta.speechMs < 80 && meta.peakDbfs - meta.floorDbfs < 6)));
 }
 
 function noSpeechProbability(segment) {
@@ -72,13 +73,13 @@ function isTrivialTranscript(input) {
   return !lettersOrDigits || (lettersOrDigits.length < 2 && trimmed.length <= 3);
 }
 
-function filterTranscription(response, inputMeta) {
+function filterTranscription(response, inputMeta, { bypassLocalFilters = false } = {}) {
   const meta = validateVoiceActivity(inputMeta);
   const rawText = typeof response?.text === 'string' ? response.text.trim() : '';
   const segments = Array.isArray(response?.segments) && response.segments.length > 0
     && response.segments.every(segment => segment && typeof segment.text === 'string')
     ? response.segments.filter(segment => segment.text.trim()) : null;
-  const kept = segments?.filter(segment => !isSilentSegment(segment));
+  const kept = bypassLocalFilters ? segments : segments?.filter(segment => !isSilentSegment(segment));
   const droppedSegments = segments ? segments.length - kept.length : 0;
   // Bei fehlenden/ungültigen Segmenten bleibt der bisherige Text maßgeblich.
   let text = droppedSegments ? kept.map(segment => segment.text.trim()).join(' ')
@@ -92,7 +93,7 @@ function filterTranscription(response, inputMeta) {
   if (isArtifactPhrase(normalized)) {
     text = '';
     reason = 'known-artifact-phrase';
-  } else if (SILENCE_PHRASES.has(normalized) && hasLowSpeechActivity(meta)) {
+  } else if (!bypassLocalFilters && SILENCE_PHRASES.has(normalized) && hasLowSpeechActivity(meta)) {
     text = '';
     reason = 'known-silence-phrase';
   }
