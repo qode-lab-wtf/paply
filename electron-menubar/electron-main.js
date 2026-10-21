@@ -1795,6 +1795,30 @@ async function retryLastRecording() {
   finally { retryingBackups.delete(id); }
 }
 
+// ============================================================================
+// BENCHMARK-AUFNAHMEN (nur lokal): Existiert im Datenordner der Ordner „benchmark“,
+// wird jedes Diktat (Ton wie an Groq geschickt + Ergebnis + Pegel) dort abgelegt.
+// Ohne den Ordner passiert nichts. Zum Beenden den Ordner löschen.
+// ============================================================================
+function benchmarkDir() {
+  try {
+    const dir = path.join(app.getPath('userData'), 'benchmark');
+    return fs.existsSync(dir) ? dir : null;
+  } catch { return null; }
+}
+
+function saveBenchmarkSample(sample, audioBuffer, data) {
+  const dir = benchmarkDir();
+  if (!dir) return;
+  try {
+    if (!sample.id) {
+      sample.id = new Date().toISOString().replace(/[:.]/g, '-');
+      fs.writeFileSync(path.join(dir, `${sample.id}.webm`), audioBuffer);
+    }
+    if (data) fs.writeFileSync(path.join(dir, `${sample.id}.json`), JSON.stringify({ id: sample.id, ...data }, null, 2));
+  } catch (err) { console.error('[Benchmark] Speichern fehlgeschlagen:', err.message); }
+}
+
 async function processAudioData(audioData, isRetry = false, voiceActivity, job = dictationJobs.create()) {
   const updateStatus = (status, detail = '') => sendJobStatus(job, status, detail);
   job.backupId ??= backupId;
@@ -1836,6 +1860,10 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
       onFiltered: result => { locallyFiltered ||= result.reason === 'known-silence-phrase'; },
     });
     console.log('Transcript length:', transcript.length);
+    const benchSample = {};
+    const benchBase = { createdAt: new Date().toISOString(), isRetry, language, enablePolish: !!enablePolish,
+      activeProfile: s.get('activeProfile'), skipped: skipTranscription, voiceActivity: measurement || null, transcript };
+    saveBenchmarkSample(benchSample, audioBuffer, transcript ? null : { ...benchBase, polished: null, finalText: '' });
     if (process.env.PAPLY_DEBUG_TEXT === '1') console.log('Transcript:', transcript);
 
     // Bei leerer Transkription (Stille) einfach beenden - nichts ausgeben
@@ -1892,6 +1920,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     });
 
     const finalText = polished || transcript;
+    saveBenchmarkSample(benchSample, audioBuffer, { ...benchBase, polished, finalText });
     const copyToClipboard = s.get('copyToClipboard');
 
     // Direkt den finalen Text einfügen - kein Placeholder mehr
