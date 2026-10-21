@@ -8,7 +8,7 @@ import {
   Instagram, Sparkles, Save, Eye, EyeOff, Headphones
 } from 'lucide-react';
 import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
-import { formatShortcut } from '@/lib/shortcut';
+import { formatShortcut, keyEventToAccelerator } from '@/lib/shortcut';
 import { Onboarding } from './views/Onboarding';
 import { MeetingsView } from './views/MeetingsView';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { saveSettings } from '@/lib/settings-save';
 import { followSystemTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import type { Settings as SettingsType, HistoryItem, Stats, Profile, CustomAgent, Snippet } from '@/types/electron';
@@ -109,8 +110,9 @@ export function Dashboard() {
     };
     const offState = window.electronAPI.onRecordingState(applyState);
     void window.electronAPI.getTranscriptionStatus().then(applyState);
-    const offStatus = window.electronAPI.onStatusUpdate(({ status }) => {
+    const offStatus = window.electronAPI.onStatusUpdate(({ status, detail }) => {
       setIsTranscribing(status === 'transcribing' || status === 'polishing');
+      if (detail && (status === 'error' || status === 'empty' || status === 'done')) setSettingsError(detail);
     });
     return () => { offState(); offStatus(); };
   }, []);
@@ -151,11 +153,11 @@ export function Dashboard() {
   const handleSettingChange = async (key: keyof SettingsType, value: boolean | string | number) => {
     setSettingsError('');
     try {
-      await window.electronAPI.setSettings({ [key]: value });
+      await saveSettings(window.electronAPI, { [key]: value });
       setSettings(await window.electronAPI.getSettings());
       return true;
-    } catch {
-      setSettingsError('Speichern nicht möglich. Prüfe, ob das Tastenkürzel gültig und noch frei ist.');
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Speichern nicht möglich. Prüfe, ob das Tastenkürzel gültig und noch frei ist.');
       return false;
     }
   };
@@ -1169,16 +1171,8 @@ function AgentsView({
     if (!recording) return;
     e.preventDefault();
     
-    const parts: string[] = [];
-    if (e.ctrlKey) parts.push('Ctrl');
-    if (e.altKey) parts.push('Alt');
-    if (e.metaKey) parts.push(platform?.isMac ? 'Cmd' : 'Win');
-    if (e.shiftKey) parts.push('Shift');
-    
-    const key = e.key;
-    if (!['Control', 'Alt', 'Meta', 'Shift'].includes(key)) {
-      parts.push(key.toUpperCase());
-      const hotkey = parts.join('+');
+    const hotkey = keyEventToAccelerator(e);
+    if (hotkey) {
       if (isWizard) {
         setWizardData(prev => ({ ...prev, hotkey }));
         setWizardHotkeyRecording(false);
@@ -1832,22 +1826,17 @@ function SettingsView({
     if (!isRecording) return;
     e.preventDefault();
     
-    const parts: string[] = [];
-    if (e.metaKey) parts.push('Command');
-    if (e.ctrlKey) parts.push('Ctrl');
-    if (e.altKey) parts.push('Alt');
-    if (e.shiftKey) parts.push('Shift');
-    
-    const key = e.key;
-    if (!['Control', 'Alt', 'Meta', 'Shift', 'Fn'].includes(key)) {
-      const keyMap: Record<string, string> = {
-        ' ': 'Space', 'ArrowUp': 'Up', 'ArrowDown': 'Down',
-        'ArrowLeft': 'Left', 'ArrowRight': 'Right',
-      };
-      parts.push(keyMap[key] || (key.length === 1 ? key.toUpperCase() : key));
-      setShortcutInput(parts.join('+'));
+    const shortcut = keyEventToAccelerator(e);
+    if (shortcut) {
+      setShortcutInput(shortcut);
       setIsRecording(false);
     }
+  };
+
+  const handleUseGlobe = async () => {
+    setShortcutInput('GLOBE');
+    setIsRecording(false);
+    if (!await onSettingChange('shortcut', 'GLOBE')) setShortcutInput(settings?.shortcut || '');
   };
 
   const handleMeetingHotkeyRecord = (e: React.KeyboardEvent) => {
@@ -1880,7 +1869,10 @@ function SettingsView({
       if (!await onSettingChange('geminiApiKey', geminiKey)) return;
     }
     if (shortcutInput && shortcutInput !== settings?.shortcut) {
-      if (!await onSettingChange('shortcut', shortcutInput)) return;
+      if (!await onSettingChange('shortcut', shortcutInput)) {
+        setShortcutInput(settings?.shortcut || '');
+        return;
+      }
     }
     if (settings?.meetingEnabled && meetingHotkeyInput && meetingHotkeyInput !== settings?.meetingHotkey) {
       if (!await onSettingChange('meetingHotkey', meetingHotkeyInput)) return;
@@ -2048,11 +2040,7 @@ function SettingsView({
           />
           {platform?.isMac && (
             <button
-              onClick={() => {
-                setShortcutInput('GLOBE');
-                setIsRecording(false);
-                onSettingChange('shortcut', 'GLOBE');
-              }}
+              onClick={handleUseGlobe}
               className={cn(
                 'mt-2 w-full flex items-center gap-2 p-2 rounded-lg border transition-colors text-sm',
                 shortcutInput === 'GLOBE'

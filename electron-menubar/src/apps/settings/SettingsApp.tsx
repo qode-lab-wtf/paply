@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
 import { captureShortcut, formatShortcut } from '@/lib/shortcut';
+import { saveSettings } from '@/lib/settings-save';
 import { followSystemTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import type { Settings, Platform } from '@/types/electron';
@@ -73,10 +74,12 @@ export function SettingsApp() {
     setIsSaving(true);
     setSaveError('');
     try {
-      await window.electronAPI.setSettings({ [key]: value });
+      await saveSettings(window.electronAPI, { [key]: value });
       setSettings(prev => prev ? { ...prev, [key]: value } : null);
     } catch (error) {
-      setSaveError('Speichern nicht möglich. Prüfe, ob das Tastenkürzel gültig und noch frei ist.');
+      if (key === 'shortcut') setShortcut(settings?.shortcut || '');
+      if (key === 'meetingHotkey') setMeetingHotkey(settings?.meetingHotkey || '');
+      setSaveError(error instanceof Error ? error.message : 'Speichern nicht möglich. Prüfe, ob das Tastenkürzel gültig und noch frei ist.');
     } finally {
       setIsSaving(false);
     }

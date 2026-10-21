@@ -13,21 +13,29 @@ export function formatShortcut(shortcut: string, isMac: boolean): string {
     .join(isMac ? ' ' : ' + ');
 }
 
-export function keyEventToAccelerator(event: KeyboardEvent): string | null {
-  if (['Meta', 'Control', 'Alt', 'Shift', 'Fn'].includes(event.key)) return null;
+export function keyEventToAccelerator(event: Pick<KeyboardEvent, 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>): string | null {
+  // Option on macOS changes event.key (⌥K → ˚); event.code retains KeyK.
+  const code = event.code;
+  const keys: Record<string, string> = {
+    Space: 'Space', Enter: 'Enter', NumpadEnter: 'Enter', Tab: 'Tab', Escape: 'Escape',
+    Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert', Home: 'Home', End: 'End',
+    PageUp: 'PageUp', PageDown: 'PageDown', ArrowUp: 'Up', ArrowDown: 'Down',
+    ArrowLeft: 'Left', ArrowRight: 'Right',
+    Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\',
+    IntlBackslash: '\\', Semicolon: ';', Quote: "'", Backquote: '`',
+    Comma: ',', Period: '.', Slash: '/',
+  };
+  const letter = /^Key([A-Z])$/.exec(code);
+  const digit = /^(?:Digit|Numpad)([0-9])$/.exec(code);
+  const functionKey = /^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code) ? code : null;
+  const key = letter?.[1] || digit?.[1] || functionKey || keys[code];
+  if (!key) return null; // modifiers, dead keys, media keys and unknown codes
   const parts: string[] = [];
   if (event.metaKey) parts.push('Command');
   if (event.ctrlKey) parts.push('Ctrl');
   if (event.altKey) parts.push('Alt');
   if (event.shiftKey) parts.push('Shift');
-  const keys: Record<string, string> = {
-    ' ': 'Space',
-    ArrowUp: 'Up',
-    ArrowDown: 'Down',
-    ArrowLeft: 'Left',
-    ArrowRight: 'Right',
-  };
-  parts.push(keys[event.key] || (event.key.length === 1 ? event.key.toUpperCase() : event.key));
+  parts.push(key);
   return parts.join('+');
 }
 
