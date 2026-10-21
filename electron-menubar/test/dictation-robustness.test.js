@@ -1,3 +1,4 @@
+import { createPolishClient } from '../dictation/polish-client.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -198,15 +199,16 @@ it('später Mac-Einfügefehler ersetzt den bereits geplanten Erfolg-Ausblendtime
 for (const platform of ['darwin', 'win32']) it(`nutzt bei abgeschnittenem Polish auf ${platform} das vollständige Original`, async () => {
   const { context: c } = main(platform);
   const original = 'Sehr langes Diktat. '.repeat(2000);
-  c.getPolishPrompt = text => text;
+  c.runPolish = createPolishClient({ request: c.readResponse });
   const polish = source.slice(source.indexOf('async function polishText('), source.indexOf('// WINDOWS\n'));
   vm.runInContext(polish, c);
   c.fetch.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ text: original }) })
+    .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ data: [{ id: 'qwen/qwen3.8-27b' }] }) })
     .mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: 'Abgeschnitten.' } }] }) });
   const result = await c.processAudioData(Buffer.from('audio'), false, speech);
   expect(result.polished).toBeNull();
   expect(c.autopasteText).toHaveBeenCalledWith(original.trim(), null);
-  const payload = JSON.parse(c.fetch.mock.calls[1][1].body);
+  const payload = JSON.parse(c.fetch.mock.calls[2][1].body);
   expect(payload.max_tokens).toBeGreaterThan(1024);
   expect(payload.max_tokens).toBeLessThanOrEqual(32768);
 });
@@ -232,7 +234,7 @@ for (const platform of ['darwin', 'win32']) it(`übernimmt Agent-Wechsel währen
   c.stopRecording();
   values.activeProfile = 'coding'; values.language = 'de'; values.autopaste = true;
   await ipc['recording:audio'](event, Buffer.from('audio'), speech, job.id);
-  expect(c.polishText).toHaveBeenCalledWith('Gesprochener Text', 'en', 'plain', null);
+  expect(c.polishText).toHaveBeenCalledWith('Gesprochener Text', 'en', 'plain', null, []);
   expect(c.autopasteText).not.toHaveBeenCalled();
   expect(c.clipboard.writeText).toHaveBeenCalledWith('Gesprochener Text');
 });

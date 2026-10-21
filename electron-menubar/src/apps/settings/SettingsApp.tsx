@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { CustomVocabularySettings } from '@/components/CustomVocabularySettings';
 import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
 import { captureShortcut, formatShortcut } from '@/lib/shortcut';
 import { saveSettings } from '@/lib/settings-save';
@@ -136,6 +137,10 @@ export function SettingsApp() {
       {/* Content */}
       {activeTab === 'api' && (
         <div className="space-y-4">
+          <Card><CardContent className="pt-6">
+            <CustomVocabularySettings value={settings.customVocabulary || ''}
+              onSave={value => handleSave('customVocabulary', value)} />
+          </CardContent></Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Groq API Key</CardTitle>

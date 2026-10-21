@@ -50,7 +50,7 @@ describe('summary v2', () => {
       : { ok: true, json: async () => ({ choices: [{ message: { content: '{"kurzfassung":"G","themen":[],"todos":[]}' } }] }) });
     const s2 = await generateMeetingSummary('T', { groqApiKey: 'k', geminiApiKey: 'g', fetchImpl: fb });
     expect(s2.kurzfassung).toBe('G');
-    expect(s2.model).toBe('llama-3.3-70b-versatile');
+    expect(s2.model).toBe('openai/gpt-oss-120b');
   });
 
   it('generateMeetingSummary: leere Antwort → Fehler code empty', async () => {

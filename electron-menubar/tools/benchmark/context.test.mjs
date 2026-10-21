@@ -1,4 +1,5 @@
 import test from 'node:test';
+import appPrompt from '../../dictation/polish-prompt.js';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -141,4 +142,14 @@ test('CLI context ignores vocab/references, uses chronological raw history and i
   const missing = invoke('context');
   assert.equal(missing.status, 2, missing.stdout + missing.stderr);
   assert.match(missing.stdout, /API: 0 Aufrufe/);
+});
+
+
+test('P2 uses the exact shared app messages for identical raw inputs', () => {
+  const transcript = { text: 'Aktuell.', segments: [{ text: 'Aktuell.', avg_logprob: -0.7, start: 0, end: 1 }] };
+  const history = [{ text: 'Alt.' }, { text: 'Neuer.' }];
+  assert.deepEqual(contextMessages(transcript, history), appPrompt.buildPolishMessages(transcript.text, {
+    history: history.map(item => item.text), segments: transcript.segments,
+  }));
+  assert.equal(CONTEXT_PROMPT, appPrompt.POLISH_SYSTEM_PROMPT);
 });

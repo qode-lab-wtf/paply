@@ -2,8 +2,8 @@
 // Fallback). Der Bericht folgt der Gesprächslänge: Kurzfassung, Themen mit Standpunkten,
 // Entscheidungen, offene Fragen, Todos am Ende. Nichts erfinden. CommonJS.
 
-const { chatComplete } = require('./llm-client');
-const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const { chatComplete, DEFAULT_GROQ_MODEL } = require('./llm-client');
+const { GROQ_CHAT_URL } = require('../dictation/groq-models');
 
 const SUMMARY_SCHEMA_VERSION = 2;
 
@@ -108,7 +108,7 @@ async function generateMeetingSummary(transcriptText, opts = {}) {
     provider: llmProvider || 'auto',
     order: ['gemini', 'groq'],
     groqApiKey: groqApiKey != null ? groqApiKey : apiKey, // Abwärtskompatibilität: apiKey = Groq-Key
-    groqModel: model || 'llama-3.3-70b-versatile',
+    groqModel: model || DEFAULT_GROQ_MODEL,
     geminiApiKey,
     geminiModel,
     fetchImpl,
