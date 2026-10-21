@@ -4,6 +4,8 @@ import type { VoiceActivityMeta } from '../lib/voice-activity';
 export interface Settings {
   groqApiKey: string;
   enablePolish: boolean;
+  customVocabulary: string;
+  polishUnavailable?: boolean;
   shortcut: string;
   autoStart: boolean;
   language: 'de' | 'en';

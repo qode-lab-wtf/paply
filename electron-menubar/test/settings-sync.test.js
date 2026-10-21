@@ -20,6 +20,7 @@ const CANONICAL_KEYS = [
   'shortcut',
   'autopaste',
   'enablePolish',
+  'customVocabulary',
   'beepEnabled',
   'autoStart',
   'copyToClipboard',

@@ -7,6 +7,7 @@ import {
   Palette, FileText, Target, Edit, Lightbulb, Mail,
   Instagram, Sparkles, Save, Eye, EyeOff, Headphones
 } from 'lucide-react';
+import { CustomVocabularySettings } from '@/components/CustomVocabularySettings';
 import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
 import { formatShortcut, keyEventToAccelerator } from '@/lib/shortcut';
 import { Onboarding } from './views/Onboarding';
@@ -272,6 +273,9 @@ export function Dashboard() {
           </Badge>
         </header>
 
+        {settings?.polishUnavailable && <p role="status" className="p-4 text-sm text-muted-foreground">
+          Polieren nicht verfügbar – das betroffene Diktat wurde als Rohtext übernommen.
+        </p>}
         {settingsError && <p role="alert" className="p-4 text-sm text-destructive">{settingsError}</p>}
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
@@ -1963,10 +1967,12 @@ function SettingsView({
               onCheckedChange={(checked) => onSettingChange('autopaste', checked)}
             />
           </div>
+          <CustomVocabularySettings value={settings.customVocabulary || ''}
+            onSave={value => onSettingChange('customVocabulary', value)} />
           <div className="flex items-center justify-between">
             <div>
               <Label>Polish aktivieren</Label>
-              <p className="text-xs text-muted-foreground">Mit Groq Llama optimieren</p>
+              <p className="text-xs text-muted-foreground">Diktat behutsam korrigieren</p>
             </div>
             <Switch
               checked={settings.enablePolish}
