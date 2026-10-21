@@ -1,6 +1,44 @@
 # Paply — Stand
 
-**Zeitpunkt:** 22.09.2026, nachmittags · **Phase:** Betrieb (v1.13.1) + Entwicklung (Stimmerkennung)
+**Zeitpunkt:** 21.10.2026 · **Phase:** Release v1.14.0 („einmal abrunden“, Weitergabe an Windows-Nutzer)
+
+## v1.14.0 — Abrunden für Mac + Windows (21.10.2026)
+
+Allans Auftrag: App abrunden, Fehler raus, schneller, schöneres Design (Logo, Aufnahme-Animation),
+Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Windows.
+
+- **Stille statt „Vielen Dank“:** Groq Whisper liefert bei Stille „Vielen Dank.“ (`no_speech_prob` ist bei
+  Groq immer 0). Pegelmessung während der Aufnahme relativ zum Grundrauschen; ohne Sprache wird Groq gar
+  nicht gefragt, typische Stille-Phrasen werden bei kaum Sprachaktivität verworfen. Echt diktiertes
+  „Vielen Dank“ bleibt. Durchlauf-Test mit echten Groq-Aufrufen (Stille, Rauschen −50/−40 dB, Klick,
+  laut/leise gesprochen, Satz) bestanden.
+- **Meeting-Modus (Cmd+Shift+X) ausgeblendet:** standardmäßig aus, in den Einstellungen als „Beta“
+  einschaltbar; Meetings und 7-Tage-Löschung bleiben.
+- **Ersteinrichtung** für neue Nutzer (Groq-Schlüssel mit Prüfung, Mikrofon, Bedienungshilfen, Kürzel).
+  Anleitung zum Weitergeben: `docs/WINDOWS-INSTALLATION.md`.
+- **Robustheit Diktat:** Start/Stop-Rennen, Mikrofonfehler, parallele Diktate (Ziel-App pro Diktat),
+  Einfüge-Fehler → „In Zwischenablage kopiert“, Polish schneidet nicht mehr ab, transaktionaler
+  Kürzel-Wechsel, Single-Instance, keine Diktat-Texte im Log, Backups ≤ 24 h. Windows: Einfügen ins
+  Ausgangsfenster + schneller (langlebiger Fokus-Helfer, Ctrl+V über uiohook).
+- **Absturz behoben (schon in v1.13.1):** Ohne Bedienungshilfen-Recht brach uiohook die App auf dem Mac
+  ab — betraf jeden neuen Mac-Nutzer beim ersten Start.
+- **Tempo:** Aufnahme startet ohne Warten auf die Ziel-App-Ermittlung (Test: 20–80 ms statt ~250 ms);
+  keine Google-Fonts mehr (Systemschrift).
+- **Design:** Logo „p-Kopf“ (Opus-5.5-Entwurf B, von Allan gewählt), neue Icons für Dock/Menüleiste/
+  Windows-Tray/Installer, Aufnahme-Pille „Echo“ mit Zeitanzeige, veredelter Start-/Stopp-Ton,
+  Markenfarben.
+- Automatische Tests: 372 grün. Windows nur per CI-Build + Praxistest beim Freund geprüft.
+
+## Offen / braucht Allan
+
+- Praxistest v1.14.0 auf dem MacBook und Rückmeldung des Windows-Freunds (Einfügen, Tray, Pille).
+- MacBook per `ssh macbook` noch nicht erreichbar (Entfernte Anmeldung aus) — ungepushte Stände dort
+  nicht geprüft.
+- Stimmerkennung im Meeting-Modus (siehe unten) ruht, solange der Modus Beta ist.
+
+---
+
+## Stand 22.09.2026 (v1.13.1)
 
 ## Bestätigtes Ziel
 
@@ -31,7 +69,7 @@ wespeaker-resnet34; bei Schwelle 0,7 drei Stimmen, aber stark schwellenabhängig
 mit bekannter Wahrheit: nächste Mehrpersonen-Aufnahme mit Namensansage („Ich bin …“) und/oder gelabelte
 Forschungsaufnahmen (Download-Freigabe von Allan offen).
 
-## Offen / braucht Allan
+### Offen (Stand 22.09.)
 
 - Praxistest v1.13.0 in der Alltags-App und Rückmeldung.
 - „ok“ für den Download gelabelter Übungsaufnahmen (Stimmerkennung).

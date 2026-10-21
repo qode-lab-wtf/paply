@@ -6,7 +6,7 @@ Die GitHub Action `build-release.yml` baut Mac (DMG + ZIP) und Windows und legt
 ein GitHub-Release an, sobald ein Tag `v*` gepusht wird:
 
 ```bash
-cd ~/Vibe/paply-main
+cd ~/Vibe/paply-main   # Mac mini: ~/Vibe/paply
 git push origin main          # Code hochladen
 git tag v1.8.0                 # Version-Tag (muss zur package.json-Version passen)
 git push origin v1.8.0         # löst die Action aus

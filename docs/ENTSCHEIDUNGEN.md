@@ -30,3 +30,16 @@ Projektordner, die Codex-Test-App, alte Installationsdateien und die alte Web-Ve
 werden entfernt. Beurteilung „wichtiger“ Zweige überließ Allan Claude: Codex-Unterlagen und Messprotokolle
 ins Archiv übernommen; paply.dev-Planung (Feb. 2026) nach `~/Vibe/paply.dev/docs/` gerettet;
 Windows-Signing-Fix vom Feb. 2026 ist überholt (Windows-Build läuft).
+
+## 2026-10-21 — Abrunden + Weitergabe an Windows (von Allan bestätigt)
+
+- Meeting-Modus „funktioniert sehr schlecht“ → ausgeblendet, als Beta in den Einstellungen zuschaltbar
+  (Code und Meetings bleiben).
+- Logo **B „p-Kopf“**, Aufnahme-Animation **„Echo“ mit Timer**, **veredelter Ton** (Allans Wahl aus drei
+  Opus-5.5-Entwürfen).
+- Der Windows-Freund holt sich einen eigenen kostenlosen Groq-Schlüssel (Ersteinrichtung führt hin).
+- Release v1.14.0 veröffentlichen, sobald Tests und Opus-Review grün sind.
+- Alle Änderungen gleichwertig für macOS und Windows.
+- Diktat: Stille-Fix ausdrücklich gewünscht; übriger Diktat-Ablauf auf dem Mac bleibt gleich
+  (gleiche Einfüge-Methode). Nicht umgesetzt, weil Verhalten ändernd: Zwischenablage nach dem Einfügen
+  wiederherstellen; Schlüssel per Schlüsselbund verschlüsseln (unsignierte App → Passwortabfragen).

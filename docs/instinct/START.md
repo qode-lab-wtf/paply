@@ -2,7 +2,7 @@
 
 Mac-/Windows-Menüleisten-App für Diktat (Cmd+X) und Gesprächsaufnahmen (Cmd+Shift+X).
 Es gibt genau EIN Paply: dieses Repository, Branch `main`, App-Code unter `electron-menubar/`.
-Repository: https://github.com/qode-lab-wtf/paply · lokal: `~/Vibe/paply-main`
+Repository: https://github.com/qode-lab-wtf/paply · lokal: `~/Vibe/paply-main` (MacBook) bzw. `~/Vibe/paply` (Mac mini)
 (`paply.dev` ist ein anderes Produkt — Chrome-Plugin — und gehört nicht hierher.)
 
 - Bestätigte Richtung (Allans Worte): [ZIEL.md](ZIEL.md)
