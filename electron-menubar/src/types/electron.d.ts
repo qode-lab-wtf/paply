@@ -13,6 +13,8 @@ export interface Settings {
   activeProfile: string;
   pttThreshold: number;
   meetingHotkey: string;
+  meetingEnabled: boolean;
+  onboardingCompleted: boolean;
   // System-Audio (Gegenstelle eines Anrufs auf diesem Computer): 'auto' = automatisch erkennen
   // (empfohlen), 'always' = immer einbeziehen, 'never' = nie. Default 'auto'.
   systemAudioMode: 'auto' | 'always' | 'never';
@@ -100,7 +102,21 @@ export interface Platform {
   version?: string;
 }
 
+export interface MicrophonePermission {
+  status: string;
+  accessibilityRequired: boolean;
+  accessibilityGranted: boolean;
+}
+
 export interface ElectronAPI {
+  onSettingsChanged: (cb: () => void) => () => void;
+  validateGroqKey: (key: string, saveAnyway?: boolean) => Promise<{ status: 'valid' | 'invalid' | 'unavailable'; saved: boolean }>;
+  completeOnboarding: () => Promise<boolean>;
+  openOnboarding: () => Promise<boolean>;
+  openGroqKeys: () => Promise<void>;
+  microphonePermission: (request?: boolean) => Promise<MicrophonePermission>;
+  openMicrophoneSettings: () => Promise<void>;
+
   // Settings
   getSettings: () => Promise<Settings>;
   setSettings: (settings: Partial<Settings>) => Promise<boolean>;

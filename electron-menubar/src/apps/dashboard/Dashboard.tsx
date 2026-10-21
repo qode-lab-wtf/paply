@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Mic, History, BarChart3, Users, Code, Settings,
   Play, Square, Loader2, Copy, Check, Trash2, Star,
@@ -6,6 +6,9 @@ import {
   Palette, FileText, Target, Edit, Lightbulb, Mail,
   Instagram, Sparkles, Save, Eye, EyeOff, Headphones
 } from 'lucide-react';
+import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
+import { formatShortcut } from '@/lib/shortcut';
+import { Onboarding } from './views/Onboarding';
 import { MeetingsView } from './views/MeetingsView';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { followSystemTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import type { Settings as SettingsType, HistoryItem, Stats, Profile, CustomAgent, Snippet } from '@/types/electron';
 
@@ -47,6 +51,10 @@ const AGENT_TEMPLATES = [
 ];
 
 export function Dashboard() {
+  useEffect(() => followSystemTheme(), []);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const onboardingDismissed = useRef(false);
+  const [settingsError, setSettingsError] = useState('');
   const [activeNav, setActiveNav] = useState<NavItem>('transcription');
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -73,6 +81,7 @@ export function Dashboard() {
           window.electronAPI.getSnippets(),
         ]);
         setSettings(settingsData);
+        setShowOnboarding(!settingsData.groqApiKey || !settingsData.onboardingCompleted);
         setHistory(historyData);
         setStats(statsData);
         setProfiles(profilesData.profiles);
@@ -91,6 +100,17 @@ export function Dashboard() {
     window.electronAPI.onStatsUpdated((newStats) => setStats(newStats));
     window.electronAPI.onAgentSwitched(({ id }) => setActiveProfile(id));
   }, []);
+
+  useEffect(() => window.electronAPI.onSettingsChanged(() => {
+    window.electronAPI.getSettings().then(data => {
+      setSettings(data);
+      if (!data.meetingEnabled) setActiveNav(nav => nav === 'meetings' ? 'transcription' : nav);
+      if (!data.onboardingCompleted || (!data.groqApiKey && !onboardingDismissed.current)) {
+        onboardingDismissed.current = false;
+        setShowOnboarding(true);
+      }
+    }).catch(() => setSettingsError('Die Einstellungen konnten nicht geladen werden.'));
+  }), []);
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
@@ -122,8 +142,15 @@ export function Dashboard() {
   };
 
   const handleSettingChange = async (key: keyof SettingsType, value: boolean | string | number) => {
-    await window.electronAPI.setSettings({ [key]: value });
-    setSettings(prev => prev ? { ...prev, [key]: value } : null);
+    setSettingsError('');
+    try {
+      await window.electronAPI.setSettings({ [key]: value });
+      setSettings(await window.electronAPI.getSettings());
+      return true;
+    } catch {
+      setSettingsError('Speichern nicht möglich. Prüfe, ob das Tastenkürzel gültig und noch frei ist.');
+      return false;
+    }
   };
 
   const handleAgentSwitch = async (agentId: string) => {
@@ -165,17 +192,23 @@ export function Dashboard() {
     await window.electronAPI.updateAgentHotkey(agentId, hotkey);
   };
 
-  const shortcutDisplay = platform?.isMac ? 'Command+X' : 'Ctrl+X';
+  const shortcutDisplay = platform?.isMac ? 'Alt+Command+K' : 'Ctrl+Alt+K';
 
   const navItems = [
     { id: 'transcription' as const, label: 'Transkription', icon: Mic },
     { id: 'history' as const, label: 'History', icon: History },
-    { id: 'meetings' as const, label: 'Meetings', icon: Headphones },
+    ...(settings?.meetingEnabled ? [{ id: 'meetings' as const, label: 'Meetings', icon: Headphones }] : []),
     { id: 'stats' as const, label: 'Stats', icon: BarChart3 },
     { id: 'agents' as const, label: 'Agenten', icon: Users },
     { id: 'snippets' as const, label: 'Snippets', icon: Code },
     { id: 'settings' as const, label: 'Einstellungen', icon: Settings },
   ];
+
+  if (showOnboarding && settings && platform) return <Onboarding settings={settings} isMac={platform.isMac} onDone={() => {
+    onboardingDismissed.current = true;
+    setShowOnboarding(false);
+    window.electronAPI.getSettings().then(setSettings).catch(() => {});
+  }} />;
 
   return (
     <div className="flex h-screen bg-background">
@@ -219,10 +252,11 @@ export function Dashboard() {
             {navItems.find(n => n.id === activeNav)?.label}
           </h1>
           <Badge variant="outline" className="font-mono text-xs">
-            {settings?.shortcut || shortcutDisplay}
+            {formatShortcut(settings?.shortcut || shortcutDisplay, !!platform?.isMac)}
           </Badge>
         </header>
 
+        {settingsError && <p role="alert" className="p-4 text-sm text-destructive">{settingsError}</p>}
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
           {activeNav === 'transcription' && (
@@ -252,7 +286,7 @@ export function Dashboard() {
             />
           )}
 
-          {activeNav === 'meetings' && <MeetingsView />}
+          {activeNav === 'meetings' && settings?.meetingEnabled && <MeetingsView />}
 
           {activeNav === 'stats' && <StatsView stats={stats} history={history} settings={settings} />}
 
@@ -1770,7 +1804,7 @@ function SettingsView({
 }: {
   settings: SettingsType | null;
   platform: { isMac: boolean; isWin: boolean } | null;
-  onSettingChange: (key: keyof SettingsType, value: boolean | string | number) => void;
+  onSettingChange: (key: keyof SettingsType, value: boolean | string | number) => Promise<boolean>;
 }) {
   const [groqKey, setGroqKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
@@ -1785,7 +1819,7 @@ function SettingsView({
       setGroqKey(settings.groqApiKey ? '••••••••••••••••' : '');
       setGeminiKey(settings.geminiApiKey ? '••••••••••••••••' : '');
       setShortcutInput(settings.shortcut || '');
-      setMeetingHotkeyInput(settings.meetingHotkey || 'Command+Shift+X');
+      setMeetingHotkeyInput(settings.meetingHotkey || 'CommandOrControl+Shift+X');
     }
   }, [settings]);
 
@@ -1835,16 +1869,16 @@ function SettingsView({
 
   const handleSave = async () => {
     if (groqKey && !groqKey.includes('•')) {
-      await onSettingChange('groqApiKey', groqKey);
+      if (!await onSettingChange('groqApiKey', groqKey)) return;
     }
     if (geminiKey && !geminiKey.includes('•')) {
-      await onSettingChange('geminiApiKey', geminiKey);
+      if (!await onSettingChange('geminiApiKey', geminiKey)) return;
     }
     if (shortcutInput && shortcutInput !== settings?.shortcut) {
-      await onSettingChange('shortcut', shortcutInput);
+      if (!await onSettingChange('shortcut', shortcutInput)) return;
     }
-    if (meetingHotkeyInput && meetingHotkeyInput !== settings?.meetingHotkey) {
-      await onSettingChange('meetingHotkey', meetingHotkeyInput);
+    if (settings?.meetingEnabled && meetingHotkeyInput && meetingHotkeyInput !== settings?.meetingHotkey) {
+      if (!await onSettingChange('meetingHotkey', meetingHotkeyInput)) return;
     }
 
     setSaved(true);
@@ -1855,6 +1889,8 @@ function SettingsView({
 
   return (
     <div className="max-w-xl space-y-6">
+      <Button variant="link" className="px-0" onClick={() => window.electronAPI.openOnboarding()}>Ersteinrichtung erneut zeigen</Button>
+      <MeetingBetaSettings enabled={settings.meetingEnabled} isMac={!!platform?.isMac} />
       {/* API Keys */}
       <Card>
         <CardHeader>
@@ -1872,7 +1908,7 @@ function SettingsView({
               placeholder="gsk_..."
             />
           </div>
-          <div>
+          {settings.meetingEnabled && <><div>
             <Label className="text-xs text-muted-foreground mb-2 block">
               Google Gemini API Key (nötig für Meetings mit Sprechertrennung + Bericht; kostenlos auf aistudio.google.com)
             </Label>
@@ -1901,7 +1937,7 @@ function SettingsView({
             <p className="text-xs text-muted-foreground mt-1">
               „Automatisch": Gemini zuerst (Meeting-Bericht), bei erschöpftem Kontingent automatisch Groq.
             </p>
-          </div>
+          </div></>}
         </CardContent>
       </Card>
 
@@ -1994,7 +2030,7 @@ function SettingsView({
         <CardContent>
           <Label className="text-xs text-muted-foreground mb-2 block">Globaler Hotkey</Label>
           <Input
-            value={shortcutInput === 'GLOBE' ? '🌐 Fn / Globe-Taste' : shortcutInput}
+            value={formatShortcut(shortcutInput, !!platform?.isMac)}
             placeholder="Klicken und Tastenkombination drücken"
             readOnly
             onKeyDown={handleHotkeyRecord}
@@ -2031,23 +2067,23 @@ function SettingsView({
             <div><span className="font-medium text-foreground/70">Gedrückt halten</span> → Aufnahme solange gehalten</div>
           </div>
 
-          <div className="mt-4">
+          {settings.meetingEnabled && <div className="mt-4">
             <Label className="text-xs text-muted-foreground mb-2 block">Meeting-Recorder Hotkey</Label>
             <Input
-              value={meetingHotkeyInput}
-              placeholder="Command+Shift+X"
+              value={formatShortcut(meetingHotkeyInput, !!platform?.isMac)}
+              placeholder={formatShortcut('CommandOrControl+Shift+X', !!platform?.isMac)}
               readOnly
               onKeyDown={handleMeetingHotkeyRecord}
               onClick={() => setIsRecordingMeeting(true)}
               onBlur={() => setIsRecordingMeeting(false)}
               className={cn('font-mono', isRecordingMeeting && 'ring-2 ring-primary')}
             />
-          </div>
+          </div>}
         </CardContent>
       </Card>
 
       {/* Save Button */}
-      <Button onClick={handleSave} className="w-full" size="lg">
+      <Button onClick={() => handleSave().catch(() => {})} className="w-full" size="lg">
         {saved ? (
           <><Check className="w-4 h-4 mr-2" /> Gespeichert!</>
         ) : (

@@ -10,6 +10,7 @@ const {
   shell,
   dialog,
   screen,
+  systemPreferences,
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -60,6 +61,8 @@ const CallDetectorManager = require('./call-detector-manager');
 const callDetectorManager = new CallDetectorManager();
 const { createMeetingController } = require('./meeting/meeting-controller');
 const { createMeetingStore } = require('./meeting/meeting-store');
+const { createMeetingBetaMode, meetingAccelerator } = require('./meeting/beta-mode');
+const { GROQ_KEYS_URL, saveGroqKey, microphonePermission } = require('./app-setup');
 let meetingController = null;   // lazy in app.whenReady (braucht getStore + Pfade)
 let meetingStore = null;        // dito; von IPC-Handlern referenziert
 let meetingOverlayWindow = null;
@@ -143,7 +146,8 @@ function getStore() {
         favorites: [],
         // Meeting-Recorder
         meetings: [],
-        meetingHotkey: 'Command+Shift+X',
+        meetingEnabled: false,
+        meetingHotkey: 'CommandOrControl+Shift+X',
         meetingSummaryModel: 'llama-3.3-70b-versatile',
         // System-Audio (Gegenstelle eines Anrufs): 'auto' = automatisch erkennen (empfohlen).
         systemAudioMode: 'auto',
@@ -1289,6 +1293,14 @@ function updateTrayMenu() {
     { label: 'Transcribe', accelerator: shortcut === 'GLOBE' ? undefined : shortcut, click: startTranscription },
     { type: 'separator' },
     { label: 'History', submenu: historySubmenu },
+    ...(s.get('meetingEnabled', false) ? [{
+      label: 'Meeting starten / beenden (Beta)',
+      click: () => {
+        if (!getStore().get('meetingEnabled', false)) return;
+        Promise.resolve().then(() => meetingController?.isActive() ? meetingController.stop() : meetingController?.start())
+          .catch(() => dialog.showErrorBox('Meeting-Modus', 'Das Meeting konnte nicht gestartet oder beendet werden.'));
+      },
+    }] : []),
     { type: 'separator' },
     { label: 'Einstellungen...', click: createSettingsWindow },
     { label: 'Nach Updates suchen...', click: () => checkForUpdates(false) },
@@ -1832,6 +1844,39 @@ function acceleratorToUioKeycode(accelerator) {
   return keyMap[mainKey] || null;
 }
 
+// ============================================================================
+// MEETING-BETA — unabhängig vom Diktat-Hotkey
+// ============================================================================
+const meetingBetaMode = createMeetingBetaMode({
+  globalShortcut, getController: () => meetingController, platform: process.platform,
+  onError: (message) => dialog.showErrorBox('Meeting-Modus', message),
+});
+
+function applyMeetingSettings(settings) {
+  const s = getStore();
+  const enabled = settings.meetingEnabled ?? s.get('meetingEnabled', false);
+  const hotkey = settings.meetingHotkey ?? s.get('meetingHotkey', 'CommandOrControl+Shift+X');
+  if (typeof enabled !== 'boolean' || typeof hotkey !== 'string' || !hotkey.trim()) {
+    throw new Error('Bitte wähle ein gültiges Meeting-Tastenkürzel.');
+  }
+  meetingBetaMode.apply(enabled, hotkey);
+  s.set('meetingEnabled', enabled);
+  s.set('meetingHotkey', hotkey);
+  if (enabled) {
+    ensureMeetingOverlayWindow();
+  } else {
+    if (meetingOverlayWindow && !meetingOverlayWindow.isDestroyed()) meetingOverlayWindow.close();
+    systemAudioManager.stop();
+    callDetectorManager.stop();
+  }
+}
+
+function notifySettingsChanged() {
+  for (const win of [mainWindow, settingsWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.send('settings:changed');
+  }
+}
+
 function registerHotkey() {
   const shortcut = getStore().get('shortcut');
 
@@ -1901,19 +1946,6 @@ function registerHotkey() {
     console.log('Recovery hotkey pressed');
     retryLastRecording();
   });
-
-  // Register Meeting-Recorder hotkey (Standard Cmd+Shift+X, Toggle)
-  const meetingKey = getStore().get('meetingHotkey', 'Command+Shift+X');
-  try { globalShortcut.unregister(meetingKey); } catch {}
-  const meetingOk = globalShortcut.register(meetingKey, () => {
-    console.log('Meeting hotkey pressed:', meetingKey);
-    if (meetingController && meetingController.isActive()) {
-      Promise.resolve(meetingController.stop()).catch((e) => console.error('Meeting stop error:', e));
-    } else if (meetingController) {
-      meetingController.start();
-    }
-  });
-  if (!meetingOk) console.error('Meeting hotkey registration failed:', meetingKey);
 
   // Register Agent-Switch hotkeys (Cmd+1, Cmd+2, Cmd+3, ...)
   registerAgentHotkeys();
@@ -2139,7 +2171,7 @@ function showSmartPasteOverlay() {
 // ============================================================================
 function setupIpcHandlers() {
   // Meeting-Recorder
-  ipcMain.handle('meeting:start', () => (meetingController ? meetingController.start() : null));
+  ipcMain.handle('meeting:start', () => (getStore().get('meetingEnabled', false) && meetingController ? meetingController.start() : { error: 'Meeting-Modus ist ausgeschaltet.' }));
   ipcMain.handle('meeting:stop', () => (meetingController ? meetingController.stop() : null));
   ipcMain.handle('meeting:get-status', () => (meetingController ? meetingController.getStatus() : { active: false, id: null }));
   // Renderer meldet den Wandzeit-Stempel des ersten Mikro-Samples (VOR dem ersten PCM, gleiche geordnete IPC-Kette).
@@ -2181,7 +2213,9 @@ function setupIpcHandlers() {
       hideDock: s.get('hideDock'),
       activeProfile: s.get('activeProfile'),
       pttThreshold: s.get('pttThreshold', 350),
-      meetingHotkey: s.get('meetingHotkey', 'Command+Shift+X'),
+      meetingEnabled: s.get('meetingEnabled', false),
+      onboardingCompleted: s.get('onboardingCompleted', !!s.get('groqApiKey')),
+      meetingHotkey: meetingAccelerator(s.get('meetingHotkey', 'CommandOrControl+Shift+X'), process.platform),
       systemAudioMode: s.get('systemAudioMode', 'auto'),
       geminiApiKey: s.get('geminiApiKey', ''),
       llmProvider: s.get('llmProvider', 'auto'),
@@ -2190,6 +2224,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle('settings:set', (_event, settings) => {
     const s = getStore();
+    if (settings.meetingEnabled !== undefined || settings.meetingHotkey !== undefined) applyMeetingSettings(settings);
     if (settings.groqApiKey !== undefined) s.set('groqApiKey', settings.groqApiKey);
     if (settings.geminiApiKey !== undefined) s.set('geminiApiKey', settings.geminiApiKey);
     if (settings.llmProvider !== undefined) s.set('llmProvider', settings.llmProvider);
@@ -2201,11 +2236,6 @@ function setupIpcHandlers() {
 
     if (settings.shortcut !== undefined && settings.shortcut !== s.get('shortcut')) {
       s.set('shortcut', settings.shortcut);
-      registerHotkey();
-    }
-
-    if (settings.meetingHotkey !== undefined && settings.meetingHotkey !== s.get('meetingHotkey')) {
-      s.set('meetingHotkey', settings.meetingHotkey);
       registerHotkey();
     }
 
@@ -2236,8 +2266,32 @@ function setupIpcHandlers() {
     }
 
     updateTrayMenu();
+    notifySettingsChanged();
     return true;
   });
+
+  // Ersteinrichtung: feste externe Ziele, keine frei übergebenen URLs.
+  ipcMain.handle('onboarding:validateGroqKey', async (_event, key, saveAnyway = false) => {
+    const result = await saveGroqKey(getStore(), key, { saveAnyway: saveAnyway === true });
+    if (result.saved) { updateTrayMenu(); notifySettingsChanged(); }
+    return result;
+  });
+  ipcMain.handle('onboarding:complete', () => {
+    getStore().set('onboardingCompleted', true);
+    notifySettingsChanged();
+    return true;
+  });
+  ipcMain.handle('onboarding:open', () => {
+    getStore().set('onboardingCompleted', false);
+    showMainWindow();
+    notifySettingsChanged();
+    return true;
+  });
+  ipcMain.handle('onboarding:openGroqKeys', () => shell.openExternal(GROQ_KEYS_URL));
+  ipcMain.handle('permissions:microphone', (_event, request) => microphonePermission(systemPreferences, process.platform, request === true));
+  ipcMain.handle('permissions:openMicrophone', () => shell.openExternal(isWin
+    ? 'ms-settings:privacy-microphone'
+    : 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'));
 
   // History
   ipcMain.handle('history:get', () => getHistory());
@@ -2497,6 +2551,8 @@ function setupIpcHandlers() {
 // ============================================================================
 app.whenReady().then(() => {
   const s = getStore();
+  // Alte Windows-Installationen enthielten macOS-Acceleratoren. Nur Meeting migrieren.
+  if (isWin) s.set('meetingHotkey', meetingAccelerator(s.get('meetingHotkey', 'CommandOrControl+Shift+X'), process.platform));
 
   // Dock-Icon verstecken wenn gewünscht (Standard: sichtbar)
   if (app.dock && s.get('hideDock')) {
@@ -2555,8 +2611,6 @@ app.whenReady().then(() => {
     chunkMinSeconds: 20,
     chunkMaxSeconds: 40,
   });
-  // Overlay vorladen (versteckt), damit der Meeting-Start keine Sekunden-Lücke hat.
-  try { ensureMeetingOverlayWindow(); } catch (e) { console.error('Overlay preload failed:', e); }
   // Unterbrochene Aufnahmen/Auswertungen (App-Neustart, Absturz) wieder aufnehmen;
   // abgelaufenes Audio (7 Tage) löschen — jetzt und täglich.
   try { meetingController.resumePending(); } catch (e) { console.error('resumePending failed:', e); }
@@ -2564,6 +2618,10 @@ app.whenReady().then(() => {
   setInterval(() => { try { meetingController.runRetention(); } catch { /* best effort */ } }, 24 * 60 * 60 * 1000);
 
   registerHotkey();
+  // Overlay vorladen (versteckt), damit der Meeting-Start keine Sekunden-Lücke hat.
+  if (s.get('meetingEnabled', false)) {
+    try { applyMeetingSettings({}); } catch (e) { dialog.showErrorBox('Meeting-Modus', e.message); }
+  }
   updateAutoLaunch();
 
   // Reset daily/weekly stats if needed
@@ -2575,22 +2633,8 @@ app.whenReady().then(() => {
   console.log('Groq Key:', s.get('groqApiKey') ? 'Set' : 'Not set');
   console.log('Polish:', s.get('enablePolish') ? 'Enabled' : 'Disabled');
 
-  // Auto-open dashboard (or settings on first run if no API key)
-  if (!s.get('groqApiKey')) {
-    setTimeout(() => {
-      createMainWindow();
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Willkommen bei paply!',
-        message: 'API Key benötigt',
-        detail: 'Bitte konfiguriere deinen Groq API Key in den Einstellungen.\n\nDu kannst einen kostenlosen API Key hier erstellen:\nhttps://console.groq.com/keys',
-        buttons: ['OK'],
-      });
-    }, 500);
-  } else {
-    // Open main window on startup
-    setTimeout(() => createMainWindow(), 300);
-  }
+  // Das Dashboard zeigt ohne Key die Ersteinrichtung statt eines modalen Dialogs.
+  setTimeout(() => createMainWindow(), 300);
 
   // Check for updates silently on startup (after 5 seconds)
   setTimeout(() => {

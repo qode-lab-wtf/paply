@@ -5,6 +5,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (settings) => ipcRenderer.invoke('settings:set', settings),
 
+  onSettingsChanged: (cb) => { const h = () => cb(); ipcRenderer.on('settings:changed', h); return () => ipcRenderer.removeListener('settings:changed', h); },
+  validateGroqKey: (key, saveAnyway = false) => ipcRenderer.invoke('onboarding:validateGroqKey', key, saveAnyway),
+  completeOnboarding: () => ipcRenderer.invoke('onboarding:complete'),
+  openOnboarding: () => ipcRenderer.invoke('onboarding:open'),
+  openGroqKeys: () => ipcRenderer.invoke('onboarding:openGroqKeys'),
+  microphonePermission: (request = false) => ipcRenderer.invoke('permissions:microphone', request),
+  openMicrophoneSettings: () => ipcRenderer.invoke('permissions:openMicrophone'),
+
   // History
   getHistory: () => ipcRenderer.invoke('history:get'),
   clearHistory: () => ipcRenderer.invoke('history:clear'),

@@ -1,45 +1,20 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Key, Keyboard, Volume2, Eye, EyeOff, Globe, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
+import { captureShortcut, formatShortcut } from '@/lib/shortcut';
+import { followSystemTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import type { Settings, Platform } from '@/types/electron';
 
 type Tab = 'api' | 'shortcuts' | 'behavior';
 
-/**
- * Maps a keyboard event to an Electron accelerator string.
- */
-function keyEventToAccelerator(e: KeyboardEvent): string | null {
-  const parts: string[] = [];
-
-  if (e.metaKey) parts.push('Command');
-  if (e.ctrlKey) parts.push('Ctrl');
-  if (e.altKey) parts.push('Alt');
-  if (e.shiftKey) parts.push('Shift');
-
-  const key = e.key;
-  // Ignore standalone modifier keys
-  if (['Meta', 'Control', 'Alt', 'Shift', 'Fn'].includes(key)) return null;
-
-  // Map special keys
-  const keyMap: Record<string, string> = {
-    ' ': 'Space', 'ArrowUp': 'Up', 'ArrowDown': 'Down',
-    'ArrowLeft': 'Left', 'ArrowRight': 'Right', 'Escape': 'Escape',
-    'Enter': 'Enter', 'Backspace': 'Backspace', 'Delete': 'Delete',
-    'Tab': 'Tab',
-  };
-
-  const mappedKey = keyMap[key] || (key.length === 1 ? key.toUpperCase() : key);
-  parts.push(mappedKey);
-
-  return parts.join('+');
-}
-
 export function SettingsApp() {
+  useEffect(() => followSystemTheme(), []);
   const [activeTab, setActiveTab] = useState<Tab>('api');
   const [settings, setSettings] = useState<Settings | null>(null);
   const [platform, setPlatform] = useState<Platform | null>(null);
@@ -52,6 +27,7 @@ export function SettingsApp() {
   const [meetingHotkey, setMeetingHotkey] = useState('');
   const [isCapturingMeeting, setIsCapturingMeeting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -75,35 +51,32 @@ export function SettingsApp() {
     loadData();
   }, []);
 
-  // Key-capture handler for Diktat-Shortcut
-  const handleKeyCapture = useCallback((e: KeyboardEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const accel = keyEventToAccelerator(e);
-    if (accel) {
-      setShortcut(accel);
-      setIsCapturing(false);
-    }
-  }, []);
-
-  // Key-capture handler for Meeting-Recorder
-  const handleKeyCaptureM = useCallback((e: KeyboardEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const accel = keyEventToAccelerator(e);
-    if (accel) {
-      setMeetingHotkey(accel);
-      setIsCapturingMeeting(false);
-    }
-  }, []);
+  // Effekte räumen auch bei Tabwechsel und Unmount auf; die Erfassung selbst
+  // entfernt den Listener synchron nach genau einer gültigen Kombination.
+  useEffect(() => {
+    if (!isCapturing || activeTab !== 'shortcuts') return;
+    return captureShortcut(window, shortcut => { setShortcut(shortcut); setIsCapturing(false); });
+  }, [isCapturing, activeTab]);
+  useEffect(() => {
+    if (!isCapturingMeeting || activeTab !== 'shortcuts' || !settings?.meetingEnabled) return;
+    return captureShortcut(window, shortcut => { setMeetingHotkey(shortcut); setIsCapturingMeeting(false); });
+  }, [isCapturingMeeting, activeTab, settings?.meetingEnabled]);
+  useEffect(() => { setIsCapturing(false); setIsCapturingMeeting(false); }, [activeTab, settings?.meetingEnabled]);
+  useEffect(() => window.electronAPI.onSettingsChanged(() => {
+    window.electronAPI.getSettings().then(data => {
+      setSettings(data);
+      setMeetingHotkey(data.meetingHotkey);
+    }).catch(() => setSaveError('Die Einstellungen konnten nicht geladen werden.'));
+  }), []);
 
   const handleSave = async (key: keyof Settings, value: string | boolean) => {
     setIsSaving(true);
+    setSaveError('');
     try {
       await window.electronAPI.setSettings({ [key]: value });
       setSettings(prev => prev ? { ...prev, [key]: value } : null);
     } catch (error) {
-      console.error('Failed to save setting:', error);
+      setSaveError('Speichern nicht möglich. Prüfe, ob das Tastenkürzel gültig und noch frei ist.');
     } finally {
       setIsSaving(false);
     }
@@ -133,6 +106,11 @@ export function SettingsApp() {
         <h1 className="text-lg font-semibold">Einstellungen</h1>
       </div>
 
+      <div className="mb-5 space-y-4">
+        <Button variant="link" className="px-0" onClick={() => window.electronAPI.openOnboarding()}>Ersteinrichtung erneut zeigen</Button>
+        <MeetingBetaSettings enabled={settings.meetingEnabled} isMac={!!platform?.isMac} />
+        {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
+      </div>
       {/* Tabs */}
       <div className="flex gap-1 p-1 mb-6 bg-muted rounded-lg">
         {tabs.map((tab) => (
@@ -198,7 +176,7 @@ export function SettingsApp() {
             </CardContent>
           </Card>
 
-          <Card>
+          {settings.meetingEnabled && <Card>
             <CardHeader>
               <CardTitle className="text-base">Google Gemini API Key</CardTitle>
               <CardDescription>
@@ -264,7 +242,7 @@ export function SettingsApp() {
                 </p>
               </div>
             </CardContent>
-          </Card>
+          </Card>}
 
         </div>
       )}
@@ -286,10 +264,9 @@ export function SettingsApp() {
                   onClick={() => {
                     if (isCapturing) {
                       setIsCapturing(false);
-                      window.removeEventListener('keydown', handleKeyCapture, true);
                     } else {
+                      setIsCapturingMeeting(false);
                       setIsCapturing(true);
-                      window.addEventListener('keydown', handleKeyCapture, true);
                     }
                   }}
                   className={cn(
@@ -303,13 +280,12 @@ export function SettingsApp() {
                     ? '⌨️ Drücke eine Tastenkombination...'
                     : shortcut === 'GLOBE'
                       ? '🌐 Fn / Globe-Taste'
-                      : shortcut || 'Klicken zum Aufnehmen'}
+                      : formatShortcut(shortcut, !!platform?.isMac) || 'Klicken zum Aufnehmen'}
                 </button>
                 <Button
                   onClick={async () => {
                     if (isCapturing) {
                       setIsCapturing(false);
-                      window.removeEventListener('keydown', handleKeyCapture, true);
                     }
                     await handleSave('shortcut', shortcut);
                   }}
@@ -325,7 +301,6 @@ export function SettingsApp() {
                   onClick={async () => {
                     setShortcut('GLOBE');
                     setIsCapturing(false);
-                    window.removeEventListener('keydown', handleKeyCapture, true);
                     await handleSave('shortcut', 'GLOBE');
                   }}
                   className={cn(
@@ -359,7 +334,7 @@ export function SettingsApp() {
           </Card>
 
           {/* Meeting-Recorder-Shortcut */}
-          <Card>
+          {settings.meetingEnabled && <Card>
             <CardHeader>
               <CardTitle className="text-base">Meeting-Recorder</CardTitle>
               <CardDescription>
@@ -372,10 +347,9 @@ export function SettingsApp() {
                   onClick={() => {
                     if (isCapturingMeeting) {
                       setIsCapturingMeeting(false);
-                      window.removeEventListener('keydown', handleKeyCaptureM, true);
                     } else {
+                      setIsCapturing(false);
                       setIsCapturingMeeting(true);
-                      window.addEventListener('keydown', handleKeyCaptureM, true);
                     }
                   }}
                   className={cn(
@@ -387,15 +361,14 @@ export function SettingsApp() {
                 >
                   {isCapturingMeeting
                     ? '⌨️ Drücke eine Tastenkombination...'
-                    : meetingHotkey || 'Command+Shift+X'}
+                    : formatShortcut(meetingHotkey || 'CommandOrControl+Shift+X', !!platform?.isMac)}
                 </button>
                 <Button
                   onClick={async () => {
                     if (isCapturingMeeting) {
                       setIsCapturingMeeting(false);
-                      window.removeEventListener('keydown', handleKeyCaptureM, true);
                     }
-                    await handleSave('meetingHotkey', meetingHotkey || 'Command+Shift+X');
+                    await handleSave('meetingHotkey', meetingHotkey || 'CommandOrControl+Shift+X');
                   }}
                   disabled={isSaving}
                 >
@@ -408,7 +381,7 @@ export function SettingsApp() {
                 </p>
               )}
             </CardContent>
-          </Card>
+          </Card>}
 
           {/* Weitere Shortcuts */}
           <Card>
@@ -420,13 +393,13 @@ export function SettingsApp() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Smart-Paste</span>
                   <kbd className="px-2 py-1 rounded bg-muted text-xs font-mono">
-                    {platform?.isMac ? '⌘⇧V' : 'Ctrl+Shift+V'}
+                    {formatShortcut('CommandOrControl+Alt+Shift+V', !!platform?.isMac)}
                   </kbd>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Letzte Aufnahme wiederholen</span>
                   <kbd className="px-2 py-1 rounded bg-muted text-xs font-mono">
-                    {platform?.isMac ? '⌘⇧R' : 'Ctrl+Shift+R'}
+                    {formatShortcut('CommandOrControl+Alt+Shift+R', !!platform?.isMac)}
                   </kbd>
                 </div>
                 <div className="flex justify-between">
@@ -484,7 +457,7 @@ export function SettingsApp() {
                 />
               </div>
 
-              <div>
+              {settings.meetingEnabled && <div>
                 <Label>System-Audio (Anrufe)</Label>
                 <p className="text-xs text-muted-foreground mb-2">
                   Läuft ein Anruf auf diesem Computer (Zoom/Teams/WhatsApp), wird die Gegenstelle
@@ -507,7 +480,7 @@ export function SettingsApp() {
                     </Button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               <div className="flex items-center justify-between">
                 <div>
