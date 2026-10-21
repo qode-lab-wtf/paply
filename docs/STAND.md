@@ -51,6 +51,9 @@ Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Window
 
 - **Verlauf-Aufbewahrung wählbar:** „Verlauf behalten: 7 / 30 / 90 Tage / immer“ (heute fest 90 Tage;
   Allan, 21.10.2026 — erst bauen, wenn weitere Punkte dazukommen).
+- **Diktat-Aufnahmen für Qualitätstests behalten** (Schalter, standardmäßig aus, z. B. 14 Tage): Ton + Text
+  vergleichen, Whisper-Modelle/Einstellungen an echten Aufnahmen testen. Heute wird Diktat-Audio nicht
+  aufbewahrt (nur Sicherung bis Erfolg, max. 24 h).
 - Rückmeldung des Windows-Freunds einarbeiten (Einfügen, Tray, Pille, Ersteinrichtung).
 - Windows: Hinweis im Log, wenn der Fokus-Helfer wegen Gruppenrichtlinie (AllSigned) nicht startet.
 - Optional, ändert Verhalten (nur auf Wunsch): Zwischenablage nach dem Einfügen wiederherstellen;
