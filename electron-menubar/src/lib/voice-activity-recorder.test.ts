@@ -17,7 +17,9 @@ describe('Sprachmessung am vorhandenen Audio-Analyser', () => {
     const { source, analyser } = audioSource(sampleRate);
     const stop = startVoiceActivityMeasurement(source as unknown as AnalyserNode);
     vi.advanceTimersByTime(2000);
-    expect(stop()).toMatchObject({ durationMs: 2000, measuredMs: 2000, speechMs: 0, peakDbfs: -120 });
+    const result = stop();
+    expect(result).toEqual({ durationMs: 2000, measuredMs: 2000, speechMs: 0, peakDbfs: -120, floorDbfs: -120, maxGapMs: 40 });
+    expect(Object.keys(JSON.parse(JSON.stringify(result)))).not.toContain('windows');
     expect(analyser.fftSize / sampleRate * 1000).toBeGreaterThanOrEqual(50);
     expect(source.fftSize).toBe(32);
     expect(source.disconnect).toHaveBeenCalledWith(analyser);
@@ -37,6 +39,25 @@ describe('Sprachmessung am vorhandenen Audio-Analyser', () => {
     vi.advanceTimersByTime(100);
     expect(stop()).toBe(result);
     expect(result?.peakDbfs).toBeCloseTo(-60);
+  });
+
+  it('sendet bei Raumrauschen nur die relative Zusammenfassung samt Grundpegel', () => {
+    vi.useFakeTimers();
+    const { source, setLevel } = audioSource();
+    setLevel(10 ** (-50 / 20));
+    const stop = startVoiceActivityMeasurement(source as unknown as AnalyserNode);
+    vi.advanceTimersByTime(2000);
+    setLevel(10 ** (-25 / 20));
+    vi.advanceTimersByTime(600);
+    setLevel(10 ** (-50 / 20));
+    vi.advanceTimersByTime(2400);
+    const result = stop();
+    expect(result?.floorDbfs).toBeCloseTo(-50);
+    expect(result?.peakDbfs).toBeCloseTo(-25);
+    expect(result?.speechMs).toBe(600);
+    expect(Object.keys(result!).sort()).toEqual([
+      'durationMs', 'floorDbfs', 'maxGapMs', 'measuredMs', 'peakDbfs', 'speechMs',
+    ]);
   });
 
   it('liefert nach einem suspendierten Kontext keinen Stille-Nachweis', () => {

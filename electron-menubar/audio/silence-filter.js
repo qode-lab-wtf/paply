@@ -3,8 +3,7 @@
 // https://console.groq.com/docs/speech-to-text#understanding-metadata-fields
 const NO_SPEECH_PROB = 0.6;
 const LOW_LOGPROB = -1.0;
-const PHRASE_NO_SPEECH_PROB = 0.9;
-const MIN_PHRASE_SPEECH_MS = 400;
+const MIN_PHRASE_SPEECH_MS = 250;
 
 function normalizeTranscript(text) {
   return text.normalize('NFKC').toLowerCase()
@@ -28,13 +27,16 @@ function isArtifactPhrase(text) {
 
 function validateVoiceActivity(meta) {
   if (!meta || typeof meta !== 'object') return undefined;
-  const { durationMs, measuredMs, speechMs, peakDbfs, maxGapMs } = meta;
-  if (![durationMs, measuredMs, speechMs, peakDbfs, maxGapMs].every(Number.isFinite)
+  const { durationMs, measuredMs, speechMs, peakDbfs, floorDbfs, maxGapMs } = meta;
+  // Ohne floorDbfs stammt speechMs noch von der alten absoluten Schwelle und
+  // darf keine lokale Verwerfentscheidung auslösen (z. B. bei alten Backups).
+  if (![durationMs, measuredMs, speechMs, peakDbfs, floorDbfs, maxGapMs].every(Number.isFinite)
     || durationMs <= 0 || measuredMs < 0 || measuredMs > durationMs
-    || speechMs < 0 || speechMs > measuredMs || maxGapMs < 0 || peakDbfs > 0 || peakDbfs < -120) {
+    || speechMs < 0 || speechMs > measuredMs || maxGapMs < 0 || peakDbfs > 0 || peakDbfs < -120
+    || floorDbfs < -120 || floorDbfs > peakDbfs) {
     return undefined;
   }
-  return { durationMs, measuredMs, speechMs, peakDbfs, maxGapMs };
+  return { durationMs, measuredMs, speechMs, peakDbfs, floorDbfs, maxGapMs };
 }
 
 function hasReliableMeasurement(meta) {
@@ -47,9 +49,9 @@ function hasLowSpeechActivity(meta) {
 
 function shouldSkipTranscription(input) {
   const meta = validateVoiceActivity(input);
-  // Höchstens ein leises Messfenster über -65 dBFS tolerieren (z. B. ein
-  // Störimpuls). Lautere Spitzen oder >=80 ms Aktivität immer transkribieren.
-  return Boolean(hasReliableMeasurement(meta) && meta.speechMs < 80 && meta.peakDbfs < -60);
+  // Nur sehr stationäre Signale überspringen, unabhängig von ihrem absoluten
+  // Pegel. Deutliche Spitzen (auch Klicks) werden zunächst transkribiert.
+  return Boolean(hasReliableMeasurement(meta) && meta.speechMs < 80 && meta.peakDbfs < meta.floorDbfs + 10);
 }
 
 function noSpeechProbability(segment) {
@@ -86,14 +88,11 @@ function filterTranscription(response, inputMeta) {
   // Groq liefert laut realen Vergleichsmessungen selbst bei digitaler Stille
   // no_speech_prob=0. avg_logprob trennt dabei echte Dankesformeln nicht von
   // Halluzinationen: Niemals allein anhand der Text-Konfidenz verwerfen.
-  const measuredSpeech = meta && meta.speechMs >= MIN_PHRASE_SPEECH_MS;
-  const highNoSpeech = kept?.length > 0 && kept.every(segment => noSpeechProbability(segment) > PHRASE_NO_SPEECH_PROB);
   const normalized = normalizeTranscript(text);
   if (isArtifactPhrase(normalized)) {
     text = '';
     reason = 'known-artifact-phrase';
-  } else if (SILENCE_PHRASES.has(normalized)
-    && (hasLowSpeechActivity(meta) || (highNoSpeech && !measuredSpeech))) {
+  } else if (SILENCE_PHRASES.has(normalized) && hasLowSpeechActivity(meta)) {
     text = '';
     reason = 'known-silence-phrase';
   }

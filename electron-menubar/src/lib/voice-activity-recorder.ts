@@ -1,5 +1,5 @@
-import { createVoiceActivity, measureVoiceActivity, MAX_SAMPLE_GAP_MS } from './voice-activity';
-import type { VoiceActivityMeta } from './voice-activity';
+import { measureVoiceActivity, summarizeVoiceActivity, MAX_SAMPLE_GAP_MS } from './voice-activity';
+import type { VoiceActivityMeta, VoiceActivityWindow } from './voice-activity';
 
 // Eigener Zeitbereich-Puffer am vorhandenen Analyser: Die FFT-Auflösung und
 // Pegelbalken des Widgets bleiben unverändert. Keine Verbindung zum Lautsprecher.
@@ -11,7 +11,7 @@ export function startVoiceActivityMeasurement(source: AnalyserNode): () => Voice
   const maxGapMs = Math.min(MAX_SAMPLE_GAP_MS, analyser.fftSize / source.context.sampleRate * 1000);
   source.connect(analyser);
   const samples = new Float32Array(analyser.fftSize);
-  let meta = createVoiceActivity();
+  const windows: VoiceActivityWindow[] = [];
   const startedAt = performance.now();
   let lastSampleAt = startedAt;
   let valid = source.context.state === 'running';
@@ -19,10 +19,13 @@ export function startVoiceActivityMeasurement(source: AnalyserNode): () => Voice
   let result: VoiceActivityMeta | undefined;
   const sample = () => {
     const now = performance.now();
+    if (now === lastSampleAt) return;
     // Ein suspendierter Kontext liefert Nullen, aber keinen Stille-Nachweis.
     if (source.context.state !== 'running' || now - lastSampleAt > maxGapMs) valid = false;
     analyser.getFloatTimeDomainData(samples);
-    meta = measureVoiceActivity(meta, samples, now - lastSampleAt);
+    const window = measureVoiceActivity(samples, now - lastSampleAt);
+    if (window) windows.push(window);
+    else valid = false;
     lastSampleAt = now;
   };
   const timer = setInterval(sample, 40);
@@ -35,6 +38,7 @@ export function startVoiceActivityMeasurement(source: AnalyserNode): () => Voice
     source.disconnect(analyser);
     const now = performance.now();
     if (!valid || source.context.state !== 'running') return undefined;
+    const meta = summarizeVoiceActivity(windows);
     result = {
       ...meta,
       durationMs: now - startedAt,

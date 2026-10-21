@@ -1,19 +1,82 @@
 import { describe, it, expect } from 'vitest';
 import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from './silence-filter.js';
+import { measureVoiceActivity, summarizeVoiceActivity } from '../src/lib/voice-activity.ts';
 
-const silence = { durationMs: 4000, measuredMs: 4000, speechMs: 0, peakDbfs: -90, maxGapMs: 40 };
+const silence = { durationMs: 4000, measuredMs: 4000, speechMs: 0, peakDbfs: -90, floorDbfs: -90, maxGapMs: 40 };
 const speech = { ...silence, speechMs: 400, peakDbfs: -35 };
 const segment = (text, no_speech_prob = 0.01, avg_logprob = -0.1) => ({ text, no_speech_prob, avg_logprob });
 
+// Vom Sample-Fenster bis zur Main-Entscheidung testen, statt speechMs für die
+// Raum-/Sprachfälle vorzugeben. -Infinity erzeugt wirklich digitale Nullen.
+function metaForLevels(levels) {
+  return summarizeVoiceActivity(levels.map(dbfs => measureVoiceActivity(
+    new Float32Array(128).fill(10 ** (dbfs / 20)), 40
+  )));
+}
+
+describe('Relative Sprachaktivität unter realistischen Grundpegeln', () => {
+  const thanks = { text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0, -0.28)] };
+
+  it('überspringt 5 s stationäres Raumrauschen bei -50 dBFS ±2 dB', () => {
+    const meta = metaForLevels(Array.from({ length: 125 }, (_, i) => -50 + (i % 5) - 2));
+    expect(meta.floorDbfs).toBeCloseTo(-52);
+    expect(meta.peakDbfs).toBeCloseTo(-48);
+    expect(meta.speechMs).toBe(0);
+    expect(shouldSkipTranscription(meta)).toBe(true);
+  });
+
+  it('behält 600 ms gesprochene Silben bei -25 dBFS über Raumrauschen von -50 dBFS', () => {
+    const meta = metaForLevels([
+      ...Array.from({ length: 110 }, (_, i) => -50 + (i % 5) - 2), ...Array(15).fill(-25),
+    ]);
+    expect(meta.speechMs).toBeGreaterThanOrEqual(400);
+    expect(shouldSkipTranscription(meta)).toBe(false);
+    expect(filterTranscription(thanks, meta).text).toBe('Vielen Dank.');
+  });
+
+  it('transkribiert einen 80-ms-Tastaturklick über -55 dBFS Rauschen, verwirft aber die Dankes-Halluzination', () => {
+    const meta = metaForLevels([...Array(123).fill(-55), ...Array(2).fill(-30)]);
+    expect(meta.speechMs).toBe(80);
+    expect(meta.peakDbfs - meta.floorDbfs).toBeGreaterThan(10);
+    expect(shouldSkipTranscription(meta)).toBe(false);
+    expect(filterTranscription(thanks, meta).text).toBe('');
+  });
+
+  it.each([0, 5, 10])('behält Dauerrede ohne Pausen zwischen -35 und -15 dBFS (Phasenlage %i)', phase => {
+    const meta = metaForLevels(Array.from({ length: 125 }, (_, i) => -35 + ((i + phase) % 21)));
+    expect(meta.speechMs).toBeGreaterThanOrEqual(250);
+    expect(shouldSkipTranscription(meta)).toBe(false);
+    expect(filterTranscription(thanks, meta).text).toBe('Vielen Dank.');
+    expect(filterTranscription({ text: 'Das ist ein zusammenhängendes Diktat ohne Pausen.' }, meta).text)
+      .toBe('Das ist ein zusammenhängendes Diktat ohne Pausen.');
+  });
+
+  it('überspringt digitale Stille', () => {
+    const meta = metaForLevels(Array(125).fill(-Infinity));
+    expect(meta).toMatchObject({ floorDbfs: -120, peakDbfs: -120, speechMs: 0 });
+    expect(shouldSkipTranscription(meta)).toBe(true);
+  });
+
+  it('behält Sprache von -28 bis -18 dBFS in einem lauten Café bei -40 dBFS ±4 dB', () => {
+    const meta = metaForLevels([
+      ...Array.from({ length: 110 }, (_, i) => -40 + (i % 9) - 4),
+      ...Array.from({ length: 15 }, (_, i) => -28 + (i % 6) * 2),
+    ]);
+    expect(meta.speechMs).toBeGreaterThanOrEqual(400);
+    expect(shouldSkipTranscription(meta)).toBe(false);
+    expect(filterTranscription(thanks, meta).text).toBe('Vielen Dank.');
+  });
+});
+
 describe('Diktat-Stillefilter', () => {
-  it('überspringt Groq nur bei vollständig gemessener Aufnahme mit nahezu keiner leisen Aktivität', () => {
+  it('überspringt Groq nur bei zuverlässiger Messung mit unter 80 ms Aktivität und weniger als 10 dB Dynamik', () => {
     expect(shouldSkipTranscription(silence)).toBe(true);
     expect(shouldSkipTranscription(speech)).toBe(false);
-    expect(shouldSkipTranscription({ ...silence, speechMs: 40, peakDbfs: -62 })).toBe(true);
-    expect(shouldSkipTranscription({ ...silence, speechMs: 80, peakDbfs: -62 })).toBe(false);
+    expect(shouldSkipTranscription({ ...silence, speechMs: 79, peakDbfs: -81 })).toBe(true);
+    expect(shouldSkipTranscription({ ...silence, speechMs: 80, peakDbfs: -81 })).toBe(false);
     expect(shouldSkipTranscription({ ...silence, speechMs: 40, peakDbfs: -35 })).toBe(false);
-    expect(shouldSkipTranscription({ ...silence, peakDbfs: -60 })).toBe(false);
-    expect(shouldSkipTranscription({ ...silence, peakDbfs: -120 })).toBe(true);
+    expect(shouldSkipTranscription({ ...silence, peakDbfs: -80 })).toBe(false);
+    expect(shouldSkipTranscription({ ...silence, peakDbfs: -120, floorDbfs: -120 })).toBe(true);
   });
 
   it('verwendet absolute Sprachdauer, damit lange Pausen echte Sprache nicht verdünnen', () => {
@@ -28,6 +91,8 @@ describe('Diktat-Stillefilter', () => {
     { ...silence, speechMs: -1 }, { ...silence, measuredMs: 5000 },
     { ...silence, peakDbfs: NaN }, { ...silence, peakDbfs: null },
     { ...silence, durationMs: Infinity }, { ...silence, speechMs: '0' },
+    { ...silence, floorDbfs: undefined }, { ...silence, floorDbfs: null },
+    { ...silence, floorDbfs: -121 }, { ...silence, floorDbfs: -80 },
   ])('verwirft bei fehlenden, kurzen oder unzuverlässigen Messungen nichts vorab (%j)', meta => {
     expect(shouldSkipTranscription(meta)).toBe(false);
     expect(filterTranscription({ text: 'Vielen Dank.' }, meta).text).toBe('Vielen Dank.');
@@ -62,10 +127,10 @@ describe('Diktat-Stillefilter', () => {
     }
   });
 
-  it('nutzt für mehrdeutige Phrasen die Grenze unter 400 ms gemessener Aktivität', () => {
+  it('nutzt für mehrdeutige Phrasen die Grenze unter 250 ms gemessener Aktivität', () => {
     const response = { text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0, -0.28)] };
-    expect(filterTranscription(response, { ...speech, speechMs: 399 }).text).toBe('');
-    expect(filterTranscription(response, { ...speech, speechMs: 400 }).text).toBe('Vielen Dank.');
+    expect(filterTranscription(response, { ...speech, speechMs: 249 }).text).toBe('');
+    expect(filterTranscription(response, { ...speech, speechMs: 250 }).text).toBe('Vielen Dank.');
     expect(filterTranscription(response).text).toBe('Vielen Dank.');
     expect(filterTranscription(response, { ...speech, speechMs: 100, measuredMs: 2000 }).text).toBe('Vielen Dank.');
   });
@@ -111,8 +176,8 @@ describe('Diktat-Stillefilter', () => {
     }
   );
 
-  it('filtert bekannte Phrasen ohne Renderer-Metadaten nur mit sehr hohem no_speech_prob', () => {
-    expect(filterTranscription({ text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0.99)] }).text).toBe('');
+  it('behält mehrdeutige Phrasen ohne Renderer-Metadaten auch bei hohem no_speech_prob allein', () => {
+    expect(filterTranscription({ text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0.99)] }).text).toBe('Vielen Dank.');
     expect(filterTranscription({ text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0.7)] }).text).toBe('Vielen Dank.');
   });
 
@@ -139,5 +204,13 @@ describe('Diktat-Stillefilter', () => {
   it('validiert auch aus JSON-Backups geladene Metadaten', () => {
     expect(validateVoiceActivity(JSON.parse(JSON.stringify(silence)))).toEqual(silence);
     expect(validateVoiceActivity({ ...silence, speechMs: 5000 })).toBeUndefined();
+  });
+
+  it('nutzt alte Metadaten ohne relativen Grundpegel nicht zum Verwerfen mehrdeutiger Phrasen', () => {
+    const { floorDbfs, ...oldMeta } = silence;
+    expect(validateVoiceActivity(oldMeta)).toBeUndefined();
+    expect(shouldSkipTranscription(oldMeta)).toBe(false);
+    expect(filterTranscription({ text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0.99)] }, oldMeta).text).toBe('Vielen Dank.');
+    expect(filterTranscription({ text: 'Amara.org' }, oldMeta).text).toBe('');
   });
 });

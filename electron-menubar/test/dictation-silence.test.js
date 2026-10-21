@@ -11,7 +11,7 @@ const source = fs.readFileSync(path.join(__dirname, '../electron-main.js'), 'utf
 const transcribe = source.slice(source.indexOf('async function transcribeAudio('), source.indexOf('// AUTO UPDATER ('));
 const audio = source.slice(source.indexOf('let lastAudioBackup ='), source.indexOf('// HOTKEY\n'));
 const directories = [];
-const silence = { durationMs: 4000, measuredMs: 4000, speechMs: 0, peakDbfs: -120, maxGapMs: 40 };
+const silence = { durationMs: 4000, measuredMs: 4000, speechMs: 0, peakDbfs: -120, floorDbfs: -120, maxGapMs: 40 };
 const speech = { ...silence, speechMs: 800, peakDbfs: -40 };
 
 function main(response = { text: 'Vielen Dank.' }, settings = {}) {
@@ -41,10 +41,10 @@ afterEach(() => {
 });
 
 describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
-  it('überspringt bei gemessener Stille API, Polishing, Historie und Einfügen und sendet empty', async () => {
+  it.each([silence, { ...silence, floorDbfs: -52, peakDbfs: -48 }])('überspringt bei stationärem Signal API, Polishing, Historie und Einfügen und sendet empty (%j)', async meta => {
     const { context, directory, window } = main(undefined, { groqApiKey: '' });
-    await context.saveAudioBackup(Buffer.from('audio'), silence);
-    const result = await context.processAudioData(Buffer.from('audio'), false, silence);
+    await context.saveAudioBackup(Buffer.from('audio'), meta);
+    const result = await context.processAudioData(Buffer.from('audio'), false, meta);
     expect(result).toEqual({ success: true, empty: true });
     for (const fn of [context.fetch, context.polishText, context.addToHistory, context.autopasteText, context.clipboard.writeText]) {
       expect(fn).not.toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(window.webContents.send).toHaveBeenCalledWith('status:update', { status: 'empty', detail: '' });
   });
 
-  it('verwirft die real gemessene Groq-Stille-Phrase trotz no_speech_prob=0 bei weniger als 400 ms Aktivität', async () => {
+  it('verwirft die real gemessene Groq-Stille-Phrase trotz no_speech_prob=0 bei weniger als 250 ms Aktivität', async () => {
     const { context, window } = main({ text: ' Vielen Dank.', segments: [
       { text: ' Vielen Dank.', no_speech_prob: 0, avg_logprob: -0.28, compression_ratio: 0.62 },
     ] });
@@ -124,13 +124,14 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.getAudioBackup()).toBeNull();
   });
 
-  it.each(['fehlend', 'beschädigt'])('verarbeitet alte Backups ohne nutzbare Metadaten (%s) weiter', async metadata => {
+  it.each(['fehlend', 'beschädigt', 'alt'])('verarbeitet alte Backups ohne nutzbare Metadaten (%s) weiter', async metadata => {
     const { context, directory } = main();
     await context.saveAudioBackup(Buffer.from('audio'));
     const backupDir = path.join(directory, 'audio-backups');
-    if (metadata === 'beschädigt') {
+    if (metadata !== 'fehlend') {
       const name = fs.readdirSync(backupDir).find(name => name.endsWith('.webm'));
-      fs.writeFileSync(path.join(backupDir, `${name}.json`), '{kaputt');
+      const { floorDbfs, ...oldMeta } = silence;
+      fs.writeFileSync(path.join(backupDir, `${name}.json`), metadata === 'alt' ? JSON.stringify(oldMeta) : '{kaputt');
     }
     vm.runInContext('lastAudioBackup = null; backupTimestamp = null;', context);
     await context.retryLastRecording();
