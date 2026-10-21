@@ -578,7 +578,7 @@ function setupAutoUpdater() {
     console.log('Update available:', info.version);
     updateCheckInProgress = false;
 
-    if (updateCheckSilent) return;
+    // Auch bei der stillen Start-Prüfung melden: Nur „kein Update“ und Prüf-Fehler bleiben still.
     dialog.showMessageBox({
       type: 'info',
       title: 'Update verfügbar!',
@@ -611,9 +611,12 @@ function setupAutoUpdater() {
 
   updater.on('error', (error) => {
     console.error('Auto-updater error:', error);
+    const failedDuringDownload = downloadInProgress;
     updateCheckInProgress = false;
     downloadInProgress = false;
-    if (updateCheckSilent) return;
+    // Still bleiben nur Fehler der Hintergrund-Prüfung; scheitert ein vom Nutzer gestarteter
+    // Download (z. B. unsignierte Mac-App), führt der Dialog zur Release-Seite.
+    if (updateCheckSilent && !failedDuringDownload) return;
 
     // Fallback: Open GitHub releases page
     dialog.showMessageBox({

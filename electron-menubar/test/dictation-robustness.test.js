@@ -154,7 +154,7 @@ it('protokolliert Text nur mit PAPLY_DEBUG_TEXT=1', async () => {
   expect(JSON.stringify(c.console.log.mock.calls)).toContain('Gesprochener Text');
 });
 
-it('unterdrückt bei Hintergrund-Updates sämtliche Dialoge, manuelle Prüfung zeigt sie', async () => {
+it('Hintergrund-Prüfung: still bei „kein Update“ und Prüffehler, meldet aber neue Versionen', async () => {
   const { EventEmitter } = await import('node:events');
   const updater = new EventEmitter(); updater.checkForUpdates = vi.fn(async () => {});
   const context = vm.createContext({ getAutoUpdater: () => updater, console, CURRENT_VERSION: '1',
@@ -163,12 +163,15 @@ it('unterdrückt bei Hintergrund-Updates sämtliche Dialoge, manuelle Prüfung z
   const code = source.slice(source.indexOf('function setupAutoUpdater('), source.indexOf('// Fallback manual update check'));
   vm.runInContext(`let updateCheckSilent = true; let updateCheckInProgress = false; let downloadInProgress = false;\n${code}`, context);
   context.setupAutoUpdater();
-  for (const event of ['update-not-available', 'update-available', 'error']) {
+  for (const event of ['update-not-available', 'error']) {
     await context.checkForUpdates(true); updater.emit(event, { version: '1', message: 'Failure' });
   }
   expect(context.dialog.showMessageBox).not.toHaveBeenCalled();
-  await context.checkForUpdates(false); updater.emit('update-not-available', { version: '1' });
+  await context.checkForUpdates(true); updater.emit('update-available', { version: '2' });
   expect(context.dialog.showMessageBox).toHaveBeenCalledOnce();
+  expect(context.dialog.showMessageBox.mock.calls[0][0].title).toBe('Update verfügbar!');
+  await context.checkForUpdates(false); updater.emit('update-not-available', { version: '1' });
+  expect(context.dialog.showMessageBox).toHaveBeenCalledTimes(2);
 });
 
 it('zweite Instanz initialisiert weder Manager noch Hotkeys', () => {
