@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { __resetSoundsForTests, playStartSound, playStopSound, warmUpSounds } from './sounds';
+import { __resetSoundsForTests, playStartSound, playStopSound, SOUND_VARIANTS, warmUpSounds } from './sounds';
 
 type Call = [string, number, number];
 
@@ -8,6 +8,7 @@ class FakeParam {
   calls: Call[] = [];
   setValueAtTime(v: number, t: number) { this.calls.push(['set', v, t]); }
   exponentialRampToValueAtTime(v: number, t: number) { this.calls.push(['exp', v, t]); }
+  linearRampToValueAtTime(v: number, t: number) { this.calls.push(['lin', v, t]); }
 }
 class FakeNode { connect() {} disconnect() {} }
 class FakeGain extends FakeNode { gain = new FakeParam(); }
@@ -30,8 +31,10 @@ class FakeContext {
   constructor() { contexts.push(this); }
   createGain() { const g = new FakeGain(); this.gains.push(g); return g; }
   createOscillator() { const o = new FakeOsc(); this.oscs.push(o); return o; }
-  createBiquadFilter() { return Object.assign(new FakeNode(), { type: '', frequency: new FakeParam() }); }
+  filters: { frequency: FakeParam }[] = [];
+  createBiquadFilter() { const f = Object.assign(new FakeNode(), { type: '', frequency: new FakeParam(), Q: new FakeParam() }); this.filters.push(f); return f; }
   resume() { this.state = 'running'; return Promise.resolve(); }
+  suspend() { this.state = 'suspended'; return Promise.resolve(); }
 }
 
 describe('sounds', () => {
@@ -71,8 +74,8 @@ describe('sounds', () => {
       const [first, attack] = g.gain.calls;
       expect(first[0]).toBe('set');
       expect(first[1]).toBeLessThan(0.001);
-      expect(attack[0]).toBe('exp');
-      expect(attack[2] - first[2]).toBeGreaterThanOrEqual(0.005);
+      expect(attack[0]).toBe('lin');
+      expect(attack[2] - first[2]).toBeGreaterThanOrEqual(0.015);
     }
   });
 
@@ -89,5 +92,21 @@ describe('sounds', () => {
   it('bleibt ohne Web Audio still statt zu werfen', () => {
     vi.stubGlobal('AudioContext', undefined);
     expect(() => playStartSound()).not.toThrow();
+  });
+
+  it('klingt standardmäßig warm: tiefe Grundtöne, Tiefpass ≤ 2 kHz, langes Ausklingen', () => {
+    playStartSound();
+    const ctx = contexts[0];
+    const sines = ctx.oscs.filter((o) => o.type === 'sine').map((o) => o.frequency.value);
+    expect(Math.max(...sines)).toBeLessThan(520);
+    const lp = ctx.filters[0].frequency.calls.at(-1)!;
+    expect(lp[1]).toBeLessThanOrEqual(2000);
+    expect(SOUND_VARIANTS.warm.decay).toBeGreaterThan(SOUND_VARIANTS.hell.decay);
+  });
+
+  it('spielt auf Wunsch eine andere Variante', () => {
+    playStartSound('hell');
+    const sines = contexts[0].oscs.filter((o) => o.type === 'sine').map((o) => o.frequency.value);
+    expect(sines).toContain(SOUND_VARIANTS.hell.start[0]);
   });
 });

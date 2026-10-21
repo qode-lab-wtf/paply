@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { RecordingPill, type PillStatus, type RecordingPillProps } from '../RecordingPill';
-import { playStartSound, playStopSound } from '@/lib/sounds';
+import { playStartSound, playStopSound, DEFAULT_SOUND_VARIANT, type SoundVariant } from '@/lib/sounds';
 
 // Simulierter Sprachpegel (Silben ~4 Hz, Phrasen mit Pausen)
 function createFakeLevel() {
@@ -69,6 +69,27 @@ const FLOW: [PillStatus, number, (() => void)?][] = [
   ['leaving', 800],
 ];
 
+const VARIANTS: [SoundVariant, string][] = [
+  ['warm', 'Warm (Standard)'],
+  ['holz', 'Holz'],
+  ['hell', 'Hell (v1.14.0)'],
+];
+
+function Sounds() {
+  return (
+    <div className="sounds">
+      <b>Töne:</b>
+      {VARIANTS.map(([v, name]) => (
+        <span key={v} style={{ display: 'inline-flex', gap: 4 }}>
+          <button onClick={() => playStartSound(v)}>{name} · Start</button>
+          <button onClick={() => playStopSound(v)}>Stopp</button>
+        </span>
+      ))}
+      <span style={{ opacity: 0.6 }}>Standard: {DEFAULT_SOUND_VARIANT}</span>
+    </div>
+  );
+}
+
 function Live() {
   const [i, setI] = useState(-1);
   useEffect(() => {
@@ -97,10 +118,14 @@ function App() {
       <style>{`
         .page { min-height: 100vh; padding: 24px; font: 13px system-ui; background: #d9dee6; color: #222; }
         @media (prefers-color-scheme: dark) { .page { background: #10141a; color: #ddd; } }
-        .frame { position: relative; width: 320px; height: 88px; transform: translateZ(0); outline: 1px dashed rgb(128 128 128 / .5); }
-        .grid { display: grid; grid-template-columns: repeat(2, 320px); gap: 18px 28px; }
+        .frame { position: relative; width: 272px; height: 64px; transform: translateZ(0); outline: 1px dashed rgb(128 128 128 / .5);
+          background: linear-gradient(90deg, #f3f4f2 0 34%, #5b7cfa 34% 52%, #e8a33d 52% 66%, #121417 66%); }
+        .frame.plain { background: none; }
+        .grid { display: grid; grid-template-columns: repeat(2, 272px); gap: 18px 28px; }
+        .sounds { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
         figcaption { font-size: 11px; opacity: .6; margin-top: 4px; }
       `}</style>
+      <Sounds />
       <Live />
       <div className="grid">{cases.map((c) => <Frame key={c.title} c={c} />)}</div>
     </div>
