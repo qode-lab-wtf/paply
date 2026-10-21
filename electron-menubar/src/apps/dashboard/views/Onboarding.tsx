@@ -9,6 +9,7 @@ import {
   Mic,
   Sparkles,
 } from 'lucide-react';
+import { PaplyMark } from '@/components/brand/PaplyMark';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -118,7 +119,7 @@ export function Onboarding({
     <main className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-8 py-10">
       <div className="w-full max-w-2xl space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-lg font-semibold tracking-tight">paply</span>
+          <span className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"><PaplyMark size={28} />paply</span>
           <span className="text-sm text-muted-foreground">Dein Start · {step + 1} von 5</span>
         </div>
         <nav aria-label="Fortschritt der Ersteinrichtung" className="grid grid-cols-5 gap-3">

@@ -30,7 +30,7 @@ export function makeMain(platform = 'darwin', settings = {}) {
     setTimeout: vi.fn((fn, ms) => { const timer = { fn, ms }; timers.push(timer); return timer; }),
     clearTimeout: vi.fn(timer => { if (timer) timer.cancelled = true; }),
     console: { log: vi.fn(), error: vi.fn() },
-    resizeRecordingWindow: vi.fn(), recordingWindow: win, mainWindow: win, createRecordingWindow: () => win,
+    positionRecordingWindow: vi.fn(), recordingWindow: win, mainWindow: win, createRecordingWindow: () => win,
     dialog: { showMessageBox: vi.fn() },
     savePreviousApp: vi.fn(async () => platform === 'darwin' ? 'Editor' : '123'),
     polishText: vi.fn(async text => text), addToHistory: vi.fn(),

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- paply · Marke „p-Kopf“ · Wortmarke mit Zeichen, für helle Flächen -->
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="-12 -96 760 260">
+<svg x="0" y="-80" width="206" height="220" viewBox="230 220 600 640">
+<defs>
+<linearGradient id="wm-mark" x1="300" y1="236" x2="470" y2="842" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#7cf29a"/>
+<stop offset="1" stop-color="#22b45f"/>
+</linearGradient>
+<linearGradient id="wm-beak" x1="0" y1="0" x2=".5" y2="1">
+<stop offset="0" stop-color="#ffe066"/>
+<stop offset="1" stop-color="#ffa51f"/>
+</linearGradient>
+<mask id="wm-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+<rect width="1024" height="1024" fill="#fff"/>
+<circle cx="470" cy="450" r="230" fill="#000"/>
+</mask>
+<mask id="wm-ctr" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+<rect width="1024" height="1024" fill="#fff"/>
+<circle cx="520" cy="410" r="62" fill="#000"/>
+</mask>
+</defs>
+<g class="upper-beak" mask="url(#wm-gap)">
+<path d="M529.21 538.93A150 150 0 1 1 729.96 576.91A110 110 0 0 0 529.21 538.93Z" fill="url(#wm-beak)"/>
+</g>
+<g class="head" mask="url(#wm-ctr)">
+<path d="M256 450a214 214 0 1 0 428 0a214 214 0 1 0 -428 0Z" fill="url(#wm-mark)"/>
+<path d="M334 450H334A78 78 0 0 1 412 528V764A78 78 0 0 1 334 842H334A78 78 0 0 1 256 764V528A78 78 0 0 1 334 450Z" fill="url(#wm-mark)"/>
+</g>
+</svg>
+<g transform="translate(250 0)">
+<g fill="none" stroke="#0f1f17" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="50" cy="50" r="38"/>
+<path d="M12 50V150"/>
+<circle cx="166" cy="50" r="38"/>
+<path d="M204 12V88"/>
+<circle cx="282" cy="50" r="38"/>
+<path d="M244 50V150"/>
+<path d="M338 -64V88"/>
+<path d="M374 12V48A38 38 0 0 0 450 48V12M450 48V112C450 146 426 162 392 160"/>
+</g>
+</g>
+</svg>

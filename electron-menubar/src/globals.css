@@ -3,63 +3,74 @@
 @tailwind utilities;
 
 @layer base {
+  /* Marke „p-Kopf“: Grün, Waldgrün, Schnabel-Gelb. Kontrast Text auf Primary ≥ 5:1 (hell) bzw. ≥ 9:1 (dunkel). */
   :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.13 0.028 261.692);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.13 0.028 261.692);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.13 0.028 261.692);
-    --primary: oklch(0.65 0.18 132);
-    --primary-foreground: oklch(0.99 0.03 121);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.003 264.542);
-    --muted-foreground: oklch(0.551 0.027 264.364);
-    --accent: oklch(0.65 0.18 132);
-    --accent-foreground: oklch(0.99 0.03 121);
+    --brand-green: #22b45f;
+    --brand-green-bright: #3ad879;
+    --brand-green-deep: #13803f;
+    --brand-forest: #0f2c20;
+    --brand-forest-deep: #0a1d15;
+    --brand-beak: #ffc233;
+    --brand-mint: #e8f8ee;
+
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+    --background: #ffffff;
+    --foreground: #0f1f17;
+    --card: #ffffff;
+    --card-foreground: #0f1f17;
+    --popover: #ffffff;
+    --popover-foreground: #0f1f17;
+    --primary: #13803f;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f2;
+    --secondary-foreground: #13251b;
+    --muted: #f3f6f4;
+    --muted-foreground: #5b6b62;
+    --accent: #13803f;
+    --accent-foreground: #ffffff;
     --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.99 0.03 121);
-    --border: oklch(0.928 0.006 264.531);
-    --input: oklch(0.928 0.006 264.531);
-    --ring: oklch(0.707 0.022 261.325);
+    --destructive-foreground: #ffffff;
+    --border: #e2e9e4;
+    --input: #e2e9e4;
+    --ring: #22b45f;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0.002 247.839);
-    --sidebar-foreground: oklch(0.13 0.028 261.692);
-    --sidebar-primary: oklch(0.65 0.18 132);
-    --sidebar-primary-foreground: oklch(0.99 0.03 121);
-    --sidebar-accent: oklch(0.65 0.18 132);
-    --sidebar-accent-foreground: oklch(0.99 0.03 121);
-    --sidebar-border: oklch(0.928 0.006 264.531);
+    --sidebar: #f6faf7;
+    --sidebar-foreground: #0f1f17;
+    --sidebar-primary: #13803f;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #e8f8ee;
+    --sidebar-accent-foreground: #0f2c20;
+    --sidebar-border: #e2e9e4;
   }
 
   .dark {
-    --background: oklch(0.13 0.028 261.692);
-    --foreground: oklch(0.985 0.002 247.839);
-    --card: oklch(0.21 0.034 264.665);
-    --card-foreground: oklch(0.985 0.002 247.839);
-    --popover: oklch(0.21 0.034 264.665);
-    --popover-foreground: oklch(0.985 0.002 247.839);
-    --primary: oklch(0.77 0.20 131);
-    --primary-foreground: oklch(0.27 0.07 132);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.278 0.033 256.848);
-    --muted-foreground: oklch(0.707 0.022 261.325);
-    --accent: oklch(0.77 0.20 131);
-    --accent-foreground: oklch(0.27 0.07 132);
+    --background: #0c1511;
+    --foreground: #eef5f0;
+    --card: #131f19;
+    --card-foreground: #eef5f0;
+    --popover: #131f19;
+    --popover-foreground: #eef5f0;
+    --primary: #3ad879;
+    --primary-foreground: #06200f;
+    --secondary: #1b2a22;
+    --secondary-foreground: #eef5f0;
+    --muted: #1a2620;
+    --muted-foreground: #9db0a5;
+    --accent: #3ad879;
+    --accent-foreground: #06200f;
     --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.985 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.551 0.027 264.364);
-    --sidebar: oklch(0.21 0.034 264.665);
-    --sidebar-foreground: oklch(0.985 0.002 247.839);
-    --sidebar-primary: oklch(0.85 0.21 129);
-    --sidebar-primary-foreground: oklch(0.27 0.07 132);
-    --sidebar-accent: oklch(0.77 0.20 131);
-    --sidebar-accent-foreground: oklch(0.27 0.07 132);
-    --sidebar-border: oklch(1 0 0 / 10%);
+    --destructive-foreground: #ffffff;
+    --border: rgb(255 255 255 / 10%);
+    --input: rgb(255 255 255 / 15%);
+    --ring: #2b9e5c;
+    --sidebar: #111c17;
+    --sidebar-foreground: #eef5f0;
+    --sidebar-primary: #3ad879;
+    --sidebar-primary-foreground: #06200f;
+    --sidebar-accent: #1b2a22;
+    --sidebar-accent-foreground: #eef5f0;
+    --sidebar-border: rgb(255 255 255 / 10%);
   }
 
   * {
@@ -68,7 +79,7 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
   }
 }
 

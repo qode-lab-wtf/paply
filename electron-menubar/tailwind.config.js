@@ -5,9 +5,18 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Segoe UI Variable Text"', '"Segoe UI"', 'system-ui', 'sans-serif'],
       },
       colors: {
+        brand: {
+          green: '#22b45f',
+          bright: '#3ad879',
+          deep: '#13803f',
+          forest: '#0f2c20',
+          'forest-deep': '#0a1d15',
+          beak: '#ffc233',
+          mint: '#e8f8ee',
+        },
         background: 'var(--background)',
         foreground: 'var(--foreground)',
         card: {

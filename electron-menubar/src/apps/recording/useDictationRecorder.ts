@@ -1,26 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startVoiceActivityMeasurement } from '@/lib/voice-activity-recorder';
 import { createRecordingGeneration } from '@/lib/recording-generation';
+import { playStartSound, playStopSound, warmUpSounds } from '@/lib/sounds';
 import type { RecordingPillProps, PillStatus } from './RecordingPill';
 
 const MIC_ERROR = 'Kein Mikrofonzugriff';
-
-function playBeep(frequency: number, duration: number) {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = frequency;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
-    osc.onended = () => { void ctx.close(); };
-  } catch { /* Audio feedback must not prevent recording. */ }
-}
 
 export function useDictationRecorder(): RecordingPillProps {
   const [status, setStatus] = useState<PillStatus>('empty');
@@ -54,10 +38,11 @@ export function useDictationRecorder(): RecordingPillProps {
       // Freeze voice measurement before stopping tracks; onstop is asynchronous.
       active.release();
       if (active.recorder.state !== 'inactive') active.recorder.stop();
-      if (!discard && active.beep) playBeep(400, 0.12);
+      if (!discard && active.beep) playStopSound();
       return true;
     };
 
+    warmUpSounds();
     void api.getPlatform().then(value => {
       if (!mounted) return;
       setPlatform(value.isMac ? 'mac' : value.isWin ? 'win' : 'linux');
@@ -78,7 +63,7 @@ export function useDictationRecorder(): RecordingPillProps {
       if (!generation.isCurrent(token)) return;
       setErrorText(null);
       setInfoText(null);
-      if (beep) playBeep(800, 0.12);
+      if (beep) playStartSound();
       setStatus('recording');
       let stream: MediaStream | null = null;
       let context: AudioContext | null = null;

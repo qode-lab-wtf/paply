@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PaplyMark } from '@/components/brand/PaplyMark';
 import {
   Mic, History, BarChart3, Users, Code, Settings,
   Play, Square, Loader2, Copy, Check, Trash2, Star,
@@ -221,10 +222,8 @@ export function Dashboard() {
       {/* Sidebar */}
       <aside className="w-56 border-r bg-sidebar flex flex-col">
         <div className="p-4 border-b flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-            <Mic className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-semibold text-sidebar-foreground">paply</span>
+          <PaplyMark size={32} title="paply" />
+          <span className="font-semibold tracking-tight text-sidebar-foreground">paply</span>
         </div>
 
         <nav className="flex-1 p-2 space-y-1">

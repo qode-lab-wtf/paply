@@ -1015,6 +1015,9 @@ let settingsWindow = null;
 let historyWindow = null;
 let recordingWindow = null;
 
+// Fenster-Icon für Taskleiste/Alt-Tab unter Windows/Linux (macOS nimmt das Bundle-Icon icon.icns)
+const WINDOW_ICON = isMac ? undefined : path.join(__dirname, isWin ? 'icon.ico' : 'icon.png');
+
 function createMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.focus();
@@ -1027,7 +1030,8 @@ function createMainWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'paply',
-    backgroundColor: '#0f1115',
+    icon: WINDOW_ICON,
+    backgroundColor: '#0c1511',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1074,6 +1078,7 @@ function createSettingsWindow() {
     minWidth: 420,
     minHeight: 500,
     title: 'paply Einstellungen',
+    icon: WINDOW_ICON,
     backgroundColor: '#F9FAFB',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -1098,6 +1103,7 @@ function createHistoryWindow() {
     resizable: true,
     minimizable: true,
     title: 'paply History',
+    icon: WINDOW_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1109,47 +1115,74 @@ function createHistoryWindow() {
   historyWindow.on('closed', () => { historyWindow = null; });
 }
 
+// Aufnahme-Pille „Echo“: festes, transparentes, klick-durchlässiges Fenster. Die Pille animiert
+// nur innerhalb (Breite, Klangwolke, Schatten) – das Fenster wird nie zur Laufzeit skaliert.
+const PILL_WINDOW = { width: 320, height: 88 }; // Pille max. 296 × 44 + Klangwolke 72 px + Schattenrand
+const PILL_WINDOW_OPAQUE = { width: 300, height: 52 }; // Rückfall ohne Transparenz (Windows ohne GPU-Compositing)
+const PILL_BOTTOM_GAP = 16; // Abstand Fensterunterkante → Dock/Taskleiste (Pille sitzt ~38 px darüber)
+
+function pillNeedsOpaqueWindow() {
+  if (!isWin) return false;
+  if (process.env.PAPLY_OPAQUE_PILL === '1') return true;
+  try {
+    const compositing = String(app.getGPUFeatureStatus().gpu_compositing || '');
+    return !compositing.startsWith('enabled');
+  } catch {
+    return false;
+  }
+}
+
+// Unten mittig auf dem Bildschirm mit dem Mauszeiger; workArea respektiert Dock und Taskleiste
+// (auch wenn die Windows-Taskleiste oben oder seitlich sitzt). Vor jedem Einblenden aufrufen.
+function positionRecordingWindow(win = recordingWindow) {
+  if (!win || win.isDestroyed()) return;
+  const { screen } = require('electron');
+  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const [w, h] = win.getSize();
+  win.setPosition(
+    Math.round(workArea.x + (workArea.width - w) / 2),
+    Math.round(workArea.y + workArea.height - h - PILL_BOTTOM_GAP),
+  );
+}
+
 function createRecordingWindow() {
   if (recordingWindow && !recordingWindow.isDestroyed()) {
     return recordingWindow;
   }
 
-  const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const opaque = pillNeedsOpaqueWindow();
+  const { nativeTheme } = require('electron');
+  const size = opaque ? PILL_WINDOW_OPAQUE : PILL_WINDOW;
 
-  // Compact widget size
-  const widgetWidth = 140;
-  const widgetHeight = 52;
-
-  const windowOptions = {
-    width: widgetWidth,
-    height: widgetHeight,
+  recordingWindow = new BrowserWindow({
+    ...size,
     show: false,
+    frame: false,
     resizable: false,
-    alwaysOnTop: true,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: false,
     skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    transparent: !opaque,
+    backgroundColor: opaque ? (nativeTheme.shouldUseDarkColors ? '#1b1e1c' : '#ffffff') : '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // Pegel-Animation läuft auch, wenn das Fenster nie fokussiert wird
     },
-  };
+  });
 
-  if (isMac) {
-    windowOptions.frame = false;
-    windowOptions.transparent = true;
-    windowOptions.focusable = false;
-  } else {
-    windowOptions.frame = false;
-    windowOptions.transparent = false;
-    windowOptions.backgroundColor = '#1e1e1e';
-    windowOptions.focusable = false;
-  }
+  // Über Vollbild-Apps und auf allen Spaces; Mausklicks gehen durch die transparente Fläche hindurch
+  recordingWindow.setAlwaysOnTop(true, 'screen-saver');
+  if (isMac) recordingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  recordingWindow.setIgnoreMouseEvents(true);
 
-  recordingWindow = new BrowserWindow(windowOptions);
-
-  recordingWindow.loadFile(path.join(__dirname, 'renderer', 'recording.html'));
+  recordingWindow.loadFile(path.join(__dirname, 'renderer', 'recording.html'), opaque ? { query: { opaque: '1' } } : undefined);
   recordingWindow.webContents.on('render-process-gone', () => {
     for (const job of dictationJobs.pending()) {
       if (['starting', 'requested', 'recording', 'stopped'].includes(job.phase)) failRecording(job, 'Aufnahmefenster geschlossen — bitte erneut versuchen');
@@ -1162,11 +1195,7 @@ function createRecordingWindow() {
     }
   });
 
-  // Position: bottom center, slightly above the Dock
-  const x = Math.round((width - widgetWidth) / 2);
-  const y = height - widgetHeight - 80; // 80px above bottom edge (above Dock)
-  recordingWindow.setPosition(x, y);
-
+  positionRecordingWindow(recordingWindow);
   return recordingWindow;
 }
 
@@ -1323,10 +1352,13 @@ function setupTray() {
       icon.setTemplateImage(true);
     }
   } else {
-    // Windows: Use regular colored icon
+    // Windows: farbiges Tray-Icon (16–48 px für 100–300 % Skalierung), sonst App-Icon
+    const trayPath = path.join(__dirname, 'tray.ico');
     const icoPath = path.join(__dirname, 'icon.ico');
     const pngPath = path.join(__dirname, 'icon.png');
-    if (fs.existsSync(icoPath)) {
+    if (fs.existsSync(trayPath)) {
+      icon = nativeImage.createFromPath(trayPath);
+    } else if (fs.existsSync(icoPath)) {
       icon = nativeImage.createFromPath(icoPath);
     } else if (fs.existsSync(pngPath)) {
       icon = nativeImage.createFromPath(pngPath);
@@ -1381,17 +1413,8 @@ function publishRecordingState() {
   mainWindow?.webContents.send('recording:state', { isRecording });
 }
 
-function resizeRecordingWindow(detail = '') {
-  if (!recordingWindow || recordingWindow.isDestroyed()) return;
-  const area = screen.getPrimaryDisplay().workAreaSize;
-  const width = detail ? Math.min(area.width - 32, Math.max(360, detail.length * 7 + 180)) : 140;
-  const height = 52;
-  recordingWindow.setBounds({ x: Math.round((area.width - width) / 2), y: area.height - height - 80, width, height });
-}
-
 function sendJobStatus(job, status, detail = '') {
   if (dictationJobs.isCurrent(job)) {
-    if (status !== 'leaving') resizeRecordingWindow(detail);
     recordingWindow?.webContents.send('status:update', { status, detail, jobId: job.id });
     mainWindow?.webContents.send('status:update', { status, detail, jobId: job.id });
   }
@@ -1428,7 +1451,7 @@ async function beginRecording() {
     }
     if (!isRecording || job.phase !== 'starting' || !dictationJobs.isCurrent(job)) return;
     job.phase = 'requested';
-    resizeRecordingWindow();
+    positionRecordingWindow(win);
     win.showInactive();
     win.webContents.send('recording:start', { jobId: job.id });
   } catch { failRecording(job, 'Aufnahme konnte nicht gestartet werden'); }
@@ -1702,6 +1725,7 @@ async function retryLastRecording() {
   // Show recording window with processing state
   const win = createRecordingWindow();
   if (dictationJobs.isCurrent(job)) {
+    positionRecordingWindow(win);
     win.showInactive();
     sendJobStatus(job, 'transcribing', 'Wiederhole...');
   }
@@ -2155,8 +2179,9 @@ function showAgentSwitchNotification(agentId, agentName, agentIcon = '🎯', age
   if (recordingWindow && !recordingWindow.isDestroyed()) {
     recordingWindow.webContents.send('agent:switched', { id: agentId, name: agentName, icon: agentIcon, color: agentColor });
 
-    // Briefly show the recording window for feedback
-    recordingWindow.show();
+    // Briefly show the recording window for feedback (ohne Fokus zu stehlen)
+    if (!recordingWindow.isVisible()) positionRecordingWindow();
+    recordingWindow.showInactive();
     hideRecordingWindow(1200);
   }
 

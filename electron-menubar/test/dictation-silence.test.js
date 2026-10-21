@@ -24,7 +24,7 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
   const context = vm.createContext({
     process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
-    savePreviousApp: async () => null, resizeRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
+    savePreviousApp: async () => null, positionRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date,
     fs, path, app: { getPath: () => directory },
     filterTranscription, shouldSkipTranscription, validateVoiceActivity,

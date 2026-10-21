@@ -4,17 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Recording</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    body {
+    /* Transparentes Fenster: überstimmt body bg-background aus globals.css */
+    html, body {
       margin: 0;
       padding: 0;
-      background: transparent;
-      -webkit-app-region: drag;
+      background: transparent !important;
+      overflow: hidden;
     }
   </style>
+  <script>
+    // Rückfall-Modus ohne Fenster-Transparenz (setzt electron-main.js per ?opaque=1)
+    if (new URLSearchParams(location.search).has('opaque')) document.documentElement.classList.add('opaque');
+  </script>
 </head>
 <body>
   <div id="root"></div>
