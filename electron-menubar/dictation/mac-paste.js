@@ -13,7 +13,7 @@ function captureMacApp({ spawnImpl = spawn, timeoutMs = 2000 } = {}) {
   });
 }
 
-function pasteMac(target, { spawnImpl = spawn, timeoutMs = 5000 } = {}) {
+function pasteMac(target, { spawnImpl = spawn, timeoutMs = 15000 } = {}) {
   // Same focus command, same Cmd+V and same delays as the established Mac path.
   const name = target?.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const script = name
@@ -29,10 +29,9 @@ function pasteMac(target, { spawnImpl = spawn, timeoutMs = 5000 } = {}) {
       try {
         const proc = spawnImpl('osascript', ['-e', script]);
         const timer = setTimeout(() => { proc.kill(); resolve(false); }, timeoutMs);
-        let failed = false;
-        proc.stderr.on('data', data => { if (data.toString().trim()) failed = true; });
+        proc.stderr.on('data', () => {}); // Drain diagnostics; only the exit code decides success.
         proc.on('error', () => { clearTimeout(timer); resolve(false); });
-        proc.on('close', code => { clearTimeout(timer); resolve(code === 0 && !failed); });
+        proc.on('close', code => { clearTimeout(timer); resolve(code === 0); });
       } catch { resolve(false); }
     }, 150);
   });
