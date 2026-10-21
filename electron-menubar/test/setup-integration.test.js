@@ -10,7 +10,7 @@ import { EventEmitter } from 'node:events';
 const root = path.resolve(__dirname, '..');
 const realRequire = createRequire(path.join(root, 'electron-main.js'));
 
-function harness({ platform = 'win32', persisted = {} } = {}) {
+function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
   let ready;
   const handlers = new Map();
   const data = { ...persisted };
@@ -41,6 +41,7 @@ function harness({ platform = 'win32', persisted = {} } = {}) {
     require: name => {
       if (name === 'electron') return electron;
       if (name === 'electron-store') return Store;
+      if (name === './dictation/polish-client' && polishFactory) return { createPolishClient: polishFactory };
       if (['./globe-key-manager', './audio-tee-manager', './windows-audio-manager', './call-detector-manager'].includes(name)) return Helper;
       if (name === './meeting/meeting-store') return { createMeetingStore: () => ({}) };
       if (name === './meeting/meeting-controller') return { createMeetingController: () => controller };
@@ -59,7 +60,7 @@ function harness({ platform = 'win32', persisted = {} } = {}) {
     registerHotkey = spies.dictation;
     ensureMeetingOverlayWindow = spies.overlay;
     showMainWindow = spies.show;
-    globalThis.fixture = { getStore, setupIpcHandlers };
+    globalThis.fixture = { getStore, setupIpcHandlers, setDashboard: win => { mainWindow = win; } };
   }`);
   vm.runInContext(source, context);
   return { ready: () => ready(), handlers, data, controller, electron, spies, helpers, context };
@@ -125,5 +126,37 @@ describe('Main: Meeting-Beta und Ersteinrichtung verdrahtet', () => {
         ? 'ms-settings:privacy-microphone'
         : 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone');
     }
+  });
+});
+
+
+describe('Main: Polieren-Einstellungen und Migration', () => {
+  it('setzt das neue Meeting-Modell als Default und migriert gespeicherte Altwerte', () => {
+    for (const persisted of [{}, { meetingSummaryModel: 'llama-3.3-70b-versatile' }]) {
+      const h = harness({ persisted }); h.ready();
+      expect(h.context.fixture.getStore().get('meetingSummaryModel')).toBe('openai/gpt-oss-120b');
+    }
+    const h = harness({ persisted: { meetingSummaryModel: 'bewusst-eigenes-modell' } }); h.ready();
+    expect(h.context.fixture.getStore().get('meetingSummaryModel')).toBe('bewusst-eigenes-modell');
+  });
+  it('liest, speichert und leert die optionale Wortliste über die echten Settings-Handler', async () => {
+    const h = harness(); h.ready();
+    expect(h.handlers.get('settings:get')().customVocabulary).toBe('');
+    await h.handlers.get('settings:set')(null, { customVocabulary: 'Paply, Müller' });
+    expect(h.handlers.get('settings:get')().customVocabulary).toBe('Paply, Müller');
+    await h.handlers.get('settings:set')(null, { customVocabulary: '' });
+    expect(h.data.customVocabulary).toBe('');
+  });
+  it('meldet Modell-Ausfall ans Dashboard und hält den Hinweis für später geöffnete Fenster vor', () => {
+    let unavailable;
+    const h = harness({ polishFactory: options => { unavailable = options.onUnavailable; return vi.fn(); } });
+    h.ready();
+    const send = vi.fn();
+    h.context.fixture.setDashboard({ isDestroyed: () => false, webContents: { send } });
+    expect(h.handlers.get('settings:get')().polishUnavailable).toBe(false);
+    unavailable();
+    expect(send).toHaveBeenCalledExactlyOnceWith('settings:changed');
+    expect(h.handlers.get('settings:get')().polishUnavailable).toBe(true);
+    expect(h.data).not.toHaveProperty('polishUnavailable');
   });
 });

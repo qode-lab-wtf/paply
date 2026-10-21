@@ -59,7 +59,7 @@ test('human reference always wins, and malformed confirmed references fail clear
   assert.equal(referenceFor('x', {}, { x: { status: 'unavailable' } }), null);
   assert.throws(() => referenceFor('x', { x: { text: '', kind: 'frei' } }, {}));
 });
-test('P0 loads all current app prompts and system without Electron; profiles resolve', async () => {
+test('P0 preserves the v1.14.0 baseline without Electron; profiles resolve', async () => {
   const p = await appPrompts();
   assert.match(p.getPrompt('Originaltext', 'de', 'code'), /TECH-BEGRIFFE KORREKTUR/);
   assert.match(p.getPrompt('Originaltext', 'de', 'plain'), /GESPROCHENE SATZZEICHEN/);
