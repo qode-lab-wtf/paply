@@ -93,6 +93,7 @@ jobs:
           name: windows-build
           path: |
             electron-menubar/dist/*.exe
+            electron-menubar/dist/*.exe.blockmap
             electron-menubar/dist/latest.yml
 
   create-release:
@@ -132,6 +133,7 @@ jobs:
             ./mac-build/*.zip
             ./mac-build/latest-mac.yml
             ./windows-build/*.exe
+            ./windows-build/*.exe.blockmap
             ./windows-build/latest.yml
           fail_on_unmatched_files: false
         env:
