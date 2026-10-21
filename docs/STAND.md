@@ -51,6 +51,17 @@ Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Window
 
 - **Verlauf-Aufbewahrung wählbar:** „Verlauf behalten: 7 / 30 / 90 Tage / immer“ (heute fest 90 Tage;
   Allan, 21.10.2026 — erst bauen, wenn weitere Punkte dazukommen).
+- **Aufnahme-Pille kleiner + Glas-Look** (Allan, 21.10.2026): auf ca. 70 % der heutigen Größe, leicht
+  transparent/glasig („Glass“-Vibe).
+- **Ton wärmer** (Allan): der veredelte Ton gefällt grundsätzlich, ist aber zu hoch/digital/„blitzartig“ →
+  weicher, dumpfer, wärmer (nicht zu dumpf).
+- **Profile Coding / Meeting / Diktat prüfen** (Allan): Was tun sie, sind sie sinnvoll und gut gebaut (alt),
+  mit neueren Modellen besser machen, einfach bedienbar — Allan ist faktisch immer auf „Coding“.
+- **Polieren ist kaputt:** Groq hat `llama-3.3-70b-versatile` abgeschaltet (404) → Polieren liefert seit
+  14.08.2026 still den Rohtext; auch die Meeting-Zusammenfassung nutzt das Modell. Verfügbar u. a.
+  `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`. Wahl per Diktat-Benchmark (läuft).
+- **Stille-Messung robuster:** Pegel per AudioWorklet statt `setInterval` messen (bei ruckelnder Oberfläche
+  fehlen sonst Messdaten → Filter greift nicht; im Test am Mac mini beobachtet, am MacBook 6/6 ok).
 - Rückmeldung des Windows-Freunds einarbeiten (Einfügen, Tray, Pille, Ersteinrichtung).
 - Windows: Hinweis im Log, wenn der Fokus-Helfer wegen Gruppenrichtlinie (AllSigned) nicht startet.
 - Optional, ändert Verhalten (nur auf Wunsch): Zwischenablage nach dem Einfügen wiederherstellen;
