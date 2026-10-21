@@ -1126,9 +1126,9 @@ function createHistoryWindow() {
 
 // Aufnahme-Pille „Echo“: festes, transparentes, klick-durchlässiges Fenster. Die Pille animiert
 // nur innerhalb (Breite, Klangwolke, Schatten) – das Fenster wird nie zur Laufzeit skaliert.
-const PILL_WINDOW = { width: 320, height: 88 }; // Pille max. 296 × 44 + Klangwolke 72 px + Schattenrand
-const PILL_WINDOW_OPAQUE = { width: 300, height: 52 }; // Rückfall ohne Transparenz (Windows ohne GPU-Compositing)
-const PILL_BOTTOM_GAP = 16; // Abstand Fensterunterkante → Dock/Taskleiste (Pille sitzt ~38 px darüber)
+const PILL_WINDOW = { width: 272, height: 64 }; // Pille max. 252 × 32 (Fehler: 38 hoch) + Klangwolke 56 px + Schattenrand
+const PILL_WINDOW_OPAQUE = { width: 260, height: 40 }; // Rückfall ohne Transparenz (Windows ohne GPU-Compositing)
+const PILL_BOTTOM_GAP = 16; // Abstand Fensterunterkante → Dock/Taskleiste (Pille sitzt ~32 px darüber)
 
 function pillNeedsOpaqueWindow() {
   if (!isWin) return false;

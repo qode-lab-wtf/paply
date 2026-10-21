@@ -15,10 +15,10 @@ export interface RecordingPillProps {
   platform: 'mac' | 'win' | 'linux';
 }
 
-// Maße der Pille „Echo“ (Fenster: 320 × 88, siehe createRecordingWindow in electron-main.js)
-const ORB = 44;
-const GAP = 12;
-const PAD_RIGHT = 15;
+// Maße der Pille „Echo“ (Fenster: 272 × 64, siehe createRecordingWindow in electron-main.js)
+const ORB = 32;
+const GAP = 8;
+const PAD_RIGHT = 12;
 
 /** Feder (Steifigkeit k, Dämpfung c) als CSS-`linear()`-Easing + Dauer in ms. */
 function spring(k: number, c: number) {
@@ -48,7 +48,7 @@ function blobPath(seed: number) {
   const pts: string[] = [];
   for (let i = 0; i < 48; i++) {
     const a = (i / 48) * Math.PI * 2;
-    const r = 22 * (1 + 0.09 * Math.sin(3 * a + seed) + 0.05 * Math.sin(5 * a + seed * 2.1) + 0.03 * Math.sin(7 * a));
+    const r = 16 * (1 + 0.09 * Math.sin(3 * a + seed) + 0.05 * Math.sin(5 * a + seed * 2.1) + 0.03 * Math.sin(7 * a));
     pts.push(`${(Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)}`);
   }
   return `M${pts.join('L')}Z`;
@@ -239,15 +239,15 @@ export function RecordingPill({ status, subscribeLevel, errorText, infoText, ret
           aria-live="polite"
         >
           <div className="pp-orb-wrap">
-            <svg className="pp-cloud" viewBox="-44 -44 88 88" aria-hidden>
+            <svg className="pp-cloud" viewBox="-32 -32 64 64" aria-hidden>
               <g ref={blobBRef} className="pp-blob"><path d={BLOB_B} /></g>
               <g ref={blobARef} className="pp-blob"><path d={BLOB_A} /></g>
             </svg>
             <div ref={ripplesRef} className="pp-ripples" aria-hidden />
             <span className="pp-ring" aria-hidden />
             <div ref={orbRef} className="pp-orb">
-              <PaplyMark size={22} className="pp-ico pp-ico-mark" />
-              <svg className="pp-ico pp-ico-done" width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <PaplyMark size={17} className="pp-ico pp-ico-mark" />
+              <svg className="pp-ico pp-ico-done" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M3.5 8.4 6.6 11.4 12.6 4.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span className="pp-ico pp-ico-error" aria-hidden>!</span>
