@@ -47,6 +47,15 @@ Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Window
   Einstellungen/Historie/Meetings erhalten.
 - Stimmerkennung im Meeting-Modus (siehe unten) ruht, solange der Modus Beta ist.
 
+## Ideen für die nächste Version (gesammelt, noch nicht beauftragt)
+
+- **Verlauf-Aufbewahrung wählbar:** „Verlauf behalten: 7 / 30 / 90 Tage / immer“ (heute fest 90 Tage;
+  Allan, 21.10.2026 — erst bauen, wenn weitere Punkte dazukommen).
+- Rückmeldung des Windows-Freunds einarbeiten (Einfügen, Tray, Pille, Ersteinrichtung).
+- Windows: Hinweis im Log, wenn der Fokus-Helfer wegen Gruppenrichtlinie (AllSigned) nicht startet.
+- Optional, ändert Verhalten (nur auf Wunsch): Zwischenablage nach dem Einfügen wiederherstellen;
+  Schlüssel im Schlüsselbund verschlüsseln (bei unsignierter App Passwortabfragen nach Updates).
+
 ---
 
 ## Stand 22.09.2026 (v1.13.1)
