@@ -5,13 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Recording</title>
   <style>
-    body {
+    /* Transparentes Fenster: überstimmt body bg-background aus globals.css */
+    html, body {
       margin: 0;
       padding: 0;
-      background: transparent;
-      -webkit-app-region: drag;
+      background: transparent !important;
+      overflow: hidden;
     }
   </style>
+  <script>
+    // Rückfall-Modus ohne Fenster-Transparenz (setzt electron-main.js per ?opaque=1)
+    if (new URLSearchParams(location.search).has('opaque')) document.documentElement.classList.add('opaque');
+  </script>
 </head>
 <body>
   <div id="root"></div>

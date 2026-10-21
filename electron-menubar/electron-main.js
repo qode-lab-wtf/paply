@@ -1112,54 +1112,77 @@ function createHistoryWindow() {
   historyWindow.on('closed', () => { historyWindow = null; });
 }
 
+// Aufnahme-Pille „Echo“: festes, transparentes, klick-durchlässiges Fenster. Die Pille animiert
+// nur innerhalb (Breite, Klangwolke, Schatten) – das Fenster wird nie zur Laufzeit skaliert.
+const PILL_WINDOW = { width: 320, height: 88 }; // Pille max. 296 × 44 + Klangwolke 72 px + Schattenrand
+const PILL_WINDOW_OPAQUE = { width: 300, height: 52 }; // Rückfall ohne Transparenz (Windows ohne GPU-Compositing)
+const PILL_BOTTOM_GAP = 16; // Abstand Fensterunterkante → Dock/Taskleiste (Pille sitzt ~38 px darüber)
+
+function pillNeedsOpaqueWindow() {
+  if (!isWin) return false;
+  if (process.env.PAPLY_OPAQUE_PILL === '1') return true;
+  try {
+    const compositing = String(app.getGPUFeatureStatus().gpu_compositing || '');
+    return !compositing.startsWith('enabled');
+  } catch {
+    return false;
+  }
+}
+
+// Unten mittig auf dem Bildschirm mit dem Mauszeiger; workArea respektiert Dock und Taskleiste
+// (auch wenn die Windows-Taskleiste oben oder seitlich sitzt). Vor jedem Einblenden aufrufen.
+function positionRecordingWindow(win = recordingWindow) {
+  if (!win || win.isDestroyed()) return;
+  const { screen } = require('electron');
+  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const [w, h] = win.getSize();
+  win.setPosition(
+    Math.round(workArea.x + (workArea.width - w) / 2),
+    Math.round(workArea.y + workArea.height - h - PILL_BOTTOM_GAP),
+  );
+}
+
 function createRecordingWindow() {
   if (recordingWindow && !recordingWindow.isDestroyed()) {
     return recordingWindow;
   }
 
-  const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const opaque = pillNeedsOpaqueWindow();
+  const { nativeTheme } = require('electron');
+  const size = opaque ? PILL_WINDOW_OPAQUE : PILL_WINDOW;
 
-  // Compact widget size
-  const widgetWidth = 140;
-  const widgetHeight = 52;
-
-  const windowOptions = {
-    width: widgetWidth,
-    height: widgetHeight,
+  recordingWindow = new BrowserWindow({
+    ...size,
     show: false,
+    frame: false,
     resizable: false,
-    alwaysOnTop: true,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: false,
     skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    transparent: !opaque,
+    backgroundColor: opaque ? (nativeTheme.shouldUseDarkColors ? '#1b1e1c' : '#ffffff') : '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // Pegel-Animation läuft auch, wenn das Fenster nie fokussiert wird
     },
-  };
+  });
 
-  if (isMac) {
-    windowOptions.frame = false;
-    windowOptions.transparent = true;
-    windowOptions.focusable = false;
-  } else {
-    windowOptions.frame = false;
-    windowOptions.transparent = false;
-    windowOptions.backgroundColor = '#1e1e1e';
-    windowOptions.focusable = false;
-  }
+  // Über Vollbild-Apps und auf allen Spaces; Mausklicks gehen durch die transparente Fläche hindurch
+  recordingWindow.setAlwaysOnTop(true, 'screen-saver');
+  if (isMac) recordingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  recordingWindow.setIgnoreMouseEvents(true);
 
-  recordingWindow = new BrowserWindow(windowOptions);
-
-  recordingWindow.loadFile(path.join(__dirname, 'renderer', 'recording.html'));
+  recordingWindow.loadFile(path.join(__dirname, 'renderer', 'recording.html'), opaque ? { query: { opaque: '1' } } : undefined);
   recordingWindow.on('closed', () => { recordingWindow = null; });
 
-  // Position: bottom center, slightly above the Dock
-  const x = Math.round((width - widgetWidth) / 2);
-  const y = height - widgetHeight - 80; // 80px above bottom edge (above Dock)
-  recordingWindow.setPosition(x, y);
-
+  positionRecordingWindow(recordingWindow);
   return recordingWindow;
 }
 

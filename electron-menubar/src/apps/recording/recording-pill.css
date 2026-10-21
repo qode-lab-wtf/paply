@@ -1,0 +1,310 @@
+/* Aufnahme-Pille „Echo“ – Animationen ausschließlich über transform/opacity (Breite: eine Transition). */
+
+.pp-root {
+  --pp-bg: rgb(255 255 255 / 0.96);
+  --pp-solid: #ffffff;
+  --pp-fg: #0f1f17;
+  --pp-muted: rgb(15 31 23 / 0.56);
+  --pp-line: rgb(0 0 0 / 0.08);
+  --pp-kbd: rgb(15 31 23 / 0.07);
+  --pp-green: #22b45f;
+  --pp-ok: #1fa856;
+  --pp-beak: #ffc233;
+  --pp-error: #ef4444;
+  --pp-shadow: 0 0 0 0.5px var(--pp-line), 0 4px 12px -4px rgb(0 0 0 / 0.32), 0 1px 4px -1px rgb(0 0 0 / 0.16);
+
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  letter-spacing: -0.005em;
+  color: var(--pp-fg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pp-root {
+    --pp-bg: rgb(24 28 26 / 0.96);
+    --pp-solid: #1b1e1c;
+    --pp-fg: #eef5f0;
+    --pp-muted: rgb(238 245 240 / 0.6);
+    --pp-line: rgb(255 255 255 / 0.12);
+    --pp-kbd: rgb(255 255 255 / 0.1);
+    --pp-green: #3ad879;
+    --pp-shadow: 0 0 0 0.5px var(--pp-line), inset 0 0.5px 0 rgb(255 255 255 / 0.08), 0 4px 12px -4px rgb(0 0 0 / 0.6), 0 1px 4px -1px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* Fenster ist transparent: globals.css (body bg-background) hier neutralisieren */
+html:not(.opaque),
+html:not(.opaque) body {
+  background: transparent !important;
+}
+
+/* Rückfall ohne transparente Fenster (Windows ohne GPU-Compositing): Fensterfläche = Pillenfarbe */
+html.opaque,
+html.opaque body {
+  background: #ffffff !important;
+}
+@media (prefers-color-scheme: dark) {
+  html.opaque,
+  html.opaque body {
+    background: #1b1e1c !important;
+  }
+}
+html.opaque .pp-pill {
+  box-shadow: none;
+  background: transparent;
+}
+
+.pp-shaker {
+  display: grid;
+  place-items: center;
+}
+
+.pp-pill {
+  position: relative;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--pp-bg);
+  box-shadow: var(--pp-shadow);
+  transition:
+    width var(--pp-spring-ms, 400ms) var(--pp-spring, cubic-bezier(0.3, 1.3, 0.5, 1)),
+    opacity 0.2s ease,
+    transform 0.25s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.pp-pill[data-hidden] {
+  opacity: 0;
+  transform: translateY(6px) scale(0.85);
+  transition:
+    width 0.2s ease-in,
+    opacity 0.2s ease-in,
+    transform 0.2s cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* ── Orb mit Klangwolke ── */
+.pp-orb-wrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+}
+.pp-cloud {
+  position: absolute;
+  left: -22px;
+  top: -22px;
+  width: 88px;
+  height: 88px;
+  overflow: visible;
+  pointer-events: none;
+}
+.pp-blob {
+  fill: var(--pp-green);
+  opacity: 0;
+  /* Wolke ist um (0,0) gezeichnet; Ursprung = Mitte des Orbs */
+  transform-box: view-box;
+  transform-origin: 0 0;
+  transition: opacity 0.3s ease;
+  will-change: transform, opacity;
+}
+.pp-pill:not([data-status='recording']) .pp-blob,
+.pp-pill[data-hidden] .pp-blob {
+  opacity: 0 !important;
+}
+.pp-ripples {
+  position: absolute;
+  inset: 0;
+}
+.pp-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--pp-green);
+  opacity: 0;
+}
+
+.pp-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--pp-green) 88%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+}
+.pp-pill[data-status='processing'] .pp-ring {
+  opacity: 1;
+  animation: pp-spin 0.9s linear infinite;
+}
+.pp-pill[data-status='polishing'] .pp-ring {
+  opacity: 1;
+  background: conic-gradient(var(--pp-green), var(--pp-beak), #fff6d6, var(--pp-green), var(--pp-beak), var(--pp-green));
+  animation: pp-spin 1.6s linear infinite;
+}
+@keyframes pp-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.pp-orb {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--pp-bg);
+  display: grid;
+  place-items: center;
+  transition: background-color 0.3s ease;
+}
+.pp-pill[data-status='done'] .pp-orb {
+  background: var(--pp-ok);
+}
+.pp-pill[data-status='error'] .pp-orb {
+  background: var(--pp-error);
+}
+
+.pp-ico {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 0.2s ease,
+    transform 0.45s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.pp-ico-done {
+  color: #fff;
+}
+.pp-ico-done path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  transition: stroke-dashoffset 0.32s cubic-bezier(0.3, 0, 0.2, 1) 0.1s;
+}
+.pp-ico-error {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.pp-ico-empty i {
+  display: block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pp-muted);
+}
+.pp-pill:is([data-status='recording'], [data-status='processing'], [data-status='polishing'], [data-status='agent']) .pp-ico-mark,
+.pp-pill[data-status='done'] .pp-ico-done,
+.pp-pill[data-status='error'] .pp-ico-error,
+.pp-pill[data-status='empty'] .pp-ico-empty {
+  opacity: 1;
+  transform: none;
+}
+.pp-pill[data-status='done'] .pp-ico-done path {
+  stroke-dashoffset: 0;
+}
+
+/* ── Label rechts vom Orb ── */
+.pp-label-clip {
+  position: absolute;
+  left: 44px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  border-radius: 0 999px 999px 0;
+}
+.pp-label {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: max-content;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: pp-in 0.28s cubic-bezier(0.3, 0.7, 0.4, 1) both 0.06s;
+}
+@keyframes pp-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.pp-text {
+  display: block;
+  max-width: 232px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-strong {
+  font-weight: 650;
+}
+.pp-muted {
+  color: var(--pp-muted);
+  font-weight: 500;
+}
+.pp-small {
+  font-size: 11.5px;
+}
+.pp-timer {
+  font-weight: 500;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pp-muted);
+  letter-spacing: 0.01em;
+}
+.pp-two {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.pp-two .pp-text {
+  font-size: 12.5px;
+}
+.pp-retry {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pp-muted);
+}
+.pp-retry kbd {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: inherit;
+  color: var(--pp-fg);
+  background: var(--pp-kbd);
+  border-radius: 5px;
+  padding: 1px 5px 2px;
+  box-shadow: inset 0 -1px 0 var(--pp-line);
+}
+.pp-agent {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* ── Reduzierte Bewegung: nur Überblendungen ── */
+@media (prefers-reduced-motion: reduce) {
+  .pp-pill,
+  .pp-pill[data-hidden] {
+    transition: opacity 0.15s linear;
+    transform: none !important;
+  }
+  .pp-ico {
+    transition: opacity 0.15s linear;
+    transform: none !important;
+  }
+  .pp-label {
+    animation: none;
+  }
+  .pp-pill[data-status='processing'] .pp-ring,
+  .pp-pill[data-status='polishing'] .pp-ring {
+    animation: none;
+    opacity: 0.7;
+  }
+}
