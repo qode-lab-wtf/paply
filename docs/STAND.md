@@ -1,6 +1,6 @@
 # Paply — Stand
 
-**Zeitpunkt:** 21.10.2026 · **Phase:** Release v1.14.0 („einmal abrunden“, Weitergabe an Windows-Nutzer)
+**Zeitpunkt:** 21.10.2026, nachmittags · **Phase:** Betrieb v1.14.0 (veröffentlicht: https://github.com/qode-lab-wtf/paply/releases/tag/v1.14.0)
 
 ## v1.14.0 — Abrunden für Mac + Windows (21.10.2026)
 
@@ -27,7 +27,17 @@ Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Window
 - **Design:** Logo „p-Kopf“ (Opus-5.5-Entwurf B, von Allan gewählt), neue Icons für Dock/Menüleiste/
   Windows-Tray/Installer, Aufnahme-Pille „Echo“ mit Zeitanzeige, veredelter Start-/Stopp-Ton,
   Markenfarben.
-- Automatische Tests: 372 grün. Windows nur per CI-Build + Praxistest beim Freund geprüft.
+- **Geprüft:** 451 automatische Tests grün; drei Opus-5.5-Reviews (Diktat-Kern, Integration, Gegenprüfung der
+  Fixes) — Befunde behoben; echter Durchlauf in der Test-App (Fake-Mikrofon-WAVs + echtes Groq) für Stille,
+  Rauschen, Klick, kurze Wörter („Danke.“, „Tschüss.“), „Vielen Dank“ laut/leise/Café und ganze Sätze;
+  gepacktes Mac-App-Bundle gestartet und diktiert; CI-Builds Mac + Windows grün.
+- **Behoben aus Reviews u. a.:** Windows-Auto-Update (Installer-Name passte nicht zu `latest.yml`, seit
+  v1.13.1 kaputt), Test-App startete nicht neben installierter App, Agent-Wechsel während des Diktats,
+  Kürzel-Erfassung mit ⌥ auf dem Mac (seit v1.13.1) und QWERTZ unter Windows, Backups/Wiederholen.
+- Je Diktat stehen Pegel-Kennzahlen (`level`: speechMs/peak/floor, kein Inhalt) in der Historie — zum
+  Nachjustieren des Stille-Filters, falls bei Allan im echten Raum doch ein „Vielen Dank“ durchrutscht.
+- Bekannte Restpunkte: Fokus-Helfer unter Windows nur per Code/Tests geprüft (Praxistest beim Freund);
+  bei Gruppenrichtlinie „AllSigned“ fügt Windows ohne Fokus-Wiederherstellung ein.
 
 ## Offen / braucht Allan
 
