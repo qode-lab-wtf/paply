@@ -42,8 +42,9 @@ Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Window
 ## Offen / braucht Allan
 
 - Praxistest v1.14.0 auf dem MacBook und Rückmeldung des Windows-Freunds (Einfügen, Tray, Pille).
-- MacBook per `ssh macbook` noch nicht erreichbar (Entfernte Anmeldung aus) — ungepushte Stände dort
-  nicht geprüft.
+- MacBook geprüft (21.10.2026, per `ssh macbook`, Benutzer `allanha`): dort liegt kein Paply-Repository
+  (nur `~/Vibe/paply.dev`, anderes Produkt) → keine ungepushten Stände. App dort auf v1.14.0 aktualisiert,
+  Einstellungen/Historie/Meetings erhalten.
 - Stimmerkennung im Meeting-Modus (siehe unten) ruht, solange der Modus Beta ist.
 
 ---
