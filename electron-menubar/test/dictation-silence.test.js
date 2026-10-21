@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { isBackupAtOrBefore, compareBackups } from '../dictation/backup-order.js';
 import { createDictationJobs } from '../dictation/jobs.js';
-import { readResponse, friendlyError } from '../dictation/policies.js';
+import { readResponse, friendlyError, explainDictationStatus } from '../dictation/policies.js';
 import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from '../audio/silence-filter.js';
 
 // Die echten Main-Funktionen mit isoliertem Store/Fenster/Netzwerk ausführen.
@@ -22,12 +23,12 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
   const values = { language: 'de', groqApiKey: 'test-placeholder', enablePolish: true, autopaste: true, ...settings };
   const window = { webContents: { send: vi.fn() }, hide: vi.fn(), showInactive: vi.fn() };
   const context = vm.createContext({
-    process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError,
+    process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
     savePreviousApp: async () => null, positionRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date,
     fs, path, app: { getPath: () => directory },
-    filterTranscription, shouldSkipTranscription, validateVoiceActivity,
+    filterTranscription, shouldSkipTranscription, validateVoiceActivity, isBackupAtOrBefore, compareBackups,
     GROQ_API_URL: 'https://example.invalid/transcribe',
     getStore: () => ({ get: key => values[key] }),
     fetch: vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(response) })),
@@ -55,10 +56,10 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     for (const fn of [context.fetch, context.polishText, context.addToHistory, context.autopasteText, context.clipboard.writeText]) {
       expect(fn).not.toHaveBeenCalled();
     }
-    expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: '' }));
+    expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: meta.peakDbfs <= -100 ? 'Kein Mikrofonsignal' : '' }));
     expect(context.setTimeout).toHaveBeenCalledWith(expect.any(Function), 900);
-    expect(fs.readdirSync(path.join(directory, 'audio-backups'))).toEqual([]);
-    expect(context.getAudioBackup()).toBeNull();
+    expect(fs.readdirSync(path.join(directory, 'audio-backups'))).toHaveLength(2);
+    expect(context.getAudioBackup()).toEqual(Buffer.from('audio'));
   });
 
   it('behält gesprochene Dankesformeln im kompletten bisherigen Ablauf', async () => {
@@ -86,11 +87,11 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: '' }));
   });
 
-  it('verwirft die real gemessene Groq-Stille-Phrase trotz no_speech_prob=0 bei weniger als 250 ms Aktivität', async () => {
+  it('verwirft die real gemessene Groq-Stille-Phrase trotz no_speech_prob=0 bei einem leisen Klick unter 120 ms Aktivität', async () => {
     const { context, window } = main({ text: ' Vielen Dank.', segments: [
       { text: ' Vielen Dank.', no_speech_prob: 0, avg_logprob: -0.28, compression_ratio: 0.62 },
     ] });
-    await context.processAudioData(Buffer.from('audio'), false, { ...speech, speechMs: 200 });
+    await context.processAudioData(Buffer.from('audio'), false, { ...speech, speechMs: 80 });
     expect(context.fetch).toHaveBeenCalledTimes(1);
     expect(context.addToHistory).not.toHaveBeenCalled();
     expect(context.autopasteText).not.toHaveBeenCalled();
@@ -120,13 +121,13 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
   });
 
-  it.each(['RAM', 'Festplatte'])('nutzt gesicherte Stille-Metadaten beim Retry aus %s', async origin => {
+  it.each(['RAM', 'Festplatte'])('umgeht gesicherte lokale Stille-Metadaten beim Retry aus %s', async origin => {
     const { context } = main();
     await context.saveAudioBackup(Buffer.from('audio'), silence);
     if (origin === 'Festplatte') vm.runInContext('lastAudioBackup = null; lastAudioVoiceActivity = undefined; backupTimestamp = null;', context);
     await context.retryLastRecording();
-    expect(context.fetch).not.toHaveBeenCalled();
-    expect(context.addToHistory).not.toHaveBeenCalled();
+    expect(context.fetch).toHaveBeenCalledOnce();
+    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
     expect(context.getAudioBackup()).toBeNull();
   });
 
@@ -144,4 +145,22 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.fetch).toHaveBeenCalledTimes(1);
     expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
   });
+});
+
+it('behält das Backup einer lokal verworfenen Phrase und rettet sie beim Retry', async () => {
+  const { context } = main({ text: 'Danke.', segments: [{ text: 'Danke.', no_speech_prob: 0, avg_logprob: -0.28 }] });
+  const click = { ...speech, floorDbfs: -55, peakDbfs: -30, speechMs: 80 };
+  await context.saveAudioBackup(Buffer.from('click-or-word'), click);
+  await context.processAudioData(Buffer.from('click-or-word'), false, click);
+  expect(context.autopasteText).not.toHaveBeenCalled();
+  expect(context.getAudioBackup()).toEqual(Buffer.from('click-or-word'));
+  await context.retryLastRecording();
+  expect(context.autopasteText).toHaveBeenCalledWith('Danke.', null);
+  expect(context.getAudioBackup()).toBeNull();
+});
+
+it.each([[undefined, 'fehlt'], [{ invalid: true }, 'ungültig'], [speech, 'gültig']])('protokolliert Messdatenstatus %s ohne Inhalt', async (meta, expected) => {
+  const { context } = main();
+  await context.processAudioData(Buffer.from('audio'), false, meta);
+  expect(context.console.log).toHaveBeenCalledWith('[Diktat] voiceActivity:', expected);
 });

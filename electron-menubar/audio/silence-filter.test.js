@@ -69,11 +69,11 @@ describe('Relative Sprachaktivität unter realistischen Grundpegeln', () => {
 });
 
 describe('Diktat-Stillefilter', () => {
-  it('überspringt Groq nur bei zuverlässiger Messung mit unter 80 ms Aktivität und weniger als 10 dB Dynamik', () => {
+  it('überspringt Groq nur bei zuverlässiger Messung mit unter 80 ms Aktivität und weniger als 6 dB Dynamik', () => {
     expect(shouldSkipTranscription(silence)).toBe(true);
     expect(shouldSkipTranscription(speech)).toBe(false);
-    expect(shouldSkipTranscription({ ...silence, speechMs: 79, peakDbfs: -81 })).toBe(true);
-    expect(shouldSkipTranscription({ ...silence, speechMs: 80, peakDbfs: -81 })).toBe(false);
+    expect(shouldSkipTranscription({ ...silence, speechMs: 79, peakDbfs: -85 })).toBe(true);
+    expect(shouldSkipTranscription({ ...silence, speechMs: 80, peakDbfs: -85 })).toBe(false);
     expect(shouldSkipTranscription({ ...silence, speechMs: 40, peakDbfs: -35 })).toBe(false);
     expect(shouldSkipTranscription({ ...silence, peakDbfs: -80 })).toBe(false);
     expect(shouldSkipTranscription({ ...silence, peakDbfs: -120, floorDbfs: -120 })).toBe(true);
@@ -127,10 +127,10 @@ describe('Diktat-Stillefilter', () => {
     }
   });
 
-  it('nutzt für mehrdeutige Phrasen die Grenze unter 250 ms gemessener Aktivität', () => {
+  it('nutzt für mehrdeutige Phrasen die Grenze unter 120 ms nur bei leisem Grundpegel', () => {
     const response = { text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0, -0.28)] };
-    expect(filterTranscription(response, { ...speech, speechMs: 249 }).text).toBe('');
-    expect(filterTranscription(response, { ...speech, speechMs: 250 }).text).toBe('Vielen Dank.');
+    expect(filterTranscription(response, { ...speech, speechMs: 119 }).text).toBe('');
+    expect(filterTranscription(response, { ...speech, speechMs: 120 }).text).toBe('Vielen Dank.');
     expect(filterTranscription(response).text).toBe('Vielen Dank.');
     expect(filterTranscription(response, { ...speech, speechMs: 100, measuredMs: 2000 }).text).toBe('Vielen Dank.');
   });
@@ -212,5 +212,37 @@ describe('Diktat-Stillefilter', () => {
     expect(shouldSkipTranscription(oldMeta)).toBe(false);
     expect(filterTranscription({ text: 'Vielen Dank.', segments: [segment('Vielen Dank.', 0.99)] }, oldMeta).text).toBe('Vielen Dank.');
     expect(filterTranscription({ text: 'Amara.org' }, oldMeta).text).toBe('');
+  });
+});
+
+describe('Review R1: kurze echte Wörter und Grenzwerte', () => {
+  it.each([
+    ['Danke.', -60, -25, 200, 'Danke.'],
+    ['Tschüss.', -60, -25, 240, 'Tschüss.'],
+    ['Vielen Dank.', -35, -20, 40, 'Vielen Dank.'],
+    ['Vielen Dank.', -70, -65, 0, ''],
+    ['Vielen Dank.', -55, -30, 80, ''],
+    ['Vielen Dank.', -50, -38, 119, ''],
+    ['Vielen Dank.', -50, -38, 120, 'Vielen Dank.'],
+    ['Vielen Dank.', -45, -30, 40, 'Vielen Dank.'],
+    ['Vielen Dank.', -35, -24, 400, ''],
+    ['Vielen Dank.', -35, -23, 40, 'Vielen Dank.'],
+  ])('%s bei Grund %s / Spitze %s / Aktivität %s ms → %j', (text, floorDbfs, peakDbfs, speechMs, expected) => {
+    const meta = { ...silence, durationMs: 600, measuredMs: 600, floorDbfs, peakDbfs, speechMs };
+    expect(filterTranscription({ text }, meta).text).toBe(expected);
+  });
+  it.each([6, 7, 8, 9])('überspringt echte Dynamik von %s dB über Rauschen nicht', dynamic => {
+    expect(shouldSkipTranscription({ ...silence, floorDbfs: -35, peakDbfs: -35 + dynamic, speechMs: 40 })).toBe(false);
+  });
+  it('behält kurze PTT-Aufnahmen ohne zuverlässige Messdauer', () => {
+    expect(filterTranscription({ text: 'Danke.' }, { ...silence, durationMs: 300, measuredMs: 300, speechMs: 200, peakDbfs: -20 }).text).toBe('Danke.');
+  });
+  it('ignoriert beim Retry Phrase und Segment-Stille, aber weiterhin Artefakte und triviale Texte', () => {
+    const options = { bypassLocalFilters: true };
+    const response = { text: 'Danke.', segments: [segment('Danke.', 0.99, -2)] };
+    expect(filterTranscription(response, silence, options)).toMatchObject({ text: 'Danke.', droppedSegments: 0, reason: null });
+    for (const text of ['Amara.org', 'Untertitel im Auftrag des ZDF, 2017', 'Copyright WDR 2023', '...', '?']) {
+      expect(filterTranscription({ text }, silence, options).text).toBe('');
+    }
   });
 });
