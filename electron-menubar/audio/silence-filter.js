@@ -104,4 +104,4 @@ function filterTranscription(response, inputMeta, { bypassLocalFilters = false }
   return { text, droppedSegments, reason };
 }
 
-module.exports = { filterTranscription, shouldSkipTranscription, validateVoiceActivity };
+module.exports = { filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment };

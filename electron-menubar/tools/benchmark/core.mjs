@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import vm from 'node:vm';
+import legacyPrompts from './legacy-prompts.cjs';
 
 export const words = text => [...String(text ?? '').normalize('NFC').matchAll(/[\p{L}\p{N}]+/gu)].map(m => m[0]);
 export const normalize = text => words(text).map(w => w.toLocaleLowerCase('de'));
@@ -132,12 +132,8 @@ export const STRICT_PROMPT = `Poliere das folgende deutsche Diktat nur leicht. K
 
 export async function appPrompts() {
   const source = await readFile(new URL('../../electron-main.js', import.meta.url), 'utf8');
-  const start = source.indexOf('function getPolishPrompt('), end = source.indexOf('async function polishText(', start);
-  const system = source.slice(end, source.indexOf('// ============================================================================', end)).match(/role: 'system', content: ('(?:[^'\\]|\\.)*')/);
-  if (start < 0 || end < 0 || !system) throw new Error('App-Prompt-Struktur geändert; P0-Extraktion prüfen.');
-  const context = vm.createContext({});
-  new vm.Script(source.slice(start, end)).runInContext(context, { timeout: 1000 });
-  return { getPrompt: (text, language, flavor, custom) => context.getPolishPrompt(text, language, flavor, custom), system: vm.runInContext(system[1], context), source };
+  return { getPrompt: legacyPrompts.getPolishPrompt,
+    system: 'Du bist ein Transkriptions-Polierer. Gib NUR den korrigierten Text zurück. Keine Kommentare, keine Erklärungen.', source };
 }
 export function profileFor(meta, config) {
   const id = meta.activeProfile || 'coding';
@@ -146,7 +142,7 @@ export function profileFor(meta, config) {
   const custom = config.customAgents?.find(a => a.id === id);
   if (custom) return { flavor: 'custom', custom };
   const defaults = { coding: 'code', code: 'code', meeting: 'meeting', dictation: 'plain', plain: 'plain' };
-  return { flavor: defaults[id] || 'code', custom: null, warning: defaults[id] ? null : `Profil ${id} unbekannt; P0 mit code (heutige App-Vorgabe).` };
+  return { flavor: defaults[id] || 'code', custom: null, warning: defaults[id] ? null : `Profil ${id} unbekannt; P0 mit code (App-Vorgabe v1.14.0).` };
 }
 
 // Shared changes against a read-aloud script are evidence, not ground truth.

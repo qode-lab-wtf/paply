@@ -6,13 +6,13 @@
 // Limit/Fehler/fehlendem Key auf den nächsten Anbieter zurück. 'groq'/'gemini' erzwingen einen
 // Anbieter. Gibt { text, model } zurück. Bei 429 hat der Fehler code='rate_limit'.
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
 // Ausweich-Reihenfolge bei nicht verfügbar/überlastet/Kontingent. Kein -lite: lehnt thinkingBudget 0 mit 400 ab.
 const GEMINI_FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
 const GEMINI_RETRY_MS = 4000;                    // eine Wiederholung je Modell bei 5xx, bevor gewechselt wird
-const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
+const { MEETING_MODEL: DEFAULT_GROQ_MODEL, GROQ_CHAT_URL, groqReasoningOptions } = require('../dictation/groq-models');
+const GROQ_URL = GROQ_CHAT_URL;
 
 async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey, model, fetchImpl }) {
   const fetch = fetchImpl || globalThis.fetch;
@@ -23,6 +23,7 @@ async function callGroq({ system, user, jsonMode, maxTokens, temperature, apiKey
       model,
       temperature,
       max_tokens: maxTokens,
+      ...groqReasoningOptions(model),
       ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),

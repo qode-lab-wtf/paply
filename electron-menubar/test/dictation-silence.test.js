@@ -1,3 +1,4 @@
+import { vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations } from '../dictation/polish-prompt.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,7 +7,7 @@ import vm from 'node:vm';
 import { isBackupAtOrBefore, compareBackups } from '../dictation/backup-order.js';
 import { createDictationJobs } from '../dictation/jobs.js';
 import { readResponse, friendlyError, explainDictationStatus } from '../dictation/policies.js';
-import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from '../audio/silence-filter.js';
+import { filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment } from '../audio/silence-filter.js';
 
 // Die echten Main-Funktionen mit isoliertem Store/Fenster/Netzwerk ausführen.
 // Electron wird weder geladen noch gestartet, es werden keine Hotkeys registriert.
@@ -28,7 +29,8 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
     savePreviousApp: async () => null, positionRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date,
     fs, path, app: { getPath: () => directory },
-    filterTranscription, shouldSkipTranscription, validateVoiceActivity, isBackupAtOrBefore, compareBackups,
+    vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations,
+    filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment, isBackupAtOrBefore, compareBackups,
     GROQ_API_URL: 'https://example.invalid/transcribe',
     getStore: () => ({ get: key => values[key] }),
     fetch: vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(response) })),
@@ -70,7 +72,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(body.get('response_format')).toBe('verbose_json');
     expect(body.get('model')).toBe('whisper-large-v3-turbo');
     expect(body.get('language')).toBe('de');
-    expect(context.polishText).toHaveBeenCalledWith('Vielen Dank.', 'de', 'code', null);
+    expect(context.polishText).toHaveBeenCalledWith('Vielen Dank.', 'de', 'code', null, []);
     expect(context.addToHistory).toHaveBeenCalledWith(expect.objectContaining({ transcript: 'Vielen Dank.', polished: 'Vielen Dank.', language: 'de' }));
     expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
     expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'done', detail: '' }));

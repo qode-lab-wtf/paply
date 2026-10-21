@@ -82,8 +82,8 @@ Beim nächsten vollständigen `all` werden die übrigen Resultate kostenlos aus 
   `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-flash-latest`.
   Wortgetreu mit Füllwörtern/Wiederholungen. Tatsächlich benutztes Modell steht beim Ergebnis.
 - `vocab.txt` wird unabhängig vom Inhalt ignoriert; die historische Variante d wird nicht mehr gewertet.
-- **P0:** `getPolishPrompt` und System-Prompt direkt aus `electron-main.js` ausgelesen.
-  Ausschließlich diese promptreinen Funktionen werden in einer VM ausgewertet, kein App-Import.
+- **P0:** eingefrorene eingebaute Prompts aus v1.14.0 in `legacy-prompts.cjs` (historischer Vergleich). Eigene Agenten nutzen weiterhin das gemeinsame App-Modul.
+  Die promptreinen Module werden ohne Electron geladen.
   `activeProfile` wird wie in der App gegen `profiles` / `customAgents` aus den aktuellen
   Einstellungen aufgelöst. Standardprofile: coding→code, dictation→plain, meeting→meeting.
   Optional `polishFlavor`/`customSettings` in der Metadatei als historische Momentaufnahme.
@@ -91,7 +91,7 @@ Beim nächsten vollständigen `all` werden die übrigen Resultate kostenlos aus 
 - **P1:** minimales Glätten, strenge Wort-/Sinn-Treue, eindeutige Selbstkorrekturen auflösen,
   Fachbegriffe/Englisch beibehalten, Temperatur 0.
 - Poliermodelle: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, nach
-  `GET /openai/v1/models` (24 h Cache). P0 behält die Temperaturvorgabe der App (nicht gesetzt).
+  `GET /openai/v1/models` (24 h Cache). P0 behält die frühere Temperaturvorgabe (nicht gesetzt).
   GPT-OSS nutzt `reasoning_format: hidden`, 8192 Ausgabetokens; nur finale, nicht abgeschnittene
   Antworten werden gewertet. Verbleibende `<think>`-Blöcke werden entfernt.
 
@@ -200,7 +200,7 @@ node tools/benchmark/bench.mjs report --data /tmp/paply-bench/aufnahmen
 node tools/benchmark/bench.mjs context --data /tmp/paply-bench/aufnahmen --offline
 ```
 
-Sortierung nach `createdAt`; Aufnahmen ohne gültige Zeit folgen danach in ID-Reihenfolge. P2 erhält den aktuellen Rohtext a plus ausschließlich die letzten drei vorherigen a-Rohtranskripte in zeitlicher Reihenfolge als Hintergrund. Es werden keine Referenzen, Ideale, polierten Texte oder Wörterlisten in den Hintergrund übernommen. Bei der ersten Aufnahme ist er leer. Segmente mit `avg_logprob < -0.5` werden mitsamt Text und Zeiten als unsicher gekennzeichnet. Niedrige Sicherheit ist allein kein Korrekturauftrag. `context.mjs` enthält den vollständigen generischen Prompt.
+Sortierung nach `createdAt`; Aufnahmen ohne gültige Zeit folgen danach in ID-Reihenfolge. P2 erhält den aktuellen Rohtext a plus ausschließlich die letzten drei vorherigen a-Rohtranskripte in zeitlicher Reihenfolge als Hintergrund. Es werden keine Referenzen, Ideale, polierten Texte oder Wörterlisten in den Hintergrund übernommen. Bei der ersten Aufnahme ist er leer. Segmente mit `avg_logprob < -0.5` werden mitsamt Text und Zeiten als unsicher gekennzeichnet. Niedrige Sicherheit ist allein kein Korrekturauftrag. `dictation/polish-prompt.js` ist die gemeinsame P2-Prompt-Quelle für App und Benchmark. `context.mjs` verwendet denselben Nachrichtenaufbau. Die App begrenzt ihren Live-Verlauf zusätzlich auf 30 Minuten und verwirft riskante Modellantworten; der historische Kontext-Vergleich misst weiterhin die ungefilterten Modellantworten mit den letzten drei Aufnahmen des Datensatzes.
 
 W-ctx konditioniert Whisper Turbo mit dem letzten Ende dieser Rohtext-Historie (höchstens 200 Unicode-Zeichen, Anfang an Wortgrenze), danach folgt derselbe P2-Prompt auf dem konditionierten Rohtext. Der Verlauf stammt in beiden Varianten immer aus a, nicht rekursiv aus konditionierten oder polierten Ausgaben. Damit bleibt der Kontext kontrolliert vergleichbar. `results.json` speichert die tatsächlich versendeten P2-Nachrichten, Kontext-IDs, Whisper-Konditionierung und Prompt-/Eingabe-Hashes. Änderungen an Verlauf, Eingabe oder Unsicherheitsmarkierung machen alte Resultate ungültig.
 

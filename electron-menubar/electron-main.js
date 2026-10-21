@@ -41,13 +41,22 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { createDictationJobs } = require('./dictation/jobs');
 const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order');
-const { polishTokenBudget, completePolish, friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
+const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
 const { captureMacApp, pasteMac } = require('./dictation/mac-paste');
 const { createWindowsFocus, pasteWindows } = require('./dictation/windows-paste');
+const { buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt } = require('./dictation/polish-prompt');
+const { getCustomAgentPrompt } = require('./dictation/custom-agent-prompt');
+const { createPolishClient } = require('./dictation/polish-client');
+const { MEETING_MODEL, migrateMeetingModel } = require('./dictation/groq-models');
+let polishUnavailable = false;
+const runPolish = createPolishClient({
+  onUnavailable: () => { polishUnavailable = true; notifySettingsChanged(); },
+  log: reason => console.log('[Polieren] Rohtext verwendet:', reason),
+});
 const dictationJobs = createDictationJobs();
 const windowsFocus = createWindowsFocus({ scriptDirectory: () => path.join(app.getPath('userData'), 'helpers') });
 
-const { filterTranscription, shouldSkipTranscription, validateVoiceActivity } = require('./audio/silence-filter');
+const { filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment } = require('./audio/silence-filter');
 
 // ============================================================================
 // PLATFORM HELPERS
@@ -111,6 +120,7 @@ function getStore() {
       defaults: {
         groqApiKey: '',
         enablePolish: false,
+        customVocabulary: '',
         shortcut: getDefaultShortcut(),
         autoStart: false,
         language: 'de',
@@ -164,7 +174,7 @@ function getStore() {
         meetings: [],
         meetingEnabled: false,
         meetingHotkey: 'CommandOrControl+Shift+X',
-        meetingSummaryModel: 'llama-3.3-70b-versatile',
+        meetingSummaryModel: MEETING_MODEL,
         // System-Audio (Gegenstelle eines Anrufs): 'auto' = automatisch erkennen (empfohlen).
         systemAudioMode: 'auto',
         // Google Gemini: Meeting-Auswertung (Audio → Wortlaut + Sprecher) und Bericht; Groq als Fallback.
@@ -173,6 +183,7 @@ function getStore() {
         llmProvider: 'auto', // 'auto' | 'groq' | 'gemini'
       },
     });
+    migrateMeetingModel(store);
   }
   return store;
 }
@@ -451,7 +462,6 @@ function deleteHistoryItem(id) {
 // API CALLS
 // ============================================================================
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GITHUB_REPO = 'qode-lab-wtf/paply';
 const CURRENT_VERSION = require('./package.json').version;
 
@@ -469,6 +479,8 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
       formData.append('model', 'whisper-large-v3-turbo');
       formData.append('language', language);
       formData.append('response_format', 'verbose_json');
+      const vocabulary = vocabularyPrompt(getStore().get('customVocabulary'));
+      if (vocabulary) formData.append('prompt', vocabulary);
 
       console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
 
@@ -512,7 +524,12 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',
           'verworfene Segmente:', filtered.droppedSegments);
       }
-      return filtered.text;
+      // Standard bleibt string; nur der Diktatpfad fordert zusätzliche Metadaten an.
+      return options.returnDetails ? {
+        text: filtered.text,
+        segments: filtered.text ? uncertainSegments({ segments: (Array.isArray(json.segments) ? json.segments : [])
+          .filter(segment => segment && (options.bypassLocalFilters || !isSilentSegment(segment))) }) : [],
+      } : filtered.text;
     } catch (error) {
       // Besseres Logging mit Ursache
       console.error(`Transcription attempt ${i + 1} failed:`, error.name, error.status || '');
@@ -761,258 +778,18 @@ function compareVersions(a, b) {
   return 0;
 }
 
-function getPolishPrompt(text, language, flavor, customSettings = null) {
-  // Handle custom agent settings
-  if (flavor === 'custom' && customSettings) {
-    return getCustomAgentPrompt(text, language, customSettings);
-  }
-
-  const flavorPrompts = {
-    code: `Du polierst Sprachtranskriptionen eines Softwareentwicklers. Der Text wurde per Whisper transkribiert — Tech-Begriffe sind oft falsch geschrieben.
-
-DEINE AUFGABE:
-1. Entferne Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher
-2. Korrigiere Grammatik und Satzbau — aber behalte den INHALT und die AUSSAGE exakt bei
-3. Erkenne und korrigiere ALLE falsch transkribierten Tech-Begriffe aus der Softwareentwicklung
-
-TECH-BEGRIFFE KORREKTUR (Whisper schreibt diese oft falsch):
-- Frameworks/Libraries: React, Next.js, Vue, Angular, Svelte, Express, Django, Flask, Laravel, Rails, Spring Boot, FastAPI, Tailwind CSS, shadcn/ui, Prisma, Drizzle, tRPC, Zustand, Redux, Vite, Webpack, Turbopack
-- Sprachen: TypeScript, JavaScript, Python, Rust, Go, Swift, Kotlin, C#, C++, PHP, Ruby, Dart, SQL
-- Tools/Plattformen: GitHub, GitLab, Docker, Kubernetes, Vercel, Netlify, AWS, Supabase, Firebase, MongoDB, PostgreSQL, Redis, Elasticsearch, Terraform, Jenkins, CircleCI
-- React-Begriffe: useState, useEffect, useRef, useMemo, useCallback, useContext, useReducer, JSX, TSX, Props, State, Hooks, Component, Provider, Context
-- Allgemein: API, REST, GraphQL, WebSocket, OAuth, JWT, CORS, CRUD, CLI, IDE, npm, yarn, pnpm, Bun, Node.js, Deno, ESLint, Prettier, CI/CD, DevOps, Frontend, Backend, Fullstack, Middleware, Deployment, Repository, Branch, Merge, Pull Request, Commit, Endpoint, Payload, Middleware, Groq, LLM, GPT, Claude, Anthropic, OpenAI
-- Wenn der Sprecher ein Wort ausspricht und danach buchstabiert oder korrigiert, verwende die korrigierte Version
-- "Grog" oder "GROG" → Groq, "Lama" oder "Lava" → Llama, "shad cn" → shadcn, "use state" → useState, "type script" → TypeScript, "next js" → Next.js, "node js" → Node.js, "Hiku" oder "HICUM" → Haiku
-
-DATEINAMEN:
-- Setze @ vor Dateinamen: "datei punkt tsx" → @datei.tsx
-- CamelCase beibehalten: @RecordingWidget.tsx
-- GROSSBUCHSTABEN beibehalten: @ROADMAP.md
-
-WICHTIG:
-- Gib NUR den korrigierten Text zurück, KEINE Kommentare oder Erklärungen
-- Ändere NICHT den Sinn oder füge eigene Inhalte hinzu
-- Behalte den natürlichen Sprechstil bei, mache nur technische Korrekturen
-
-TEXT:
-${text}`,
-
-    meeting: `Du polierst Sprachtranskriptionen von Meetings und Besprechungen. Erstelle daraus ein sauberes Protokoll.
-
-DEINE AUFGABE:
-1. Entferne Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne), Wiederholungen, Versprecher
-2. Strukturiere den Inhalt als übersichtliche Stichpunkte
-3. Erkenne und markiere Aufgaben, Entscheidungen und nächste Schritte
-
-FORMATIERUNG:
-- Personennamen korrekt: Max Müller (nicht max müller)
-- Datum: "am fünfzehnten dezember" → am 15. Dezember
-- Uhrzeit: "um vierzehn uhr" → um 14:00 Uhr
-- E-Mail: "max at firma punkt de" → max@firma.de
-- URLs: "www punkt beispiel punkt com" → www.beispiel.com
-- Action Items mit → oder - [ ] markieren
-- Mehrere Themen als separate Stichpunkte strukturieren
-
-WICHTIG:
-- Gib NUR das formatierte Protokoll zurück, KEINE Kommentare
-- Behalte alle Fakten, Namen, Zahlen und Entscheidungen exakt bei
-- Fasse NICHT zusammen — strukturiere nur
-
-TEXT:
-${text}`,
-
-    plain: `Du polierst Sprachtranskriptionen. Säubere den Text grammatikalisch, ohne den Inhalt oder Stil zu verändern.
-
-DEINE AUFGABE:
-1. Entferne Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher
-2. Korrigiere Grammatik, Satzbau, Interpunktion
-3. Deutsche Rechtschreibung: Substantive groß, korrekter Satzanfang
-
-GESPROCHENE SATZZEICHEN UMWANDELN:
-- "Punkt" → .  "Komma" → ,  "Fragezeichen" → ?  "Ausrufezeichen" → !
-- "neuer Absatz" oder "Absatz" → Zeilenumbruch
-
-WICHTIG:
-- Gib NUR den korrigierten Text zurück, KEINE Kommentare
-- Minimale Eingriffe — behalte den natürlichen Sprachfluss bei
-- Ändere NICHT den Inhalt, nur die Form
-
-TEXT:
-${text}`,
-  };
-
-  return flavorPrompts[flavor] || flavorPrompts.code;
-}
-
-// Generate prompt for custom agents with their specific settings
-function getCustomAgentPrompt(text, language, settings) {
-  // Special handling for Prompt Generator mode
-  if (settings.isPromptGenerator) {
-    return getPromptGeneratorPrompt(text, language, settings);
-  }
-
-  const toneDescriptions = {
-    technical: 'technisch und präzise',
-    formal: 'formell und professionell',
-    casual: 'locker und umgangssprachlich',
-    creative: 'kreativ und ausdrucksstark'
-  };
-
-  const formatDescriptions = {
-    prose: 'als Fließtext',
-    bullets: 'als Stichpunkte',
-    markdown: 'mit Markdown-Formatierung',
-    code: 'als Code-Kommentare oder technische Dokumentation'
-  };
-
-  const lengthDescriptions = {
-    short: 'kurz und knapp',
-    medium: 'ausgewogen',
-    long: 'ausführlich und detailliert'
-  };
-
-  const tone = toneDescriptions[settings.tone] || 'neutral';
-  const format = formatDescriptions[settings.format] || 'als Fließtext';
-  const length = lengthDescriptions[settings.length] || 'ausgewogen';
-  const creativity = settings.creativity || 50;
-  const outputLang = settings.outputLang || 'same';
-  const domain = settings.domain || 'general';
-  const fillerWords = settings.fillerWords !== false; // Default: remove filler words
-
-  let domainHint = '';
-  if (domain && domain !== 'general') {
-    const domainHints = {
-      tech: 'Beachte Tech-Begriffe (APIs, Frameworks, Programmiersprachen)',
-      business: 'Beachte Business-Terminologie und professionelle Ausdrucksweise',
-      creative: 'Beachte kreative Freiheiten und expressive Sprache',
-      academic: 'Beachte akademische Terminologie und wissenschaftlichen Stil'
-    };
-    domainHint = domainHints[domain] || '';
-  }
-
-  let outputLangHint = '';
-  if (outputLang === 'en') {
-    outputLangHint = '\n\nWICHTIG: Übersetze den finalen Text ins Englische!';
-  } else if (outputLang === 'de') {
-    outputLangHint = '\n\nWICHTIG: Übersetze den finalen Text ins Deutsche!';
-  }
-
-  const creativityHint = creativity > 70
-    ? 'Sei kreativ: Verbessere Formulierungen, füge passende Ausdrücke hinzu.'
-    : creativity < 30
-      ? 'Sei minimal: Nur offensichtliche Fehler korrigieren, Originaltext maximal beibehalten.'
-      : 'Sei ausgewogen: Korrigiere Fehler, behalte aber den Originalstil bei.';
-
-  return `Du bist ein Transkriptions-Polierer für "${settings.name || 'Custom Agent'}".
-
-EINGABESPRACHE: ${language}
-TON: ${tone}
-FORMAT: ${format}
-LÄNGE: ${length}
-KREATIVITÄT: ${creativity}% - ${creativityHint}
-${domainHint}
-
-REGELN:
-${fillerWords ? '1. ENTFERNE: Füllwörter (ähm, äh, also, sozusagen, quasi, halt, ne, oder so), Wiederholungen, Versprecher' : '1. BEHALTE: Natürliche Sprachfluss, auch mit Füllwörtern'}
-2. KORRIGIERE: Grammatik, Satzbau, Interpunktion
-3. FORMATIERE: ${format}
-4. ANPASSEN: Stil an "${tone}" anpassen
-
-WICHTIG:
-- Gib NUR den korrigierten Text zurück
-- KEINE Kommentare, KEINE Erklärungen
-- KEINE Interpretation was der User "meinen könnte"${outputLangHint}
-
-TEXT:
-${text}`;
-}
-
-// Special prompt for Prompt Generator mode (for Midjourney, DALL-E, etc.)
-function getPromptGeneratorPrompt(text, language, settings) {
-  const creativity = settings.creativity || 80;
-  const outputLang = settings.outputLang || 'en';
-
-  const creativityLevel = creativity > 70
-    ? 'sehr detailliert und kreativ ausschmücken'
-    : creativity > 40
-      ? 'moderat erweitern und verbessern'
-      : 'eng am Original bleiben, nur formattieren';
-
-  return `Du bist ein Prompt-Generator für KI-Bildgenerierung (Midjourney, DALL-E, Stable Diffusion).
-
-Deine Aufgabe: Wandle die gesprochene Beschreibung in einen professionellen, detaillierten Prompt um.
-
-EINGABESPRACHE: ${language}
-AUSGABESPRACHE: ${outputLang === 'en' ? 'Englisch' : outputLang === 'de' ? 'Deutsch' : 'wie Eingabe'}
-KREATIVITÄT: ${creativity}% - ${creativityLevel}
-
-PROMPT-STRUKTUR (folge dieser Reihenfolge):
-1. Hauptmotiv/Subjekt - Was ist das zentrale Element?
-2. Stil/Medium - Fotorealistisch, Illustration, 3D, Ölgemälde, etc.
-3. Atmosphäre/Stimmung - Licht, Farben, Emotionen
-4. Details - Texturen, Materialien, Umgebung
-5. Technische Parameter - Kamerawinkel, Brennweite, Rendering-Qualität
-
-WICHTIGE BEGRIFFE (nutze wenn passend):
-- Qualität: masterpiece, highly detailed, 8k, ultra HD, professional
-- Licht: golden hour, soft lighting, dramatic shadows, volumetric lighting
-- Stil: cinematic, ethereal, minimalist, surreal, hyperrealistic
-- Kamera: wide angle, close-up, bird's eye view, shallow depth of field
-
-BEISPIEL-INPUT: "Ich möchte einen Astronauten der auf einem fremden Planeten steht und in die Ferne schaut"
-BEISPIEL-OUTPUT: "Lone astronaut standing on alien planet surface, gazing at distant nebula, sci-fi concept art, volumetric lighting, cosmic atmosphere, detailed space suit with reflective visor, purple and orange alien landscape, dramatic composition, cinematic wide shot, 8k, highly detailed, masterpiece"
-
-REGELN:
-1. Entferne ALLE Füllwörter und Unsicherheiten
-2. Extrahiere die Kernidee und erweitere sie professionell
-3. Nutze passende technische Begriffe
-4. Halte den Prompt zwischen 50-150 Wörtern
-5. ${outputLang === 'en' ? 'Ausgabe MUSS auf Englisch sein' : outputLang === 'de' ? 'Ausgabe auf Deutsch' : 'Behalte die Sprache bei'}
-
-WICHTIG:
-- Gib NUR den fertigen Prompt zurück
-- KEINE Erklärungen, KEINE Kommentare
-- KEIN "Here is your prompt:" oder ähnliches
-
-GESPROCHENE BESCHREIBUNG:
-${text}`;
-}
-
-async function polishText(text, language = 'de', flavor = 'code', customSettings = null) {
-  const apiKey = getStore().get('groqApiKey');
-  if (!apiKey) return null;
-
-  const prompt = getPolishPrompt(text, language, flavor, customSettings);
-
-  const payload = {
-    model: 'llama-3.3-70b-versatile',
-    max_tokens: polishTokenBudget(text),
-    messages: [
-      { role: 'system', content: 'Du bist ein Transkriptions-Polierer. Gib NUR den korrigierten Text zurück. Keine Kommentare, keine Erklärungen.' },
-      { role: 'user', content: prompt },
-    ],
-  };
-
-  try {
-    const res = await readResponse(GROQ_CHAT_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    }, 30000);
-
-    if (!res.ok) {
-      console.error('Groq polish error:', res.status);
-      return null;
-    }
-
-    return completePolish(JSON.parse(res.body));
-  } catch (error) {
-    console.error('Polish error:', error.name);
-    return null;
-  }
+async function polishText(text, language = 'de', flavor = 'code', customSettings = null, segments = []) {
+  const s = getStore();
+  const custom = flavor === 'custom' && !!customSettings;
+  const messages = custom ? [
+    { role: 'system', content: 'Du bist ein Transkriptions-Polierer. Gib NUR den korrigierten Text zurück. Keine Kommentare, keine Erklärungen.' },
+    { role: 'user', content: getCustomAgentPrompt(text, language, customSettings) },
+  ] : buildPolishMessages(text, {
+    history: recentRawDictations(s.get('history')),
+    segments,
+    customVocabulary: s.get('customVocabulary'),
+  });
+  return runPolish({ text, apiKey: s.get('groqApiKey'), messages, custom });
 }
 
 // ============================================================================
@@ -1855,10 +1632,12 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     const skipTranscription = !isRetry && shouldSkipTranscription(voiceActivity);
     let locallyFiltered = skipTranscription;
     if (skipTranscription) console.log('[Diktat-Stillefilter] Aufnahme ohne Sprachaktivität, Groq übersprungen');
-    const transcript = skipTranscription ? '' : await transcribeAudio(audioBuffer, language, 3, voiceActivity, {
+    const transcription = skipTranscription ? { text: '', segments: [] } : await transcribeAudio(audioBuffer, language, 3, voiceActivity, {
       bypassLocalFilters: isRetry,
+      returnDetails: true,
       onFiltered: result => { locallyFiltered ||= result.reason === 'known-silence-phrase'; },
     });
+    const { text: transcript, segments } = transcription;
     console.log('Transcript length:', transcript.length);
     const benchSample = {};
     const benchBase = { createdAt: new Date().toISOString(), isRetry, language, enablePolish: !!enablePolish,
@@ -1901,8 +1680,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
         }
       }
 
-      // Polish the transcript (Claude handles file name formatting in the prompt)
-      polished = await polishText(transcript, language, polishFlavor, customSettings);
+      polished = await polishText(transcript, language, polishFlavor, customSettings, segments);
       console.log('Polished length:', polished?.length || 0);
       if (process.env.PAPLY_DEBUG_TEXT === '1') console.log('Polished:', polished);
     } else {
@@ -2372,6 +2150,8 @@ function setupIpcHandlers() {
     return {
       groqApiKey: s.get('groqApiKey'),
       enablePolish: s.get('enablePolish'),
+      customVocabulary: s.get('customVocabulary', ''),
+      polishUnavailable,
       shortcut: s.get('shortcut'),
       autoStart: s.get('autoStart'),
       language: s.get('language'),
@@ -2402,6 +2182,7 @@ function setupIpcHandlers() {
     if (settings.groqApiKey !== undefined) s.set('groqApiKey', settings.groqApiKey);
     if (settings.geminiApiKey !== undefined) s.set('geminiApiKey', settings.geminiApiKey);
     if (settings.llmProvider !== undefined) s.set('llmProvider', settings.llmProvider);
+    if (typeof settings.customVocabulary === 'string') s.set('customVocabulary', settings.customVocabulary);
     if (settings.enablePolish !== undefined) s.set('enablePolish', settings.enablePolish);
     if (settings.language !== undefined) s.set('language', settings.language);
     if (settings.autopaste !== undefined) s.set('autopaste', settings.autopaste);

@@ -1,4 +1,4 @@
-// Groq llama-3.3-70b-versatile: max completion 32768 (console.groq.com/docs/models).
+// Großzügiges Ausgabebudget; abgeschnittene Antworten werden vollständig verworfen.
 function polishTokenBudget(text) {
   return Math.min(32768, Math.max(1024, Math.ceil(text.length / 3) * 2));
 }

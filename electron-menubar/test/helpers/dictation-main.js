@@ -1,3 +1,4 @@
+import { vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations } from '../../dictation/polish-prompt.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { isBackupAtOrBefore, compareBackups } from '../../dictation/backup-order
 import { vi } from 'vitest';
 import { createDictationJobs } from '../../dictation/jobs.js';
 import { readResponse, friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish } from '../../dictation/policies.js';
-import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from '../../audio/silence-filter.js';
+import { filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment } from '../../audio/silence-filter.js';
 
 export const source = fs.readFileSync(path.join(__dirname, '../../electron-main.js'), 'utf8');
 export const speech = { durationMs: 4000, measuredMs: 4000, speechMs: 800, peakDbfs: -40, floorDbfs: -62, maxGapMs: 40 };
@@ -24,7 +25,8 @@ export function makeMain(platform = 'darwin', settings = {}) {
     app: { getPath: () => directory }, screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) }, isMac: platform === 'darwin', isWin: platform === 'win32',
     dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
-    filterTranscription, shouldSkipTranscription, validateVoiceActivity, isBackupAtOrBefore, compareBackups,
+    vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations,
+    filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment, isBackupAtOrBefore, compareBackups,
     GROQ_API_URL: 'https://example.invalid/transcribe', GROQ_CHAT_URL: 'https://example.invalid/polish',
     getStore: () => ({ get: (key, fallback) => values[key] ?? fallback, set: vi.fn((key, value) => { values[key] = value; }), store: values }),
     fetch: vi.fn(async () => ({ ok: true, text: async () => JSON.stringify({ text: 'Gesprochener Text' }) })),
