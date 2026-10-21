@@ -149,6 +149,7 @@
     },
     "files": [
       "electron-main.js",
+      "app-setup/**/*",
       "preload.js",
       "globe-key-manager.js",
       "audio-tee-manager.js",
