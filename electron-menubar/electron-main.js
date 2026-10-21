@@ -10,6 +10,7 @@ const {
   shell,
   dialog,
   screen,
+  systemPreferences,
 } = require('electron');
 // Acquire before managers, windows, store or global hotkeys are initialized.
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -1406,8 +1407,9 @@ async function beginRecording() {
   try {
     isRecording = true;
     publishRecordingState();
-    job.target = await savePreviousApp();
-    if (!isRecording || job.phase !== 'starting' || !dictationJobs.isCurrent(job)) return;
+    // Ziel-App parallel ermitteln statt vorher darauf zu warten: Das Aufnahmefenster
+    // nimmt keinen Fokus, die Vordergrund-App bleibt gleich — Aufnahme startet so sofort.
+    job.targetReady = savePreviousApp().then(target => { job.target = target; return target; }, () => null);
     const win = createRecordingWindow();
     // First creation may still be loading. Preloaded windows take the same fast path.
     if (win.webContents.isLoading()) {
@@ -1784,6 +1786,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     // Direkt den finalen Text einfügen - kein Placeholder mehr
     let pasted = true;
     if (autopaste) {
+      if (job.targetReady) await job.targetReady;
       const pasteResult = autopasteText(finalText, job.target);
       if (isMac) { updateStatus('done'); hideRecordingWindow(300, job); }
       pasted = await pasteResult;
@@ -1839,6 +1842,7 @@ let smartPasteWindow = null;
 let agentHotkeys = [];
 let uioHook = null;
 let uioHookStarted = false;
+let uioHookAccessWait = null; // macOS: wartet auf Bedienungshilfen-Berechtigung, bevor uiohook startet
 
 /**
  * Initialize uiohook-napi for keyUp detection (needed for Push-to-Talk).
@@ -1971,6 +1975,21 @@ function setupUioHookKeyUp(shortcut) {
 
   // Start hook if not already running
   if (!uioHookStarted) {
+    // macOS: Ohne Bedienungshilfen-Berechtigung bricht uiohook den ganzen Prozess ab
+    // (SIGABRT) — erst starten, wenn die Berechtigung da ist. Bis dahin funktioniert
+    // das Kürzel als Umschalter (Tippen), nur Halten-zum-Sprechen fehlt.
+    if (isMac && !systemPreferences.isTrustedAccessibilityClient(false)) {
+      console.warn('[PTT] Bedienungshilfen-Berechtigung fehlt — keyUp-Erkennung wartet darauf');
+      if (!uioHookAccessWait) {
+        uioHookAccessWait = setInterval(() => {
+          if (!systemPreferences.isTrustedAccessibilityClient(false)) return;
+          clearInterval(uioHookAccessWait);
+          uioHookAccessWait = null;
+          setupUioHookKeyUp(getStore().get('shortcut'));
+        }, 5000);
+      }
+      return;
+    }
     try {
       hook.start();
       uioHookStarted = true;

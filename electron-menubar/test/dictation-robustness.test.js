@@ -8,17 +8,26 @@ function main(...args) { const fixture = makeMain(...args); fixtures.push(fixtur
 afterEach(() => fixtures.splice(0).forEach(fixture => fixture.dispose()));
 
 for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, () => {
-  it('verwirft Start nach Stop während der Ziel-Ermittlung, neuer Start bleibt gültig', async () => {
+  it('startet ohne auf die Ziel-Ermittlung zu warten; Stop bricht den ersten Auftrag ab, neuer Start bleibt gültig', async () => {
     const { context: c, win, state } = main(platform);
     const target = deferred();
     c.savePreviousApp.mockReturnValueOnce(target.promise);
     const first = c.beginRecording();
+    const firstId = c.dictationJobs.current.id;
+    // Aufnahme-Start geht sofort raus, obwohl die Ziel-App noch ermittelt wird.
+    expect(win.webContents.send).toHaveBeenCalledWith('recording:start', { jobId: firstId });
     c.stopRecording();
     await c.beginRecording();
     const current = c.dictationJobs.current;
     target.resolve('Old target'); await first;
     expect(state()).toBe(true);
-    expect(win.webContents.send.mock.calls.filter(([name]) => name === 'recording:start')).toEqual([['recording:start', { jobId: current.id }]]);
+    expect(current.id).not.toBe(firstId);
+    const calls = win.webContents.send.mock.calls.filter(([name]) => name === 'recording:start' || name === 'recording:stop');
+    expect(calls).toEqual([
+      ['recording:start', { jobId: firstId }],
+      ['recording:stop', { jobId: firstId }],
+      ['recording:start', { jobId: current.id }],
+    ]);
   });
 
   it('setzt fehlgeschlagenen Mikrofonstart zurück, nächster Hotkey startet direkt', async () => {
