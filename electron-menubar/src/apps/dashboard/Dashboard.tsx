@@ -110,9 +110,18 @@ export function Dashboard() {
     };
     const offState = window.electronAPI.onRecordingState(applyState);
     void window.electronAPI.getTranscriptionStatus().then(applyState);
+    let statusMessage: string | null = null;
     const offStatus = window.electronAPI.onStatusUpdate(({ status, detail }) => {
       setIsTranscribing(status === 'transcribing' || status === 'polishing');
-      if (detail && (status === 'error' || status === 'empty' || status === 'done')) setSettingsError(detail);
+      if (detail && (status === 'error' || status === 'empty' || status === 'done')) {
+        statusMessage = detail;
+        setSettingsError(detail);
+      } else if (statusMessage && (status === 'transcribing' || (status === 'done' && !detail))) {
+        // Hinweis des letzten Diktats wieder entfernen, sobald ein neues läuft bzw. klappt.
+        const stale = statusMessage;
+        statusMessage = null;
+        setSettingsError(current => (current === stale ? null : current));
+      }
     });
     return () => { offState(); offStatus(); };
   }, []);

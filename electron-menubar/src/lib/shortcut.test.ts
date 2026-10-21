@@ -63,12 +63,23 @@ describe('Physische Tastencodes mit macOS-Option', () => {
     ['÷', 'Slash', 'Command+Alt+/'], ['Dead', 'Backquote', 'Command+Alt+`'],
     ['ArrowLeft', 'ArrowLeft', 'Command+Alt+Left'], ['End', 'End', 'Command+Alt+End'],
   ])('nutzt %s / %s für %s', (key, code, expected) => {
-    expect(keyEventToAccelerator({ key, code, metaKey: true, altKey: true } as KeyboardEvent)).toBe(expected);
+    expect(keyEventToAccelerator({ key, code, metaKey: true, altKey: true } as KeyboardEvent, true)).toBe(expected);
   });
   it.each(['AltLeft', 'ShiftRight', 'MetaLeft', 'ControlRight', 'AudioVolumeUp', 'Unidentified', ''])('ignoriert Modifier oder nicht unterstützten Code %s', code => {
     expect(keyEventToAccelerator({ code } as KeyboardEvent)).toBeNull();
   });
   it('behält Windows-Ctrl und Shift unabhängig vom erzeugten Zeichen', () => {
-    expect(keyEventToAccelerator({ key: '!', code: 'Digit1', ctrlKey: true, shiftKey: true } as KeyboardEvent)).toBe('Ctrl+Shift+1');
+    expect(keyEventToAccelerator({ key: '!', code: 'Digit1', ctrlKey: true, shiftKey: true } as KeyboardEvent, false)).toBe('Ctrl+Shift+1');
+  });
+  it('Windows mit QWERTZ: nimmt das erzeugte Zeichen statt der US-Position', () => {
+    expect(keyEventToAccelerator({ key: 'z', code: 'KeyY', ctrlKey: true, altKey: true } as KeyboardEvent, false)).toBe('Ctrl+Alt+Z');
+    expect(keyEventToAccelerator({ key: 'y', code: 'KeyZ', ctrlKey: true, altKey: true } as KeyboardEvent, false)).toBe('Ctrl+Alt+Y');
+    expect(keyEventToAccelerator({ key: 'k', code: 'KeyK', ctrlKey: true, altKey: true } as KeyboardEvent, false)).toBe('Ctrl+Alt+K');
+    // AltGr-Zeichen (Strg+Alt+Q = @) fallen auf die Tastenposition zurück
+    expect(keyEventToAccelerator({ key: '@', code: 'KeyQ', ctrlKey: true, altKey: true } as KeyboardEvent, false)).toBe('Ctrl+Alt+Q');
+  });
+  it('lehnt Satzzeichen unter Windows und die ISO-Taste überall ab', () => {
+    expect(keyEventToAccelerator({ key: 'ß', code: 'Minus', ctrlKey: true } as KeyboardEvent, false)).toBeNull();
+    expect(keyEventToAccelerator({ key: '<', code: 'IntlBackslash', metaKey: true } as KeyboardEvent, true)).toBeNull();
   });
 });

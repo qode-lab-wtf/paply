@@ -1841,9 +1841,12 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     // Bei leerer Transkription (Stille) einfach beenden - nichts ausgeben
     if (!transcript) {
       console.log('Empty transcript - nothing to paste');
-      if (!locallyFiltered) clearSuccessfulBackups(job.backupId);
-      updateStatus('empty', measurement?.peakDbfs <= -100 ? 'Kein Mikrofonsignal' : '');
-      hideRecordingWindow(900, job);
+      // Nur das eigene Backup: Ein leeres Ergebnis (z. B. versehentliches Tippen) darf
+      // ältere, fehlgeschlagene Aufnahmen nicht mitlöschen.
+      if (!locallyFiltered) clearAudioBackup(job.backupId);
+      const noSignal = measurement?.peakDbfs <= -100;
+      updateStatus('empty', noSignal ? 'Kein Mikrofonsignal' : '');
+      hideRecordingWindow(noSignal ? 3000 : 900, job);
       return { success: true, empty: true };
     }
 

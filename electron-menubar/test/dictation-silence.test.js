@@ -57,7 +57,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
       expect(fn).not.toHaveBeenCalled();
     }
     expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: meta.peakDbfs <= -100 ? 'Kein Mikrofonsignal' : '' }));
-    expect(context.setTimeout).toHaveBeenCalledWith(expect.any(Function), 900);
+    expect(context.setTimeout).toHaveBeenCalledWith(expect.any(Function), meta.peakDbfs <= -100 ? 3000 : 900);
     expect(fs.readdirSync(path.join(directory, 'audio-backups'))).toHaveLength(2);
     expect(context.getAudioBackup()).toEqual(Buffer.from('audio'));
   });
