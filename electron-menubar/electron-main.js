@@ -1012,6 +1012,9 @@ let settingsWindow = null;
 let historyWindow = null;
 let recordingWindow = null;
 
+// Fenster-Icon für Taskleiste/Alt-Tab unter Windows/Linux (macOS nimmt das Bundle-Icon icon.icns)
+const WINDOW_ICON = isMac ? undefined : path.join(__dirname, isWin ? 'icon.ico' : 'icon.png');
+
 function createMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.focus();
@@ -1024,6 +1027,7 @@ function createMainWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'paply',
+    icon: WINDOW_ICON,
     backgroundColor: '#0f1115',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -1071,6 +1075,7 @@ function createSettingsWindow() {
     minWidth: 420,
     minHeight: 500,
     title: 'paply Einstellungen',
+    icon: WINDOW_ICON,
     backgroundColor: '#F9FAFB',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -1095,6 +1100,7 @@ function createHistoryWindow() {
     resizable: true,
     minimizable: true,
     title: 'paply History',
+    icon: WINDOW_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1302,10 +1308,13 @@ function setupTray() {
       icon.setTemplateImage(true);
     }
   } else {
-    // Windows: Use regular colored icon
+    // Windows: farbiges Tray-Icon (16–48 px für 100–300 % Skalierung), sonst App-Icon
+    const trayPath = path.join(__dirname, 'tray.ico');
     const icoPath = path.join(__dirname, 'icon.ico');
     const pngPath = path.join(__dirname, 'icon.png');
-    if (fs.existsSync(icoPath)) {
+    if (fs.existsSync(trayPath)) {
+      icon = nativeImage.createFromPath(trayPath);
+    } else if (fs.existsSync(icoPath)) {
       icon = nativeImage.createFromPath(icoPath);
     } else if (fs.existsSync(pngPath)) {
       icon = nativeImage.createFromPath(pngPath);

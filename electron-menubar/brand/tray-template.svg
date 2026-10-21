@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- paply · Marke „p-Kopf“ · macOS-Menüleiste, Template (nur Schwarz + Alpha), 22 × 22 pt -->
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+<defs>
+<mask id="pt-g" maskUnits="userSpaceOnUse" x="0" y="0" width="22" height="22">
+<rect width="22" height="22" fill="#fff"/>
+<path d="M4.07 9.02a5.24 5.24 0 1 0 10.48 0a5.24 5.24 0 1 0 -10.48 0Z" fill="#000" stroke="#000" stroke-width="1.5"/>
+</mask>
+<mask id="pt-e" maskUnits="userSpaceOnUse" x="0" y="0" width="22" height="22">
+<rect width="22" height="22" fill="#fff"/>
+<path d="M8.84 8.04a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0Z" fill="#000"/>
+</mask>
+</defs>
+<g fill="#000">
+<path d="M10.76 11.2A3.67 3.67 0 1 1 15.68 12.13A2.69 2.69 0 0 0 10.76 11.2Z" mask="url(#pt-g)"/>
+<g mask="url(#pt-e)">
+<path d="M4.07 9.02a5.24 5.24 0 1 0 10.48 0a5.24 5.24 0 1 0 -10.48 0Z"/>
+<path d="M5.98 9.02H5.98A1.91 1.91 0 0 1 7.89 10.93V16.71A1.91 1.91 0 0 1 5.98 18.62H5.98A1.91 1.91 0 0 1 4.07 16.71V10.93A1.91 1.91 0 0 1 5.98 9.02Z"/>
+</g>
+</g>
+</svg>
