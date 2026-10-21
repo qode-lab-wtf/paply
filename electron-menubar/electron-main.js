@@ -377,6 +377,8 @@ function addToHistory(entry) {
     polishUsed: !!entry.polished,
     favorite: false,
   };
+  // Pegel-Kennzahlen (kein Inhalt) zum Nachjustieren des Stille-Filters an echten Aufnahmen.
+  if (entry.level) newEntry.level = entry.level;
 
   history.unshift(newEntry);
 
@@ -1824,7 +1826,8 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     console.log('Audio buffer type:', typeof audioData, 'Buffer size:', audioBuffer.length);
 
     const measurement = validateVoiceActivity(voiceActivity);
-    console.log('[Diktat] voiceActivity:', voiceActivity == null ? 'fehlt' : measurement ? 'gültig' : 'ungültig');
+    console.log('[Diktat] voiceActivity:', voiceActivity == null ? 'fehlt' : measurement ? 'gültig' : 'ungültig',
+      measurement ? `speech=${Math.round(measurement.speechMs)}ms peak=${Math.round(measurement.peakDbfs)} floor=${Math.round(measurement.floorDbfs)}` : '');
     const skipTranscription = !isRetry && shouldSkipTranscription(voiceActivity);
     let locallyFiltered = skipTranscription;
     if (skipTranscription) console.log('[Diktat-Stillefilter] Aufnahme ohne Sprachaktivität, Groq übersprungen');
@@ -1877,7 +1880,13 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     }
 
     await job.turn;
-    addToHistory({ transcript, polished, language });
+    addToHistory({
+      transcript, polished, language,
+      level: measurement ? {
+        speechMs: Math.round(measurement.speechMs), durationMs: Math.round(measurement.durationMs),
+        peakDbfs: Math.round(measurement.peakDbfs), floorDbfs: Math.round(measurement.floorDbfs),
+      } : null,
+    });
 
     const finalText = polished || transcript;
     const copyToClipboard = s.get('copyToClipboard');

@@ -71,7 +71,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(body.get('model')).toBe('whisper-large-v3-turbo');
     expect(body.get('language')).toBe('de');
     expect(context.polishText).toHaveBeenCalledWith('Vielen Dank.', 'de', 'code', null);
-    expect(context.addToHistory).toHaveBeenCalledWith({ transcript: 'Vielen Dank.', polished: 'Vielen Dank.', language: 'de' });
+    expect(context.addToHistory).toHaveBeenCalledWith(expect.objectContaining({ transcript: 'Vielen Dank.', polished: 'Vielen Dank.', language: 'de' }));
     expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
     expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'done', detail: '' }));
   });
@@ -162,5 +162,6 @@ it('behält das Backup einer lokal verworfenen Phrase und rettet sie beim Retry'
 it.each([[undefined, 'fehlt'], [{ invalid: true }, 'ungültig'], [speech, 'gültig']])('protokolliert Messdatenstatus %s ohne Inhalt', async (meta, expected) => {
   const { context } = main();
   await context.processAudioData(Buffer.from('audio'), false, meta);
-  expect(context.console.log).toHaveBeenCalledWith('[Diktat] voiceActivity:', expected);
+  expect(context.console.log).toHaveBeenCalledWith('[Diktat] voiceActivity:', expected, expect.any(String));
+  expect(JSON.stringify(context.console.log.mock.calls)).not.toContain('Vielen Dank');
 });
