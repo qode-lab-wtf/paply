@@ -1,0 +1,51 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import vm from 'node:vm';
+import { vi } from 'vitest';
+import { createDictationJobs } from '../../dictation/jobs.js';
+import { readResponse, friendlyError, replaceShortcut, polishTokenBudget, completePolish } from '../../dictation/policies.js';
+import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from '../../audio/silence-filter.js';
+
+export const source = fs.readFileSync(path.join(__dirname, '../../electron-main.js'), 'utf8');
+export const speech = { durationMs: 4000, measuredMs: 4000, speechMs: 800, peakDbfs: -40, maxGapMs: 40 };
+export const tick = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
+export function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
+export function makeMain(platform = 'darwin', settings = {}) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'paply-dictation-'));
+  const values = { language: 'de', groqApiKey: 'test-placeholder', enablePolish: true, autopaste: true, shortcut: 'Alt+Command+K', ...settings };
+  const win = { webContents: { send: vi.fn(), isLoading: () => false }, hide: vi.fn(), showInactive: vi.fn(), isDestroyed: () => false, setBounds: vi.fn() };
+  const timers = [];
+  const ipc = {};
+  const context = vm.createContext({
+    Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date, fs, path,
+    process: { env: {}, platform },
+    app: { getPath: () => directory }, screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) }, isMac: platform === 'darwin', isWin: platform === 'win32',
+    dictationJobs: createDictationJobs(), friendlyError, replaceShortcut, polishTokenBudget, completePolish,
+    readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
+    filterTranscription, shouldSkipTranscription, validateVoiceActivity,
+    GROQ_API_URL: 'https://example.invalid/transcribe', GROQ_CHAT_URL: 'https://example.invalid/polish',
+    getStore: () => ({ get: (key, fallback) => values[key] ?? fallback, set: vi.fn((key, value) => { values[key] = value; }), store: values }),
+    fetch: vi.fn(async () => ({ ok: true, text: async () => JSON.stringify({ text: 'Gesprochener Text' }) })),
+    setTimeout: vi.fn((fn, ms) => { const timer = { fn, ms }; timers.push(timer); return timer; }),
+    clearTimeout: vi.fn(timer => { if (timer) timer.cancelled = true; }),
+    console: { log: vi.fn(), error: vi.fn() },
+    resizeRecordingWindow: vi.fn(), recordingWindow: win, mainWindow: win, createRecordingWindow: () => win,
+    dialog: { showMessageBox: vi.fn() },
+    savePreviousApp: vi.fn(async () => platform === 'darwin' ? 'Editor' : '123'),
+    polishText: vi.fn(async text => text), addToHistory: vi.fn(),
+    autopasteText: vi.fn(async () => true), clipboard: { writeText: vi.fn() },
+    ipcMain: { on: (name, fn) => { ipc[name] = fn; }, handle: (name, fn) => { ipc[name] = fn; } },
+    changeDictationShortcut: vi.fn(() => true), updateTrayMenu: vi.fn(),
+  });
+  const lifecycle = source.slice(source.indexOf('function publishRecordingState('), source.indexOf('// PUSH-TO-TALK LOGIC'));
+  const ptt = source.slice(source.indexOf('function handleHotkeyDown('), source.indexOf('// AUDIO BACKUP SYSTEM'));
+  const transcribe = source.slice(source.indexOf('async function transcribeAudio('), source.indexOf('// AUTO UPDATER ('));
+  const audio = source.slice(source.indexOf('let lastAudioBackup ='), source.indexOf('// HOTKEY\n'));
+  const recordingIpc = source.slice(source.indexOf('  const fromRecorder ='), source.indexOf("  ipcMain.on('open:accessibility'"));
+  const settingsIpc = source.slice(source.indexOf("  ipcMain.handle('settings:set'"), source.indexOf('  // History\n', source.indexOf("  ipcMain.handle('settings:set'")));
+  vm.runInContext(`let isRecording = false; let pttKeyDownTime = null; let pttIsHolding = false; let pttHoldTimer = null;\n${lifecycle}\n${ptt}\n${transcribe}\n${audio}\n${recordingIpc}\n${settingsIpc}`, context);
+  return { context, win, timers, ipc, values, directory, event: { sender: win.webContents },
+    state: () => vm.runInContext('isRecording', context),
+    dispose: () => fs.rmSync(directory, { recursive: true, force: true }) };
+}

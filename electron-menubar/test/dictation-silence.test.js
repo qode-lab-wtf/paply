@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createDictationJobs } from '../dictation/jobs.js';
+import { readResponse, friendlyError } from '../dictation/policies.js';
 import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from '../audio/silence-filter.js';
 
 // Die echten Main-Funktionen mit isoliertem Store/Fenster/Netzwerk ausführen.
@@ -20,19 +22,23 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
   const values = { language: 'de', groqApiKey: 'test-placeholder', enablePolish: true, autopaste: true, ...settings };
   const window = { webContents: { send: vi.fn() }, hide: vi.fn(), showInactive: vi.fn() };
   const context = vm.createContext({
+    process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError,
+    readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
+    savePreviousApp: async () => null, resizeRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date,
     fs, path, app: { getPath: () => directory },
     filterTranscription, shouldSkipTranscription, validateVoiceActivity,
     GROQ_API_URL: 'https://example.invalid/transcribe',
     getStore: () => ({ get: key => values[key] }),
-    fetch: vi.fn(async () => ({ ok: true, json: async () => response })),
+    fetch: vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(response) })),
     setTimeout: vi.fn(), clearTimeout: vi.fn(), console: { log: vi.fn(), error: vi.fn() },
     recordingWindow: window, createRecordingWindow: () => window,
     dialog: { showMessageBox: vi.fn() }, isMac: true,
     polishText: vi.fn(async text => text), addToHistory: vi.fn(),
     autopasteText: vi.fn(), clipboard: { writeText: vi.fn() },
   });
-  vm.runInContext(transcribe + '\n' + audio, context);
+  const status = source.slice(source.indexOf('function sendJobStatus('), source.indexOf('async function beginRecording('));
+  vm.runInContext(status + '\n' + transcribe + '\n' + audio, context);
   return { context, directory, window };
 }
 
@@ -49,7 +55,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     for (const fn of [context.fetch, context.polishText, context.addToHistory, context.autopasteText, context.clipboard.writeText]) {
       expect(fn).not.toHaveBeenCalled();
     }
-    expect(window.webContents.send).toHaveBeenCalledWith('status:update', { status: 'empty', detail: '' });
+    expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: '' }));
     expect(context.setTimeout).toHaveBeenCalledWith(expect.any(Function), 900);
     expect(fs.readdirSync(path.join(directory, 'audio-backups'))).toEqual([]);
     expect(context.getAudioBackup()).toBeNull();
@@ -65,8 +71,8 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(body.get('language')).toBe('de');
     expect(context.polishText).toHaveBeenCalledWith('Vielen Dank.', 'de', 'code', null);
     expect(context.addToHistory).toHaveBeenCalledWith({ transcript: 'Vielen Dank.', polished: 'Vielen Dank.', language: 'de' });
-    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.');
-    expect(window.webContents.send).toHaveBeenCalledWith('status:update', { status: 'done', detail: '' });
+    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
+    expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'done', detail: '' }));
   });
 
   it('sendet auch nach serverseitig verworfenen Segmenten empty und schreibt keine Historie', async () => {
@@ -77,7 +83,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.fetch).toHaveBeenCalledTimes(1);
     expect(context.addToHistory).not.toHaveBeenCalled();
     expect(context.autopasteText).not.toHaveBeenCalled();
-    expect(window.webContents.send).toHaveBeenCalledWith('status:update', { status: 'empty', detail: '' });
+    expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: '' }));
   });
 
   it('verwirft die real gemessene Groq-Stille-Phrase trotz no_speech_prob=0 bei weniger als 250 ms Aktivität', async () => {
@@ -88,7 +94,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.fetch).toHaveBeenCalledTimes(1);
     expect(context.addToHistory).not.toHaveBeenCalled();
     expect(context.autopasteText).not.toHaveBeenCalled();
-    expect(window.webContents.send).toHaveBeenCalledWith('status:update', { status: 'empty', detail: '' });
+    expect(window.webContents.send).toHaveBeenCalledWith('status:update', expect.objectContaining({ status: 'empty', detail: '' }));
   });
 
   it('verwirft eindeutige Artefakte auch beim Retry eines alten Backups ohne Metadaten', async () => {
@@ -111,7 +117,7 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.getAudioBackup()).toEqual(Buffer.from('audio'));
     await context.retryLastRecording();
     expect(context.fetch).toHaveBeenCalledTimes(2);
-    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.');
+    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
   });
 
   it.each(['RAM', 'Festplatte'])('nutzt gesicherte Stille-Metadaten beim Retry aus %s', async origin => {
@@ -136,6 +142,6 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     vm.runInContext('lastAudioBackup = null; backupTimestamp = null;', context);
     await context.retryLastRecording();
     expect(context.fetch).toHaveBeenCalledTimes(1);
-    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.');
+    expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);
   });
 });

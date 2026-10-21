@@ -155,6 +155,7 @@
       "windows-audio-manager.js",
       "call-detector-manager.js",
       "audio/**/*",
+      "dictation/**/*",
       "meeting/**/*",
       "!**/*.test.js",
       "renderer/**/*",
