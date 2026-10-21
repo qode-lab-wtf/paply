@@ -1143,11 +1143,15 @@ function positionRecordingWindow(win = recordingWindow) {
   if (!win || win.isDestroyed()) return;
   const { screen } = require('electron');
   const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const [w, h] = win.getSize();
-  win.setPosition(
-    Math.round(workArea.x + (workArea.width - w) / 2),
-    Math.round(workArea.y + workArea.height - h - PILL_BOTTOM_GAP),
-  );
+  // Feste Größe mitgeben: setPosition allein kann bei Monitoren mit anderer
+  // Skalierung (Windows) die Fenstergröße verfälschen.
+  const { width: w, height: h } = pillNeedsOpaqueWindow() ? PILL_WINDOW_OPAQUE : PILL_WINDOW;
+  win.setBounds({
+    x: Math.round(workArea.x + (workArea.width - w) / 2),
+    y: Math.round(workArea.y + workArea.height - h - PILL_BOTTOM_GAP),
+    width: w,
+    height: h,
+  });
 }
 
 function createRecordingWindow() {
@@ -2604,6 +2608,9 @@ function setupIpcHandlers() {
 
   ipcMain.on('open:accessibility', () => {
     if (isMac) {
+      // Systemabfrage auslösen: trägt Paply in die Liste „Bedienungshilfen“ ein (sonst
+      // fehlt der Eintrag, bis ein Einfügeversuch ihn erzeugt).
+      try { systemPreferences.isTrustedAccessibilityClient(true); } catch { /* nur Komfort */ }
       shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
     } else if (isWin) {
       // On Windows, open Privacy Settings

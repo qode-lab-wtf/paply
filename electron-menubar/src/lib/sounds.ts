@@ -20,6 +20,17 @@ const SILENT = 0.0001;
 
 let ctx: AudioContext | null = null;
 let output: AudioNode | null = null;
+let suspendTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Nach dem Ton den Audio-Ausgang wieder schlafen legen: kein dauerhaft offener
+// Ausgabe-Stream (Akku, Bluetooth-Kopfhörer). play() weckt ihn bei Bedarf.
+function scheduleSuspend(context: AudioContext, afterMs: number) {
+  if (suspendTimer) clearTimeout(suspendTimer);
+  suspendTimer = setTimeout(() => {
+    suspendTimer = null;
+    if (context.state === 'running') void context.suspend().catch(() => {});
+  }, afterMs);
+}
 
 function getContext(): AudioContext | null {
   if (ctx && ctx.state !== 'closed') return ctx;
@@ -79,6 +90,7 @@ function play(freqs: number[]) {
     } else {
       schedule(context, freqs);
     }
+    scheduleSuspend(context, (freqs.length * NOTE_GAP + DECAY) * 1000 + 400);
   } catch (err) {
     console.error('[paply] Ton fehlgeschlagen', err);
   }
@@ -97,8 +109,9 @@ export function playStopSound(): void {
 /** Legt den AudioContext vorab an, damit der erste Ton ohne Verzögerung kommt. */
 export function warmUpSounds(): void {
   try {
+    // Nur anlegen (teure Initialisierung vorziehen); bleibt bis zum ersten Ton schlafend.
     const context = getContext();
-    if (context?.state === 'suspended') void context.resume().catch(() => {});
+    if (context?.state === 'running') scheduleSuspend(context, 300);
   } catch {
     /* ohne Audio-Ausgabe einfach still bleiben */
   }
@@ -106,6 +119,8 @@ export function warmUpSounds(): void {
 
 /** Nur für Tests: internen Zustand zurücksetzen. */
 export function __resetSoundsForTests(): void {
+  if (suspendTimer) clearTimeout(suspendTimer);
+  suspendTimer = null;
   ctx = null;
   output = null;
 }
