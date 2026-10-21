@@ -92,16 +92,22 @@ export function Dashboard() {
     window.electronAPI.onAgentSwitched(({ id }) => setActiveProfile(id));
   }, []);
 
+  useEffect(() => {
+    const applyState = ({ isRecording: recording }: { isRecording: boolean }) => {
+      setIsRecording(recording);
+      if (recording) setIsTranscribing(false);
+    };
+    const offState = window.electronAPI.onRecordingState(applyState);
+    void window.electronAPI.getTranscriptionStatus().then(applyState);
+    const offStatus = window.electronAPI.onStatusUpdate(({ status }) => {
+      setIsTranscribing(status === 'transcribing' || status === 'polishing');
+    });
+    return () => { offState(); offStatus(); };
+  }, []);
+
   const toggleRecording = useCallback(async () => {
-    if (isRecording) {
-      await window.electronAPI.stopTranscription();
-      setIsRecording(false);
-      setIsTranscribing(true);
-      setTimeout(() => setIsTranscribing(false), 3000);
-    } else {
-      await window.electronAPI.startTranscription();
-      setIsRecording(true);
-    }
+    if (isRecording) await window.electronAPI.stopTranscription();
+    else await window.electronAPI.startTranscription();
   }, [isRecording]);
 
   const handleCopy = async (item: HistoryItem) => {

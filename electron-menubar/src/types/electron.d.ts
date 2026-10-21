@@ -104,7 +104,7 @@ export interface Platform {
 export interface ElectronAPI {
   // Settings
   getSettings: () => Promise<Settings>;
-  setSettings: (settings: Partial<Settings>) => Promise<boolean>;
+  setSettings: (settings: Partial<Settings>) => Promise<true | { success: false; error: { code: 'HOTKEY_REGISTRATION_FAILED'; field: 'shortcut'; message: string } }>;
 
   // History
   getHistory: () => Promise<HistoryItem[]>;
@@ -115,11 +115,14 @@ export interface ElectronAPI {
   onHistoryUpdated: (cb: (history: HistoryItem[]) => void) => void;
 
   // Recording
-  onRecordingStart: (cb: () => void) => void;
-  onRecordingStop: (cb: () => void) => void;
-  onStatusUpdate: (cb: (status: { status: 'transcribing' | 'polishing' | 'done' | 'empty' | 'error'; detail?: string }) => void) => void;
-  onErrorRetry: (cb: (data: { message: string; hotkey: string }) => void) => void;
-  sendAudio: (audioData: ArrayBuffer, voiceActivity?: VoiceActivityMeta) => void;
+  onRecordingStart: (cb: (data: { jobId: string }) => void) => () => void;
+  onRecordingStop: (cb: (data: { jobId: string }) => void) => () => void;
+  recordingStarted: (jobId: string) => void;
+  recordingFailed: (jobId: string, message: string) => void;
+  onRecordingState: (cb: (data: { isRecording: boolean }) => void) => () => void;
+  onStatusUpdate: (cb: (status: { status: 'transcribing' | 'polishing' | 'done' | 'empty' | 'error' | 'leaving'; detail?: string; jobId?: string }) => void) => () => void;
+  onErrorRetry: (cb: (data: { message: string; hotkey: string; jobId?: string }) => void) => () => void;
+  sendAudio: (audioData: ArrayBuffer, voiceActivity?: VoiceActivityMeta, jobId?: string) => void;
 
   // Transcription control
   startTranscription: () => Promise<boolean>;
@@ -139,7 +142,7 @@ export interface ElectronAPI {
   getProfiles: () => Promise<{ active: string; profiles: Record<string, Profile>; customAgents: CustomAgent[] }>;
   setActiveProfile: (profileId: string) => Promise<boolean>;
   updateProfile: (profileId: string, updates: Partial<Profile>) => Promise<boolean>;
-  onAgentSwitched: (cb: (data: { id: string; name: string; icon?: string; color?: string }) => void) => void;
+  onAgentSwitched: (cb: (data: { id: string; name: string; icon?: string; color?: string }) => void) => () => void;
 
   // Custom Agents CRUD
   getCustomAgents: () => Promise<CustomAgent[]>;

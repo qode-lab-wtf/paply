@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+function listen(channel, cb) {
+  const handler = (_event, data) => cb(data);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),
@@ -14,11 +20,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onHistoryUpdated: (cb) => ipcRenderer.on('history:updated', (_e, history) => cb(history)),
 
   // Recording
-  onRecordingStart: (cb) => ipcRenderer.on('recording:start', cb),
-  onRecordingStop: (cb) => ipcRenderer.on('recording:stop', cb),
-  onStatusUpdate: (cb) => ipcRenderer.on('status:update', (_e, status) => cb(status)),
-  onErrorRetry: (cb) => ipcRenderer.on('error:retry', (_e, data) => cb(data)),
-  sendAudio: (audioData, voiceActivity) => ipcRenderer.send('recording:audio', audioData, voiceActivity),
+  onRecordingStart: (cb) => listen('recording:start', cb),
+  onRecordingStop: (cb) => listen('recording:stop', cb),
+  recordingStarted: (jobId) => ipcRenderer.send('recording:started', { jobId }),
+  recordingFailed: (jobId, message) => ipcRenderer.send('recording:failed', { jobId, message }),
+  onRecordingState: (cb) => listen('recording:state', cb),
+  onStatusUpdate: (cb) => listen('status:update', cb),
+  onErrorRetry: (cb) => listen('error:retry', cb),
+  sendAudio: (audioData, voiceActivity, jobId) => ipcRenderer.send('recording:audio', audioData, voiceActivity, jobId),
 
   // Transcription control (from dashboard)
   startTranscription: () => ipcRenderer.invoke('transcription:start'),
@@ -38,7 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProfiles: () => ipcRenderer.invoke('profiles:get'),
   setActiveProfile: (profileId) => ipcRenderer.invoke('profiles:setActive', profileId),
   updateProfile: (profileId, updates) => ipcRenderer.invoke('profiles:update', profileId, updates),
-  onAgentSwitched: (cb) => ipcRenderer.on('agent:switched', (_e, data) => cb(data)),
+  onAgentSwitched: (cb) => listen('agent:switched', cb),
   
   // Custom Agents CRUD
   getCustomAgents: () => ipcRenderer.invoke('agents:getAll'),
