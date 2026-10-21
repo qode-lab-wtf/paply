@@ -22,16 +22,36 @@ function createMeetingStore({ baseDir, store }) {
     store.set('meetings', entries);
   }
 
-  function _meetingDir(id) {
-    return path.join(baseDir, id);
+  const root = path.resolve(baseDir);
+  function _safePath(id, parts = [], creating = false) {
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('Ungültige Meeting-ID');
+    if (!creating && !_indexList().some(entry => entry.id === id)) throw new Error('Meeting nicht gefunden');
+    const target = path.resolve(root, id, ...parts);
+    const relative = path.relative(root, target);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Ungültiger Meeting-Pfad');
+    // Auch vorhandene Unterordner/Dateien dürfen keine Symlinks nach außen sein.
+    let current = root;
+    for (const part of relative.split(path.sep)) {
+      current = path.join(current, part);
+      try {
+        if (fs.lstatSync(current).isSymbolicLink()) throw new Error('Meeting-Pfad enthält einen symbolischen Link');
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    return target;
+  }
+
+  function _meetingDir(id) { return _safePath(id); }
+  function _channel(channel) {
+    if (!['mic', 'system'].includes(channel)) throw new Error('Ungültiger Audiokanal');
+    return channel;
   }
 
   function _transcriptPath(id) {
-    return path.join(_meetingDir(id), 'transcript.json');
+    return _safePath(id, ['transcript.json']);
   }
 
   function _summaryPath(id) {
-    return path.join(_meetingDir(id), 'summary.json');
+    return _safePath(id, ['summary.json']);
   }
 
   // ---------- Öffentliche API ----------
@@ -45,7 +65,7 @@ function createMeetingStore({ baseDir, store }) {
     const shortId = Math.random().toString(36).slice(2, 8);
     const id = `${epochMs}-${shortId}`;
 
-    const dir = _meetingDir(id);
+    const dir = _safePath(id, [], true);
     fs.mkdirSync(path.join(dir, 'chunks'), { recursive: true });
 
     const entry = {
@@ -79,8 +99,10 @@ function createMeetingStore({ baseDir, store }) {
    * channel: 'mic' | 'system'
    */
   function chunkPath(id, channel, seq) {
+    _channel(channel);
+    if (!Number.isSafeInteger(seq) || seq < 0) throw new Error('Ungültige Chunk-Nummer');
     const padded = String(seq).padStart(6, '0');
-    return path.join(_meetingDir(id), 'chunks', `${channel}_${padded}.wav`);
+    return _safePath(id, ['chunks', `${channel}_${padded}.wav`]);
   }
 
   /** Absoluter Meeting-Ordner (für Audio-Dateien, Retention, Auswertung). */
@@ -88,15 +110,17 @@ function createMeetingStore({ baseDir, store }) {
 
   /** Pfad der finalen Audio-Spur (existiert erst nach dem Stop; null nach Löschung). */
   function audioPath(id, channel) {
-    const wav = path.join(_meetingDir(id), `audio_${channel}.wav`);
+    _channel(channel);
+    const wav = _safePath(id, [`audio_${channel}.wav`]);
     return fs.existsSync(wav) ? wav : null;
   }
 
   /** Sortierte Chunk-Dateien eines Kanals (Absturzsicherung während der Aufnahme). */
   function listChunkFiles(id, channel) {
-    const dir = path.join(_meetingDir(id), 'chunks');
+    _channel(channel);
+    const dir = _safePath(id, ['chunks']);
     try {
-      return fs.readdirSync(dir).filter((f) => f.startsWith(channel + '_') && f.endsWith('.wav')).sort().map((f) => path.join(dir, f));
+      return fs.readdirSync(dir).filter((f) => new RegExp(`^${channel}_[0-9]+\\.wav$`).test(f)).sort().map((f) => _safePath(id, ['chunks', f]));
     } catch { return []; }
   }
 
@@ -135,7 +159,8 @@ function createMeetingStore({ baseDir, store }) {
     const entries = _indexList();
     const idx = entries.findIndex((e) => e.id === id);
     if (idx === -1) return;
-    entries[idx] = { ...entries[idx], ...updates };
+    _meetingDir(id);
+    entries[idx] = { ...entries[idx], ...updates, id };
     _indexSet(entries);
   }
 
@@ -169,9 +194,9 @@ function createMeetingStore({ baseDir, store }) {
     // Audio-Pfade: seit v1.13 bleiben die WAV-Spuren 7 Tage erhalten (Nachhören, Neu-Auswerten),
     // danach null. .opus existiert nur bei sehr alten Meetings (vor v1.11.0).
     const audioPath = (channel) => {
-      const opus = path.join(_meetingDir(id), `audio_${channel}.opus`);
+      const opus = _safePath(id, [`audio_${channel}.opus`]);
       if (fs.existsSync(opus)) return opus;
-      const wav = path.join(_meetingDir(id), `audio_${channel}.wav`);
+      const wav = _safePath(id, [`audio_${channel}.wav`]);
       return fs.existsSync(wav) ? wav : null;
     };
 

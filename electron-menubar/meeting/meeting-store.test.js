@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -97,5 +97,76 @@ describe('MeetingStore', () => {
     expect(ms.remove(id)).toBe(true);
     expect(ms.list().length).toBe(0);
     expect(fs.existsSync(path.join(baseDir, id))).toBe(false);
+  });
+});
+
+describe('MeetingStore: sichere Dateigrenzen', () => {
+  let temp, baseDir, outside, store, ms;
+  beforeEach(() => {
+    temp = fs.mkdtempSync(path.join(os.tmpdir(), 'paply-meet-path-'));
+    baseDir = path.join(temp, 'meetings');
+    outside = path.join(temp, 'outside');
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'transcript.json'), JSON.stringify({ segments: [{ speaker: 'Sprecher 1' }] }));
+    fs.writeFileSync(path.join(outside, 'summary.json'), JSON.stringify({ todos: [{ erledigt: false }] }));
+    store = fakeStore();
+    ms = createMeetingStore({ baseDir, store });
+  });
+  afterEach(() => fs.rmSync(temp, { recursive: true, force: true }));
+
+  it.each(['../outside', '..\\outside', '/outside', 'C:\\outside', '.', '', null])('blockiert Pfad-IDs %s auch in manipuliertem Index', id => {
+    store.set('meetings', [{ id }]);
+    const transcript = fs.readFileSync(path.join(outside, 'transcript.json'), 'utf8');
+    const summary = fs.readFileSync(path.join(outside, 'summary.json'), 'utf8');
+    const operations = [
+      () => ms.renameSpeaker(id, 'Sprecher 1', 'Fremd'), () => ms.toggleTodo(id, 0),
+      () => ms.loadTranscript(id), () => ms.saveTranscript(id, {}), () => ms.saveSummary(id, {}),
+      () => ms.meetingDir(id), () => ms.chunkPath(id, 'mic', 0), () => ms.audioPath(id, 'mic'),
+      () => ms.get(id), () => ms.remove(id), () => ms.finalizeIndex(id, { title: 'Fremd' }),
+    ];
+    for (const operation of operations) expect(operation).toThrow();
+    expect(fs.readFileSync(path.join(outside, 'transcript.json'), 'utf8')).toBe(transcript);
+    expect(fs.readFileSync(path.join(outside, 'summary.json'), 'utf8')).toBe(summary);
+  });
+
+  it('verweigert den Zugriff auf nicht indexierte Meeting-Ordner', () => {
+    fs.mkdirSync(path.join(baseDir, 'orphan'), { recursive: true });
+    expect(() => ms.saveTranscript('orphan', {})).toThrow('nicht gefunden');
+    expect(() => ms.renameSpeaker('orphan', 'A', 'B')).toThrow('nicht gefunden');
+    expect(() => ms.toggleTodo('orphan', 0)).toThrow('nicht gefunden');
+    expect(() => ms.meetingDir('orphan')).toThrow('nicht gefunden');
+    expect(ms.get('orphan')).toBe(null);
+    expect(ms.remove('orphan')).toBe(false);
+  });
+
+  it('blockiert Datei-Symlinks nach außen', ({ skip }) => {
+    const id = ms.create('2026-06-08T10:00:00.000Z');
+    try {
+      fs.symlinkSync(path.join(outside, 'transcript.json'), path.join(ms.meetingDir(id), 'transcript.json'));
+    } catch (error) {
+      // Windows erlaubt Datei-Symlinks ohne Entwicklermodus/Adminrechte nicht.
+      if (process.platform === 'win32' && error.code === 'EPERM') { skip(); return; }
+      throw error;
+    }
+    expect(() => ms.renameSpeaker(id, 'Sprecher 1', 'Fremd')).toThrow('symbolischen Link');
+    expect(() => ms.saveTranscript(id, {})).toThrow('symbolischen Link');
+  });
+
+  it('blockiert Verzeichnis-Symlinks/Junctions nach außen', () => {
+    const id = ms.create('2026-06-08T10:00:00.000Z');
+    fs.rmSync(ms.meetingDir(id), { recursive: true });
+    fs.symlinkSync(outside, path.join(baseDir, id), 'junction');
+    expect(() => ms.remove(id)).toThrow('symbolischen Link');
+    expect(() => ms.get(id)).toThrow('symbolischen Link');
+    expect(fs.existsSync(path.join(outside, 'transcript.json'))).toBe(true);
+  });
+
+  it('validiert Audiokanäle und Chunk-Nummern und verhindert Index-ID-Änderungen', () => {
+    const id = ms.create('2026-06-08T10:00:00.000Z');
+    expect(() => ms.chunkPath(id, '../../outside', 0)).toThrow('Audiokanal');
+    expect(() => ms.chunkPath(id, 'mic', '../outside')).toThrow('Chunk-Nummer');
+    expect(() => ms.audioPath(id, '../outside')).toThrow('Audiokanal');
+    ms.finalizeIndex(id, { id: '../outside', title: 'Neuer Titel' });
+    expect(ms.list()[0]).toMatchObject({ id, title: 'Neuer Titel' });
   });
 });
