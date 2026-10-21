@@ -13,7 +13,7 @@ Aufnahmen und gleichnamige Metadaten in einen Ordner **außerhalb des Repository
   123.json
   references.json         # optional, menschlich bestätigte Referenzen
   scripts.json            # optional, vorgelesene Texte
-  vocab.txt               # optional, Wortliste für Variante d
+  vocab.txt               # wird im Benchmark ignoriert
 ```
 
 Metadaten: `{ "id": "123", "createdAt": "...", "language": "de", "enablePolish": true,
@@ -69,7 +69,7 @@ Kontotarif verhindert. Das Werkzeug schaltet kein Billing frei und nutzt keine b
 Kostenfreie Kontingente: [Groq](https://console.groq.com/docs/rate-limits),
 [Gemini](https://ai.google.dev/gemini-api/docs/billing).
 
-Weitere Optionen: `--limit 1` (alphabetisch erste Aufnahme),
+Weitere Optionen: `--limit 1` (chronologisch erste Aufnahme),
 `--models openai/gpt-oss-120b` (Poliermodell-Auswahl), `--scripts <pfad>`,
 `--refresh-models` (Modellliste aktualisieren und negative Cache-Einträge erneut versuchen).
 `--limit` beschränkt auch Ergebnisdateien/Bericht auf diese Auswahl; die API-Caches aller Aufnahmen bleiben.
@@ -81,7 +81,7 @@ Beim nächsten vollständigen `all` werden die übrigen Resultate kostenlos aus 
 - **c:** Gemini inline Audio, passend `audio/webm` oder `audio/wav`; Reihenfolge
   `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-flash-latest`.
   Wortgetreu mit Füllwörtern/Wiederholungen. Tatsächlich benutztes Modell steht beim Ergebnis.
-- **d:** Turbo mit `vocab.txt` als Prompt, nur wenn die Datei nichtleer ist.
+- `vocab.txt` wird unabhängig vom Inhalt ignoriert; die historische Variante d wird nicht mehr gewertet.
 - **P0:** `getPolishPrompt` und System-Prompt direkt aus `electron-main.js` ausgelesen.
   Ausschließlich diese promptreinen Funktionen werden in einer VM ausgewertet, kein App-Import.
   `activeProfile` wird wie in der App gegen `profiles` / `customAgents` aus den aktuellen
@@ -156,7 +156,7 @@ Audio bis 18 MiB wird unterstützt; längere Dateien teilen. Alignment ist auf 8
 ## Entwicklung und Prüfung
 
 ```sh
-node --test tools/benchmark/benchmark.test.mjs
+node --test tools/benchmark/*.test.mjs
 # macOS mit installierter Stimme Anna, /usr/bin/say und /usr/bin/afconvert:
 node tools/benchmark/dev-fixtures.mjs /tmp/paply-bench-dev
 node tools/benchmark/bench.mjs all --data /tmp/paply-bench-dev
@@ -184,3 +184,36 @@ open /tmp/paply-bench/aufnahmen/bericht.html
 ```
 
 Die zehn Vorlese-Vorlagen enthalten `text` und `ideal`; sechs freie Aufnahmen haben nur die Klassifikation. Konsens bleibt vorläufig. Der Bericht ändert keine Aufnahme, Vorlage oder App-Einstellung.
+
+
+## Kontext-Vergleich (P2 und W-ctx+P2)
+
+Modelle bleiben Whisper Turbo und Groq-LLM. `context` verwendet ausschließlich `qwen/qwen3.8-27b` und `openai/gpt-oss-120b` (Temperatur 0), keine fest eingetragenen Korrekturwörter und keine Wortliste. Die historischen P0/P1-Ergebnisse bleiben Vergleichsdaten; P0 wird für diesen Lauf nicht neu angefragt.
+
+```sh
+node tools/benchmark/bench.mjs context --data /tmp/paply-bench/aufnahmen
+node tools/benchmark/bench.mjs reference --data /tmp/paply-bench/aufnahmen
+node tools/benchmark/bench.mjs score --data /tmp/paply-bench/aufnahmen
+node tools/benchmark/bench.mjs audit --data /tmp/paply-bench/aufnahmen
+node tools/benchmark/bench.mjs report --data /tmp/paply-bench/aufnahmen
+# Wiederholung von context kostenlos aus Cache:
+node tools/benchmark/bench.mjs context --data /tmp/paply-bench/aufnahmen --offline
+```
+
+Sortierung nach `createdAt`; Aufnahmen ohne gültige Zeit folgen danach in ID-Reihenfolge. P2 erhält den aktuellen Rohtext a plus ausschließlich die letzten drei vorherigen a-Rohtranskripte in zeitlicher Reihenfolge als Hintergrund. Es werden keine Referenzen, Ideale, polierten Texte oder Wörterlisten in den Hintergrund übernommen. Bei der ersten Aufnahme ist er leer. Segmente mit `avg_logprob < -0.5` werden mitsamt Text und Zeiten als unsicher gekennzeichnet. Niedrige Sicherheit ist allein kein Korrekturauftrag. `context.mjs` enthält den vollständigen generischen Prompt.
+
+W-ctx konditioniert Whisper Turbo mit dem letzten Ende dieser Rohtext-Historie (höchstens 200 Unicode-Zeichen, Anfang an Wortgrenze), danach folgt derselbe P2-Prompt auf dem konditionierten Rohtext. Der Verlauf stammt in beiden Varianten immer aus a, nicht rekursiv aus konditionierten oder polierten Ausgaben. Damit bleibt der Kontext kontrolliert vergleichbar. `results.json` speichert die tatsächlich versendeten P2-Nachrichten, Kontext-IDs, Whisper-Konditionierung und Prompt-/Eingabe-Hashes. Änderungen an Verlauf, Eingabe oder Unsicherheitsmarkierung machen alte Resultate ungültig.
+
+`experiment-summary.json` vergleicht P1 (historisch), P2 und W-ctx+P2 für die beiden Modelle. Ideal-WER ist die Mikro-WER über vorgegebene Ideale. Risiko frei ist dieselbe Inhaltswort-Heuristik gegen den vorläufigen a/b/c-Konsens wie zuvor. b/c werden hier nur als bereits vorhandene Referenzdaten verwendet; `context` ruft weder Gemini noch Whisper v3 auf. Automatische Referenzen hängen ausschließlich von a/b/c ab, nicht von W-ctx.
+
+Latenz misst `performance.now()` direkt vor HTTP-Aufruf bis nach Dekodierung der vollständigen erfolgreichen Antwort. Pacing, Backoff und Cache-Lesezeit zählen nicht mit. Erfolgreiche Cache-Einträge behalten die ursprüngliche gemessene Latenz; Cache-Treffer werden nicht als 0 ms ausgegeben. Median/Max werden über diese ursprünglichen Messwerte berechnet. Historische P1-Ergebnisse ohne HTTP-Zeitmessung bleiben **—**, statt Server-Tokenzeiten als Netzlatenz auszugeben.
+
+### Getrennte Hörfehler- und Sinnprüfung
+
+Nur die Auswertung liest optionale Dateien im Datenordner:
+
+- `review-cases.json`: `[{ "id": "fall-1", "nr": 1, "bad": "fehlerhaftes muster", "good": "richtiges muster" }]`. Reguläre Ausdrücke werden auf kleingeschriebene, satzzeichenfreie Wörter mit Leerzeichen angewandt. Ein Fall zählt nur, wenn `bad` im ursprünglichen a-Rohtext vorkommt; als behoben nur, wenn das Ziel im Endtext vorkommt und `bad` verschwunden ist. Bloßes Löschen zählt nicht als Reparatur. Der konkrete Katalog verbleibt außerhalb des Repositories und erreicht nie die Inferenz-Prompts.
+- `audit` schreibt `review-inputs.json` mit Baseline, aktueller Eingabe, Ausgabe, Referenz/Ideal sowie Wortänderungen. Dies ist ausschließlich Prüfdatenmaterial.
+- `semantic-review.json`: `{ "entries": { "aufnahme-id": { "P2/modell-id": { "inputHash": "...", "baselineHash": "...", "outputHash": "...", "changes": [{ "from": "...", "to": "...", "reason": "..." }] } } } }`. Die Hashes aus `review-inputs.json` übernehmen. Die Prüfung kann als Agenten-Textprüfung erfolgen; sie ist dann kein menschlich bestätigter Audio-Goldstandard und muss so bezeichnet werden. Jede Ausgabe manuell auf neue Sinnänderungen prüfen; ein leeres Array bestätigt nur nach tatsächlicher Prüfung das Fehlen solcher Änderungen. Geerbte Hörfehler sind keine neu entstandenen Sinnänderungen; neue falsche Kontextübernahmen oder Umdeutungen schon. Für W-ctx auch Änderungen des konditionierten Rohtexts gegenüber a prüfen.
+
+Die Zusammenfassung gibt neue Sinnänderungen erst aus, wenn alle Ausgaben der Variante geprüft sind und die Hashes passen; ansonsten **—**, nicht 0. Nach Bearbeitung dieser Auswertungsdateien `score` und `report` erneut ausführen. Veraltete Prüfstände werden erkannt. Keine zusätzlichen LLM-Urteile sind für diese manuelle Zählung nötig.

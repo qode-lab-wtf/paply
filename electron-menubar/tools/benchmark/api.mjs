@@ -98,6 +98,7 @@ export class Api {
         body.set('file', new Blob([audio.buffer], { type: audio.mime }), audio.name);
       } else if (payload) { body = JSON.stringify(payload); requestHeaders['Content-Type'] = 'application/json'; }
       let response;
+      const started = performance.now();
       this.stats.requests++;
       try {
         response = await this.fetchImpl(base + endpoint, { method: payload ? 'POST' : 'GET', headers: requestHeaders, body, signal: AbortSignal.timeout(180_000) });
@@ -110,7 +111,7 @@ export class Api {
       try { data = await response.json(); } catch { throw new Error(`${provider}: ungültige API-Antwort (HTTP ${response.status}).`); }
       if (response.ok) {
         let value;
-        try { value = validate(data); } catch (error) {
+        try { value = validate(data, { latencyMs: Math.round(performance.now() - started) }); } catch (error) {
           await writeJson(file, { ok: false, at: this.now(), status: 'invalid-output', retryAt: this.now() + 86_400_000 });
           throw error;
         }
@@ -189,6 +190,6 @@ export class Api {
       ...(temperature === undefined ? {} : { temperature }),
       ...(model.startsWith('openai/gpt-oss-') ? { reasoning_format: 'hidden', reasoning_effort: 'low' } : {}),
       ...(json ? { response_format: { type: 'json_object' } } : {}),
-    }, { validate: d => ({ text: finalText(d), model, usage: d.usage ?? null }) });
+    }, { validate: (d, timing) => ({ text: finalText(d), model, usage: d.usage ?? null, ...timing }) });
   }
 }

@@ -180,7 +180,8 @@ test('CLI pipeline works fully offline, preserves scores on replay and rejects s
   assert.equal(state.recordings[1].reference.source, 'auto');
   assert.equal(state.recordings[1].reference.uncertain[0].seconds, 2);
   assert.equal(Object.keys(state.recordings[0].polish).length, 6);
-  assert.equal(Object.keys(state.recordings[0].scores).length, 10);
+  assert.equal(Object.keys(state.recordings[0].scores).length, 9);
+  assert.equal(state.recordings[0].transcripts.d, undefined); // vocab.txt is ignored.
   assert.match(await readFile(path.join(data, 'bericht.html'), 'utf8'), /data-time="2"/);
   assert.equal(invoke('match').status, 0);
   assert.equal((await readJson(path.join(data, 'references.suggested.json'))).x.ideal, 'Wir sehen Anna.');

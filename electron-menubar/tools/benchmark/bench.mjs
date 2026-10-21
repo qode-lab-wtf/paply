@@ -6,21 +6,23 @@ import { fileURLToPath } from 'node:url';
 import { Api, hash, readJson, writeJson, acquireLock } from './api.mjs';
 import { appPrompts, profileFor, STRICT_PROMPT, consensus, similarity, wer, fidelity, unanimousDeviations, selfCorrectionCase } from './core.mjs';
 import { report } from './report.mjs';
+import { CONTEXT_MODELS, contextMessages, previousDictations, whisperContext, chronological, baseTranscriptHash, isPolishFresh } from './context.mjs';
+import { experimentSummary, reviewInputs, knownRepairs, semanticAssessment } from './evaluation.mjs';
 
 export const POLISH_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
 const USAGE = `Paply Diktat-Benchmark (Node 22, ohne Electron)
-node tools/benchmark/bench.mjs <models|transcribe|match|reference|polish|score|report|all> [Optionen]
+node tools/benchmark/bench.mjs <models|transcribe|match|reference|polish|context|audit|score|report|all> [Optionen]
   --data <dir>        Aufnahmen + Metadaten + Ergebnisse (Standard /tmp/paply-bench)
   --config <pfad>     App-Konfiguration (Standard ~/Library/Application Support/paply-menubar/config.json)
   --scripts <pfad>    Vorlese-Texte für match (Standard <data>/scripts.json)
   --judge            Optionales LLM-Urteil bei score/all (zusätzliche API-Aufrufe)
   --offline          Nur API-Cache verwenden; report/reference benötigen nie Netz
-  --limit <n>        Erste n Aufnahmen, alphabetisch (sparsame Probeläufe)
+  --limit <n>        Erste n Aufnahmen, chronologisch (sparsame Probeläufe)
   --models <a,b>     Nur diese Poliermodelle (aus der festen Vergleichsliste)
   --refresh-models   Modellliste neu prüfen / negative Cache-Einträge erneut versuchen
   --help             Hilfe
 match schreibt references.suggested.json; nach Anhören manuell als references.json bestätigen.
-all = transcribe → reference → polish → score → report. match separat vor reference.
+all = transcribe → reference → polish → score → report. context ergänzt P2 und W-ctx+P2; danach reference/score/report. audit exportiert Prüfdaten. vocab.txt wird ignoriert.
 Nur mit Free-Tier-Schlüsseln nutzen; der API-Endpunkt kann den Abrechnungstarif nicht erzwingen.
 `;
 export function parseArgs(argv) {
@@ -62,6 +64,7 @@ async function recordings(dir, limit) {
     const fingerprint = hash(buffer);
     records.push({ id, file, meta, fingerprint, audio: { buffer, name: file, mime: /\.wav$/i.test(file) ? 'audio/wav' : 'audio/webm' } });
   }
+  records.sort(chronological);
   return limit ? records.slice(0, Number(limit)) : records;
 }
 function publicRecord(r, old) {
@@ -135,6 +138,7 @@ async function run(opts) {
     const rows = input.map(r => {
       const old = oldById.get(r.id), row = publicRecord(r, old);
       if (old?.fingerprint === r.fingerprint) { row.polish = old.polish || {}; row.errors = old.errors || {}; }
+      delete row.transcripts.d; delete row.errors.d; // No vocabulary in this benchmark.
       return row;
     });
     const save = async () => {
@@ -149,7 +153,7 @@ async function run(opts) {
       try { const value = await fn(); delete row.errors[key]; return value; }
       catch (e) { row.errors[key] = e.message; console.log(`${row.id} ${key}: ${e.message}`); return null; }
     };
-    if ((['models', 'transcribe', 'match', 'polish', 'all'].includes(command) || (command === 'score' && opts.judge))) {
+    if ((['models', 'transcribe', 'match', 'polish', 'context', 'all'].includes(command) || (command === 'score' && opts.judge))) {
       state.models.groq = await api.models();
       state.models.checkedAt = new Date().toISOString();
       state.models.polish = opts.models.filter(m => state.models.groq.includes(m));
@@ -158,11 +162,10 @@ async function run(opts) {
       if (command === 'models') { await writeJson(path.join(opts.data, 'models.json'), state.models); console.log(state.models.groq.join('\n')); return; }
     }
     const transcribe = async () => {
-      const vocab = await readFile(path.join(opts.data, 'vocab.txt'), 'utf8').catch(e => { if (e.code === 'ENOENT') return ''; throw e; });
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i], audio = input[i].audio;
         console.log(`Transkription ${i + 1}/${rows.length}: ${row.id}${row.meta.skipped ? ' (App hat übersprungen; hier bewusst gemessen)' : ''}`);
-        for (const [variant, model, prompt] of [['a', 'whisper-large-v3-turbo', null], ['b', 'whisper-large-v3', null], ...(vocab.trim() ? [['d', 'whisper-large-v3-turbo', vocab.trim()]] : [])]) {
+        for (const [variant, model, prompt] of [['a', 'whisper-large-v3-turbo', null], ['b', 'whisper-large-v3', null]]) {
           const value = await capture(row, variant, async () => {
             if (!state.models.groq.includes(model)) throw new Error(`Modell ${model} nicht verfügbar.`);
             return api.whisper(audio, model, prompt);
@@ -171,7 +174,6 @@ async function run(opts) {
           else delete row.transcripts[variant];
           await save();
         }
-        if (!vocab.trim()) { delete row.transcripts.d; delete row.errors.d; }
         const gemini = await capture(row, 'c', () => api.gemini(audio));
         if (gemini) row.transcripts.c = gemini; else delete row.transcripts.c;
         await save();
@@ -199,7 +201,7 @@ async function run(opts) {
       auto = {};
       for (const row of rows) {
         auto[row.id] = { ...consensus(['a', 'b', 'c'].map(k => row.transcripts[k]).filter(Boolean)), fingerprint: row.fingerprint,
-          transcriptHash: hash(row.transcripts), createdAt: new Date().toISOString() };
+          transcriptHash: baseTranscriptHash(row), createdAt: new Date().toISOString() };
       }
       await writeJson(autoFile, auto);
     }
@@ -208,7 +210,7 @@ async function run(opts) {
       const prompts = await appPrompts();
       for (const row of rows) {
         const text = row.transcripts.a?.text;
-        row.polish = {}; // Rebuild from cached exact requests; changed config/prompt never keeps stale variants.
+        row.polish = Object.fromEntries(Object.entries(row.polish).filter(([, p]) => ['P2', 'W-ctx+P2'].includes(p.variant))); // Keep independently validated context results.
         if (!text?.trim()) { row.errors.polish = 'Rohtext a fehlt/leer; keine Politur.'; continue; }
         delete row.errors.polish;
         const profile = profileFor(row.meta, config || {});
@@ -224,24 +226,60 @@ async function run(opts) {
         }
       }
     }
+    if (command === 'context') {
+      const models = CONTEXT_MODELS.filter(m => opts.models.includes(m) && state.models.groq.includes(m));
+      if (!models.length) throw new Error('Kein Kontext-Poliermodell verfügbar.');
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        let history;
+        try { history = previousDictations(rows, i); } catch (e) { row.errors.context = e.message; continue; }
+        if (!row.transcripts.a?.text?.trim()) { row.errors.context = 'Rohtext a fehlt/leer.'; continue; }
+        delete row.errors.context;
+        const prompt = whisperContext(history);
+        const value = await capture(row, 'wctx', () => api.whisper(input[i].audio, 'whisper-large-v3-turbo', prompt || null));
+        if (value) row.transcripts.wctx = { ...value, conditioning: prompt, historyIds: history.map(h => h.id), historyHash: hash(history), request: hash({ audio: row.fingerprint, prompt }) };
+        else delete row.transcripts.wctx;
+        await save();
+        for (const inputVariant of ['a', 'wctx']) for (const model of models) {
+          const variant = inputVariant === 'a' ? 'P2' : 'W-ctx+P2';
+          const name = `${variant}/${model}`;
+          const transcript = row.transcripts[inputVariant];
+          delete row.polish[name];
+          if (!transcript?.text?.trim()) { row.errors[name] = 'Eingabe-Transkript fehlt/leer.'; continue; }
+          const messages = contextMessages(transcript, history);
+          console.log(`${i + 1}/${rows.length} ${row.id}: ${name}`);
+          const polished = await capture(row, name, () => api.chat(model, messages, { temperature: 0 }));
+          if (polished) row.polish[name] = { ...polished, variant, inputVariant, inputHash: hash(transcript.text), promptHash: hash(messages), flavor: 'context', historyIds: history.map(h => h.id), messages };
+          await save();
+        }
+      }
+    }
     // Reference freshness is checked even for standalone score/report.
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
+      if (row.transcripts.wctx) {
+        try { if (row.transcripts.wctx.historyHash !== hash(previousDictations(rows, index))) delete row.transcripts.wctx; }
+        catch { delete row.transcripts.wctx; }
+      }
       const candidate = auto[row.id];
-      if (candidate && (candidate.fingerprint !== row.fingerprint || candidate.transcriptHash !== hash(row.transcripts))) delete auto[row.id];
+      if (candidate && (candidate.fingerprint !== row.fingerprint || candidate.transcriptHash !== baseTranscriptHash(row))) delete auto[row.id];
       row.reference = referenceFor(row.id, human, auto);
       row.consensus = auto[row.id]?.status === 'provisional' ? auto[row.id] : null;
       row.deviations = row.reference?.kind === 'vorgelesen' ? unanimousDeviations(row.reference.text, ['a', 'b', 'c'].map(k => row.transcripts[k])) : [];
       row.selfCorrection = row.reference ? selfCorrectionCase(row.reference, row.transcripts.a?.text || '', row.meta.transcript || '') : null;
-      for (const [key, polished] of Object.entries(row.polish)) if (polished.inputHash !== hash(row.transcripts.a?.text || '')) delete row.polish[key];
+      for (const [key, polished] of Object.entries(row.polish)) if (!isPolishFresh(polished, rows, index)) delete row.polish[key];
     }
     if (['score', 'all'].includes(command)) {
+      const cases = await readJson(path.join(opts.data, 'review-cases.json'), []);
+      const review = await readJson(path.join(opts.data, 'semantic-review.json'), {});
       for (const row of rows) {
         row.scores = {};
         if (!row.reference) { row.errors.reference = 'Referenz fehlt; reference ausführen oder references.json bestätigen.'; continue; }
         delete row.errors.reference;
         for (const [variant, t] of Object.entries(row.transcripts)) row.scores[variant] = { type: 'transcribe', wer: wer(row.reference.text, t.text) };
         for (const [variant, p] of Object.entries(row.polish)) {
-          const score = { type: 'polish', fidelity: fidelity(row.reference.text, p.text), ...(row.reference.ideal ? { idealWer: wer(row.reference.ideal, p.text) } : {}) };
+          const score = { type: 'polish', latencyMs: p.latencyMs ?? null, fidelity: fidelity(row.reference.text, p.text), ...(row.reference.ideal ? { idealWer: wer(row.reference.ideal, p.text) } : {}) };
+          score.knownRepairs = knownRepairs(row, p, cases);
+          score.semanticReview = semanticAssessment(row, p, review);
           if (opts.judge) {
             const result = await capture(row, `judge/${variant}`, async () => {
               if (!state.models.groq?.includes('openai/gpt-oss-120b')) throw new Error('Urteilsmodell openai/gpt-oss-120b nicht verfügbar.');
@@ -254,11 +292,19 @@ async function run(opts) {
         }
       }
       state.summary = aggregate(rows);
+      state.experimentSummary = experimentSummary(rows, cases, review);
+      state.reviewInputHash = hash({ cases, review });
+      state.reviewMethod = review.method || 'Textprüfung (Prüfdatei)';
+      await writeJson(path.join(opts.data, 'experiment-summary.json'), state.experimentSummary);
       state.scoreInputHash = hash(rows.map(r => ({ id: r.id, reference: r.reference, transcripts: r.transcripts, polish: r.polish })));
       await save();
-      await writeJson(path.join(opts.data, 'scores.json'), { updatedAt: state.updatedAt, summary: state.summary, recordings: rows.map(r => ({ id: r.id, reference: r.reference, scores: r.scores })) });
+      await writeJson(path.join(opts.data, 'scores.json'), { updatedAt: state.updatedAt, summary: state.summary, experimentSummary: state.experimentSummary, recordings: rows.map(r => ({ id: r.id, reference: r.reference, scores: r.scores })) });
     }
+    if (command === 'audit') await writeJson(path.join(opts.data, 'review-inputs.json'), reviewInputs(rows));
     if (['report', 'all'].includes(command)) {
+      const cases = await readJson(path.join(opts.data, 'review-cases.json'), []);
+      const review = await readJson(path.join(opts.data, 'semantic-review.json'), {});
+      if (state.reviewInputHash !== hash({ cases, review })) throw new Error('Prüfkatalog/Sinnprüfung geändert; zuerst score ausführen.');
       const digest = hash(rows.map(r => ({ id: r.id, reference: r.reference, transcripts: r.transcripts, polish: r.polish })));
       if (state.scoreInputHash !== digest) throw new Error('Kennzahlen fehlen oder sind veraltet; zuerst score ausführen.');
       // Load scores from the scored state, rather than trusting unsaved references.
@@ -277,7 +323,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     const opts = parseArgs(process.argv.slice(2));
     if (!opts.command || opts.command === '--help' || opts.help) console.log(USAGE);
-    else if (!['models', 'transcribe', 'match', 'reference', 'polish', 'score', 'report', 'all'].includes(opts.command)) throw new Error('Unbekannter Schritt. --help zeigt die Befehle.');
+    else if (!['models', 'transcribe', 'match', 'reference', 'polish', 'context', 'audit', 'score', 'report', 'all'].includes(opts.command)) throw new Error('Unbekannter Schritt. --help zeigt die Befehle.');
     else await run(opts);
   } catch (e) { console.error(e.message); process.exitCode = 1; }
 }
