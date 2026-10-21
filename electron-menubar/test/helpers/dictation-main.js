@@ -8,7 +8,7 @@ import { readResponse, friendlyError, replaceShortcut, polishTokenBudget, comple
 import { filterTranscription, shouldSkipTranscription, validateVoiceActivity } from '../../audio/silence-filter.js';
 
 export const source = fs.readFileSync(path.join(__dirname, '../../electron-main.js'), 'utf8');
-export const speech = { durationMs: 4000, measuredMs: 4000, speechMs: 800, peakDbfs: -40, maxGapMs: 40 };
+export const speech = { durationMs: 4000, measuredMs: 4000, speechMs: 800, peakDbfs: -40, floorDbfs: -62, maxGapMs: 40 };
 export const tick = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
 export function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
 export function makeMain(platform = 'darwin', settings = {}) {
