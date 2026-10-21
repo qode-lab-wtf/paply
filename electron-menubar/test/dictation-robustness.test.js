@@ -177,7 +177,7 @@ it('Hintergrund-Prüfung: still bei „kein Update“ und Prüffehler, meldet ab
 it('zweite Instanz initialisiert weder Manager noch Hotkeys', () => {
   const app = { requestSingleInstanceLock: () => false, quit: vi.fn() };
   const requireMock = vi.fn(name => { if (name === 'electron') return { app }; throw Error('Unexpected initialization: ' + name); });
-  vm.runInNewContext(source, { require: requireMock });
+  vm.runInNewContext(source, { require: requireMock, process: { env: {} }, console });
   expect(app.quit).toHaveBeenCalledOnce(); expect(requireMock).toHaveBeenCalledOnce();
 });
 

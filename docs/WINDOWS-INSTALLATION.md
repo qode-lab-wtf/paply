@@ -4,7 +4,7 @@ Kurzanleitung zum Weitergeben (z. B. an Freunde). Dauer: ca. 5 Minuten.
 
 ## 1. Herunterladen
 
-Auf <https://github.com/qode-lab-wtf/paply/releases/latest> die Datei **`paply.Setup.<Version>.exe`** laden.
+Auf <https://github.com/qode-lab-wtf/paply/releases/latest> die Datei **`paply-Setup-<Version>.exe`** laden.
 
 ## 2. Installieren
 

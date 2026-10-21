@@ -145,7 +145,8 @@
       "uninstallerIcon": "icon.ico",
       "differentialPackage": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "files": [
       "electron-main.js",
