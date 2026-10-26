@@ -24,6 +24,7 @@
 !/electron-menubar/resources/bin/macos-globe-listener.swift
 /electron-menubar/resources/bin/macos-call-detector
 !/electron-menubar/resources/bin/macos-call-detector.swift
+/electron-menubar/resources/bin/macos-notes-keymap
 
 # misc
 .DS_Store

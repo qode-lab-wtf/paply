@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { CustomVocabularySettings } from '@/components/CustomVocabularySettings';
 import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
+import { NotesSettings } from '@/components/NotesSettings';
 import { formatShortcut, keyEventToAccelerator } from '@/lib/shortcut';
 import { Onboarding } from './views/Onboarding';
 import { MeetingsView } from './views/MeetingsView';
@@ -121,7 +122,7 @@ export function Dashboard() {
         // Hinweis des letzten Diktats wieder entfernen, sobald ein neues läuft bzw. klappt.
         const stale = statusMessage;
         statusMessage = null;
-        setSettingsError(current => (current === stale ? null : current));
+        setSettingsError(current => (current === stale ? '' : current));
       }
     });
     return () => { offState(); offStatus(); };
@@ -239,6 +240,7 @@ export function Dashboard() {
         </div>
 
         <nav className="flex-1 p-2 space-y-1">
+          <button onClick={() => window.electronAPI.openNotes()} className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"><Sparkles className="w-4 h-4"/>Notes</button>
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -1208,7 +1210,7 @@ function AgentsView({
   };
 
   const currentConfigAgent = selectedConfigAgent 
-    ? (profiles[selectedConfigAgent] || customAgents.find(a => a.id === selectedConfigAgent))
+    ? (Object.prototype.hasOwnProperty.call(profiles, selectedConfigAgent) ? profiles[selectedConfigAgent] : customAgents.find(a => a.id === selectedConfigAgent))
     : null;
 
   return (
@@ -1900,6 +1902,7 @@ function SettingsView({
   return (
     <div className="max-w-xl space-y-6">
       <Button variant="link" className="px-0" onClick={() => window.electronAPI.openOnboarding()}>Ersteinrichtung erneut zeigen</Button>
+      <NotesSettings />
       <MeetingBetaSettings enabled={settings.meetingEnabled} isMac={!!platform?.isMac} />
       {/* API Keys */}
       <Card>

@@ -43,3 +43,16 @@ Windows-Signing-Fix vom Feb. 2026 ist überholt (Windows-Build läuft).
 - Diktat: Stille-Fix ausdrücklich gewünscht; übriger Diktat-Ablauf auf dem Mac bleibt gleich
   (gleiche Einfüge-Methode). Nicht umgesetzt, weil Verhalten ändernd: Zwischenablage nach dem Einfügen
   wiederherstellen; Schlüssel per Schlüsselbund verschlüsseln (unsignierte App → Passwortabfragen).
+
+
+## 2026-10-26 — Notes bauen (von Allan bestätigt)
+
+- Eine gemeinsame visuelle Gedankenablage, keine getrennten Notizbücher. Themenchips springen zu Bereichen auf derselben Fläche. Karte, freier Text, Haftnotiz, Mindmap, Vergleich und Ablauf je nach Inhalt.
+- Konfigurierbares eigenes Aufnahme-Kürzel (Mac-Voreinstellung Cmd+Y) und Öffnen-Kürzel; eigenständige Mint-Gold-Pille in Paply CI. Diktatbedienung unverändert, minimale Vorrang-Haken sichern getrennte Aufnahmen.
+- Offlinefähige Originale und manuelle Bearbeitung; KI erzeugt begrenzte Darstellungspläne ohne ausführbaren UI-Code oder recherchierte Inhalte. OpenUI rendert kontrollierte Paply-Bausteine, ReactFlow übernimmt Canvas-Interaktion.
+- Bestehender Groq-Key; kurze Gedanken 20B, komplexere 120B, Whisper-Turbo für Audio, optionale gecachte Qwen-Bildbeschreibung. Lokale Budgets und eine serielle Queue, kein stündlicher autonomer Agent.
+- Vor-/Nachreview durch Opus 5.5 Extra High und unabhängige QA, danach lokale Test-App. Ein öffentliches Release ist damit nicht beauftragt.
+
+## 2026-10-26 — Notes veröffentlichen (von Allan bestätigt)
+
+Nach dem MacBook-Test und der Y/Z-Korrektur in `1.15.0-notes.2`: „ok passt … kannst das ganze pushen, auf github etc und meine version updaten. ich werds testen.“ Damit sind Commit/Push auf `main`, Release-Tag `v1.15.0`, Veröffentlichung über den vorhandenen GitHub-Workflow und Aktualisierung der installierten MacBook-App beauftragt. Die vorhandenen Test-Notes werden zusätzlich ins normale Profil übernommen; bestehende Einstellungen, Diktatverlauf und Meetings bleiben erhalten.

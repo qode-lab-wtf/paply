@@ -1,6 +1,24 @@
 # Paply — Stand
 
-**Zeitpunkt:** 21.10.2026, abends · **Phase:** Betrieb v1.14.1
+**Zeitpunkt:** 26.10.2026 · **Phase:** Release v1.15.0 beauftragt, Veröffentlichung und MacBook-Aktualisierung in Arbeit
+
+## v1.15.0 — Notes
+
+- Allan hat nach dem MacBook-Test den GitHub-Push, das Release und die Aktualisierung seiner installierten App freigegeben. Grundlage: geprüfte `1.15.0-notes.2`, inklusive deutscher Y/Z-Korrektur.
+- Neue Gedankenaufnahme mit eigener Pille, gemeinsames bearbeitbares Canvas, begrenzte Groq-Einordnung, Text-/Bild-Paste und optionale Screenshots. Cmd+Y für Aufnahme, Cmd+Alt+Y zum Öffnen, beides änderbar. Kein zusätzlicher API-Key nötig.
+- Die normale MacBook-Installation wird auf 1.15.0 aktualisiert; ihre Einstellungen, ihr Diktatverlauf und ihre Meetings bleiben bestehen. Test-Notes werden mit einer Sicherung zusätzlich übernommen.
+- Releaseprüfung: 616/616 automatische Tests und TypeScript grün. Letzten Notes-Flush-Fehler beim nativen macOS-Beenden korrigiert; unabhängiger Test am echten 1.15.0-Paket bestätigt sauberes Beenden mit einem Aufruf (530 ms). [QA-Nachweis](notes/QA.md).
+
+## Vorangegangene Notes-Testversion 1.15.0-notes.2 (26.10.2026)
+
+- Nach MacBook-Praxistest korrigiert: Unter deutscher Tastatur löste die als Cmd+Y angezeigte Notes-Belegung tatsächlich auf Z aus (vom Nutzer bestätigt). Notes fragt jetzt über einen eigenen kleinen Carbon-Helfer die unmodifizierten Tastenbeschriftungen ab. Frische Defaults liegen auf dem gedruckten Y; Settings und Leerzustand zeigen die passenden Labels. Selbst gesetzte physische Kürzel bleiben erhalten. Diktat, gemeinsamer Shortcut-Parser, Pille und Audiofilter unverändert. 108 gezielte Tests und TypeScript grün. [QA-Nachtrag](notes/QA.md).
+- `notes.2` auf dem MacBook gestartet, Testprofil und vorhandene Gedanken erhalten. Separat geprüft: deutsche Defaults, Beschriftungen und Erhalt eigener Kürzel; keine echte Tastensimulation. App-Hash `0ae8d939b1a9b1a6d2f04499268d49ecb809d9aeac10ec29c271b75df566ff85`, nativer Helfer `4b5c21f4201bea5c6c9f64e5f34a3b3d8b66c037b62be96cc616dbba56f49e61`; beide auf dem MacBook bestätigt. Starter auf dem Schreibtisch zeigt jetzt `1.15.0-notes.2`.
+
+- Allans Auftrag umgesetzt: neue Gedankenaufnahme (Cmd+Y, änderbar), Öffnen per Cmd+Alt+Y, eigene Pille, ein gemischtes Canvas mit OpenUI/ReactFlow, Drag/Resize/Verbindungen, Edit/Copy/Delete/Undo und Text-/Bild-Paste.
+- Recorder, Quelle/Board und begrenzte Groq-Queue getrennt. Audio wird lokal bestätigt gespeichert, bei geschlossenem Board verarbeitet; Diktat/Meeting hat Vorrang. Optionaler Screenshot und begrenzte Bildbeschreibung mit demselben Key.
+- Vor-/Abschlussreview durch Opus 5.5 Extra High, separate echte Electron-QA. Gefundene Bugs korrigiert; 608 automatische Tests und TypeScript grün, 14 Paketprüfungen sowie gezielte Editor-/Transkript-/Tabellen-/Konfliktfälle bestanden. Opus-Nachprüfung mit lokaler Testfreigabe abgeschlossen; letzte empfohlene Korrekturen umgesetzt und im finalen Paket nachgetestet. [Implementierung](notes/IMPLEMENTIERUNG.md), [QA](notes/QA.md), [Reviewreaktionen](notes/REVIEW-ANTWORTEN.md).
+- Lokaler Starter: `electron-menubar/dist/notes-test/Paply Notes testen.command`; Anleitung: [Notes testen](notes/TESTEN.md). Eigenes anfangs leeres Profil `~/.paply-notes-test`. Bei dieser Testübergabe erfolgten noch kein Tag, Push, Release oder Austausch der installierten Alltags-App; die spätere Releasefreigabe steht oben. Windows noch nicht praktisch vollständig abgenommen.
+- MacBook-Übergabe (26.10.2026): Diese Entwicklungsumgebung läuft auf dem **Mac mini**, nicht auf Allans MacBook. Nach Korrektur der zunächst falschen Ortsangabe wurde das unverändert geprüfte Paket per `ssh macbook` nach `/Users/allanha/Applications/Paply-Notes-Test` übertragen und dort als `1.15.0-notes.1` gestartet. Starter auf dem MacBook-Schreibtisch: `Paply Notes testen.command`. Separates Profil `~/.paply-notes-test`; vorhandener Groq-Key und Diktatkürzel wurden ausschließlich auf dem MacBook in dieses Profil übernommen. Die installierte `/Applications/paply.app` bleibt 1.14.1 und wurde für den Test regulär beendet. App-Hash bestätigt; physischer Notes-Hotkey noch nicht bestätigt, Fernsteuerung über System Events ohne Hilfszugriff abgewiesen.
 
 ## v1.14.1 (21.10.2026)
 

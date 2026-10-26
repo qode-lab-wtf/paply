@@ -11,6 +11,10 @@ const {
   dialog,
   screen,
   systemPreferences,
+  protocol,
+  desktopCapturer,
+  session,
+  net,
 } = require('electron');
 // ============================================================================
 // ISOLIERTER TEST-MODUS
@@ -39,6 +43,12 @@ app.on('second-instance', () => { app.whenReady().then(() => { const win = creat
 
 const path = require('node:path');
 const fs = require('node:fs');
+const { createNotes } = require('./notes');
+let notesApp = null;
+// Native macOS updater closes windows before app.before-quit.
+require('electron').autoUpdater?.on('before-quit-for-update', () => notesApp?.prepareQuit());
+const notesBridge = { dictationState() {}, meetingStarted() {} };
+protocol.registerSchemesAsPrivileged([{ scheme: 'paply-notes', privileges: { standard: true, secure: true, stream: true } }]);
 const { createDictationJobs } = require('./dictation/jobs');
 const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order');
 const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
@@ -201,7 +211,7 @@ function getAutoLauncher() {
 
 async function updateAutoLaunch() {
   // In Dev/unsinged runs the login item often does not exist; skip there
-  if (!app.isPackaged) return;
+  if (!app.isPackaged || process.env.PAPLY_USER_DATA) return;
 
   try {
     const enabled = getStore().get('autoStart');
@@ -685,6 +695,10 @@ function setupAutoUpdater() {
 }
 
 async function checkForUpdates(silent = false) {
+  if (process.env.PAPLY_USER_DATA) {
+    if (!silent) dialog.showMessageBox({ type: 'info', message: 'Isolierte Testversion', detail: 'Diese Test-App installiert keine Updates. Deine normale Paply-App bleibt unabhängig davon.' });
+    return;
+  }
   if (updateCheckInProgress || downloadInProgress) {
     console.log('Update check already in progress');
     return;
@@ -1133,6 +1147,8 @@ function updateTrayMenu() {
     { label: statusLabel, enabled: false },
     { type: 'separator' },
     { label: 'Dashboard öffnen', click: showMainWindow },
+    { label: 'Notes öffnen', click: () => notesApp?.openBoard() },
+    { label: 'Gedanke aufnehmen', click: () => notesApp?.toggle() },
     { label: 'Transcribe', accelerator: shortcut === 'GLOBE' ? undefined : shortcut, click: startTranscription },
     { type: 'separator' },
     { label: 'History', submenu: historySubmenu },
@@ -1229,6 +1245,7 @@ function startTranscription() {
 }
 
 function publishRecordingState() {
+  notesBridge.dictationState(isRecording);
   mainWindow?.webContents.send('recording:state', { isRecording });
 }
 
@@ -2529,7 +2546,7 @@ app.whenReady().then(() => {
   if (isWin) { try { windowsFocus.start(); } catch { /* clipboard fallback */ } }
 
   // Setup auto-updater
-  setupAutoUpdater();
+  if (!process.env.PAPLY_USER_DATA) setupAutoUpdater();
 
   setupIpcHandlers();
 
@@ -2563,7 +2580,7 @@ app.whenReady().then(() => {
     meetingStore,
     audioTee: systemAudioManager,
     callDetector: callDetectorManager,
-    showOverlay: () => showMeetingOverlay(),
+    showOverlay: () => { notesBridge.meetingStarted(); return showMeetingOverlay(); },
     hideOverlay: () => hideMeetingOverlay(),
     getMainWindow: () => mainWindow,
     fetchImpl: (...args) => globalThis.fetch(...args),
@@ -2583,6 +2600,17 @@ app.whenReady().then(() => {
   setInterval(() => { try { meetingController.runRetention(); } catch { /* best effort */ } }, 24 * 60 * 60 * 1000);
 
   registerHotkey();
+  try {
+    notesApp = createNotes({ app, BrowserWindow, ipcMain, globalShortcut, screen, nativeImage, desktopCapturer, session, net, clipboard, getStore,
+      isDictating: () => isRecording || dictationJobs.pending().length > 0,
+      isMeetingActive: () => !!meetingController?.getStatus().active,
+      otherShortcuts: () => [getStore().get('shortcut'), getStore().get('meetingEnabled') && meetingAccelerator(getStore().get('meetingHotkey')), getQuitAccelerator(),
+        isMac ? 'Command+Option+Shift+V' : 'Control+Alt+Shift+V', isMac ? 'Command+Option+Shift+R' : 'Control+Alt+Shift+R',
+        ...Object.values(getStore().get('profiles', {})).map(p => p.hotkey), ...getStore().get('customAgents', []).map(a => a.hotkey)],
+      getSettingsWindows: () => [mainWindow, settingsWindow], openSettings: createSettingsWindow,
+    });
+    notesApp.start(); Object.assign(notesBridge, notesApp.bridge);
+  } catch (e) { dialog.showErrorBox('Notes konnten nicht geladen werden', e.message); }
   // Overlay vorladen (versteckt), damit der Meeting-Start keine Sekunden-Lücke hat.
   if (s.get('meetingEnabled', false)) {
     try { applyMeetingSettings({}); } catch (e) { dialog.showErrorBox('Meeting-Modus', e.message); }
@@ -2607,7 +2635,22 @@ app.whenReady().then(() => {
   }, 5000);
 });
 
+let notesQuitStarted = false;
+let notesQuitReady = false;
+app.on('before-quit', event => {
+  if (!notesApp || notesQuitReady) return;
+  event.preventDefault();
+  if (notesQuitStarted) return;
+  notesQuitStarted = true;
+  Promise.resolve(notesApp.flush()).catch(() => {}).finally(() => {
+    notesQuitReady = true;
+    // Native macOS termination must finish its current dispatch before retrying.
+    setImmediate(() => app.quit());
+  });
+});
+
 app.on('will-quit', () => {
+  notesApp?.shutdown();
   windowsFocus.stop();
   globalShortcut.unregisterAll();
   globeKeyManager.stop();

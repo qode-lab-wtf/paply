@@ -28,6 +28,7 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
     resumePending: vi.fn(), runRetention: vi.fn(),
   };
   const electron = {
+    protocol: { registerSchemesAsPrivileged: vi.fn() },
     app: { whenReady: () => ({ then: cb => { ready = cb; } }), on: vi.fn(), getPath: () => '/test-only', requestSingleInstanceLock: () => true, quit: vi.fn() },
     systemPreferences: { isTrustedAccessibilityClient: () => true },
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), on: vi.fn() },
@@ -37,6 +38,7 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
     session: { defaultSession: { setDisplayMediaRequestHandler: vi.fn() } },
   };
   const spies = { overlay: vi.fn(), dictation: vi.fn(), show: vi.fn() };
+  const notes = { start: vi.fn(), shutdown: vi.fn(), flush: vi.fn(async () => {}), bridge: { dictationState: vi.fn(), meetingStarted: vi.fn() } };
   const context = {
     require: name => {
       if (name === 'electron') return electron;
@@ -45,11 +47,12 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
       if (['./globe-key-manager', './audio-tee-manager', './windows-audio-manager', './call-detector-manager'].includes(name)) return Helper;
       if (name === './meeting/meeting-store') return { createMeetingStore: () => ({}) };
       if (name === './meeting/meeting-controller') return { createMeetingController: () => controller };
+      if (name === './notes') return { createNotes: () => notes };
       return realRequire(name);
     },
     process: { platform, env: {}, arch: 'x64' }, __dirname: root,
     console: { log: vi.fn(), error: vi.fn() },
-    setTimeout: vi.fn(() => ({ unref() {} })), setInterval: vi.fn(() => ({ unref() {} })), clearTimeout: vi.fn(), clearInterval: vi.fn(), spies,
+    setTimeout: vi.fn(() => ({ unref() {} })), setInterval: vi.fn(() => ({ unref() {} })), setImmediate: vi.fn(), clearTimeout: vi.fn(), clearInterval: vi.fn(), spies,
   };
   vm.createContext(context);
   // Main-Code liegt im Block der Single-Instance-Sperre: Ersetzungen müssen in
@@ -63,8 +66,33 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
     globalThis.fixture = { getStore, setupIpcHandlers, setDashboard: win => { mainWindow = win; } };
   }`);
   vm.runInContext(source, context);
-  return { ready: () => ready(), handlers, data, controller, electron, spies, helpers, context };
+  return { ready: () => ready(), handlers, data, controller, electron, spies, helpers, context, notes };
 }
+
+describe('Main: Notes beim nativen Beenden sichern', () => {
+  it.each([false, true])('wartet auf Flush und verlässt den nativen Quit-Dispatch (Flush-Fehler: %s)', async fails => {
+    const h = harness({ platform: 'darwin' }); h.ready();
+    let finish;
+    h.notes.flush.mockImplementation(() => new Promise((resolve, reject) => { finish = () => fails ? reject(new Error('disk unavailable')) : resolve(); }));
+    const beforeQuit = h.electron.app.on.mock.calls.find(([event]) => event === 'before-quit')[1];
+    const first = { preventDefault: vi.fn() }, duplicate = { preventDefault: vi.fn() };
+    beforeQuit(first); beforeQuit(duplicate);
+    expect(first.preventDefault).toHaveBeenCalledOnce();
+    expect(duplicate.preventDefault).toHaveBeenCalledOnce();
+    expect(h.notes.flush).toHaveBeenCalledOnce();
+    expect(h.context.setImmediate).not.toHaveBeenCalled();
+    finish();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(h.context.setImmediate).toHaveBeenCalledOnce();
+    expect(h.electron.app.quit).not.toHaveBeenCalled();
+    h.context.setImmediate.mock.calls[0][0]();
+    expect(h.electron.app.quit).toHaveBeenCalledOnce();
+    const retry = { preventDefault: vi.fn() };
+    beforeQuit(retry);
+    expect(retry.preventDefault).not.toHaveBeenCalled();
+    expect(h.notes.flush).toHaveBeenCalledOnce();
+  });
+});
 
 describe('Main: Meeting-Beta und Ersteinrichtung verdrahtet', () => {
   it('startet für Altinstallationen ohne Opt-in weder Meeting-Hotkey noch Overlay/Helfer, behält Retention', () => {

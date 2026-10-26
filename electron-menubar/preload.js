@@ -9,6 +9,12 @@ function listen(channel, cb) {
 contextBridge.exposeInMainWorld('electronAPI', {
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),
+  openNotes: () => ipcRenderer.invoke('notes:open'),
+  getNotesSettings: () => ipcRenderer.invoke('notes:settings:get'),
+  setNotesSettings: value => ipcRenderer.invoke('notes:settings:set', value),
+  captureNotesShortcut: field => ipcRenderer.invoke('notes:settings:listen', field),
+  onNotesShortcut: cb => listen('notes:settings:key', cb),
+  onNotesSettingsChanged: cb => listen('notes:settings:changed', cb),
   setSettings: (settings) => ipcRenderer.invoke('settings:set', settings),
 
   onSettingsChanged: (cb) => { const h = () => cb(); ipcRenderer.on('settings:changed', h); return () => ipcRenderer.removeListener('settings:changed', h); },

@@ -15,6 +15,8 @@ export default defineConfig({
         settings: path.resolve(__dirname, 'src/settings.html'),
         history: path.resolve(__dirname, 'src/history.html'),
         recording: path.resolve(__dirname, 'src/recording.html'),
+        notes: path.resolve(__dirname, 'src/notes.html'),
+        'notes-pill': path.resolve(__dirname, 'src/notes-pill.html'),
         'meeting-overlay': path.resolve(__dirname, 'src/meeting-overlay.html'),
       },
     },

@@ -1,0 +1,20 @@
+const assert = require('node:assert/strict');
+const wait = ms => new Promise(r=>setTimeout(r,ms));
+exports.run = async ({board,state,shot,app,results,targetLabel='Meer'}) => {
+ const s=await state(); const target=Object.values(s.nodes).find(n=>n.label===targetLabel);const edge=Object.values(s.edges).find(e=>e.target===target.id);
+ await board.getByRole('button',{name:'Auszeit',exact:true}).click();await wait(350);
+ const loc=board.locator(`[data-note-id="${target.id}"]`),path=board.locator(`.react-flow__edge[data-id="${edge.id}"] .react-flow__edge-path`);
+ const measure=async()=>({box:await loc.boundingBox(),point:await path.evaluate(p=>{const v=p.getPointAtLength(p.getTotalLength()),q=new DOMPoint(v.x,v.y).matrixTransform(p.getScreenCTM());return{x:q.x,y:q.y}}),d:await path.getAttribute('d')});
+ const start=await measure();await board.mouse.move(start.box.x+65,start.box.y+25);await board.mouse.down();await board.mouse.move(start.box.x+105,start.box.y+55,{steps:8});await wait(150);const mid=await measure();await shot('04-live-drag');await board.mouse.move(start.box.x+155,start.box.y+90,{steps:8});await wait(150);const end=await measure();await board.mouse.up();await wait(200);
+ assert(Math.abs(mid.box.x-start.box.x)>25,'node moved before release');assert(Math.abs(mid.point.x-start.point.x)>25,'edge moved before release');assert(Math.abs((end.box.x-start.box.x)-(end.point.x-start.point.x))<4,'edge endpoint follows node');
+ results.push({id:'live-drag',pass:true,start,mid,end});
+ const afterDrag=await state();assert.notDeepEqual(afterDrag.nodes[target.id].position,target.position);
+ const handle=board.locator(`.react-flow__node[data-id="${target.id}"] .react-flow__resize-control.bottom.right.handle`);await handle.waitFor();const h=await handle.boundingBox();await board.mouse.move(h.x+h.width/2,h.y+h.height/2);await board.mouse.down();await board.mouse.move(h.x+90,h.y+60,{steps:12});await board.mouse.up();await wait(200);const resized=(await state()).nodes[target.id];assert(resized.width>target.width+30);results.push({id:'resize',pass:true,width:resized.width,height:resized.height});
+ await loc.dblclick();await board.getByRole('textbox',{name:'Notiz bearbeiten'}).fill('Manuell bewahrter Gedanke: lieber ruhiges Meer.');await board.getByRole('button',{name:'Übernehmen',exact:true}).click();await wait(200);assert.equal((await state()).nodes[target.id].text,'Manuell bewahrter Gedanke: lieber ruhiges Meer.');
+ await board.getByRole('button',{name:'Original ansehen',exact:true}).click();assert((await board.locator('.source-modal').innerText()).includes('Ich möchte im Frühjahr ans Meer.'));await board.getByRole('button',{name:'Original schließen',exact:true}).click();
+ await board.getByRole('button',{name:'Rückgängig (⌘Z)',exact:true}).click();await wait(150);assert.equal((await state()).nodes[target.id].text,target.text);
+ await board.getByRole('button',{name:'Wiederholen (⇧⌘Z)',exact:true}).click();await wait(150);assert.equal((await state()).nodes[target.id].text,'Manuell bewahrter Gedanke: lieber ruhiges Meer.');
+ await board.getByRole('button',{name:'Text kopieren',exact:true}).click();assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),'Manuell bewahrter Gedanke: lieber ruhiges Meer.');
+ await board.getByRole('button',{name:'Entfernen',exact:true}).click();await wait(150);assert(!(await state()).nodes[target.id]);assert(!(await state()).edges[edge.id]);await board.getByRole('button',{name:'Rückgängig (⌘Z)',exact:true}).click();await wait(200);assert((await state()).nodes[target.id]);assert((await state()).edges[edge.id]);results.push({id:'edit-original-copy-delete-undo-redo',pass:true});
+ return {results,screenshot:await shot('05-edited-resized')};
+};

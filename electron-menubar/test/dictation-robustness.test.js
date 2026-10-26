@@ -161,7 +161,7 @@ it('protokolliert Text nur mit PAPLY_DEBUG_TEXT=1', async () => {
 it('Hintergrund-Prüfung: still bei „kein Update“ und Prüffehler, meldet aber neue Versionen', async () => {
   const { EventEmitter } = await import('node:events');
   const updater = new EventEmitter(); updater.checkForUpdates = vi.fn(async () => {});
-  const context = vm.createContext({ getAutoUpdater: () => updater, console, CURRENT_VERSION: '1',
+  const context = vm.createContext({ getAutoUpdater: () => updater, console, CURRENT_VERSION: '1', process: { env: {} },
     dialog: { showMessageBox: vi.fn(async () => ({ response: 1 })) },
     shell: { openExternal: vi.fn() }, GITHUB_REPO: 'test/repo', checkForUpdatesManual: vi.fn() });
   const code = source.slice(source.indexOf('function setupAutoUpdater('), source.indexOf('// Fallback manual update check'));

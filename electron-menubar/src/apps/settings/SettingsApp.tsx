@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { CustomVocabularySettings } from '@/components/CustomVocabularySettings';
 import { MeetingBetaSettings } from '@/components/MeetingBetaSettings';
+import { NotesSettings } from '@/components/NotesSettings';
 import { captureShortcut, formatShortcut } from '@/lib/shortcut';
 import { saveSettings } from '@/lib/settings-save';
 import { followSystemTheme } from '@/lib/theme';
@@ -112,6 +113,7 @@ export function SettingsApp() {
 
       <div className="mb-5 space-y-4">
         <Button variant="link" className="px-0" onClick={() => window.electronAPI.openOnboarding()}>Ersteinrichtung erneut zeigen</Button>
+        <NotesSettings />
         <MeetingBetaSettings enabled={settings.meetingEnabled} isMac={!!platform?.isMac} />
         {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
       </div>

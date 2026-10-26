@@ -1,0 +1,14 @@
+import { build } from 'esbuild';
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
+const dir=fileURLToPath(new URL('.',import.meta.url));
+const result=await build({entryPoints:[dir+'src.jsx'],bundle:true,write:false,minify:true,format:'iife',target:'chrome130',define:{'process.env.NODE_ENV':'"production"'},legalComments:'none'});
+const css=await readFile(dir+'style.css','utf8');
+const logo=await readFile(dir+'../../../electron-menubar/brand/mark.svg','utf8');
+const code=result.outputFiles[0].text.replaceAll('__PAPLY_LOGO__','data:image/svg+xml;base64,'+Buffer.from(logo).toString('base64')).replaceAll('</script','<\\/script');
+const packed=gzipSync(code).toString('base64');
+const bootstrap=`(async()=>{try{const bytes=Uint8Array.from(atob('${packed}'),c=>c.charCodeAt(0));const source=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();const script=document.createElement('script');script.textContent=source;document.body.append(script)}catch(e){console.error(e);document.getElementById('paply-generative').textContent='Der Entwurf konnte nicht geladen werden.'}})()`;
+const html=`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Paply · Gedanken nehmen Form an</title><style>${css}</style></head><body><div id="paply-generative"></div><script>${bootstrap}</script></body></html>`;
+await writeFile(dir+'../paply-notes-generative.html',html);
+console.log('Self-contained OpenUI prototype:',Buffer.byteLength(html),'bytes');

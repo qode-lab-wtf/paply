@@ -1,0 +1,171 @@
+{
+  "mixed_forms": {
+    "at": "2026-10-26T18:57:05.264Z",
+    "model": "openai/gpt-oss-120b",
+    "syntheticOnly": true,
+    "maxTokens": 18000,
+    "results": [
+      {
+        "name": "Mindmap",
+        "valid": true,
+        "latencyMs": 3553,
+        "sentences": 5,
+        "covered": 5,
+        "topics": [
+          "Frühjahrsauszeit"
+        ],
+        "structures": [
+          "mindmap"
+        ],
+        "expected": "mindmap",
+        "usage": {
+          "tokens": 3489,
+          "audioSeconds": 0,
+          "requests": 1
+        }
+      },
+      {
+        "name": "Vergleich",
+        "valid": true,
+        "latencyMs": 4292,
+        "sentences": 6,
+        "covered": 6,
+        "topics": [
+          "Lampenvergleich Esstisch"
+        ],
+        "structures": [
+          "table"
+        ],
+        "expected": "table",
+        "usage": {
+          "tokens": 7400,
+          "audioSeconds": 0,
+          "requests": 2
+        }
+      },
+      {
+        "name": "Ablauf",
+        "valid": true,
+        "latencyMs": 2152,
+        "sentences": 4,
+        "covered": 4,
+        "topics": [
+          "Paply Test"
+        ],
+        "structures": [
+          "flow"
+        ],
+        "expected": "flow",
+        "usage": {
+          "tokens": 10251,
+          "audioSeconds": 0,
+          "requests": 3
+        }
+      },
+      {
+        "name": "Gemischte Gedanken",
+        "valid": true,
+        "latencyMs": 2989,
+        "sentences": 4,
+        "covered": 4,
+        "topics": [
+          "Paply",
+          "Waldausflug",
+          "Haus"
+        ],
+        "structures": [],
+        "expected": null,
+        "usage": {
+          "tokens": 13486,
+          "audioSeconds": 0,
+          "requests": 4
+        }
+      }
+    ],
+    "usage": {
+      "tokens": 13486,
+      "audioSeconds": 0,
+      "requests": 4
+    }
+  },
+  "populated_board": {
+    "at": "2026-10-26T19:13:31.020Z",
+    "model": "openai/gpt-oss-120b",
+    "populated": true,
+    "syntheticOnly": true,
+    "maxTokens": 18000,
+    "results": [
+      {
+        "name": "Befülltes Board mit echten IDs",
+        "valid": true,
+        "latencyMs": 4338,
+        "sentences": 12,
+        "covered": 12,
+        "topics": [
+          "Küchengarten"
+        ],
+        "structures": [
+          "mindmap"
+        ],
+        "expected": null,
+        "usage": {
+          "tokens": 5185,
+          "audioSeconds": 0,
+          "requests": 1
+        }
+      }
+    ],
+    "transport": [
+      {
+        "status": 200,
+        "reserved": 7520,
+        "usage": {
+          "queue_time": 0.054285522,
+          "prompt_tokens": 3324,
+          "prompt_time": 0.160132828,
+          "completion_tokens": 1861,
+          "completion_time": 3.90198809,
+          "total_tokens": 5185,
+          "total_time": 4.062120918,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1120
+          }
+        },
+        "finishReason": "stop"
+      }
+    ],
+    "usage": {
+      "tokens": 5185,
+      "audioSeconds": 0,
+      "requests": 1
+    }
+  },
+  "short_and_vision": {
+    "syntheticOnly": true,
+    "at": "2026-10-26T19:21:24.457Z",
+    "short": {
+      "valid": true,
+      "ms": 823,
+      "topics": [],
+      "covered": 1,
+      "usage": {
+        "tokens": 2092,
+        "audioSeconds": 0,
+        "requests": 1
+      }
+    },
+    "vision": {
+      "valid": true,
+      "ms": 331,
+      "result": {
+        "caption": "Ein grünes, abgerundetes Rechteck links neben den Texten 'LAMPE A' und '80 EUR' auf hellem Hintergrund.",
+        "visibleText": "LAMPE A\n80 EUR"
+      },
+      "usage": {
+        "tokens": 3005,
+        "audioSeconds": 0,
+        "requests": 2
+      }
+    }
+  }
+}

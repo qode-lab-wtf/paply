@@ -1,5 +1,6 @@
 import type { MeetingIndexEntry, MeetingFull, MeetingSummary } from './meeting';
 import type { VoiceActivityMeta } from '../lib/voice-activity';
+import type { NotesPreferences } from './notes';
 
 export interface Settings {
   groqApiKey: string;
@@ -112,6 +113,12 @@ export interface MicrophonePermission {
 }
 
 export interface ElectronAPI {
+  openNotes: () => Promise<boolean>;
+  getNotesSettings: () => Promise<NotesPreferences>;
+  setNotesSettings: (value: Partial<NotesPreferences>) => Promise<NotesPreferences>;
+  captureNotesShortcut: (field: 'captureHotkey' | 'openHotkey' | null) => Promise<boolean>;
+  onNotesShortcut: (cb: (value: { field: 'captureHotkey' | 'openHotkey'; key: string }) => void) => () => void;
+  onNotesSettingsChanged: (cb: () => void) => () => void;
   onSettingsChanged: (cb: () => void) => () => void;
   validateGroqKey: (key: string, saveAnyway?: boolean) => Promise<{ status: 'valid' | 'invalid' | 'unavailable'; saved: boolean }>;
   completeOnboarding: () => Promise<boolean>;

@@ -21,6 +21,7 @@ export function makeMain(platform = 'darwin', settings = {}) {
   const ipc = {};
   const context = vm.createContext({
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date, fs, path,
+    notesBridge: { dictationState: vi.fn(), meetingStarted: vi.fn() },
     process: { env: {}, platform },
     app: { getPath: () => directory }, screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) }, isMac: platform === 'darwin', isWin: platform === 'win32',
     dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish,

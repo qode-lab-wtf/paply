@@ -15,6 +15,7 @@ permissions:
   contents: write
 
 env:
+  OPENUI_TELEMETRY_DISABLED: '1'
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:

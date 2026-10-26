@@ -5,6 +5,6 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   test: {
     environment: 'node',
-    include: ['test/**/*.test.js', 'audio/**/*.test.js', 'meeting/**/*.test.js', 'src/lib/**/*.test.ts'],
+    include: ['test/**/*.test.js', 'audio/**/*.test.js', 'meeting/**/*.test.js', 'notes/**/*.test.js', 'src/lib/**/*.test.ts'],
   },
 });
