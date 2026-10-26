@@ -1,14 +1,10 @@
 # Paply Notes testen
 
-Dies ist die Anleitung zur separaten Testversion. Nach Allans Freigabe wird Notes als reguläres **1.15.0** veröffentlicht und in die installierte MacBook-App übernommen; den aktuellen Stand beschreibt [STAND.md](../STAND.md). Danach für den Alltag die normale Paply-App verwenden.
+Notes ist als reguläres [Paply 1.15.0](https://github.com/qode-lab-wtf/paply/releases/tag/v1.15.0) veröffentlicht. Für den Alltag die normale App unter `/Applications/paply.app` verwenden. Den Stand der MacBook-Aktualisierung und Datenübernahme beschreibt [STAND.md](../STAND.md).
 
-Lokale macOS-Testversion **1.15.0-notes.2** für Apple Silicon. Keine Veröffentlichung, keine Änderung der installierten App.
-
-**Auf Allans MacBook:** Seit 26.10.2026 liegt die Test-App unter `~/Applications/Paply-Notes-Test`. Der Starter **Paply Notes testen.command** liegt auf dem Schreibtisch. Der vorhandene Groq-Key ist bereits im separaten Testprofil eingerichtet. Die installierte App unter `/Applications/paply.app` bleibt 1.14.1; zum Notes-Test den Schreibtisch-Starter verwenden. Das Repository und der unten verlinkte Buildpfad liegen auf dem Mac mini.
-
-1. Das bisher laufende Paply beenden, damit die globalen Kürzel frei sind.
-2. [Paply Notes testen.command](../../electron-menubar/dist/notes-test/Paply%20Notes%20testen.command) öffnen. **Der erste Start sieht leer aus:** eigener Datenordner `~/.paply-notes-test`. Den vorhandenen Groq-Key in die App-Einstellungen eintragen.
-3. **Cmd+Y** startet und stoppt eine Gedankenaufnahme. **Cmd+Alt+Y** öffnet das Board. Beide Kürzel lassen sich in den Einstellungen ändern. Die Notes-Pille zeigt eine eigene grün-goldene Aura.
+1. Die normale Paply-App öffnen; Version im Dashboard prüfen: **1.15.0**. Den alten separaten Test-Starter nicht parallel verwenden.
+2. **Cmd+Y** startet und stoppt eine Gedankenaufnahme. **Cmd+Alt+Y** öffnet das Board. Beide Kürzel lassen sich in den Einstellungen ändern. Die Notes-Pille zeigt eine eigene grün-goldene Aura.
+3. Alternativ Notes über die App oder die Menüleiste öffnen. Der vorhandene Groq-Key gilt auch für Notes.
 
 Seit `notes.2` berücksichtigen Voreinstellungen und Anzeige die tatsächliche Mac-Tastaturbelegung. In `notes.1` lagen Y/Z bei deutschen Tastaturen vertauscht. Bereits selbst gesetzte Kürzel behalten ihre Tastenposition; Notes zeigt deren aktuelle Beschriftung an.
 
@@ -26,9 +22,12 @@ Seit `notes.2` berücksichtigen Voreinstellungen und Anzeige die tatsächliche M
 - Das kostenlose Groq-Kontingent hängt von deinem Konto und weiterer Nutzung ab. Notes begrenzt Requests und Kontext zusätzlich; es gibt keine Zusage unbegrenzter Gratisnutzung.
 - Manuell verschobene, vergrößerte oder bearbeitete Rohkarten bleiben bewusst als Rohnotiz erhalten. Ihre Position wird anschließend nicht von der KI neu geordnet. Weitere Teile einer langen Aufnahme werden weiterhin verarbeitet.
 - Entfernen nimmt Karten von der Fläche; Originaltranskript bleibt lokal. Erfolgreich verarbeiteter Ton wird nach sieben Tagen beim nächsten Appstart bereinigt. Undo gilt für diese Sitzung.
-- Bitte **den Starter** benutzen: Ein direkter Start der enthaltenen `paply.app` würde den normalen Datenordner öffnen. Zum normalen Paply zurückkehren: Test-App beenden, installierte App öffnen.
 - Trifft ein Transkript genau beim Speichern ein, kann ein Versionshinweis erscheinen. Der Entwurf bleibt offen; mit erneutem „Übernehmen“ bestätigst du ihn.
 - Beim Wechsel in eine andere App soll der Editor speichern und schließen. Dieser native Fokuswechsel ließ sich in der Testautomation nicht zuverlässig auslösen; bitte einmal per Cmd+Tab ausprobieren. Bleibt der Editor offen, wartet nur dieser Moment auf das Schließen.
-- Windows, echte Berechtigungsdialoge und die physische Hotkey-/Mikrofonbedienung brauchen noch den Praxistest. Die Test-App lädt keine Updates und ändert kein globales Login-Item.
+- Windows ist erfolgreich gebaut, braucht aber noch den Praxistest. Echte Berechtigungsdialoge und physische Mikrofonbedienung sind nicht vollständig durch die automatisierte QA abgedeckt.
+
+## Frühere separate Testversion
+
+Die vorangegangene `1.15.0-notes.2` liegt auf dem MacBook unter `~/Applications/Paply-Notes-Test` und verwendete ausschließlich `~/.paply-notes-test`. Dieser Stand bleibt als Rückfallmöglichkeit erhalten. Ein frisches Testprofil sieht leer aus. Das Repository und `electron-menubar/dist/notes-test` liegen auf dem Mac mini; sie sind nicht die installierte MacBook-App.
 
 Prüfbelege: [separate QA](QA.md), [gepackte App](PACKAGED-QA.md), [Editor-Nachprüfung](EDITOR-QA.md), [Opus-Abschlussprüfung](OPUS-EDITOR-NACHPRUEFUNG.md), [Umsetzung und Modellproben](IMPLEMENTIERUNG.md).

@@ -1,12 +1,15 @@
 # Paply — Stand
 
-**Zeitpunkt:** 26.10.2026 · **Phase:** Release v1.15.0 beauftragt, Veröffentlichung und MacBook-Aktualisierung in Arbeit
+**Zeitpunkt:** 26.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan
 
 ## v1.15.0 — Notes
 
 - Allan hat nach dem MacBook-Test den GitHub-Push, das Release und die Aktualisierung seiner installierten App freigegeben. Grundlage: geprüfte `1.15.0-notes.2`, inklusive deutscher Y/Z-Korrektur.
 - Neue Gedankenaufnahme mit eigener Pille, gemeinsames bearbeitbares Canvas, begrenzte Groq-Einordnung, Text-/Bild-Paste und optionale Screenshots. Cmd+Y für Aufnahme, Cmd+Alt+Y zum Öffnen, beides änderbar. Kein zusätzlicher API-Key nötig.
-- Die normale MacBook-Installation wird auf 1.15.0 aktualisiert; ihre Einstellungen, ihr Diktatverlauf und ihre Meetings bleiben bestehen. Test-Notes werden mit einer Sicherung zusätzlich übernommen.
+- [Release v1.15.0](https://github.com/qode-lab-wtf/paply/releases/tag/v1.15.0), Commit `946d240`, Tag und `main` gepusht. [GitHub-Build 40399124996](https://github.com/qode-lab-wtf/paply/actions/runs/40399124996): Mac, Windows und Veröffentlichung erfolgreich.
+- Normale MacBook-App `/Applications/paply.app` aus dem tatsächlichen GitHub-Release auf **1.15.0** aktualisiert und gestartet. 13 Notes-Quellen mit 60 Dateien aus dem Testprofil übernommen; Kopie per Hashvergleich bestätigt. Produktionskonfiguration inklusive Groq-Key, Cmd+X und 1.300 Verlaufseinträgen unverändert; sämtliche Meeting-Dateien bytegleich erhalten. Startlog bestätigt Version 1.15.0 und aktiven uiohook-Listener.
+- Sicherung von alter App und beiden Profilen auf dem MacBook unter `~/Library/Application Support/Paply Update Backups/1.15.0-20261026-215707`. Alter Schreibtisch-Teststarter dort archiviert; im Alltag die normale App verwenden. Das isolierte Testprofil und Testpaket bleiben erhalten.
+- Download gegen `latest-mac.yml` geprüft. Release-`app.asar` identisch zum separat geprüften 1.15.0-Kandidaten: SHA-256 `9d961ce553e286634c99fa602ed01d963e80ccac245dbcf5bd8892c34ea736e2`. CI-Keymap-Helper `f360a94958407d21af09f29839fdeacb4aae66b0f527c04cb7a96901f0cfe1da` nach Übertragung geprüft; deutsche Y/Z-Zuordnung auf dem MacBook bestätigt.
 - Releaseprüfung: 616/616 automatische Tests und TypeScript grün. Letzten Notes-Flush-Fehler beim nativen macOS-Beenden korrigiert; unabhängiger Test am echten 1.15.0-Paket bestätigt sauberes Beenden mit einem Aufruf (530 ms). [QA-Nachweis](notes/QA.md).
 
 ## Vorangegangene Notes-Testversion 1.15.0-notes.2 (26.10.2026)
@@ -71,7 +74,7 @@ Weitergabe an einen Freund mit Windows; alles gleichwertig für macOS und Window
 
 ## Offen / braucht Allan
 
-- Praxistest v1.14.0 auf dem MacBook und Rückmeldung des Windows-Freunds (Einfügen, Tray, Pille).
+- Praxistest von Notes in v1.15.0 auf dem MacBook; Rückmeldung des Windows-Freunds (Einfügen, Tray, Pille, Notes).
 - MacBook geprüft (21.10.2026, per `ssh macbook`, Benutzer `allanha`): dort liegt kein Paply-Repository
   (nur `~/Vibe/paply.dev`, anderes Produkt) → keine ungepushten Stände. App dort auf v1.14.0 aktualisiert,
   Einstellungen/Historie/Meetings erhalten.
