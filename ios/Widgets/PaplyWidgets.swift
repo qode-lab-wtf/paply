@@ -8,6 +8,8 @@ struct PaplyWidgetsBundle: WidgetBundle {
     var body: some Widget {
         DictationLiveActivity()
         DictationControl()
+        ThoughtLiveActivity()
+        ThoughtControl()
     }
 }
 

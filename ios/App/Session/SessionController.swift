@@ -193,6 +193,8 @@ final class SessionController {
 
     @discardableResult
     func beginDictation(id: String, source: DictationSource, commandLatencyMs: Double? = nil) -> BeginResult {
+        // Gedanken-Haken: Die Tastatur übernimmt – der Gedanke wird gesichert, nie verworfen.
+        if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.keyboardTookOver) }
         guard status == .ready || status == .recording, audio.isRunning || idlePaused else {
             reportDictationError(id: id, source: source, code: status == .interrupted ? .interrupted : .sessionNotReady)
             return .notReady
@@ -465,7 +467,7 @@ final class SessionController {
         pauseTask?.cancel()
         pauseTask = Task {
             await Task.yield()
-            guard !Task.isCancelled, status == .ready, dictation == nil, !idlePaused,
+            guard !Task.isCancelled, status == .ready, dictation == nil, !idlePaused, !isThoughtActive,
                   UIApplication.shared.applicationState != .active
             else { return }
             idlePaused = true
@@ -788,7 +790,7 @@ final class SessionController {
                     Diag.log("app.wasSuspended", ["gapS": .d(gap.rounded()), "idlePaused": .b(idlePaused)])
                 }
                 SharedIO.async { Self.removeStalePending() }
-                if let until = holdUntil, Date() >= until, dictation == nil, processingCount == 0, status != .off {
+                if let until = holdUntil, Date() >= until, dictation == nil, processingCount == 0, !isThoughtActive, status != .off {
                     stopSession(reason: "hold-expired")
                     return
                 }
@@ -851,6 +853,8 @@ final class SessionController {
         default: "raw\(reason ?? 0)"
         }
         if began {
+            // Gedanken-Haken: bei Unterbrechung sichern (anders als beim Diktat nie verwerfen)
+            if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.interruption) }
             Diag.log("audio.interruption.began", [
                 "reason": .s(reasonName), "status": .s(status.rawValue), "app": .s(Self.appState), "engine": .b(audio.isRunning),
             ])
@@ -1041,4 +1045,58 @@ private final class ActiveDictation {
         self.feedTask = feedTask
         self.startedNs = startedNs
     }
+}
+
+// MARK: - Gedanken-Haken (KONZEPT §9.2, H3; Review durch Koordinator)
+
+extension SessionController {
+    /// Gedanke hängt sich an den Audio-Strom. Fall A: Sitzung läuft (ggf. Engine aus dem
+    /// Leerlauf fortsetzen). Fall B: keine Sitzung → im Hintergrund starten (AudioRecordingIntent).
+    /// false = Mikro ließ sich nicht starten (Aufrufer holt die App nach vorne).
+    func attachThought(id: String, sink: @escaping @Sendable ([Float]) -> Void) async -> Bool {
+        let begin = MonoClock.now()
+        let ready = (status == .ready || status == .recording) && (audio.isRunning || idlePaused)
+        let fall = ready ? "A" : "B"
+        if !ready {
+            guard await startSession(trigger: "thought-intent") else {
+                Diag.log("thought.attach", ["id": .s(String(id.prefix(8))), "case": .s(fall), "ok": .b(false), "ms": .ms(MonoClock.msSince(begin))])
+                return false
+            }
+        }
+        pauseTask?.cancel()
+        if idlePaused {
+            idlePaused = false
+            if case .failure(let error) = await audio.resumeInput() {
+                Diag.log("thought.attach", [
+                    "id": .s(String(id.prefix(8))), "case": .s("A-paused"), "ok": .b(false),
+                    "stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC),
+                ])
+                return false
+            }
+        }
+        // Vorlauf 0,5 s kommt mit (wie beim Diktat); Pegel rechnet ThoughtCapture selbst.
+        let preroll = audio.processor.attach(owner: id, sink: sink, levels: nil)
+        lastActivityAt = Date()
+        publish()
+        Diag.log("thought.attach", [
+            "id": .s(String(id.prefix(8))), "case": .s(fall), "ok": .b(true),
+            "prerollMs": .ms(Double(preroll) / AudioTapProcessor.sampleRate * 1000),
+            "ms": .ms(MonoClock.msSince(begin)), "app": .s(Self.appState),
+        ])
+        return true
+    }
+
+    /// Gedanke löst sich vom Audio-Strom (nach dem Nachlauf). Danach ggf. Leerlauf-Pause.
+    func detachThought(id: String) {
+        audio.processor.detach(owner: id)
+        lastActivityAt = Date()
+        publish()
+        schedulePauseIfIdle(reason: "thought-end")
+    }
+
+    /// Solange ein Gedanke aufnimmt: keine Leerlauf-Pause, kein Ablauf der Bereithalte-Dauer.
+    var isThoughtActive: Bool { ThoughtCapture.shared.active != nil }
+
+    /// Für ThoughtCapture: letzter Tap-Block (Nachlauf beim Stopp).
+    var lastAudioArrivalNs: UInt64 { audio.processor.lastArrivalNs }
 }

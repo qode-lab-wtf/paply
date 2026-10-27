@@ -154,6 +154,13 @@ struct ShortcutAck: Codable, Sendable {
     var ackNs: UInt64
 }
 
+/// `thought-state.json` – nur ob gerade ein Gedanke aufnimmt (für Control und Widget). Kein Text.
+struct ThoughtStateFile: Codable, Sendable, Equatable {
+    var recording: Bool
+    var id: String?
+    var startedAt: Date?
+}
+
 /// `keyboard-report.json` – die Tastatur meldet ihre eigene Höhe (für die Höhenmessung).
 struct KeyboardReport: Codable, Sendable {
     var viewHeight: Double

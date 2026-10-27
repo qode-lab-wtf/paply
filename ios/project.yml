@@ -1,9 +1,16 @@
 # XcodeGen-Spezifikation für Paply iOS.
 # Neu erzeugen:  xcodegen generate --spec ios/project.yml
 # Das erzeugte Paply.xcodeproj liegt im Repo, damit ohne XcodeGen gebaut werden kann.
+#
+# Alle Quellordner sind „synchronisierte Ordner“ (Xcode 16+): Neue Dateien in App/, Keyboard/,
+# Widgets/ und Shared/* gehören automatisch zum Target – das Projekt muss dafür NICHT neu erzeugt
+# werden. Nur neue Ordner auf oberster Ebene oder geänderte Target-Zuordnungen brauchen XcodeGen.
+# Zuordnung: App = App + Shared/{Core,UI,Intents} · Tastatur = Keyboard + Shared/Core ·
+# Widgets = Widgets + Shared/{Core,UI,Intents}. PaplyKit (inkl. Thoughts/) ist ein Swift-Package.
 name: Paply
 
 options:
+  projectFormat: xcode16_0
   deploymentTarget:
     iOS: "18.0"
   developmentLanguage: de
@@ -44,7 +51,13 @@ targets:
     platform: iOS
     sources:
       - path: App
-      - path: Shared
+        type: syncedFolder
+      - path: Shared/Core
+        type: syncedFolder
+      - path: Shared/UI
+        type: syncedFolder
+      - path: Shared/Intents
+        type: syncedFolder
     dependencies:
       - target: PaplyKeyboard
       - target: PaplyWidgets
@@ -66,7 +79,9 @@ targets:
     platform: iOS
     sources:
       - path: Keyboard
+        type: syncedFolder
       - path: Shared/Core
+        type: syncedFolder
     settings:
       groups: [iphone]
       base:
@@ -82,9 +97,13 @@ targets:
     platform: iOS
     sources:
       - path: Widgets
+        type: syncedFolder
       - path: Shared/Core
+        type: syncedFolder
       - path: Shared/UI
+        type: syncedFolder
       - path: Shared/Intents
+        type: syncedFolder
     settings:
       groups: [iphone]
       base:

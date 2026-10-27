@@ -19,6 +19,10 @@ enum DarwinSignal: String, CaseIterable, Sendable {
     case shortcut
     /// App → Widget-Prozess: Schnelltaste verarbeitet (`shortcut-ack.json`)
     case shortcutAck
+    /// Widget-Prozess → App: Gedanken-Knopf gedrückt (`thought-command.json`)
+    case thoughtToggle
+    /// App → alle: `thought-state.json` hat sich geändert
+    case thoughtState
 
     var notificationName: String { "\(AppGroup.identifier).\(rawValue)" }
 }

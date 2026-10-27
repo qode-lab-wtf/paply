@@ -7,6 +7,8 @@ enum SharedFile: String, Sendable {
     case shortcutCommand = "shortcut-command.json"
     case shortcutAck = "shortcut-ack.json"
     case keyboardReport = "keyboard-report.json"
+    case thoughtState = "thought-state.json"
+    case thoughtCommand = "thought-command.json"
 }
 
 /// Kleine JSON-Dateien in der App Group. Geschrieben wird atomar (Umbenennen),
