@@ -2,10 +2,61 @@ import PaplyKit
 import SwiftUI
 import UIKit
 
+// MARK: - Bausteine
+
+/// Kleines farbiges Symbol vor einer Zeile – wie in den iOS-Einstellungen.
+struct SettingsIcon: View {
+    let symbol: String
+    var tint: Color = .paplyGreen
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 29, height: 29)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint))
+            .accessibilityHidden(true)
+    }
+}
+
+struct SettingsRow: View {
+    let title: String
+    let symbol: String
+    var tint: Color = .paplyGreen
+    var value: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SettingsIcon(symbol: symbol, tint: tint)
+            Text(title).foregroundStyle(Color.paplyText)
+            Spacer(minLength: 8)
+            if let value {
+                Text(value)
+                    .foregroundStyle(Color.paplyText.opacity(0.55))
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+private extension View {
+    /// Zeilen-Hintergrund passend zum Waldgrün
+    func paplyRows() -> some View {
+        listRowBackground(Color.white.opacity(0.07))
+    }
+}
+
+// MARK: - Einstellungen
+
+/// Nur das, was man im Alltag braucht. Alles Technische liegt im Entwicklerbereich
+/// (erscheint nach 5× Tippen auf die Version).
 struct SettingsView: View {
     @Bindable private var settings = AppSettings.shared
+    private let setup = SetupStatus.shared
     @State private var keyDraft = ""
     @State private var keyCheck: KeyCheckState = .idle
+    @State private var versionTaps = 0
+    @State private var devHint: String?
 
     enum KeyCheckState: Equatable {
         case idle
@@ -15,156 +66,129 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                if settings.hasAPIKey {
-                    HStack {
-                        Text("Gespeichert")
-                        Spacer()
-                        Text(maskedKey).foregroundStyle(.secondary).monospaced()
-                    }
-                    keyStatusRow
-                    Button("Schlüssel prüfen") { validate(settings.apiKey) }
-                        .disabled(keyCheck == .checking)
-                    Button("Schlüssel entfernen", role: .destructive) {
-                        settings.saveAPIKey("")
-                        keyCheck = .idle
-                        SessionController.shared.refreshShared()
-                    }
-                } else {
-                    SecureField("gsk_…", text: $keyDraft)
-                        .textContentType(.password)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .onSubmit { saveDraft() }
-                    HStack {
-                        // onPaste kommt nach dem asynchronen Laden auf einer fremden Queue an.
-                        // Ohne @Sendable gälte die Closure als MainActor-isoliert und Swift 6
-                        // bricht zur Laufzeit ab (dispatch_assert_queue). Deshalb erst hier
-                        // ausdrücklich zurück auf den Main-Actor.
-                        PasteButton(payloadType: String.self) { @Sendable strings in
-                            guard let first = strings.first else { return }
-                            Task { @MainActor in
-                                keyDraft = first
-                                saveDraft()
-                            }
-                        }
-                        .labelStyle(.titleAndIcon)
-                        .buttonBorderShape(.capsule)
-                        Spacer()
-                        Button("Sichern") { saveDraft() }
-                            .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                    keyStatusRow
-                }
-            } header: {
-                Text("Groq-Schlüssel")
-            } footer: {
-                Text("Der Schlüssel liegt nur im Schlüsselbund dieses iPhones. Am Mac kopieren, hier „Einsetzen“ tippen.")
-            }
+            keySection
 
             Section {
-                Picker("Transkription", selection: $settings.paply.transcriptionModel) {
-                    ForEach(AppSettings.transcriptionModels, id: \.id) { model in
-                        Text(model.label).tag(model.id)
-                    }
-                }
-                Toggle("Stücke-Upload", isOn: $settings.paply.chunkedUpload)
-                HStack {
-                    Text("Sprache")
-                    Spacer()
-                    Text("Automatisch").foregroundStyle(.secondary)
-                }
                 NavigationLink(value: Route.spokenLanguages) {
-                    HStack {
-                        Text("Sprachen, die du sprichst")
-                        Spacer()
-                        Text(spokenSummary).foregroundStyle(.secondary).lineLimit(1)
-                    }
+                    SettingsRow(title: "Sprachen", symbol: "globe", value: languagesSummary)
                 }
                 NavigationLink(value: Route.vocabulary) {
-                    HStack {
-                        Text("Eigene Begriffe")
-                        Spacer()
-                        Text(vocabularySummary).foregroundStyle(.secondary)
-                    }
+                    SettingsRow(title: "Eigene Begriffe", symbol: "text.book.closed", tint: .paplyGreenDeep, value: vocabularySummary)
                 }
             } header: {
                 Text("Diktat")
-            } footer: {
-                Text("Paply erkennt die gesprochene Sprache selbst. „Sprachen, die du sprichst“ hilft nur beim Wechsel mitten im Satz. Stücke-Upload schickt lange Diktate schon während der Aufnahme in Teilen.")
             }
+            .paplyRows()
 
             Section {
-                Picker("Mikro bereit halten", selection: $settings.holdDuration) {
+                Picker(selection: $settings.holdDuration) {
                     ForEach(HoldDuration.allCases) { duration in
                         Text(duration.label).tag(duration)
                     }
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIcon(symbol: "mic.fill", tint: .paplyMicDot)
+                        Text("Mikro bereit halten").foregroundStyle(Color.paplyText)
+                    }
                 }
-            } header: {
-                Text("Sitzung")
             } footer: {
-                Text("Gezählt ab der letzten Nutzung. Solange das Mikro bereit ist, zeigt iOS oben den orangen Punkt – ausblenden kann ihn keine App. Im Leerlauf wird nichts gespeichert oder gesendet.")
+                Text("So lange nach der letzten Nutzung hört Paply sofort zu. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst.")
             }
+            .paplyRows()
 
             Section {
-                Toggle("App automatisch öffnen", isOn: $settings.autoOpenApp)
-                Toggle("Host-App protokollieren", isOn: $settings.logHostBundleID)
-                Toggle("Mikro im Leerlauf pausieren (Experiment)", isOn: Binding(
-                    get: { settings.idlePause != .off },
-                    set: { settings.idlePause = $0 ? .pause : .off }
-                ))
-                if settings.idlePause != .off {
-                    Picker("Art", selection: $settings.idlePause) {
-                        Text("engine.pause()").tag(IdlePauseMode.pause)
-                        Text("engine.stop()").tag(IdlePauseMode.stop)
+                NavigationLink(value: Route.shortcuts) {
+                    SettingsRow(title: "Schnelltasten", symbol: "hand.tap.fill", tint: .paplyBeakDeep)
+                }
+                if setup.needsKeyboardSetup {
+                    NavigationLink(value: Route.keyboardSetup) {
+                        SettingsRow(title: "Tastatur einrichten", symbol: "keyboard.fill", tint: .paplyDanger, value: "fehlt noch")
                     }
                 }
-                NavigationLink(value: Route.testVariants) {
-                    HStack {
-                        Text("Testvarianten der Pipeline")
-                        Spacer()
-                        Text(settings.testOptions.isDefault ? "Standard" : "geändert")
-                            .foregroundStyle(settings.testOptions.isDefault ? Color.secondary : Color.paplyBeak)
+                if settings.developerMode {
+                    NavigationLink(value: Route.developer) {
+                        SettingsRow(title: "Entwicklerbereich", symbol: "hammer.fill", tint: .gray)
                     }
                 }
-                NavigationLink("Testseite (Höhe, Diktat)", value: Route.testPage)
-                NavigationLink("Diagnose", value: Route.diagnostics)
-                Button("Tastatur einrichten") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-            } header: {
-                Text("Labor (Phase 0)")
-            } footer: {
-                Text("Ohne Sitzung öffnet die Tastatur Paply automatisch (Variante A) oder zeigt „Paply starten“ (Variante B). „Host-App protokollieren“ ist experimentell: Die Tastatur liest dann über private Felder, welche App sie zeigt, und schreibt das nur ins Protokoll. „Mikro im Leerlauf pausieren“ hält die Aufnahme an, sobald Paply im Hintergrund nichts zu tun hat (Sitzung bleibt aktiv), und startet sie erst beim nächsten 🌐 – ohne Vorlauf. Klappt das nicht, gilt „Mikro aus“.")
             }
+            .paplyRows()
 
-            Section("Info") {
-                LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")
-                LabeledContent("App Group", value: AppGroup.containerURL == nil ? "fehlt!" : "ok")
-                LabeledContent("Polieren", value: settings.paply.polishModel)
+            Section {
+                Button {
+                    countVersionTap()
+                } label: {
+                    HStack {
+                        Text("Version").foregroundStyle(Color.paplyText.opacity(0.55))
+                        Spacer()
+                        Text(Self.versionText).foregroundStyle(Color.paplyText.opacity(0.55)).monospacedDigit()
+                    }
+                }
+                .buttonStyle(.plain)
+            } footer: {
+                if let devHint { Text(devHint) }
             }
+            .paplyRows()
         }
         .paplyList()
         .navigationTitle("Einstellungen")
-        .onChange(of: settings.paply) { _, value in
-            Diag.log("settings.change", [
-                "model": .s(value.transcriptionModel),
-                "chunked": .b(value.chunkedUpload),
-                "vocabLen": .i(value.vocabulary.count),
-            ])
-        }
+        .onAppear { setup.refresh() }
         .onChange(of: settings.holdDuration) { _, value in
             Diag.log("settings.hold", ["hold": .s(value.rawValue)])
             SessionController.shared.refreshShared()
         }
-        .onChange(of: settings.autoOpenApp) { _, value in
-            Diag.log("settings.autoOpen", ["on": .b(value)])
+    }
+
+    // MARK: Groq-Schlüssel
+
+    private var keySection: some View {
+        Section {
+            if settings.hasAPIKey {
+                HStack(spacing: 12) {
+                    SettingsIcon(symbol: "key.fill", tint: .paplyBeakDeep)
+                    Text("Schlüssel gespeichert").foregroundStyle(Color.paplyText)
+                    Spacer()
+                    Text(maskedKey).foregroundStyle(Color.paplyText.opacity(0.55)).monospaced()
+                }
+                keyStatusRow
+                Button("Schlüssel prüfen") { validate(settings.apiKey) }
+                    .disabled(keyCheck == .checking)
+                Button("Schlüssel entfernen", role: .destructive) {
+                    settings.saveAPIKey("")
+                    keyCheck = .idle
+                    SessionController.shared.refreshShared()
+                }
+            } else {
+                SecureField("gsk_…", text: $keyDraft)
+                    .textContentType(.password)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit { saveDraft() }
+                HStack {
+                    // onPaste kommt nach dem asynchronen Laden auf einer fremden Queue an.
+                    // Ohne @Sendable gälte die Closure als MainActor-isoliert und Swift 6
+                    // bricht zur Laufzeit ab (dispatch_assert_queue). Deshalb erst hier
+                    // ausdrücklich zurück auf den Main-Actor.
+                    PasteButton(payloadType: String.self) { @Sendable strings in
+                        guard let first = strings.first else { return }
+                        Task { @MainActor in
+                            keyDraft = first
+                            saveDraft()
+                        }
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonBorderShape(.capsule)
+                    Spacer()
+                    Button("Sichern") { saveDraft() }
+                        .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                keyStatusRow
+            }
+        } header: {
+            Text("Groq-Schlüssel")
+        } footer: {
+            Text("Kostenlos auf console.groq.com unter „API Keys“. Am Mac kopieren und hier einsetzen. Der Schlüssel bleibt nur auf diesem iPhone.")
         }
-        .onChange(of: settings.idlePause) { _, value in
-            Diag.log("settings.idlePause", ["mode": .s(value.rawValue)])
-        }
+        .paplyRows()
     }
 
     @ViewBuilder
@@ -196,14 +220,6 @@ struct SettingsView: View {
         settings.apiKeySuffix.map { "••••" + $0 } ?? "–"
     }
 
-    private var vocabularySummary: String {
-        let words = settings.paply.vocabulary
-            .split(whereSeparator: { $0 == "," || $0 == "\n" })
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        return words.isEmpty ? "keine" : "\(words.count)"
-    }
-
     private func saveDraft() {
         let key = keyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
@@ -229,34 +245,51 @@ struct SettingsView: View {
         }
     }
 
-    private var spokenSummary: String {
-        let codes = settings.effectiveSpokenLanguages
-        let names = codes.prefix(3).map(AppSettings.languageName).joined(separator: ", ")
-        let prefix = settings.spokenLanguagesAuto ? "automatisch" : "eigene"
-        return codes.isEmpty ? prefix : "\(prefix): \(names)\(codes.count > 3 ? " …" : "")"
+    // MARK: Zusammenfassungen
+
+    private var languagesSummary: String {
+        let names = settings.effectiveSpokenLanguages.map(AppSettings.languageName)
+        let list = names.isEmpty ? "" : " (\(names.prefix(3).joined(separator: ", "))\(names.count > 3 ? " …" : ""))"
+        return (settings.spokenLanguagesAuto ? "Automatisch" : "Eigene") + list
     }
-}
 
-struct VocabularyView: View {
-    @Bindable private var settings = AppSettings.shared
+    private var vocabularySummary: String {
+        let words = settings.paply.vocabulary
+            .split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return words.isEmpty ? "keine" : "\(words.count)"
+    }
 
-    var body: some View {
-        Form {
-            Section {
-                TextEditor(text: $settings.paply.vocabulary)
-                    .frame(minHeight: 220)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-            } footer: {
-                Text("Namen und Fachwörter, getrennt durch Komma oder neue Zeile. Sie helfen beim Erkennen und Polieren.")
-            }
+    // MARK: Entwicklerbereich freischalten
+
+    static var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    private func countVersionTap() {
+        guard !settings.developerMode else {
+            devHint = "Der Entwicklerbereich ist schon an."
+            return
         }
-        .paplyList()
-        .navigationTitle("Eigene Begriffe")
+        versionTaps += 1
+        if versionTaps >= 5 {
+            settings.developerMode = true
+            versionTaps = 0
+            devHint = "Entwicklerbereich ist an."
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            Diag.log("settings.developerMode", ["on": .b(true)])
+        } else if versionTaps >= 3 {
+            devHint = "Noch \(5 - versionTaps)× tippen …"
+        }
     }
 }
 
-/// „Sprachen, die du sprichst“: automatisch aus Tastaturen + Gerätesprachen oder eigene Liste.
+// MARK: - Sprachen
+
+/// Eine Zeile „Sprachen“: automatisch aus Tastaturen + Gerätesprachen oder eigene Liste.
 struct SpokenLanguagesView: View {
     @Bindable private var settings = AppSettings.shared
 
@@ -266,11 +299,12 @@ struct SpokenLanguagesView: View {
                 Toggle("Automatisch", isOn: $settings.spokenLanguagesAuto)
             } footer: {
                 Text(settings.spokenLanguagesAuto
-                     ? "Automatisch: \(names(settings.detectedSpokenLanguages)). Aus deinen aktivierten Tastaturen und den Gerätesprachen; findet Paply nur eine Sprache, kommt Englisch dazu."
-                     : "Wähle die Sprachen, zwischen denen du beim Sprechen wechselst.")
+                     ? "Erkannt: \(names(settings.detectedSpokenLanguages)). Aus deinen Tastaturen und den Sprachen des iPhones; ist es nur eine, kommt Englisch dazu."
+                     : "Wähle die Sprachen, die du sprichst – auch gemischt in einem Satz.")
             }
+            .paplyRows()
             if !settings.spokenLanguagesAuto {
-                Section("Eigene Liste") {
+                Section("Deine Sprachen") {
                     ForEach(choices, id: \.self) { code in
                         Button {
                             toggle(code)
@@ -285,11 +319,12 @@ struct SpokenLanguagesView: View {
                         }
                     }
                 }
+                .paplyRows()
             }
             Section {
                 EmptyView()
             } footer: {
-                Text("Hilft Whisper, wenn du mitten im Satz die Sprache wechselst (z. B. Deutsch mit einem englischen Satz). Die Erkennung selbst bleibt automatisch.")
+                Text("Paply erkennt die Sprache beim Sprechen selbst. Die Liste hilft nur, wenn du mitten im Satz wechselst – zum Beispiel ein englischer Satz in einer deutschen Nachricht.")
             }
         }
         .paplyList()
@@ -325,6 +360,283 @@ struct SpokenLanguagesView: View {
     }
 }
 
+// MARK: - Eigene Begriffe
+
+struct VocabularyView: View {
+    @Bindable private var settings = AppSettings.shared
+
+    var body: some View {
+        Form {
+            Section {
+                TextEditor(text: $settings.paply.vocabulary)
+                    .frame(minHeight: 220)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            } footer: {
+                Text("Namen und Fachwörter, getrennt durch Komma oder neue Zeile. Paply schreibt sie dann richtig.")
+            }
+            .paplyRows()
+        }
+        .paplyList()
+        .navigationTitle("Eigene Begriffe")
+    }
+}
+
+// MARK: - Schnelltasten
+
+/// Kurze, bebilderte Anleitung. Die Aktionstaste nur auf Geräten, die eine haben.
+struct ShortcutsGuideView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Diktat starten und stoppen, ohne die Tastatur zu öffnen. Der Text liegt danach in der Zwischenablage und wartet auf 🌐.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.paplyText.opacity(0.7))
+                    .padding(.horizontal, 4)
+
+                GuideCard(title: "Rückseite doppelt tippen", symbol: "hand.tap.fill", steps: [
+                    "Öffne die App „Kurzbefehle“, tippe „+“ und füge die Aktion „Paply-Diktat an/aus“ hinzu.",
+                    "Einstellungen → Bedienungshilfen → Tippen → Auf Rückseite tippen → Doppeltippen → deinen Kurzbefehl wählen.",
+                    "Zweimal hinten aufs iPhone tippen: Paply hört zu. Nochmal: fertig.",
+                ], buttons: [
+                    ("Kurzbefehle öffnen", URL(string: "shortcuts://")),
+                    ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
+                ])
+
+                GuideCard(title: "Kontrollzentrum", symbol: "switch.2", steps: [
+                    "Kontrollzentrum öffnen (oben rechts nach unten wischen).",
+                    "Oben links „+“ → „Steuerelement hinzufügen“.",
+                    "„Paply-Diktat“ suchen und antippen.",
+                ], buttons: [])
+
+                if DeviceInfo.hasActionButton {
+                    GuideCard(title: "Aktionstaste", symbol: "button.programmable", steps: [
+                        "Einstellungen → Aktionstaste.",
+                        "Zu „Steuerelement“ wischen und „Paply-Diktat“ wählen.",
+                    ], buttons: [
+                        ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
+                    ])
+                }
+            }
+            .padding(16)
+        }
+        .background(PaplyBackground())
+        .navigationTitle("Schnelltasten")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Karte mit Symbol, nummerierten Schritten und Knöpfen.
+struct GuideCard: View {
+    let title: String
+    let symbol: String
+    let steps: [String]
+    let buttons: [(String, URL?)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.paplyForest)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(Color.paplyGreenBright))
+                Text(title).font(.headline).foregroundStyle(Color.paplyText)
+            }
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("\(index + 1)")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(Color.paplyForest)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(Color.paplyText.opacity(0.85)))
+                    Text(step)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.paplyText.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if !buttons.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
+                        if let url = button.1 {
+                            Button(button.0) { UIApplication.shared.open(url) }
+                                .font(.subheadline.weight(.semibold))
+                                .buttonStyle(.borderedProminent)
+                                .tint(Color.white.opacity(0.14))
+                                .foregroundStyle(Color.paplyText)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .paplyCard()
+    }
+}
+
+// MARK: - Tastatur einrichten
+
+struct KeyboardSetupView: View {
+    private let setup = SetupStatus.shared
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
+                    statusLine("Paply als Tastatur hinzugefügt", done: setup.keyboardEnabled)
+                    statusLine("Vollzugriff erlaubt", done: setup.fullAccessSeen)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .paplyCard()
+
+                GuideCard(title: "So geht’s", symbol: "keyboard.fill", steps: [
+                    "„Einstellungen öffnen“ tippen – du landest bei Paply.",
+                    "„Tastaturen“ → „Paply“ einschalten.",
+                    "„Vollen Zugriff erlauben“ einschalten.",
+                    "In einem Textfeld 🌐 tippen, bis Paply erscheint.",
+                ], buttons: [
+                    ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
+                ])
+
+                Text("Den vollen Zugriff braucht die Tastatur nur, um mit der Paply-App zu sprechen. Die Tastatur selbst sendet nichts ins Internet. Falls schon alles erlaubt ist: einmal Paply in der Tastatur öffnen, dann verschwindet dieser Hinweis.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.paplyText.opacity(0.55))
+                    .padding(.horizontal, 4)
+            }
+            .padding(16)
+        }
+        .background(PaplyBackground())
+        .navigationTitle("Tastatur einrichten")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { setup.refresh() }
+    }
+
+    private func statusLine(_ text: String, done: Bool) -> some View {
+        Label {
+            Text(text).foregroundStyle(Color.paplyText)
+        } icon: {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(done ? Color.paplyGreenBright : Color.paplyText.opacity(0.4))
+        }
+    }
+}
+
+// MARK: - Entwicklerbereich
+
+/// Alles Technische für Phase 0. Funktionen und Standardwerte unverändert.
+struct DeveloperView: View {
+    @Bindable private var settings = AppSettings.shared
+    @Environment(\.dismiss) private var dismiss
+    private let storage = StorageCheck.shared
+
+    private var storageSummary: String {
+        guard let result = storage.result else { return "–" }
+        if !result.ok { return "Fehler" }
+        return result.other == nil ? "App ok · Tastatur fehlt" : "App + Tastatur ok"
+    }
+
+    var body: some View {
+        Form {
+            Section("Diktat") {
+                Picker("Transkription", selection: $settings.paply.transcriptionModel) {
+                    ForEach(AppSettings.transcriptionModels, id: \.id) { model in
+                        Text(model.label).tag(model.id)
+                    }
+                }
+                Toggle("Stücke-Upload", isOn: $settings.paply.chunkedUpload)
+                NavigationLink(value: Route.testVariants) {
+                    HStack {
+                        Text("Testvarianten der Pipeline")
+                        Spacer()
+                        Text(settings.testOptions.isDefault ? "Standard" : "geändert")
+                            .foregroundStyle(settings.testOptions.isDefault ? Color.secondary : Color.paplyBeak)
+                    }
+                }
+                LabeledContent("Polier-Modell", value: settings.paply.polishModel)
+            }
+            .paplyRows()
+
+            Section {
+                Toggle("Mikro im Leerlauf pausieren (Experiment)", isOn: Binding(
+                    get: { settings.idlePause != .off },
+                    set: { settings.idlePause = $0 ? .pause : .off }
+                ))
+                if settings.idlePause != .off {
+                    Picker("Art", selection: $settings.idlePause) {
+                        Text("engine.pause()").tag(IdlePauseMode.pause)
+                        Text("engine.stop()").tag(IdlePauseMode.stop)
+                    }
+                }
+            } header: {
+                Text("Sitzung")
+            } footer: {
+                Text("Hält die Aufnahme an, sobald Paply im Hintergrund nichts zu tun hat (Sitzung bleibt aktiv), und startet sie erst beim nächsten 🌐 – ohne Vorlauf. Klappt das nicht, gilt „Mikro aus“.")
+            }
+            .paplyRows()
+
+            Section {
+                Toggle("App automatisch öffnen", isOn: $settings.autoOpenApp)
+                Toggle("Host-App protokollieren", isOn: $settings.logHostBundleID)
+            } header: {
+                Text("Tastatur")
+            } footer: {
+                Text("Ohne Sitzung öffnet die Tastatur Paply automatisch (Variante A) oder zeigt „Paply starten“ (Variante B). „Host-App protokollieren“ liest über private Felder, welche App die Tastatur zeigt, und schreibt das nur ins Protokoll.")
+            }
+            .paplyRows()
+
+            Section("Werkzeuge") {
+                NavigationLink("Testseite (Höhe, Diktat)", value: Route.testPage)
+                NavigationLink("Diagnose", value: Route.diagnostics)
+                NavigationLink(value: Route.storageCheck) {
+                    HStack {
+                        Text("Speicher-Selbsttest")
+                        Spacer()
+                        Text(storageSummary).foregroundStyle(storage.result?.ok == false ? Color.paplyDanger : Color.secondary)
+                    }
+                }
+            }
+            .paplyRows()
+
+            Section("Info") {
+                LabeledContent("Version", value: SettingsView.versionText)
+                LabeledContent("App Group", value: AppGroup.identifier)
+            }
+            .paplyRows()
+
+            Section {
+                Toggle("Entwicklerbereich anzeigen", isOn: $settings.developerMode)
+            } footer: {
+                Text("Ausblenden ändert keine Einstellung. Wieder einblenden: 5× auf die Version tippen.")
+            }
+            .paplyRows()
+        }
+        .paplyList()
+        .navigationTitle("Entwicklerbereich")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: settings.paply) { _, value in
+            Diag.log("settings.change", [
+                "model": .s(value.transcriptionModel),
+                "chunked": .b(value.chunkedUpload),
+                "vocabLen": .i(value.vocabulary.count),
+            ])
+        }
+        .onChange(of: settings.autoOpenApp) { _, value in
+            Diag.log("settings.autoOpen", ["on": .b(value)])
+        }
+        .onChange(of: settings.idlePause) { _, value in
+            Diag.log("settings.idlePause", ["mode": .s(value.rawValue)])
+        }
+        .onChange(of: settings.developerMode) { _, on in
+            Diag.log("settings.developerMode", ["on": .b(on)])
+            if !on { dismiss() }
+        }
+    }
+}
+
 /// Testschalter der Pipeline (PipelineOptions) – nur für Messungen.
 struct TestVariantsView: View {
     @Bindable private var settings = AppSettings.shared
@@ -343,15 +655,101 @@ struct TestVariantsView: View {
             } footer: {
                 Text("Nur für Messreihen. „Polieren“ aus nur für reine Transkriptions-Messungen – dann wird der Rohtext eingesetzt. „Strenge Polier-Prüfung“ verwirft polierten Text schon bei ersetzten oder eingefügten Wörtern (Standard an). Jede Einstellung steht im Protokoll (opts).")
             }
+            .paplyRows()
             Section {
                 Button("Auf Standard zurücksetzen") { settings.testOptions = PipelineTestOptions() }
                     .disabled(settings.testOptions.isDefault)
             }
+            .paplyRows()
         }
         .paplyList()
         .navigationTitle("Testvarianten")
         .onChange(of: settings.testOptions) { _, value in
             Diag.log("settings.testOptions", ["opts": .s(value.logName)])
+        }
+    }
+}
+
+// MARK: - Speicher-Selbsttest
+
+/// App und Tastatur schreiben je eine Markierung in den gemeinsamen Speicher und lesen die
+/// des anderen. Zeigt Pfade, Ergebnis und die Dateien mit Größe.
+struct StorageCheckView: View {
+    private let storage = StorageCheck.shared
+
+    private static let time: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "de_DE")
+        f.dateFormat = "dd.MM. HH:mm:ss"
+        return f
+    }()
+
+    var body: some View {
+        Form {
+            if let result = storage.result {
+                Section("App") {
+                    check("Ordner angelegt", result.basePath != nil)
+                    check("Markierung geschrieben", result.wroteOwn)
+                    check("Markierung zurückgelesen", result.readBackOwn)
+                    if !result.errors.isEmpty {
+                        Text(result.errors.joined(separator: "\n")).foregroundStyle(Color.paplyDanger)
+                    }
+                }
+                .listRowBackground(Color.white.opacity(0.07))
+                Section {
+                    if let other = result.other {
+                        check("Markierung der Tastatur gelesen", true)
+                        LabeledContent("Zuletzt von der Tastatur", value: Self.time.string(from: other.date))
+                        check("Tastatur konnte die App lesen", other.readOther)
+                    } else {
+                        check("Markierung der Tastatur gelesen", false)
+                        Text("Einmal 🌐 → Paply in einem Textfeld öffnen (mit Vollzugriff), dann „Erneut prüfen“.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Tastatur")
+                }
+                .listRowBackground(Color.white.opacity(0.07))
+                Section("Pfade") {
+                    Text(result.containerPath ?? "kein Container").font(.caption.monospaced()).textSelection(.enabled)
+                    Text(result.basePath ?? "kein Paply-Ordner").font(.caption.monospaced()).textSelection(.enabled)
+                }
+                .listRowBackground(Color.white.opacity(0.07))
+            } else {
+                Section { ProgressView() }
+            }
+            Section("Dateien (\(storage.files.count))") {
+                ForEach(storage.files, id: \.path) { file in
+                    HStack {
+                        Text(file.path).font(.caption.monospaced())
+                        Spacer()
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(file.bytes), countStyle: .file))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .listRowBackground(Color.white.opacity(0.07))
+            Section {
+                Button("Erneut prüfen") { storage.run(reason: "button") }
+            } footer: {
+                if let at = storage.checkedAt { Text("Geprüft: \(Self.time.string(from: at))") }
+            }
+            .listRowBackground(Color.white.opacity(0.07))
+        }
+        .paplyList()
+        .navigationTitle("Speicher-Selbsttest")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { storage.run(reason: "open") }
+    }
+
+    private func check(_ title: String, _ ok: Bool) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(ok ? Color.paplyGreenBright : Color.paplyDanger)
         }
     }
 }

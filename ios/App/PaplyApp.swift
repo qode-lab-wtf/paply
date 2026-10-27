@@ -19,6 +19,7 @@ struct PaplyApp: App {
             }
             if phase == .active {
                 SessionController.shared.lastActivatedAt = Date()
+                SetupStatus.shared.refresh()
                 // Sprachen aus Tastaturen + Gerätesprachen nur im Vordergrund ableiten und merken
                 AppSettings.shared.refreshDetectedSpokenLanguages()
             }
@@ -35,7 +36,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             "sinceProcessStartMs": .ms(MonoClock.ms(from: MonoClock.processStart, to: MonoClock.now())),
             "version": .s(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"),
             "os": .s(UIDevice.current.systemVersion),
-            "appGroup": .b(AppGroup.containerURL != nil),
+            "appGroup": .s(AppGroup.identifier),
+            "container": .opt(AppGroup.containerURL?.path),
+            "base": .opt(AppGroup.baseURL?.path),
         ])
         SessionController.shared.bootstrap()
         return true

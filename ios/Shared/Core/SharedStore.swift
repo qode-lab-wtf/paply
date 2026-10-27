@@ -13,7 +13,7 @@ enum SharedFile: String, Sendable {
 /// damit der andere Prozess nie eine halbe Datei liest.
 enum SharedStore {
     static func url(_ file: SharedFile) -> URL? {
-        AppGroup.containerURL?.appendingPathComponent(file.rawValue)
+        AppGroup.baseURL?.appendingPathComponent(file.rawValue)
     }
 
     static func read<T: Decodable>(_ type: T.Type, _ file: SharedFile) -> T? {

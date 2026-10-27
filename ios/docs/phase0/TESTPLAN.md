@@ -7,6 +7,11 @@ Messwerte stehen.
 Du musst nichts Technisches lesen. Notiere, was du siehst (Tabelle am Ende), und schick am Schluss
 das Diagnoseprotokoll. Alle Zeiten im Protokoll misst Paply selbst.
 
+> **Entwicklerbereich (für diese Tests nötig):** Zahnrad → ganz unten **5× auf „Version“ tippen** →
+> „Entwicklerbereich“ erscheint in den Einstellungen. Dort liegen Diagnose, Testseite,
+> Speicher-Selbsttest, Modellwahl, Stücke-Upload, Testvarianten und die Experimente. Im Text unten
+> heißt das kurz **„Entwicklerbereich →“**. Ausblenden: Schalter ganz unten im Entwicklerbereich.
+
 > **Groq-Kontingent sparsam nutzen:** Der Groq-Schlüssel läuft im kostenlosen Tarif. Fürs Polieren
 > (qwen) gibt es etwa **200 000 Tokens pro Tag**, und dein Desktop-Paply nutzt denselben Schlüssel mit.
 > Ist das Kontingent aufgebraucht, setzt Paply den Rohtext ein (im Verlauf steht dann „Unpoliert
@@ -25,11 +30,11 @@ das Diagnoseprotokoll. Alle Zeiten im Protokoll misst Paply selbst.
    kopiert), „Keine Verbindung zu Groq“ (gespeichert, später prüfen) oder ein Fehlertext von Groq.
    Bitte einmal im Flugmodus „Schlüssel prüfen“ tippen – es muss „Keine Verbindung“ kommen.
    Protokoll: `settings.apiKey.check` mit `result`.
-   - **Sprachen:** Zahnrad → „Sprachen, die du sprichst“. Bei „Automatisch“ stehen dort die Sprachen
+   - **Sprachen:** Zahnrad → „Sprachen“. Bei „Automatisch“ stehen dort die Sprachen
      deiner Tastaturen und des iPhones (z. B. „automatisch: Deutsch, Englisch“). Findet Paply nur
      eine Sprache, kommt Englisch automatisch dazu. Stimmt die Liste?
 4. **Höhe messen – nur mit laufender Sitzung:** Auf der Startseite „Starten“ tippen und warten, bis
-   „Mikro bereit“ steht. Sonst öffnet die Tastatur die App über die Testseite. Dann Zahnrad → Labor → Testseite.
+   „Paply ist bereit“ steht. Sonst öffnet die Tastatur die App über die Testseite. Dann Entwicklerbereich → Testseite.
    - Ins Textfeld tippen (Apple-Tastatur erscheint).
    - Mit 🌐 zu Paply wechseln, 2 Sekunden warten. (Paply nimmt dabei auf – danach einfach nach
      links wischen, das verwirft.)
@@ -39,7 +44,10 @@ das Diagnoseprotokoll. Alle Zeiten im Protokoll misst Paply selbst.
    live geprüft. Nach dem allerersten Diktat mit Paply: Verlauf → ⓘ → Abschnitt „Polieren“. Dort muss
    **„Ergebnis: poliert“** und ein Modell stehen und **kein** „Unpoliert eingesetzt“. Steht dort ein
    Grund, bitte notieren und dem Koordinator sagen, bevor du weitertestest.
-6. **Protokoll finden:** Zahnrad → Labor → **Diagnose**. Neueste Einträge oben. Oben rechts „Teilen“
+6. **Speicher prüfen:** Entwicklerbereich → **Speicher-Selbsttest**. Einmal 🌐 → Paply in einem Textfeld
+   öffnen, dann „Erneut prüfen“: Alle Häkchen grün (App schreibt/liest, Tastatur gelesen, Tastatur konnte
+   die App lesen)? Sonst Foto davon an den Koordinator.
+7. **Protokoll finden:** Entwicklerbereich → **Diagnose**. Neueste Einträge oben. Oben rechts „Teilen“
    (Datei an den Koordinator schicken) und „Löschen“. Vor jedem großen Test einmal löschen, dann
    ist das Protokoll übersichtlich.
 
@@ -111,13 +119,13 @@ Frage: Wenn das Mikro aus ist – wie fühlt sich der Weg „🌐 → Paply blit
 5. Die Paply-Fläche ist grün, die Zeit läuft schon. Einen Satz sagen, irgendwo auf die Fläche tippen.
 6. Wiederholen in WhatsApp, Mail, Safari (Suchfeld).
 
-**Variante B:** Zahnrad → Labor → „App automatisch öffnen“ **aus**. Wiederholen: Die Tastatur zeigt
+**Variante B:** Entwicklerbereich → „App automatisch öffnen“ **aus**. Wiederholen: Die Tastatur zeigt
 „Paply ist nicht bereit“ mit „Paply starten“. Was fühlt sich besser an?
 
 **Ohne Vollzugriff:** Vollzugriff ausschalten (siehe 0.2). Paply zeigt „Vollzugriff fehlt“ und
 „Weiter zur nächsten Tastatur“. Klappt das Weiterschalten? Danach Vollzugriff wieder an.
 
-**Experimentell (nur zur Info):** Labor → „Host-App protokollieren“ an, Paply einmal zeigen.
+**Experimentell (nur zur Info):** Entwicklerbereich → „Host-App protokollieren“ an, Paply einmal zeigen.
 Im Protokoll steht `kb.host.experimental` – steht dort eine Bundle-ID oder `null`? Danach wieder aus.
 
 **iOS 26** (nur falls ein Gerät mit iOS 26 da ist): gleiche Schritte. Zusätzlich: Klappt das
@@ -143,7 +151,7 @@ Hört Paply nach dem Zurückkommen wirklich schon zu (Zeit läuft)?
 
 **Schritte**
 
-Vier Durchgänge. Vor jedem: Zahnrad → Diktat → „Transkription“ und „Stücke-Upload“ einstellen.
+Vier Durchgänge. Vor jedem: Entwicklerbereich → „Transkription“ und „Stücke-Upload“ einstellen.
 
 | Durchgang | Transkription | Stücke-Upload |
 | --- | --- | --- |
@@ -157,7 +165,7 @@ Je Durchgang in der Testseite (oder Notizen) diktieren – wegen des Kontingents
 - 2 × mittel (ca. 30 Sekunden),
 - 1 × lang (ca. 2 Minuten, z. B. eine Mail vorlesen, deutsch und englisch gemischt).
 
-**Testvarianten** (Zahnrad → Labor → Testvarianten der Pipeline): Upload-Format FLAC/WAV,
+**Testvarianten** (Entwicklerbereich → Testvarianten der Pipeline): Upload-Format FLAC/WAV,
 Sprachwechsel-Beispiel an/aus, Polieren an/aus, strenge Polier-Prüfung an/aus. Standard ist FLAC,
 Beispiel an, Polieren an, strenge Prüfung an – für die Durchgänge A–D **nichts ändern**. **„Polieren aus“ nur für reine Transkriptions-Messungen**
 (dann wird der Rohtext eingesetzt). Danach wieder „Auf Standard zurücksetzen“. Jede Variante steht
@@ -282,7 +290,7 @@ Tastatur der Liste, nicht zur vorigen. Steht Paply am Ende, heißt „weiter“ 
 
 ## 5. Schnelltaste im Hintergrund
 
-**Einrichten**
+**Einrichten** (bebildert auch in der App: Zahnrad → Schnelltasten)
 
 - **Rückseite:** Kurzbefehle-App → „+“ → Aktion „Paply-Diktat an/aus“ hinzufügen, sichern.
   Dann Einstellungen → Bedienungshilfen → Tippen → Auf Rückseite tippen → Doppeltippen → diesen Kurzbefehl.
@@ -292,7 +300,9 @@ Tastatur der Liste, nicht zur vorigen. Steht Paply am Ende, heißt „weiter“ 
 
 1. **Sitzung läuft**, Safari ist offen. Rückseite 2× tippen.
    Erscheint oben in der Dynamic Island die Paply-Marke mit Zeit? Sprechen. Rückseite 2× tippen.
-   „Poliere …“, dann „In der Zwischenablage“.
+   „Poliere …“, dann klappt die Dynamic Island kurz auf: **„In Zwischenablage · beim nächsten 🌐
+   einsetzen“** (bzw. „Nichts verstanden“), nach ~2,5 s verschwindet sie.
+   Der Text steht außerdem im **Verlauf** der App.
 2. Notizen öffnen, lange tippen → „Einsetzen“: Ist der Text da?
 3. Neue Notiz, 🌐 → Paply: Zeigt Paply einmal „Wartender Text – Einsetzen“? Ein Tipp setzt ein.
 4. Dasselbe mit dem **Kontrollzentrum-Knopf**.
@@ -315,7 +325,9 @@ Tastatur der Liste, nicht zur vorigen. Steht Paply am Ende, heißt „weiter“ 
 | Live Activity | `activity.start` / `activity.start.failed` / `activity.end` | `code` |
 | Mikro im Hintergrund starten | `session.start` / `session.start.failed` | `stage`, `code`, `fourCC` |
 | App nach vorne holen | `intent.foreground.request` | `reason` |
-| Zwischenablage | `shortcut.deliver` | `clipboard`, `textLen` |
+| Zwischenablage | `shortcut.deliver` | `clipboard`, `textLen`, `noSpeech` |
+| Wartender Text geschrieben | `shortcut.pending` | `written`, `path` |
+| Bestätigung gezeigt | `activity.end` | `phase`, `note` |
 
 ---
 
@@ -345,7 +357,7 @@ Hintergrund: Ist eine andere App vorne, zeigt iOS bei laufender Aufnahme in der 
 breites Mikro-Symbol, nicht nur den Punkt. Das Experiment hält die Aufnahme im Leerlauf an (die
 Sitzung bleibt aktiv) und startet sie erst beim nächsten 🌐 wieder – dann ohne Vorlauf.
 
-1. Zahnrad → Labor → **„Mikro im Leerlauf pausieren (Experiment)“** an. Art zuerst **engine.pause()**.
+1. Entwicklerbereich → **„Mikro im Leerlauf pausieren (Experiment)“** an. Art zuerst **engine.pause()**.
 2. Sitzung starten, dann zu Notizen wechseln (Paply geht in den Hintergrund).
    **Beobachten:** Verschwindet das Mikro-Symbol in der Dynamic Island? Bleibt der orange Punkt?
    (Ein paar Sekunden warten.)
@@ -406,5 +418,5 @@ du die Klicks?
 | 3c Strenge Polier-Prüfung an/aus | | | |
 | 3d Erneut versuchen / verwerfen | | | |
 
-Zum Schluss: Diagnose → Teilen → an den Koordinator. Oder er holt das Protokoll per Kabel
+Zum Schluss: Entwicklerbereich → Diagnose → Teilen → an den Koordinator. Oder er holt das Protokoll per Kabel
 (`ios/scripts/pull-logs.sh`).

@@ -32,7 +32,7 @@ final class LevelChannel: @unchecked Sendable {
     }
 
     private static var fileURL: URL? {
-        AppGroup.containerURL?.appendingPathComponent("levels.bin")
+        AppGroup.baseURL?.appendingPathComponent("levels.bin")
     }
 
     static func openWriter() -> LevelChannel? {

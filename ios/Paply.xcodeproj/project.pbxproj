@@ -13,6 +13,7 @@
 		075D57CA1C93F696BBF2E070 /* FlashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEB31306E107ADC2F9ADA22C /* FlashView.swift */; };
 		09CA8C6DD4EDB4E97527198A /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CFE296D653DF4B9E936A9B /* SharedSettings.swift */; };
 		0F9FE35C09AF583E1FF54FDB /* ShortcutBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D6DAEB9943A5E72D3DEF82 /* ShortcutBridge.swift */; };
+		11FF776E311FAF173B1E648A /* StorageSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF0560F6CA903EE656385B0 /* StorageSelfTest.swift */; };
 		1393A54221DD8155A0629EDE /* LevelChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8DD5888A85A20E1837B253 /* LevelChannel.swift */; };
 		1A841718E7622E61A02289A3 /* AppOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D182544A8427A8D9BA2F803 /* AppOpener.swift */; };
 		1D94CDB3A4190567D5C4638C /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CFE296D653DF4B9E936A9B /* SharedSettings.swift */; };
@@ -45,6 +46,7 @@
 		8CAFE335BFF614E42E26590D /* Diag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92833402C9166B969077C2CF /* Diag.swift */; };
 		8DE3E803361BFF622A3AE98C /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
 		9127BF1621CFD0C7CA5484B0 /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CFE296D653DF4B9E936A9B /* SharedSettings.swift */; };
+		9558F885B8E37CFC8ACB5AF5 /* StorageSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF0560F6CA903EE656385B0 /* StorageSelfTest.swift */; };
 		9C3B4353C28EB3E72575D035 /* AudioTapProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8974C40529DFB1D8761B623 /* AudioTapProcessor.swift */; };
 		9E103FDB3E7567EBD82B30B6 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17BCC199927577F73B846F7F /* Keychain.swift */; };
 		9ED521DBF479B0C7A4AFED10 /* DarwinBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */; };
@@ -58,6 +60,7 @@
 		BB382618AA18102D033E2782 /* ToggleDictationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40DEAE75E2BFC3F11D6050 /* ToggleDictationIntent.swift */; };
 		C048E09CA377777A3BFB3023 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC91B1771B577E04CF8A270 /* NetworkMonitor.swift */; };
 		C792C981FC471C6BD24CF301 /* DictationActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042D6D3F4F80DA00AE89D823 /* DictationActivity.swift */; };
+		D21CE450797BE51A51215A7B /* SetupStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864247B0438E9F0053907608 /* SetupStatus.swift */; };
 		D59CF9A3ECE26857236C3FFF /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C515A2729ED0FEE867CF6F78 /* AppGroup.swift */; };
 		DE3C580D59FB1BFAB5C2FB21 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72FC59997AB6553C2A82B21 /* DiagnosticsView.swift */; };
 		E30A582F111A4CE3B521FE13 /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
@@ -66,6 +69,7 @@
 		EBE9D771357E1B9144BBC537 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F11F9D1337FC14CA767374 /* SettingsView.swift */; };
 		F46394BC1CC0EF06B94B9E25 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D1A73142E02BB36F10F427 /* Brand.swift */; };
 		F53E665EB72C175AC2CFCFDB /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */; };
+		F7BC778F8FE1AE7BD91436EE /* StorageSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF0560F6CA903EE656385B0 /* StorageSelfTest.swift */; };
 		FB72FEFB177EEBD864949552 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 724B91F7AB66ADC38A2BE72A /* KeyboardViewController.swift */; };
 		FB94787CCF8338731479839D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD39327CA0E2F3231965BD9F /* Assets.xcassets */; };
 		FB9A404548916B334E2340BB /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */; };
@@ -117,6 +121,7 @@
 		2DC9B028B15A423DEA60FEB0 /* PaplyKeyboard.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaplyKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMetrics.swift; sourceTree = "<group>"; };
 		46CFE296D653DF4B9E936A9B /* SharedSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSettings.swift; sourceTree = "<group>"; };
+		4CF0560F6CA903EE656385B0 /* StorageSelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSelfTest.swift; sourceTree = "<group>"; };
 		4E88615BBB6B88DF532C8589 /* PaplyWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaplyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		538BDAD38D348D4AD4EF3685 /* MonoClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonoClock.swift; sourceTree = "<group>"; };
 		5A8DD5888A85A20E1837B253 /* LevelChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelChannel.swift; sourceTree = "<group>"; };
@@ -127,6 +132,7 @@
 		73F11F9D1337FC14CA767374 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		81AF1F373569A7AD0BA6F5D1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		85E9958ECB23C7D6BF2C446C /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		864247B0438E9F0053907608 /* SetupStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupStatus.swift; sourceTree = "<group>"; };
 		8968A98A0CB6C512AD78D995 /* PaplyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaplyApp.swift; sourceTree = "<group>"; };
 		8BE46E3028D0B3168693C030 /* HistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryDetailView.swift; sourceTree = "<group>"; };
 		8D182544A8427A8D9BA2F803 /* AppOpener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOpener.swift; sourceTree = "<group>"; };
@@ -190,6 +196,7 @@
 				E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */,
 				46CFE296D653DF4B9E936A9B /* SharedSettings.swift */,
 				AC1D44366C159314D195BA1D /* SharedStore.swift */,
+				4CF0560F6CA903EE656385B0 /* StorageSelfTest.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -229,6 +236,7 @@
 				EEB83141FC8D0BC2E178B374 /* AppSettings.swift */,
 				85E9958ECB23C7D6BF2C446C /* HistoryStore.swift */,
 				17BCC199927577F73B846F7F /* Keychain.swift */,
+				864247B0438E9F0053907608 /* SetupStatus.swift */,
 			);
 			path = Store;
 			sourceTree = "<group>";
@@ -469,6 +477,7 @@
 				F53E665EB72C175AC2CFCFDB /* SharedModels.swift in Sources */,
 				9127BF1621CFD0C7CA5484B0 /* SharedSettings.swift in Sources */,
 				5A42417E47CC1ED8D8350521 /* SharedStore.swift in Sources */,
+				11FF776E311FAF173B1E648A /* StorageSelfTest.swift in Sources */,
 				ACDE32AA7FA4FF3BE548DA46 /* ToggleDictationIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -502,11 +511,13 @@
 				AD2DAA1B994680623FAC14FA /* RootView.swift in Sources */,
 				FC662E55064F57778D1A3232 /* SessionController.swift in Sources */,
 				EBE9D771357E1B9144BBC537 /* SettingsView.swift in Sources */,
+				D21CE450797BE51A51215A7B /* SetupStatus.swift in Sources */,
 				777640EB21A4E2B5173CE968 /* SharedIO.swift in Sources */,
 				FB9A404548916B334E2340BB /* SharedModels.swift in Sources */,
 				1D94CDB3A4190567D5C4638C /* SharedSettings.swift in Sources */,
 				EAFF3703FA3D0BBD40CCB20F /* SharedStore.swift in Sources */,
 				0F9FE35C09AF583E1FF54FDB /* ShortcutBridge.swift in Sources */,
+				F7BC778F8FE1AE7BD91436EE /* StorageSelfTest.swift in Sources */,
 				608CFFCBF9353BBE6529C154 /* TestPageView.swift in Sources */,
 				BB382618AA18102D033E2782 /* ToggleDictationIntent.swift in Sources */,
 			);
@@ -529,6 +540,7 @@
 				31EAEFD0155EC7C25ABE3767 /* SharedModels.swift in Sources */,
 				09CA8C6DD4EDB4E97527198A /* SharedSettings.swift in Sources */,
 				8B284AD2A10825C5C90A1420 /* SharedStore.swift in Sources */,
+				9558F885B8E37CFC8ACB5AF5 /* StorageSelfTest.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

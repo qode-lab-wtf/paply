@@ -84,6 +84,7 @@ final class AppSettings {
         static let spokenAuto = "spokenLanguagesAuto"
         static let spokenDetected = "spokenLanguagesDetected"
         static let idlePause = "idlePauseMode"
+        static let developerMode = "developerMode"
     }
 
     var paply: PaplySettings {
@@ -100,6 +101,11 @@ final class AppSettings {
 
     var logHostBundleID: Bool {
         didSet { SharedSettings.logHostBundleID = logHostBundleID }
+    }
+
+    /// Versteckter Entwicklerbereich (5× auf die Version tippen)
+    var developerMode: Bool {
+        didSet { UserDefaults.standard.set(developerMode, forKey: Key.developerMode) }
     }
 
     var idlePause: IdlePauseMode {
@@ -146,6 +152,7 @@ final class AppSettings {
         }
         spokenLanguagesAuto = UserDefaults.standard.object(forKey: Key.spokenAuto) as? Bool ?? true
         idlePause = IdlePauseMode(rawValue: UserDefaults.standard.string(forKey: Key.idlePause) ?? "") ?? .off
+        developerMode = UserDefaults.standard.bool(forKey: Key.developerMode)
         detectedSpokenLanguages = UserDefaults.standard.stringArray(forKey: Key.spokenDetected) ?? []
         let key = Keychain.readAPIKey()
         cachedAPIKey = key

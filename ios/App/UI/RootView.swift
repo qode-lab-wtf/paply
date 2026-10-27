@@ -5,9 +5,13 @@ enum Route: Hashable {
     case settings
     case vocabulary
     case spokenLanguages
+    case shortcuts
+    case keyboardSetup
+    case developer
     case testVariants
     case testPage
     case diagnostics
+    case storageCheck
     case entry(String)
 }
 
@@ -25,9 +29,13 @@ struct RootView: View {
                     case .settings: SettingsView()
                     case .vocabulary: VocabularyView()
                     case .spokenLanguages: SpokenLanguagesView()
+                    case .shortcuts: ShortcutsGuideView()
+                    case .keyboardSetup: KeyboardSetupView()
+                    case .developer: DeveloperView()
                     case .testVariants: TestVariantsView()
                     case .testPage: TestPageView()
                     case .diagnostics: DiagnosticsView()
+                    case .storageCheck: StorageCheckView()
                     case .entry(let id): HistoryDetailView(id: id, showToast: show)
                     }
                 }
@@ -75,20 +83,6 @@ private struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 SessionCard()
-                if !settings.hasAPIKey {
-                    NavigationLink(value: Route.settings) {
-                        HStack {
-                            Label("Groq-Schlüssel eintragen", systemImage: "key.fill")
-                                .foregroundStyle(Color.paplyBeak)
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(Color.paplyText.opacity(0.35))
-                        }
-                        .padding(16)
-                        .contentShape(Rectangle())
-                        .paplyCard(cornerRadius: 16)
-                    }
-                    .buttonStyle(.plain)
-                }
 
                 Text("Verlauf")
                     .font(.title2.weight(.bold))
@@ -123,6 +117,7 @@ private struct HomeView: View {
             .padding(.bottom, 32)
         }
         .background(PaplyBackground())
+        .onAppear { SetupStatus.shared.refresh() }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { PaplyWordmark() }
             ToolbarItem(placement: .topBarTrailing) {
@@ -204,42 +199,78 @@ private struct HistoryRow: View {
     }
 }
 
-/// Status der Sitzung mit Starten/Beenden.
+/// Ruhige Statuskarte: Paply bereit oder aus, EIN Knopf, und falls nötig der nächste Schritt.
+/// Keine Technikwerte – die stehen im Entwicklerbereich.
 private struct SessionCard: View {
     private let session = SessionController.shared
     private let settings = AppSettings.shared
+    private let setup = SetupStatus.shared
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { _ in
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(dotColor)
-                    .frame(width: 10, height: 10)
-                    .shadow(color: dotColor.opacity(0.6), radius: session.status == .off ? 0 : 5)
-                    .padding(.leading, 2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.headline).foregroundStyle(Color.paplyText)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    Circle().fill(dotColor.opacity(0.18)).frame(width: 34, height: 34)
+                    Circle().fill(dotColor).frame(width: 12, height: 12)
+                        .shadow(color: dotColor.opacity(0.7), radius: isOn ? 6 : 0)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.paplyText)
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(.subheadline)
                         .foregroundStyle(Color.paplyText.opacity(0.62))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                Button(buttonTitle) { toggle() }
-                    .font(.subheadline.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
-                    .tint(session.status == .off || session.status == .interrupted ? .paplyGreen : Color.white.opacity(0.14))
-                    .foregroundStyle(session.status == .off || session.status == .interrupted ? Color.paplyForest : Color.paplyText)
-                    .clipShape(Capsule())
+                Spacer(minLength: 0)
             }
-            .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 14))
-            .paplyCard()
+
+            Button(action: toggle) {
+                Text(buttonTitle)
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(isOn ? Color.paplyText : Color.paplyForest)
+                    .background(Capsule().fill(isOn ? Color.white.opacity(0.12) : Color.paplyGreenBright))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 16)
+
+            if let step = nextStep {
+                Divider().overlay(Color.white.opacity(0.12)).padding(.vertical, 14)
+                NavigationLink(value: step.route) {
+                    HStack(spacing: 12) {
+                        Image(systemName: step.symbol)
+                            .foregroundStyle(Color.paplyBeak)
+                            .frame(width: 22)
+                        Text(step.text)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.paplyText)
+                        Spacer(minLength: 8)
+                        Text(step.action)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.paplyGreenBright)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.paplyText.opacity(0.35))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(18)
+        .paplyCard(cornerRadius: 22)
+        .animation(.paplySmooth, value: session.status)
     }
+
+    private var isOn: Bool { session.status == .ready || session.status == .recording }
 
     private var dotColor: Color {
         switch session.status {
-        case .off: Color.white.opacity(0.28)
+        case .off: Color.white.opacity(0.35)
         case .ready, .recording: .paplyMicDot
         case .interrupted: .paplyDanger
         }
@@ -247,43 +278,57 @@ private struct SessionCard: View {
 
     private var title: String {
         switch session.status {
-        case .off: "Mikro aus"
-        case .ready: "Mikro bereit"
-        case .recording: "Diktat läuft"
-        case .interrupted: "Unterbrochen"
+        case .off: "Paply ist aus"
+        case .ready, .recording: "Paply ist bereit"
+        case .interrupted: "Mikro aus"
         }
     }
 
     private var subtitle: String {
-        var parts: [String] = []
         switch session.status {
         case .off:
-            parts.append(session.detail ?? "Startet, sobald du Paply in der Tastatur wählst.")
-        case .interrupted:
-            parts.append(session.detail ?? "Neu starten, damit Paply wieder zuhört.")
+            "Schalte das Mikro ein, dann hört Paply sofort zu, wenn du 🌐 tippst."
         case .ready, .recording:
-            if let since = session.startedAt { parts.append("seit \(Format.time.string(from: since))") }
             if let until = session.holdUntil {
-                parts.append("bis \(Format.time.string(from: until))")
+                "Tippe in einem Textfeld auf 🌐 und sprich. Bereit bis \(Format.time.string(from: until))."
             } else {
-                parts.append(settings.holdDuration.label)
+                "Tippe in einem Textfeld auf 🌐 und sprich."
             }
-            if let battery = session.monitor.batteryPercent { parts.append("Akku \(battery) %") }
-            if session.idlePaused { parts.append("im Leerlauf angehalten (Experiment)") }
-            if session.processingCount > 0 { parts.append("poliert …") }
+        case .interrupted:
+            "Zum Beispiel nach einem Anruf. Einmal neu starten, dann geht’s weiter."
         }
-        return parts.joined(separator: " · ")
     }
 
     private var buttonTitle: String {
         switch session.status {
-        case .off: "Starten"
+        case .off: "Mikro bereit halten"
         case .interrupted: "Neu starten"
-        case .ready, .recording: "Beenden"
+        case .ready, .recording: "Ausschalten"
         }
     }
 
+    private struct Step {
+        let symbol: String
+        let text: String
+        let action: String
+        let route: Route
+    }
+
+    private var nextStep: Step? {
+        if !settings.hasAPIKey {
+            return Step(symbol: "key.fill", text: "Groq-Schlüssel fehlt", action: "Eintragen", route: .settings)
+        }
+        if !setup.keyboardEnabled {
+            return Step(symbol: "keyboard", text: "Tastatur noch nicht eingerichtet", action: "Einrichten", route: .keyboardSetup)
+        }
+        if !setup.fullAccessSeen {
+            return Step(symbol: "lock.open", text: "Vollzugriff für die Tastatur fehlt", action: "Anleitung", route: .keyboardSetup)
+        }
+        return nil
+    }
+
     private func toggle() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         switch session.status {
         case .off:
             Task { await session.startSession(trigger: "app-button") }

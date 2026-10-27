@@ -29,6 +29,9 @@ final class AudioTapProcessor: @unchecked Sendable {
     private var levels: LevelChannel?
     private var levelSum: Float = 0
     private var levelCount = 0
+    /// Geschätztes Grundrauschen in dBFS: fällt sofort mit, steigt nur langsam (~1 dB/s).
+    /// Wird auch im Leerlauf mitgeführt, damit das erste Diktat schon richtig skaliert.
+    private var noiseFloorDb: Float = -60
     private var stats = TapStats()
 
     struct TapStats: Sendable {
@@ -53,7 +56,7 @@ final class AudioTapProcessor: @unchecked Sendable {
             return
         }
         appendPreroll(samples)
-        if levels != nil { pushLevels(samples, arrivalNs: arrivalNs) }
+        measureLevels(samples, arrivalNs: arrivalNs)
         let sink = self.sink
         if sink != nil { consumedUpTo = totalSamples } // gehört diesem Diktat
         lock.unlock()
@@ -127,22 +130,30 @@ final class AudioTapProcessor: @unchecked Sendable {
         return out
     }
 
-    private func pushLevels(_ samples: [Float], arrivalNs: UInt64) {
+    /// Pegel je ~33 ms: RMS → dBFS, bezogen aufs Grundrauschen. 3 dB über dem Rauschen = 0,
+    /// +30 dB = 1; die Wurzel hebt leise Stimme sichtbar an. Geschrieben wird nur, solange
+    /// ein Diktat einen Pegel-Kanal angehängt hat.
+    private func measureLevels(_ samples: [Float], arrivalNs: UInt64) {
         var remaining = samples.count
         for sample in samples {
             levelSum += sample * sample
             levelCount += 1
             remaining -= 1
-            if levelCount >= Self.levelWindow {
-                let rms = (levelSum / Float(levelCount)).squareRoot()
-                let db = 20 * log10(max(rms, 1e-7))
-                // −55 dBFS … −12 dBFS → 0 … 1
-                let level = min(1, max(0, (db + 55) / 43))
-                let offsetNs = UInt64(Double(remaining) / Self.sampleRate * 1_000_000_000)
-                levels?.push(level: level, ns: arrivalNs > offsetNs ? arrivalNs - offsetNs : arrivalNs)
-                levelSum = 0
-                levelCount = 0
+            guard levelCount >= Self.levelWindow else { continue }
+            let rms = (levelSum / Float(levelCount)).squareRoot()
+            let db = 20 * log10(max(rms, 1e-7))
+            levelSum = 0
+            levelCount = 0
+            if db < noiseFloorDb {
+                noiseFloorDb = max(db, -80)
+            } else {
+                noiseFloorDb = min(noiseFloorDb + 0.033, -25)
             }
+            guard let levels else { continue }
+            let linear = min(1, max(0, (db - noiseFloorDb - 3) / 30))
+            let level = linear.squareRoot()
+            let offsetNs = UInt64(Double(remaining) / Self.sampleRate * 1_000_000_000)
+            levels.push(level: level, ns: arrivalNs > offsetNs ? arrivalNs - offsetNs : arrivalNs)
         }
     }
 

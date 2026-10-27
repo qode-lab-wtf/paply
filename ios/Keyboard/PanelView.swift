@@ -71,7 +71,15 @@ final class PanelView: UIView {
         let header = UIStackView(arrangedSubviews: [markView, statusLabel, UIView(), timeLabel])
         header.spacing = 8
         header.alignment = .center
+        // Kopf und Hinweis behalten ihre Höhe, die Wellenform nimmt den Rest. Ohne diese
+        // Prioritäten konnte Auto Layout ihr 0 pt geben – dann blieb sie unsichtbar/still.
+        header.setContentHuggingPriority(.required, for: .vertical)
+        hintLabel.setContentHuggingPriority(.required, for: .vertical)
+        header.setContentCompressionResistancePriority(.required, for: .vertical)
+        hintLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         waveform.translatesAutoresizingMaskIntoConstraints = false
+        waveform.setContentHuggingPriority(UILayoutPriority(1), for: .vertical)
+        waveform.setContentCompressionResistancePriority(UILayoutPriority(1), for: .vertical)
 
         recordingStack.axis = .vertical
         recordingStack.spacing = 8
@@ -118,6 +126,7 @@ final class PanelView: UIView {
             card.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
 
+            waveform.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
             markView.widthAnchor.constraint(equalToConstant: 17),
             markView.heightAnchor.constraint(equalToConstant: 18),
 
@@ -226,10 +235,15 @@ final class PanelView: UIView {
     }
 }
 
-/// Wellenform: Balken = die letzten Pegelwerte, älteste links.
+/// Wellenform: Balken = die letzten Pegelwerte (älteste links). Jeder Balken folgt seinem
+/// Zielwert mit einer Feder (SMOOTH der Desktop-Pille, k=420 c=30), so fließt die Welle
+/// statt zu springen. In Ruhe atmen die Balken dezent.
 final class WaveformView: UIView {
     static let barCount = 36
     private var bars: [CALayer] = []
+    private var targets = [Double](repeating: 0, count: barCount)
+    private var values = [Double](repeating: 0, count: barCount)
+    private var velocities = [Double](repeating: 0, count: barCount)
     var barColor: UIColor = Brand.recordInk {
         didSet { bars.forEach { $0.backgroundColor = barColor.cgColor } }
     }
@@ -239,12 +253,10 @@ final class WaveformView: UIView {
         for _ in 0..<Self.barCount {
             let bar = CALayer()
             bar.backgroundColor = barColor.cgColor
-            bar.cornerRadius = 2
             layer.addSublayer(bar)
             bars.append(bar)
         }
         isUserInteractionEnabled = false
-        setContentHuggingPriority(.defaultLow, for: .vertical)
     }
 
     @available(*, unavailable)
@@ -252,11 +264,39 @@ final class WaveformView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        update(levels: [])
+        render(time: CACurrentMediaTime())
     }
 
-    /// `levels` 0…1, älteste zuerst; fehlende Werte links werden als Stille gezeichnet.
-    func update(levels: [Float]) {
+    /// Zurück auf Ruhe (neues Diktat)
+    func reset() {
+        targets = [Double](repeating: 0, count: Self.barCount)
+        values = targets
+        velocities = targets
+        render(time: CACurrentMediaTime())
+    }
+
+    /// Neue Zielwerte 0…1, älteste zuerst; fehlende Werte links = Stille.
+    func setTargets(_ levels: [Float]) {
+        let count = Self.barCount
+        for i in 0..<count {
+            let index = levels.count - count + i
+            targets[i] = index >= 0 ? Double(levels[index]) : 0
+        }
+    }
+
+    /// Ein Bild weiter: Federn integrieren (halbimplizites Euler) und zeichnen.
+    func step(dt: Double, time: Double) {
+        let dt = min(max(dt, 0), 1.0 / 30)
+        let k = Brand.Spring.smooth.stiffness
+        let c = Brand.Spring.smooth.damping
+        for i in 0..<Self.barCount {
+            velocities[i] += (k * (targets[i] - values[i]) - c * velocities[i]) * dt
+            values[i] += velocities[i] * dt
+        }
+        render(time: time)
+    }
+
+    private func render(time: Double) {
         let count = bars.count
         let width = bounds.width
         let height = bounds.height
@@ -266,9 +306,10 @@ final class WaveformView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (i, bar) in bars.enumerated() {
-            let index = levels.count - count + i
-            let level = index >= 0 ? CGFloat(levels[index]) : 0
-            let h = max(4, height * (0.08 + 0.92 * level))
+            // dezentes Atmen in Ruhe (langsame Welle über die Balken)
+            let breath = 0.07 + 0.05 * (0.5 + 0.5 * sin(time * 2 * .pi * 0.45 + Double(i) * 0.42))
+            let level = max(breath, min(1, max(0, values[i])))
+            let h = max(4, height * CGFloat(level))
             bar.frame = CGRect(x: CGFloat(i) * (barWidth + gap), y: (height - h) / 2, width: barWidth, height: h)
             bar.cornerRadius = min(barWidth / 2, 2.5)
         }

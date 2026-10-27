@@ -68,8 +68,12 @@ enum ShortcutBridge {
             let before = UIPasteboard.general.changeCount
             UIPasteboard.general.string = outcome.text
             copied = UIPasteboard.general.changeCount != before
-            SharedStore.write(PendingText(id: id, text: outcome.text, createdAt: Date()), .pendingText)
-            note = copied ? "In der Zwischenablage · 🌐 setzt ein" : "Wartet auf 🌐"
+            let pending = PendingText(id: id, text: outcome.text, createdAt: Date())
+            SharedIO.async {
+                let written = SharedStore.write(pending, .pendingText)
+                Diag.log("shortcut.pending", ["written": .b(written), "path": .opt(SharedStore.url(.pendingText)?.path)])
+            }
+            note = copied ? "In Zwischenablage · beim nächsten 🌐 einsetzen" : "Beim nächsten 🌐 einsetzen"
         } else if let error = outcome.errorMessage {
             note = error
         } else {
@@ -138,14 +142,26 @@ enum ShortcutBridge {
         }.value
     }
 
+    /// Ergebnis kurz zeigen, dann beenden. Erst aktualisieren, ~2,5 s stehen lassen und dann
+    /// sofort beenden: Eine beendete Activity verschwindet aus der Dynamic Island sofort –
+    /// mit `end(…, .after)` sah man die Bestätigung dort gar nicht.
     private static func end(phase: DictationActivityAttributes.ContentState.Phase, note: String) async {
         guard let id = activityID else { return }
         activityID = nil
         let state = DictationActivityAttributes.ContentState(phase: phase, startedAt: Date(), note: note)
+        let stale = staleDate
         await Task.detached {
             guard let activity = Activity<DictationActivityAttributes>.activities.first(where: { $0.id == id }) else { return }
-            await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .after(Date().addingTimeInterval(4)))
+            // Mit Hinweis: iOS klappt die Dynamic Island kurz auf und zeigt den Text
+            let alert = AlertConfiguration(
+                title: "Paply",
+                body: LocalizedStringResource(stringLiteral: note),
+                sound: .default
+            )
+            await activity.update(ActivityContent(state: state, staleDate: stale), alertConfiguration: alert)
+            try? await Task.sleep(for: .milliseconds(2_500))
+            await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
         }.value
-        Diag.log("activity.end", ["phase": .s(phase.rawValue)])
+        Diag.log("activity.end", ["phase": .s(phase.rawValue), "note": .s(note.count > 40 ? "error" : note)])
     }
 }

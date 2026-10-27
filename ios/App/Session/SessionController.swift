@@ -80,9 +80,12 @@ final class SessionController {
         shared = SessionState()
         publish()
         SharedIO.async {
+            StorageCheck.migrateOldLayout()
             SharedStore.pruneResults()
             Self.removeStalePending()
         }
+        // Echter Schreib-/Lesetest im gemeinsamen Speicher + Pfade und Größen ins Protokoll
+        StorageCheck.shared.run(reason: "launch")
         // Live Activity aus einem abgestürzten Vorgänger nicht stehen lassen
         ShortcutBridge.endLeftoverActivities()
         _ = NetworkMonitor.shared
@@ -442,6 +445,8 @@ final class SessionController {
             "noSpeech": .b(outcome.noSpeech),
             "retries": .i(entry.retries),
             "keptForRetry": .b(keepForRetry),
+            // Pegel, die für die Tastatur geschrieben wurden (zuletzt angehängtes Diktat)
+            "levelsWritten": .i(Int(levelChannel?.count ?? 0)),
             "deferred": .b(entry.deliverAsPending),
             "app": .s(Self.appState),
         ]

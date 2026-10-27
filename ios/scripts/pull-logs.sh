@@ -44,13 +44,20 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${OUT:-$HOME/paply-logs/$STAMP}"
 mkdir -p "$OUT/raw"
 
-echo "Hole Diagnostics aus $GROUP …"
-xcrun devicectl device copy from \
+# Paply legt alles unter Library/ ab – nur diesen Teil zeigt devicectl bei App-Group-Containern.
+SOURCE="Library/Application Support/Paply/Diagnostics"
+echo "Hole $SOURCE aus $GROUP …"
+if ! xcrun devicectl device copy from \
   --device "$UDID" \
   --domain-type appGroupDataContainer \
   --domain-identifier "$GROUP" \
-  --source Diagnostics \
-  --destination "$OUT/raw"
+  --source "$SOURCE" \
+  --destination "$OUT/raw"; then
+  echo "Kopieren fehlgeschlagen. Sichtbar im Container:" >&2
+  xcrun devicectl device info files --device "$UDID" --domain-type appGroupDataContainer --domain-identifier "$GROUP" >&2 || true
+  echo "Ausweg: In Paply → Einstellungen → Entwicklerbereich → Diagnose → Teilen (z. B. per AirDrop)." >&2
+  exit 1
+fi
 
 python3 -I - "$OUT" <<'PY'
 import json, os, statistics, sys

@@ -20,9 +20,26 @@ enum AppGroup {
         return UserDefaults(suiteName: identifier)
     }
 
-    /// Unterordner im Container (wird bei Bedarf angelegt).
+    /// Paplys Dateien im Container: `Library/Application Support/Paply`. Bewusst unter
+    /// `Library/` – devicectl zeigt (und kopiert) bei App-Group-Containern nur diesen Teil.
+    /// Wird einmal je Prozess angelegt; nil ohne App Group (oder Tastatur ohne Vollzugriff).
+    static let baseURL: URL? = {
+        guard let container = containerURL else { return nil }
+        let url = container
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("Paply", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return url
+        } catch {
+            return nil
+        }
+    }()
+
+    /// Unterordner in `baseURL` (wird bei Bedarf angelegt).
     static func directory(_ name: String) -> URL? {
-        guard let base = containerURL else { return nil }
+        guard let base = baseURL else { return nil }
         let url = base.appendingPathComponent(name, isDirectory: true)
         if !FileManager.default.fileExists(atPath: url.path) {
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

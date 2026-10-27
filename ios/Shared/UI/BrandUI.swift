@@ -3,6 +3,8 @@ import SwiftUI
 extension Color {
     static let paplyGreen = Color(uiColor: Brand.green)
     static let paplyGreenBright = Color(uiColor: Brand.greenBright)
+    static let paplyGreenDeep = Color(uiColor: Brand.greenDeep)
+    static let paplyBeakDeep = Color(uiColor: PaplyMarkGeometry.beakColors.bottom)
     static let paplyForest = Color(uiColor: Brand.forest)
     static let paplyForestDeep = Color(uiColor: Brand.forestDeep)
     static let paplyBeak = Color(uiColor: Brand.beak)

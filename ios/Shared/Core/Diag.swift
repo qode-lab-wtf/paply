@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Wert im Diagnoseprotokoll. Diktat-Texte gehören NIE hierher, nur Längen.
 enum DiagValue: Sendable, Encodable, Equatable {
@@ -42,6 +43,9 @@ final class Diag: @unchecked Sendable {
     // nur auf `queue` benutzt
     private var handle: FileHandle?
     private var handleDay: String?
+    private var warnedNoStorage = false
+    /// Rückfall, wenn es keinen gemeinsamen Speicher gibt: einmal in Console melden
+    private let fallbackLogger = Logger(subsystem: "dev.paply.ios", category: "diag")
     private let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -97,7 +101,13 @@ final class Diag: @unchecked Sendable {
         try? handle?.close()
         handle = nil
         handleDay = nil
-        guard let dir = AppGroup.directory(Self.directoryName) else { return nil }
+        guard let dir = AppGroup.directory(Self.directoryName) else {
+            if !warnedNoStorage {
+                warnedNoStorage = true
+                fallbackLogger.error("Diagnose: kein App-Group-Speicher (\(AppGroup.identifier, privacy: .public)) – Protokoll wird verworfen")
+            }
+            return nil
+        }
         let url = dir.appendingPathComponent("\(day)-\(process.rawValue).jsonl")
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)

@@ -38,6 +38,15 @@ final class KeyboardViewController: UIInputViewController {
     private var pending: PendingText?
     private var tokens: [DarwinToken] = []
     private var levels: LevelChannel?
+    // Pegel-Anzeige: Kanal je Diktat, Statistik für `kb.levels`, adaptive Zeichenverzögerung
+    private var levelTag: UInt32 = 0
+    private var lastLevelCount: UInt64 = 0
+    private var lastLevelArrival: CFTimeInterval = 0
+    private var levelGapMs: Double = 100
+    private var levelStats: [Float] = []
+    private var levelsLogged = false
+    private var lastTickTime: CFTimeInterval = 0
+    private var lastOpenAttempt: CFTimeInterval = 0
     private var displayLink: CADisplayLink?
     private var haptic: UIImpactFeedbackGenerator?
     /// Die App hat in diesem Diktat Sprache erkannt
@@ -124,10 +133,12 @@ final class KeyboardViewController: UIInputViewController {
         Diag.log("kb.appear", fields)
         HostProbe.log(from: self)
 
-        guard hasFullAccess, AppGroup.containerURL != nil else {
+        guard hasFullAccess, AppGroup.baseURL != nil else {
             show(.failure(.noFullAccess))
             return
         }
+        // Speicher-Selbsttest: eigene Markierung schreiben, die der App lesen (abseits vom Main-Thread)
+        DispatchQueue.global(qos: .utility).async { _ = StorageSelfTest.run(as: .keyboard) }
         subscribe()
         startDisplayLink()
 
@@ -168,6 +179,7 @@ final class KeyboardViewController: UIInputViewController {
         Diag.log("kb.disappear", fields)
         switch state {
         case .connecting, .recording:
+            logLevelStats(reason: "disappear")
             guard let id = dictationID else { break }
             if speechSeen {
                 // Echtes Diktat nicht verlieren: fertig machen, beim nächsten 🌐 einmal anbieten
@@ -243,6 +255,7 @@ final class KeyboardViewController: UIInputViewController {
     private func startRecording() {
         let id = UUID().uuidString
         dictationID = id
+        resetLevels(for: id)
         speechSeen = false
         finishTapNs = 0
         lastPongNs = 0
@@ -258,6 +271,7 @@ final class KeyboardViewController: UIInputViewController {
     private func attach(to id: String) {
         clearAttachID()
         dictationID = id
+        resetLevels(for: id)
         lastPongNs = 0
         show(.connecting)
         send(.record, id: id) // idempotent: die App bestätigt nur
@@ -314,6 +328,7 @@ final class KeyboardViewController: UIInputViewController {
     private func finish() {
         guard case .recording = state, let id = dictationID else { return }
         finishTapNs = MonoClock.now()
+        logLevelStats(reason: "finish")
         send(.finish, id: id)
         show(.polishing)
         Diag.log("kb.finish", ["id": .s(String(id.prefix(8)))])
@@ -322,6 +337,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func discard() {
         let previous = state
+        if previous == .connecting || isRecording { logLevelStats(reason: "discard") }
         if let id = dictationID, previous == .connecting || isRecording || isRetryableFailure {
             send(.cancel, id: id) // bei Fehler: behaltenes Audio in der App freigeben
         }
@@ -564,15 +580,14 @@ final class KeyboardViewController: UIInputViewController {
 
     private func show(_ newState: State) {
         state = newState
-        // Bildrate nur für Wellenform und Zeit; das erste Bild wird immer gemessen
-        displayLink?.isPaused = firstFrameLogged && !isRecording
+        // Bildrate nur für Wellenform und Zeit (Verbinden + Aufnahme); das erste Bild wird immer gemessen
+        displayLink?.isPaused = firstFrameLogged && !isLive
         switch newState {
         case .idle:
             break
         case .connecting:
             panel.showRecording(status: "Mikro …")
             panel.setTime("0:00")
-            panel.waveform.update(levels: [])
         case .recording:
             panel.showRecording(status: "Paply hört zu")
             ensureLevels()
@@ -651,7 +666,37 @@ final class KeyboardViewController: UIInputViewController {
     // MARK: Pegel und Zeit (Bildrate)
 
     private func ensureLevels() {
-        if levels == nil { levels = LevelChannel.openReader() }
+        guard levels == nil else { return }
+        lastOpenAttempt = CACurrentMediaTime()
+        levels = LevelChannel.openReader()
+    }
+
+    private func resetLevels(for id: String) {
+        levels = nil // je Diktat frisch öffnen
+        levelTag = LevelChannel.tag(for: id)
+        lastLevelCount = 0
+        lastLevelArrival = 0
+        levelGapMs = 100
+        levelStats = []
+        levelsLogged = false
+        panel.waveform.reset()
+    }
+
+    /// Einmal pro Diktat: kamen Pegel an, und wie laut? (ohne Text)
+    private func logLevelStats(reason: String) {
+        guard !levelsLogged, let id = dictationID else { return }
+        levelsLogged = true
+        let sorted = levelStats.sorted()
+        func round2(_ v: Float) -> Double { (Double(v) * 100).rounded() / 100 }
+        Diag.log("kb.levels", [
+            "id": .s(String(id.prefix(8))),
+            "reason": .s(reason),
+            "channel": .b(levels != nil),
+            "received": .i(levelStats.count),
+            "max": .d(round2(sorted.last ?? 0)),
+            "median": .d(round2(sorted.isEmpty ? 0 : sorted[sorted.count / 2])),
+            "gapMs": .ms(levelGapMs),
+        ])
     }
 
     private func startDisplayLink() {
@@ -670,16 +715,41 @@ final class KeyboardViewController: UIInputViewController {
                 "sinceProcessStartMs": .ms(MonoClock.ms(from: MonoClock.processStart, to: MonoClock.now())),
                 "viewH": .d(Double(view.bounds.height)),
             ])
-            displayLink?.isPaused = !isRecording
+            displayLink?.isPaused = !isLive
         }
-        guard case .recording(let startNs) = state else { return }
-        let now = MonoClock.now()
-        let seconds = Int(MonoClock.ms(from: startNs, to: now) / 1000)
-        panel.setTime("\(seconds / 60):\(String(format: "%02d", seconds % 60))")
-        // Leicht verzögert zeichnen: Pegel kommen blockweise (Tap-Puffer)
-        if let levels, levels.tag == LevelChannel.tag(for: dictationID ?? "") {
-            panel.waveform.update(levels: levels.recent(max: WaveformView.barCount, notAfter: now - 120_000_000))
+        let frameTime = displayLink?.timestamp ?? CACurrentMediaTime()
+        let dt = lastTickTime > 0 ? frameTime - lastTickTime : 1.0 / 60
+        lastTickTime = frameTime
+        guard isLive else { return }
+        if case .recording(let startNs) = state {
+            let now = MonoClock.now()
+            let seconds = Int(MonoClock.ms(from: startNs, to: now) / 1000)
+            panel.setTime("\(seconds / 60):\(String(format: "%02d", seconds % 60))")
+            updateLevelTargets(now: now, frameTime: frameTime)
         }
+        panel.waveform.step(dt: dt, time: frameTime)
+    }
+
+    /// Pegel aus der geteilten Datei holen. Sie kommen blockweise (Tap-Puffer ~100 ms);
+    /// gezeichnet wird um einen Block verzögert, damit die Welle gleichmäßig weiterläuft.
+    private func updateLevelTargets(now: UInt64, frameTime: CFTimeInterval) {
+        if levels == nil, frameTime - lastOpenAttempt > 0.5 { ensureLevels() }
+        guard let levels, levels.tag == levelTag else { return }
+        let count = levels.count
+        if count > lastLevelCount {
+            let fresh = Int(min(count - lastLevelCount, 60))
+            levelStats.append(contentsOf: levels.recent(max: fresh, notAfter: .max))
+            if levelStats.count > 4_000 { levelStats.removeFirst(levelStats.count - 4_000) }
+            if lastLevelArrival > 0 {
+                let gap = (frameTime - lastLevelArrival) * 1000
+                levelGapMs = levelGapMs * 0.8 + min(gap, 500) * 0.2
+            }
+            lastLevelArrival = frameTime
+            lastLevelCount = count
+        }
+        let delayMs = min(max(levelGapMs + 30, 60), 300)
+        let limit = now > UInt64(delayMs * 1_000_000) ? now - UInt64(delayMs * 1_000_000) : now
+        panel.waveform.setTargets(levels.recent(max: WaveformView.barCount, notAfter: limit))
     }
 
     // MARK: Hilfen
@@ -688,6 +758,9 @@ final class KeyboardViewController: UIInputViewController {
         if case .recording = state { return true }
         return false
     }
+
+    /// Wellenform lebt: beim Verbinden (Atmen) und während der Aufnahme
+    private var isLive: Bool { state == .connecting || isRecording }
 
     private var isRetryableFailure: Bool {
         if case .failure(.network(_, true)) = state { return true }

@@ -56,8 +56,11 @@ Paply, dann Paply antippen → „Vollen Zugriff erlauben“. In der App den Gro
 scripts/pull-logs.sh                # bzw. --device "Allans iPhone"
 ```
 
-Holt `Diagnostics/*.jsonl` aus dem App-Group-Container, schreibt `~/paply-logs/<Zeit>/merged.jsonl`
-und zeigt Median und Mittel der Latenzen je Modell · Stücke-Upload · Netz. In der App: Einstellungen → Labor → Diagnose (ansehen, teilen, löschen).
+Holt `Library/Application Support/Paply/Diagnostics/*.jsonl` aus dem App-Group-Container (devicectl zeigt
+bei App-Group-Containern nur `Library/` – deshalb liegen alle gemeinsamen Dateien dort), schreibt `~/paply-logs/<Zeit>/merged.jsonl`
+und zeigt Median und Mittel der Latenzen je Modell · Stücke-Upload · Netz. In der App: Einstellungen →
+ganz unten 5× auf „Version“ tippen → Entwicklerbereich → Diagnose (ansehen, teilen, löschen). Dort auch der
+Speicher-Selbsttest (App und Tastatur schreiben und lesen gegenseitig eine Testdatei).
 Das Protokoll enthält keine Diktat-Texte, nur Längen und Zeiten.
 
 ## Projekt neu erzeugen
