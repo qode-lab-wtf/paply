@@ -59,6 +59,9 @@ struct MapRequest: Equatable {
     var input: MapLayoutInput
     /// gezeichnete Gedanken (ohne die, die gerade geordnet werden)
     var total: Int
+    /// Stand der gemerkten Plätze, mit denen `input` gebaut ist (`MapAnchors.revision`): Nur eine Anordnung mit
+    /// dem aktuellen Stand darf ihre Plätze merken.
+    var anchorRevision: Int
 }
 
 @MainActor
@@ -75,7 +78,7 @@ final class MapEngine {
     /// Eingabe, zu der `layout` gehört – mit den eigenen Ankern der Anordnung (rechnet man damit erneut,
     /// kommt genau `layout` heraus; das muss nicht noch einmal gerechnet werden)
     @ObservationIgnored private var settled: MapLayoutInput?
-    @ObservationIgnored private var requested: MapLayoutInput?
+    @ObservationIgnored private var requested: MapRequest?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
 
@@ -93,7 +96,8 @@ final class MapEngine {
     // MARK: Eingabe
 
     /// Eingabe aus dem Modell. Gedanken, die gerade geordnet werden, erscheinen erst fertig an ihrem Kreis.
-    static func makeRequest(model: ThoughtsModel, anchors: [String: MapAnchor]) -> MapRequest {
+    /// `anchorRevision`: Stand von `anchors` (`MapAnchors.revision`).
+    static func makeRequest(model: ThoughtsModel, anchors: [String: MapAnchor], anchorRevision: Int = 0) -> MapRequest {
         let visible = model.thoughts.filter { !$0.isProcessing }
         var topicOf: [String: String] = [:]
         var counts: [String: Int] = [:]
@@ -124,29 +128,30 @@ final class MapEngine {
             }
         }
         return MapRequest(input: MapLayoutInput(topics: topics, thoughts: items, links: links, anchors: anchors),
-                          total: visible.count)
+                          total: visible.count, anchorRevision: anchorRevision)
     }
 
     // MARK: Rechnen
 
     /// Neue Eingabe: im Hintergrund rechnen. Eine laufende, ältere Rechnung wird verworfen; bis zum Ergebnis
-    /// bleibt die letzte Karte stehen. `persist`: Anker danach merken (nur mit geladenem Modell).
+    /// bleibt die letzte Karte stehen. `persist`: Anker danach merken (nur mit geladenem Modell). Neu gelesene
+    /// Anker (`anchorRevision`) entwerten jede laufende Rechnung, auch wenn die Eingabe sonst gleich ist.
     func request(_ request: MapRequest, persist: Bool) {
-        let input = request.input
-        guard input != requested else { return }
-        requested = input
+        guard request != requested else { return }
+        requested = request
         task?.cancel()
         generation &+= 1
+        let input = request.input
         if input == settled { return } // nur die eigenen Anker kamen zurück: gleiche Karte
-        let ticket = generation
+        let ticket = generation, revision = request.anchorRevision
         task = Task { [weak self] in
             let layout = await Task.detached(priority: .userInitiated) { MapLayout.compute(input) }.value
             guard let self, !Task.isCancelled, ticket == self.generation else { return }
-            self.apply(layout, for: input, persist: persist)
+            self.apply(layout, for: input, anchorRevision: revision, persist: persist)
         }
     }
 
-    private func apply(_ layout: MapLayout, for input: MapLayoutInput, persist: Bool) {
+    private func apply(_ layout: MapLayout, for input: MapLayoutInput, anchorRevision: Int, persist: Bool) {
         if layout != self.layout {
             version += 1
             self.layout = layout
@@ -155,8 +160,9 @@ final class MapEngine {
         settled.anchors = layout.anchors
         self.settled = settled
         Self.last = (layout, version, settled)
-        // erst mit geladenem Modell – sonst sähen alle Themen gelöscht aus
-        if persist { MapAnchors.shared.remember(layout.anchors) }
+        // erst mit geladenem Modell – sonst sähen alle Themen gelöscht aus; gerechnet mit einem älteren Stand der
+        // Anker (vor dem Nachladen) merkt `MapAnchors` nichts
+        if persist { MapAnchors.shared.remember(layout.anchors, revision: anchorRevision) }
     }
 
     // MARK: Anzeige

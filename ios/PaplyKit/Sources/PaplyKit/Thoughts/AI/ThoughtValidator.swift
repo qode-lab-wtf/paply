@@ -191,15 +191,18 @@ public enum ThoughtValidator {
                 rejections.append("topic:name")
                 return .none
             }
-            if let match = TopicHygiene.matchExisting(name, among: input.topics) {
+            // Doppel-Schranke: Nur ein Name, der dem Titel eines vorhandenen Themas ohne Zweifel gleich ist, leitet
+            // um – beschrieben oder nicht. Namen aus Beschreibungen sind nur Hinweise (`mentioned`), unscharfe Nähe
+            // nur ein späterer Vorschlag. Mehrere gleich gute Titel: der Code entscheidet nicht, und ein weiteres
+            // gleichnamiges Thema entsteht auch nicht.
+            let same = TopicHygiene.sameNamed(name, among: input.topics)
+            if same.count == 1 {
                 rejections.append("topic:duplicate")
-                return .existing(match.topicID)
+                return .existing(same[0].topicID)
             }
-            // Meint der Name eindeutig ein beschriebenes Thema (Titel, oder Eigennamen daraus und ein weiterer
-            // Begriff im Transkript) → dieses Thema (Code statt Prompt). Im Zweifel bleibt es ein neues Thema.
-            if let match = TopicMentions.describedMatch(name, transcript: input.transcript, among: input.topics) {
-                rejections.append("topic:described")
-                return .existing(match.topicID)
+            if same.count > 1 {
+                rejections.append("topic:ambiguous")
+                return .none
             }
             if input.topicsFull {
                 rejections.append("topic:full")

@@ -316,8 +316,11 @@ public actor ThoughtStore {
 
     /// Wie `update`, dazu das Thema im selben Schritt (KI-Ergebnis übernehmen, KONZEPT §6.10): `topic` wird über
     /// seine Alias-Kette aufgelöst. Gibt es es nicht (mehr) – neu, oder gerade mit seinem letzten Gedanken entfernt
-    /// (`pruneTopics`) –, wird es angehängt, aber nur, wenn der Gedanke es danach wirklich trägt. `change` bekommt
-    /// die ID, die gilt (nil = ohne Thema). So zeigt ein Gedanke nie auf ein Thema, das es nicht gibt.
+    /// (`pruneTopics`) –, gilt zuerst die Doppel-Schranke gegen alle lebenden Themen (`TopicHygiene.sameNamed`): Hat
+    /// seit der Prüfung des Aufrufers ein paralleler Lauf oder der Nutzer ein gleichnamiges Thema angelegt, gilt
+    /// dieses; sind es mehrere gleich gute, bleibt der Gedanke ohne Thema. Sonst wird es angehängt, aber nur, wenn der
+    /// Gedanke es danach wirklich trägt. `change` bekommt die ID, die gilt (nil = ohne Thema). So zeigt ein Gedanke nie
+    /// auf ein Thema, das es nicht gibt, und es entstehen nie zwei gleichnamige.
     @discardableResult
     public func update(_ id: String, topic: Topic?, _ change: @Sendable (inout Thought, _ topicID: String?) -> Void) throws -> Thought? {
         try ensureLoaded()
@@ -328,10 +331,15 @@ public actor ThoughtStore {
             if let existing = Self.resolve(topic.id, in: topicsDoc.topics) {
                 topicID = existing.id
             } else if topicsReadable, !topicsDoc.topics.contains(where: { $0.id == topic.id }) {
-                var fresh = topic
-                fresh.mergedInto = nil
-                missing = fresh
-                topicID = fresh.id
+                let same = TopicHygiene.sameNamed(topic.title, among: topicsDoc.topics)
+                if same.count == 1 {
+                    topicID = same[0].id
+                } else if same.isEmpty {
+                    var fresh = topic
+                    fresh.mergedInto = nil
+                    missing = fresh
+                    topicID = fresh.id
+                }
             }
         }
         var next = current

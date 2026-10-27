@@ -289,15 +289,49 @@ private func ledger(_ clock: Clock, limits: TokenLedger.Limits = .init(), url: U
         #expect(!TopicHygiene.isValidNewName(String(repeating: "x", count: 25)))
     }
 
+    /// Doppel-Schranke: verbindlich nur bei eindeutiger Gleichheit mit einem Titel. Früher leiteten auch Präfix,
+    /// Levenshtein ≤ 2, grober Stamm und ä = a um („Umzugsplanung“, „Lisbon“, „Gärten“) – das sind jetzt neue
+    /// Themen, die Nähe zählt nur noch für Vorschläge der Themenpflege (`suggestionPairsAndSchedule`).
     @Test func duplicateBarrier() {
         let topics = F.topics
         #expect(TopicHygiene.matchExisting("Wohnungen", among: topics)?.topicID == "t_wohnung")
-        #expect(TopicHygiene.matchExisting("Umzugsplanung", among: topics)?.topicID == "t_umzug")
-        #expect(TopicHygiene.matchExisting("Lisbon", among: topics)?.topicID == "t_lissabon")
-        #expect(TopicHygiene.matchExisting("Gärten", among: topics)?.topicID == "t_garten")
-        #expect(TopicHygiene.matchExisting("Schufa", among: topics) == nil)
-        #expect(TopicHygiene.matchExisting("Reise", among: topics) == nil)
-        #expect(TopicHygiene.matchExisting("Pap", among: topics) == nil)
+        #expect(TopicHygiene.matchExisting("PAPLY", among: topics)?.topicID == "t_paply")
+        for name in ["Umzugsplanung", "Lisbon", "Gärten", "Schufa", "Reise", "Pap", "Wohnungssuche"] {
+            #expect(TopicHygiene.matchExisting(name, among: topics) == nil, "\(name)")
+        }
+    }
+
+    @Test(arguments: [
+        // gleich bis auf Groß/Klein, Umlaut ä = ae, Leer-, Binde- und Satzzeichen
+        ("Paply-App", "Paply App"), ("PaplyApp", "paply app"), ("Müller Bau", "Mueller-Bau"), ("Café Müller", "café mueller"),
+        // Plural/Genitiv Wort für Wort
+        ("Wohnungen", "Wohnung"), ("Rudervereine", "Ruderverein"), ("Lissabon-Reisen", "Lissabon Reise"), ("Brandts", "Brandt"),
+        ("Projekts", "Projekt"), ("Ideen", "Idee"),
+        // Tippfehler in langen Namen: vertauscht, ein Buchstabe fehlt oder ist zu viel (innen)
+        ("Lissbaon", "Lissabon"), ("Lisssabon", "Lissabon"), ("Kassenbuh", "Kassenbuch"),
+    ])
+    func sameNameIsCertain(a: String, b: String) {
+        #expect(TopicHygiene.sameNameRank(a, b) != nil, "\(a) ↔ \(b)")
+        #expect(TopicHygiene.sameNameRank(b, a) != nil, "\(b) ↔ \(a)")
+    }
+
+    @Test(arguments: [
+        // Prüfer: Wortanfang bzw. -er-Ableitung
+        ("Reisen", "Reis"), ("Fisch", "Fischer"), ("Umzugsplanung", "Umzug"), ("Paply", "Pap"),
+        // ä ≠ a, ß ≠ ss, andere Akzente: nicht sicher
+        ("Gärten", "Garten"), ("Umzüge", "Umzug"), ("Küchen", "Kuchen"), ("Bär", "Bar"), ("Buße", "Busse"), ("Muller", "Müller"),
+        ("Café", "Cafe"),
+        // kurzer Stamm, andere Sprache
+        ("Kurs", "Kur"), ("Reise", "Reis"), ("Lisbon", "Lissabon"),
+        // Tippfehler nur in langen Namen, nur innen, keine Ziffern, kein ae-Umlaut
+        ("Lisabon", "Lissabon"), ("Lissabonn", "Lissabon"), ("Llissabon", "Lissabon"), ("Kuechenplanung", "Kuchenplanung"),
+        ("Küchenplanung", "Kuchenplanung"), ("Projekt 12", "Projekt 21"), ("Projekt 12", "Projekt 1"), ("Schreiner", "Schreiber"),
+        // Wortzahl
+        ("Paply App", "Paply"), ("Oma Ilse", "Ilse"),
+    ])
+    func differentNamesStayApart(a: String, b: String) {
+        #expect(TopicHygiene.sameNameRank(a, b) == nil, "\(a) ↔ \(b)")
+        #expect(TopicHygiene.sameNameRank(b, a) == nil, "\(b) ↔ \(a)")
     }
 
     @Test func suggestionPairsAndSchedule() {
@@ -308,7 +342,11 @@ private func ledger(_ clock: Clock, limits: TokenLedger.Limits = .init(), url: U
             TopicHygiene.Profile(topicID: "d", name: "Gartenplanung", count: 2, keywords: ["beet"]),
         ]
         let pairs = TopicHygiene.candidatePairs(profiles, declined: [])
-        #expect(Set(pairs.map { [$0.a, $0.b] }) == [["a", "b"], ["c", "d"]])
+        #expect(Set(pairs.map { [$0.a, $0.b] }) == [["a", "b"], ["c", "d"]]) // „Garten“/„Gartenplanung“: nur über die Namensnähe
+        // Was nicht mehr umgeleitet wird, darf weiter als Vorschlag kommen (der Nutzer bestätigt)
+        for (a, b) in [("Umzug", "Umzüge"), ("Garten", "Gärten"), ("Lissabon", "Lisbon"), ("Umzug", "Umzugsplanung")] {
+            #expect(TopicHygiene.namesAreClose(a, b), "\(a) ↔ \(b)")
+        }
         #expect(TopicHygiene.candidatePairs(profiles, declined: [["a", "b"]]).map { [$0.a, $0.b] } == [["c", "d"]])
         let now = Date()
         #expect(!TopicHygiene.isSuggestionDue(activeTopics: 7, lastRun: nil, now: now))

@@ -1,6 +1,7 @@
 import Foundation
 
-/// Themenpflege über Wochen (KONZEPT §6.10) und die lokale Doppel-Schranke (§6.7).
+/// Themenpflege über Wochen (KONZEPT §6.10) und die lokale Doppel-Schranke (§6.7): Ein neues Thema wird nur dann auf
+/// ein vorhandenes umgeleitet, wenn der Name dessen Titel ohne Zweifel gleich ist (`matchExisting`).
 public enum TopicHygiene {
     /// Höchstens so viele aktive Themen; danach darf die KI keins mehr anlegen.
     public static let maxActiveTopics = 24
@@ -51,35 +52,127 @@ public enum TopicHygiene {
         return !isBlocked(trimmed)
     }
 
-    /// Doppel-Schranke: das bestehende Thema, das `name` meint, oder nil.
-    /// Gleich nach Normalisierung, gleicher Singular/Plural-Stamm, Levenshtein ≤ 2 ab 5 Zeichen
-    /// oder Präfix eines bestehenden Namens (je ≥ 4 Zeichen) → bestehendes Thema.
+    // MARK: Doppel-Schranke (verbindlich)
+
+    /// Doppel-Schranke: das vorhandene Thema, dessen **Titel** `name` eindeutig meint (`sameNameRank`), oder nil –
+    /// auch wenn mehrere gleich gut passen. Nur das leitet ein neues Thema verbindlich um (Validator, Prozessor und
+    /// im selben Schritt noch einmal im Speicher). Eine falsche Umleitung wiegt schwerer als keine: Unscharfe Nähe
+    /// („Umzugsplanung“ ↔ „Umzug“, „Reisen“ ↔ „Reis“) zählt nur für Vorschläge der Themenpflege, die der Nutzer
+    /// bestätigt (`candidatePairs`); Namen aus Beschreibungen sind nur Hinweise an die KI (`TopicMentions`).
     public static func matchExisting(_ name: String, among topics: [TopicIndexEntry]) -> TopicIndexEntry? {
-        let candidate = normalized(name)
-        guard !candidate.isEmpty else { return nil }
-        let candidateStem = stem(candidate)
-        var best: (entry: TopicIndexEntry, rank: Int)?
-        for entry in topics {
-            let existing = normalized(entry.name)
-            guard !existing.isEmpty else { continue }
-            var rank: Int?
-            if existing == candidate {
-                rank = 0
-            } else if stem(existing) == candidateStem {
-                rank = 1
-            } else if min(existing.count, candidate.count) >= 5,
-                      EditCheck.editDistance(existing, candidate) <= 2 {
-                rank = 2
-            } else if min(existing.count, candidate.count) >= 4,
-                      existing.hasPrefix(candidate) || candidate.hasPrefix(existing) {
-                rank = 3
+        let found = sameNamed(name, among: topics)
+        return found.count == 1 ? found[0] : nil
+    }
+
+    /// Alle Themen, deren Titel `name` gleich gut treffen (beste Stufe), ohne Doppel. Mehr als eins = mehrdeutig:
+    /// dann entscheidet der Code nicht.
+    public static func sameNamed(_ name: String, among topics: [TopicIndexEntry]) -> [TopicIndexEntry] {
+        best(name, among: topics, id: \.topicID, title: \.name)
+    }
+
+    /// Wie oben gegen gespeicherte Themen; nur lebende zählen (zusammengeführte, `mergedInto`, nicht).
+    public static func sameNamed(_ name: String, among topics: [Topic]) -> [Topic] {
+        best(name, among: topics.filter { $0.mergedInto == nil }, id: \.id, title: \.title)
+    }
+
+    private static func best<T>(_ name: String, among items: [T], id: (T) -> String, title: (T) -> String) -> [T] {
+        var found: [T] = []
+        var bestRank = Int.max
+        var seen: Set<String> = []
+        for item in items {
+            guard let rank = sameNameRank(name, title(item)), rank <= bestRank else { continue }
+            if rank < bestRank {
+                found = []
+                seen = []
+                bestRank = rank
             }
-            guard let r = rank else { continue }
-            if best == nil || r < best!.rank || (r == best!.rank && entry.count > best!.entry.count) {
-                best = (entry, r)
+            if seen.insert(id(item)).inserted { found.append(item) }
+        }
+        return found
+    }
+
+    /// Sind `a` und `b` ohne Zweifel derselbe Name? 0 = gleich bis auf Groß/Klein, Umlaut (ä = ae), Leer-, Binde- und
+    /// Satzzeichen („Paply-App“ = „paply app“); 1 = Wort für Wort gleich bis auf Plural/Genitiv („Wohnungen“,
+    /// „Lissabon-Reisen“); 2 = Tippfehler in einem langen Namen (`isTypo`). nil = verschieden.
+    ///
+    /// Bewusst nicht: ä = a („Küchen“ ≠ „Kuchen“, „Bär“ ≠ „Bar“, also auch nicht „Gärten“ → „Garten“ oder „Umzüge“ →
+    /// „Umzug“), ß = ss („Buße“ ≠ „Busse“), andere Akzente, -er („Fischer“ ≠ „Fisch“), ein Wortanfang („Reisen“ ≠
+    /// „Reis“, „Umzugsplanung“ ≠ „Umzug“), andere Sprachen („Lisbon“) und Wörter aus Beschreibungen.
+    static func sameNameRank(_ a: String, _ b: String) -> Int? {
+        let keyA = nameKey(a), keyB = nameKey(b)
+        guard !keyA.isEmpty, !keyB.isEmpty else { return nil }
+        if keyA == keyB { return 0 }
+        let wordsA = TextAnalysis.alphanumericRuns(a), wordsB = TextAnalysis.alphanumericRuns(b)
+        if wordsA.count == wordsB.count, zip(wordsA, wordsB).allSatisfy(sameWordOrInflection) { return 1 }
+        if isTypo(a, b) { return 2 }
+        return nil
+    }
+
+    /// Vergleichsform der Doppel-Schranke: klein, ä/ö/ü als ae/oe/ue, nur Buchstaben und Ziffern. Anders als
+    /// `normalized` bleiben Akzente und ß stehen.
+    static func nameKey(_ text: String) -> String {
+        var key = String.UnicodeScalarView()
+        for scalar in TextAnalysis.normalizedLower(text).unicodeScalars {
+            switch scalar {
+            case "ä": key.append(contentsOf: "ae".unicodeScalars)
+            case "ö": key.append(contentsOf: "oe".unicodeScalars)
+            case "ü": key.append(contentsOf: "ue".unicodeScalars)
+            default: if TextAnalysis.isWordScalar(scalar) { key.append(scalar) }
             }
         }
-        return best?.entry
+        return String(key)
+    }
+
+    /// Gleiches Wort oder Plural/Genitiv davon, mit den geprüften Endungen der Treffer-Erkennung
+    /// (`TopicMentions.bases` ohne -er: -es ab 4, -e und -en ab 5, -n nach -e/-el/-er ab 4). -s erst ab 4 Zeichen
+    /// Stamm – „Kurs“ ist nicht „Kur“.
+    private static func sameWordOrInflection(_ a: String, _ b: String) -> Bool {
+        let keyA = nameKey(a), keyB = nameKey(b)
+        if keyA == keyB { return true }
+        func bases(_ word: String) -> Set<String> {
+            Set(TopicMentions.bases(word, derivedNames: false).filter { $0.count >= 4 }.map(nameKey))
+        }
+        return bases(a).contains(keyB) || bases(b).contains(keyA)
+    }
+
+    /// Tippfehler: beide Namen ≥ 8 Zeichen (ohne Leer- und Satzzeichen), zwei benachbarte Buchstaben vertauscht oder
+    /// ein Buchstabe fehlt bzw. ist zu viel. Nie am Anfang oder Ende (das wäre ein Wortanfang bzw. eine Endung), nie
+    /// eine Ziffer, nie ein „e“ nach a/o/u („Kuechenplan“ ≠ „Kuchenplan“). Umlaute zählen hier als eigene Buchstaben,
+    /// ä ↔ a ist also kein Tippfehler.
+    static func isTypo(_ a: String, _ b: String) -> Bool {
+        let x = Array(typoKey(a)), y = Array(typoKey(b))
+        guard min(x.count, y.count) >= 8 else { return false }
+        if x.count == y.count {
+            let differing = x.indices.filter { x[$0] != y[$0] }
+            guard differing.count == 2, differing[1] == differing[0] + 1 else { return false }
+            let i = differing[0]
+            return x[i] == y[i + 1] && x[i + 1] == y[i] && x[i].isLetter && x[i + 1].isLetter
+        }
+        let (long, short) = x.count > y.count ? (x, y) : (y, x)
+        guard long.count == short.count + 1, !long.starts(with: short), !long.reversed().starts(with: short.reversed()) else {
+            return false
+        }
+        var i = 0
+        while long[i] == short[i] { i += 1 } // erste Abweichung: dort steht der zusätzliche Buchstabe
+        guard Array(long[(i + 1)...]) == Array(short[i...]), long[i].isLetter else { return false }
+        return !(long[i] == "e" && "aou".contains(long[i - 1]))
+    }
+
+    /// klein, nur Buchstaben und Ziffern, sonst unverändert (Umlaute und Akzente bleiben eigene Zeichen)
+    private static func typoKey(_ text: String) -> String {
+        String(String.UnicodeScalarView(TextAnalysis.normalizedLower(text).unicodeScalars.filter(TextAnalysis.isWordScalar)))
+    }
+
+    /// Unscharfe Namensnähe – nur für Vorschläge der Themenpflege, nie für eine Umleitung: gleich nach `normalized`
+    /// (auch ä = a), gleicher grober Stamm, Levenshtein ≤ 2 ab 5 Zeichen, ein Name Anfang des anderen (je ≥ 4)
+    /// oder `sameNameRank`.
+    static func namesAreClose(_ a: String, _ b: String) -> Bool {
+        let x = normalized(a), y = normalized(b)
+        guard !x.isEmpty, !y.isEmpty else { return false }
+        if x == y || stem(x) == stem(y) { return true }
+        if min(x.count, y.count) >= 5, EditCheck.editDistance(x, y) <= 2 { return true }
+        if min(x.count, y.count) >= 4, x.hasPrefix(y) || y.hasPrefix(x) { return true }
+        return sameNameRank(a, b) != nil
     }
 
     // MARK: Seltene Vorschläge zum Zusammenführen (§6.10 Punkt 5)
@@ -121,7 +214,7 @@ public enum TopicHygiene {
         return now.timeIntervalSince(lastRun) >= suggestionInterval
     }
 
-    /// Lokale Paarsuche: Namensnähe, Kosinus der Schwerpunkte ≥ 0,7 (gleiche Sprache) oder
+    /// Lokale Paarsuche: Namensnähe (`namesAreClose`, unscharf), Kosinus der Schwerpunkte ≥ 0,7 (gleiche Sprache) oder
     /// Jaccard der Schlagwörter ≥ 0,4. Abgelehnte Paare kommen nie wieder. Höchstens `limit`.
     /// Zwei Nutzer-Themen sind nie ein Paar: Der Nutzer hat beide bewusst angelegt bzw. beschrieben.
     public static func candidatePairs(_ profiles: [Profile], declined: Set<[String]>, limit: Int = 5) -> [(a: String, b: String, score: Double)] {
@@ -132,8 +225,7 @@ public enum TopicHygiene {
                 let key = [a.topicID, b.topicID].sorted()
                 guard !declined.contains(key), !(a.isUserDefined && b.isUserDefined) else { continue }
                 var score = 0.0
-                let entryB = TopicIndexEntry(topicID: b.topicID, name: b.name, count: b.count, hint: [])
-                if matchExisting(a.name, among: [entryB]) != nil { score = max(score, 1) }
+                if namesAreClose(a.name, b.name) { score = max(score, 1) }
                 if let ca = a.centroid, let cb = b.centroid, a.language != nil, a.language == b.language {
                     let cosine = cosineSimilarity(ca, cb)
                     if cosine >= 0.7 { score = max(score, cosine) }

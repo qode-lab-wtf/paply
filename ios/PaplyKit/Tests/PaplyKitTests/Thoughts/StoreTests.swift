@@ -571,6 +571,56 @@ struct StoreTests {
         #expect(Set(await reloaded.topics().map(\.id)) == [boats.id, "t_alias"])
     }
 
+    /// Prüfer-Fall: Mehrere Läufe haben je ein neues „Boote“ erzeugt (verschiedene IDs, Namensprüfung vor dem Speichern
+    /// bestanden) und weisen gleichzeitig zu. Die Namensprüfung im selben Speicher-Schritt nimmt ab dem zweiten das
+    /// vorhandene Thema – nie zwei gleichnamige. Ebenso, wenn der Nutzer das Thema in diesem Fenster anlegt.
+    @Test func parallelRunsNeverCreateTheSameTopicTwice() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        let thoughts = (0..<8).map { _ in StoreSupport.thought(state: .structuring, topicId: nil) }
+        for thought in thoughts { try await store.save(thought) }
+        let proposals = thoughts.indices.map { i in
+            Topic(title: ["Boote", "boote", "Boote", "BOOTE"][i % 4], icon: .flag, owner: .ai)
+        }
+        #expect(Set(proposals.map(\.id)).count == proposals.count)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for (thought, topic) in zip(thoughts, proposals) {
+                group.addTask {
+                    _ = try await store.update(thought.id, topic: topic) { t, topicID in
+                        t.topicId = topicID
+                        t.topicOwner = .ai
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+        let topics = await store.topics()
+        #expect(topics.count == 1)
+        let boats = try #require(topics.first)
+        #expect(proposals.map(\.id).contains(boats.id))
+        for thought in thoughts { #expect(await store.thought(thought.id)?.topicId == boats.id) }
+        let reloaded = try ThoughtStore(root: root)
+        #expect(await reloaded.topics().map { [$0.id, $0.title] } == [[boats.id, boats.title]]) // so auch auf der Platte
+
+        // Der Nutzer legt „Segeln“ an, nachdem ein Lauf es als neu erkannt hat: der Lauf nimmt das des Nutzers
+        let late = Topic(title: "Segeln", icon: .flag, owner: .ai)
+        let own = Topic(title: "Segeln", icon: .heart, owner: .user)
+        try await store.updateTopics { $0.append(own) }
+        let assigned = try await store.update(thoughts[0].id, topic: late) { t, topicID in t.topicId = topicID }
+        #expect(assigned?.topicId == own.id)
+        #expect(await store.topics() == [boats, own])
+
+        // Mehrdeutig (zwei gleich gute Titel): ohne Thema, kein drittes gleichnamiges
+        let apps = [Topic(title: "Paply App", icon: .code, owner: .user), Topic(title: "Paply-App", icon: .code, owner: .user)]
+        try await store.updateTopics { $0.append(contentsOf: apps) }
+        let ambiguous = try await store.update(thoughts[1].id, topic: Topic(title: "paply app", icon: .code, owner: .ai)) { t, topicID in
+            t.topicId = topicID
+        }
+        #expect(ambiguous?.topicId == nil)
+        #expect(await store.topics() == [boats, own] + apps)
+    }
+
     @Test func purgeAllAndThirtyDayPurgeTakeTheirTopicsAlong() async throws {
         let root = StoreSupport.temporaryRoot()
         defer { StoreSupport.remove(root) }

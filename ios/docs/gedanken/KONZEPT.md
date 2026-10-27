@@ -595,6 +595,11 @@ Ein Treffer heißt `"mentioned": true`. Treffer-Themen (≤ 8) stehen vorn im In
 außerhalb des 60-Tage-Fensters liegen oder über die Obergrenzen gingen. Sie überstehen jede Kürzung (§6.4
 `build`). Der Index bleibt bei ≤ 32 Einträgen.
 
+Treffer sind **nur Hinweise** für die KI (`mentioned` und `about`), auch bei Eigennamen und auch, wenn mehrere Themen
+denselben Namen in der Beschreibung tragen (dann sind alle `mentioned`, die KI entscheidet). Der Code leitet wegen
+eines Treffers nie um; umgeleitet wird nur ein neuer Name, der dem Titel eines Themas gleich ist (§6.7). Das ist die
+bewertete Grundlage (EVAL.md, Prompt v3: 6 von 7, die Umleitung griff dort nie).
+
 **Kandidaten (Vorauswahl lokal, ohne Netz):**
 1. Wortschatz: Lemmata (NLTagger `.lemma`) von Substantiven, Eigennamen und Verben, ohne Stoppwörter,
    gewichtet mit TF-IDF über alle Gedanken. Dazu BM25 gegen jeden Gedanken.
@@ -630,7 +635,8 @@ Version 3 („Themen mit Beschreibung“, Leitplanke Allan: Prompt schlank, Code
 - Genau eine neue Zeile in TOPIC (2 Sätze, +287 Bytes ≈ +95 Tokens nach Schätzung Bytes/3): `about` hat Vorrang,
   wenn der Hauptinhalt passt, auch ohne Namen; `mentioned` ist ein starkes Indiz, kein Zwang.
 - Alles andere macht der Code: Treffer-Erkennung (`TopicMentions`), Treffer-Themen sicher im Index und in jeder
-  Kürzungsstufe (§6.2, §6.3), Umleitung neuer Varianten auf das beschriebene Thema (§6.7).
+  Kürzungsstufe (§6.2, §6.3). Umgeleitet wird ein neues Thema nur, wenn sein Name dem Titel eines vorhandenen Themas
+  ohne Zweifel gleich ist (§6.7); Namen aus Beschreibungen bleiben Hinweise.
 
 `ThoughtPrompt.version` wird mit jedem Ergebnis gespeichert (`ai.promptVersion`).
 
@@ -797,7 +803,7 @@ beide leer sind.
 | `title` | trimmen; Anführungszeichen und Schlusspunkt weg; 1–60 Zeichen, eine Zeile; jede Ziffer kommt im Transkript vor; ≥ 1 Inhaltswort (Lemma) aus dem Transkript | Ersatztitel: erste 6 Wörter des Textes + „…“ |
 | `clean_text` | `PolishSafetyNet.rejection(…, profile: .thought)`: Länge (ohne „• “ und Zeilenumbrüche) 0,55–1,15 × Rohtext; fehlende Inhaltswörter ≤ 25 %; Zahl der Verneinungen gleich; Ziffern erhalten (`EditCheck.digitsPreserved`); neue Inhaltswörter ≤ max(2, 10 %) außerhalb von „Eigene Begriffe“; Meta-Antwort; `strictEdits` aus (Aufräumen formuliert Fehlstarts legitim um, E1 misst die Ablehnungsquote) | Text = Rohtext nach `TranscriptCleanup` + Satzanfänge groß; `textIsRaw = true`; Code in `ai.rejections` |
 | `topic.existing` | Alias im gesendeten Index → echte ID | wie `none` |
-| `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke:** gleich nach Normalisierung (klein, ohne Akzente, ohne Bindestriche/Leerzeichen), Singular/Plural-Stamm, Levenshtein ≤ 2 ab 5 Zeichen oder Präfix eines bestehenden Namens → bestehendes Thema. **Beschriebene Themen:** Umgeleitet wird nur bei eindeutiger Gleichheit (Code `topic:described`, im Validator und noch einmal im Prozessor gegen alle Themen): Der Name ist der Titel eines beschriebenen Themas oder eine klare Variante (Groß/Klein, Umlaut, Plural/Genitiv). Oder er besteht nur aus Eigennamen aus Titel oder Beschreibung (dort großgeschrieben, kein gewöhnliches Wort; Genitiv-s zählt: „Kowalskis“, „Brandts“) bzw. aus einem dort zusammenhängend geschriebenen Namen („Müller Bau“ bei „… Kunden Müller Bau …“) – und das Transkript nennt mindestens einen weiteren Begriff desselben Themas. Gewöhnliche Wörter („Köln“, „Pflege“, „Garten“), Stammvergleiche und ein gemeinsamer Ort allein („Kita Beuel“) leiten nie um; im Zweifel bleibt es ein neues Thema. `topics_full` → `none`. | `none` |
+| `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke** (`TopicHygiene.matchExisting`, für alle Themen, beschrieben oder nicht): Umgeleitet wird nur, wenn der Name dem **Titel** eines vorhandenen Themas ohne Zweifel gleich ist – (1) gleich bis auf Groß/Klein, Umlaut ä = ae, Leer-, Binde- und Satzzeichen („Paply-App“ = „paply app“, „Mueller-Bau“ = „Müller Bau“); (2) Wort für Wort gleich bis auf Plural/Genitiv mit den geprüften Endungen aus §6.3 (-s ab 4 Zeichen Stamm, -es ab 4, -e und -en ab 5, -n nach -e/-el/-er ab 4; kein -er): „Wohnungen“ → „Wohnung“, „Lissabon-Reisen“ → „Lissabon-Reise“; (3) Tippfehler nur in langen Namen (beide ≥ 8 Zeichen): zwei Nachbarbuchstaben vertauscht oder ein Buchstabe innen fehlt bzw. ist zu viel – nie am Anfang oder Ende, nie eine Ziffer, nie ein „e“ nach a/o/u. Nicht sicher und daher **keine** Umleitung: ä = a („Gärten“/„Garten“, „Umzüge“/„Umzug“, „Küchen“/„Kuchen“), ß = ss, andere Akzente, Wortanfänge („Reisen“/„Reis“, „Umzugsplanung“/„Umzug“), -er („Fisch“/„Fischer“), andere Sprachen („Lisbon“) und Namen aus Beschreibungen („Müller Bau“ in „… Kunden Müller Bau …“, „Kowalski“, „Köln“/„Koeln“, „Home Office“) – das bleibt ein neues Thema; die KI hatte den Hinweis (`mentioned`, `about`), und unscharf Nahes kann später die Themenpflege als Vorschlag bringen (§6.10). Passen mehrere Themen gleich gut (zwei Titel, die nach (1) gleich sind): keine Umleitung und kein weiteres gleichnamiges Thema → `none` (Code `topic:ambiguous`). Geprüft wird im Validator gegen den gesendeten Index (`topic:duplicate`), im Prozessor gegen alle lebenden Themen und beim Übernehmen noch einmal im selben Schritt im Speicher (`ThoughtStore.update(_:topic:_:)`), sodass parallele Läufe oder ein gleichzeitig vom Nutzer angelegtes Thema nie zwei gleichnamige ergeben. `topics_full` → `none` (die Umleitung auf einen gleichen Titel gilt trotzdem). | `none` |
 | Thema vom Nutzer gesetzt | Die KI-Wahl wird ignoriert | – |
 | `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). `due_hint` muss im Zitat stehen, sonst `null`. Doppelte (normalisiert) fallen weg. | Aufgabe fällt weg |
 | `related` | ≤ 3; `ref` ∈ gesendete Kandidaten; kein Selbstbezug; `reason` ≤ 60 Zeichen, nur Ziffern aus einem der beiden Texte. **Annahme:** `high` → ja; `medium` → nur bei lokalem Wert ≥ 0,75; `low` → nein. | Verbindung fällt weg |
@@ -861,7 +867,8 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
    Themen, die der Nutzer selbst anlegt, sind sofort aktiv.
 2. **Obergrenze 24 aktive Themen.** Danach darf die KI kein neues Thema mehr anlegen (`topics_full`) und
    wählt ein bestehendes oder keins.
-3. **Lokale Doppel-Schranke** (6.7) gegen „Wohnung“/„Wohnungen“/„Wohnungssuche“.
+3. **Lokale Doppel-Schranke** (6.7): „Wohnungen“ wird verbindlich „Wohnung“. „Wohnungssuche“ ist nur nah dran und
+   bleibt ein eigenes Thema, bis der Nutzer einen Vorschlag (Punkt 5) bestätigt.
 4. **Stabile Namen:** Die KI benennt nie um. Umbenennen, Symbol ändern, Beschreiben, Zusammenführen und Löschen kann
    nur der Nutzer. Beim Zusammenführen behält das Ziel seine ID, die Quelle bekommt `mergedInto` (Alias). Gedanken
    werden im Hintergrund umgeschrieben, Rückgängig 5 s.
@@ -870,11 +877,13 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
      Verbindungen. Verbindungen werden nur im neuen Gedanken gespeichert.
    - Felder mit `owner == user` bleiben (§6.7).
    - Andere Gedanken und vorhandene Themen (Name, Symbol, Beschreibung, Besitzer, Reihenfolge) ändert er nie. Ein
-     neues Thema wird nur angehängt (`ThoughtProcessor.resolveTopic` → `updateTopics { $0.append }`).
+     neues Thema wird nur angehängt, im selben Schritt wie die Zuweisung und nach erneuter Namensprüfung
+     (`ThoughtStore.update(_:topic:_:)`, §6.7).
    - Tests: `DescribedTopicsTests.aRunOnlyOrdersItsOwnThoughtAndOnlyAppendsTopics`.
 5. **Seltene KI-Vorschläge:** höchstens 1× je 7 Tage, beim Öffnen der App, nur ab 8 aktiven Themen.
-   - Lokal Paare suchen: Namensnähe, Kosinus der Themen-Schwerpunkte ≥ 0,7 (gleiche Sprache) oder
-     Jaccard der Schlagwörter ≥ 0,4.
+   - Lokal Paare suchen: Namensnähe (unscharf, `TopicHygiene.namesAreClose`: auch ä = a, grober Stamm, Levenshtein ≤ 2
+     ab 5 Zeichen, Wortanfang ab 4 – genau das, was §6.7 nicht verbindlich umleitet), Kosinus der Themen-Schwerpunkte
+     ≥ 0,7 (gleiche Sprache) oder Jaccard der Schlagwörter ≥ 0,4.
    - Gibt es Paare (höchstens 5), folgt **ein** Aufruf an `gpt-oss-20b` (`low`, ≈ 1 500 Tokens) mit Namen,
      Anzahl, 5 Schlagwörtern und 3 Beispieltiteln je Thema.
    - Schema `{pairs: [{a, b, merge: boolean, name: string|null, reason: string}]}`.

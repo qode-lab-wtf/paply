@@ -255,7 +255,9 @@ markieren soll. Das prüfen `plan` und `swift test` offline; alle 8 Fälle stimm
 
 - Alle 7 Antworten waren gültig, und alle Texte überstanden das Sicherheitsnetz.
 - Kein neues Thema und kein `mustNotAdd`-Treffer.
-- Die Umleitung im Code (`topic:described`) musste kein einziges Mal greifen.
+- Die Umleitung im Code (`topic:described`) musste kein einziges Mal greifen. Nachtrag (2. Prüfrunde): Diese
+  Umleitung über Namen aus Beschreibungen gibt es nicht mehr; Treffer sind nur Hinweise, umgeleitet wird nur ein
+  gleicher Titel (KONZEPT §6.7). Das Ergebnis oben bleibt davon unberührt.
 - Beide Fälle mit nur beiläufigem Namen folgten dem Hauptinhalt.
 - Zwei der drei Fälle ohne Namen wurden über die Beschreibung richtig zugeordnet.
 

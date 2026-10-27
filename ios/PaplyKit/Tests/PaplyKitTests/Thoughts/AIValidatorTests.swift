@@ -162,12 +162,21 @@ private typealias F = AIFixture
         #expect(result.topic == .none && result.rejections.contains("topic:name"))
     }
 
-    @Test(arguments: [("Wohnungen", "t_wohnung"), ("Wohnungssuche", "t_wohnung"), ("Lisabon", "t_lissabon"),
-                      ("lissabon", "t_lissabon"), ("PAPLY", "t_paply"), ("Gärten", "t_garten")])
+    @Test(arguments: [("Wohnungen", "t_wohnung"), ("lissabon", "t_lissabon"), ("Lissbaon", "t_lissabon"), ("PAPLY", "t_paply"),
+                      ("Umzugs", "t_umzug"), ("Paply.", "t_paply")])
     func variantsOfExistingTopicsBecomeExisting(name: String, id: String) {
         let result = F.validate(F.answer(topic: F.topic("new", name: name)))
         #expect(result.topic == .existing(id), "\(name)")
         #expect(result.rejections.contains("topic:duplicate"))
+    }
+
+    /// Unscharfe Nähe leitet nicht mehr um (früher Präfix, Levenshtein ≤ 2, ä = a): Es bleibt ein neues Thema;
+    /// zusammenführen kann später ein Vorschlag der Themenpflege, den der Nutzer bestätigt.
+    @Test(arguments: ["Wohnungssuche", "Lisabon", "Gärten", "Umzugsplanung"])
+    func nearNamesStayNew(name: String) {
+        let result = F.validate(F.answer(topic: F.topic("new", name: name)))
+        #expect(result.topic == .new(name: name, icon: .home), "\(name)")
+        #expect(!result.rejections.contains("topic:duplicate"))
     }
 
     @Test(arguments: ["Ein sehr langer Themenname", "Viel zu viele Wörter hier", "2024", "x"])

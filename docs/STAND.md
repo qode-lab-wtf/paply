@@ -25,6 +25,8 @@
   aufteilen, jeder mit eigenem Thema. Nur aufteilen, wenn die Teile eindeutig nichts miteinander zu tun haben; im
   Zweifel bleibt es ein Gedanke. Die Teile verweisen aufeinander („Aus einer Aufnahme“). Heute wird aus einer
   Aufnahme genau ein Gedanke; Thema und Titel richten sich nach der Hauptsache, Aufgaben werden alle erkannt.
+- **Vorgemerkt für später (Allan, 27.10.):** Meeting-Modus – mehrere Personen in einer Besprechung, daraus
+  Protokoll und To-dos.
 - Nebenwirkung 27.10.: Die Mac-Latenzmessung hat das Free-Tier-Polierkontingent (qwen) von Allans Groq-Schlüssel
   fast aufgebraucht; das Desktop-Diktat setzte bis zur Erholung Rohtext ein.
 

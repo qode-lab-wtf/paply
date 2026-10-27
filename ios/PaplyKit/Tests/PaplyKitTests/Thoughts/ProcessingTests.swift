@@ -647,14 +647,28 @@ struct ProcessingTests {
     }
 
     @Test func newTopicMatchingExistingNameReusesIt() async throws {
-        let h = try Harness.make(structurer: MockStructurer([Self.success(topic: .new(name: "Gärten", icon: .leaf))]))
+        let h = try Harness.make(structurer: MockStructurer([Self.success(topic: .new(name: "Wohnungen", icon: .home))]))
         defer { h.cleanup() }
-        let garden = Topic(id: "t_garden", title: "Garten", icon: .leaf, owner: .ai)
-        try await h.store.saveTopics([garden])
+        let flat = Topic(id: "t_flat", title: "Wohnung", icon: .home, owner: .ai)
+        try await h.store.saveTopics([flat])
         let id = try await h.capture()
         await h.run()
-        #expect(await h.thought(id)?.topicId == "t_garden")
+        #expect(await h.thought(id)?.topicId == "t_flat")
         #expect(await h.store.topics().count == 1)
+    }
+
+    /// Zwei gleich gute Titel („Paply App“, „Paply-App“): Der Prozessor entscheidet nicht und legt kein drittes an.
+    @Test func ambiguousNewTopicStaysWithoutTopic() async throws {
+        let h = try Harness.make(structurer: MockStructurer([Self.success(topic: .new(name: "paply app", icon: .code))]))
+        defer { h.cleanup() }
+        let topics = [Topic(id: "t_app1", title: "Paply App", icon: .code, owner: .user),
+                      Topic(id: "t_app2", title: "Paply-App", icon: .code, owner: .ai)]
+        try await h.store.saveTopics(topics)
+        let id = try await h.capture()
+        await h.run()
+        let thought = try #require(await h.thought(id))
+        #expect(thought.state == .done && thought.topicId == nil)
+        #expect(await h.store.topics() == topics)
     }
 
     @Test func longThoughtUsesPartsWithGapAndCombinesResult() async throws {

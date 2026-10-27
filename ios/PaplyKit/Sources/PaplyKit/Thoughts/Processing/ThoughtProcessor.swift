@@ -569,7 +569,7 @@ public actor ThoughtProcessor {
         let clock = now()
         var aiTopic: Topic?
         if current.topicOwner != .user {
-            aiTopic = await resolveTopic(result.topic, chosen: record.chosenTopic, transcript: source.text)
+            aiTopic = await resolveTopic(result.topic, chosen: record.chosenTopic)
         }
         var links: [ThoughtLink] = []
         for related in result.related where related.thoughtID != id {
@@ -587,7 +587,8 @@ public actor ThoughtProcessor {
                                 tokens: record.usage?.total ?? 0, at: clock, rejections: result.rejections)
         let aiLinks = links
         // Zuweisung und Thema in einem Schritt: Wurde das Thema inzwischen mit seinem letzten Gedanken entfernt,
-        // legt der Speicher es wieder an, statt eine ID ins Leere zu setzen.
+        // legt der Speicher es wieder an, statt eine ID ins Leere zu setzen. Hat inzwischen ein anderer Lauf oder der
+        // Nutzer ein gleichnamiges Thema angelegt, nimmt der Speicher dieses (Namensprüfung im selben Schritt).
         let updated = try? await store.update(id, topic: aiTopic) { t, chosenTopic in
             guard t.deletedAt == nil else { return }
             if t.titleOwner != .user {
@@ -663,7 +664,7 @@ public actor ThoughtProcessor {
     /// Rechte eines Laufs (KONZEPT §6.10): Die KI wählt ein vorhandenes Thema, keins oder legt **ein** neues an.
     /// Vorhandene Themen (Name, Symbol, Beschreibung, Besitzer, Reihenfolge) ändert sie nie – angelegt wird nur
     /// angehängt.
-    private func resolveTopic(_ decision: TopicDecision, chosen: TopicLabel?, transcript: String) async -> Topic? {
+    private func resolveTopic(_ decision: TopicDecision, chosen: TopicLabel?) async -> Topic? {
         let topics = await store.topics()
         switch decision {
         case .none:
@@ -673,26 +674,23 @@ public actor ThoughtProcessor {
             // Inzwischen mit seinem letzten Gedanken entfernt: wie ein neues Thema mit Name und Symbol von damals –
             // es trägt jetzt wieder einen Gedanken. Kein Namens- und Mengenlimit: Das Thema gab es ja schon.
             guard let chosen else { return nil }
-            return await newTopic(chosen.name, icon: chosen.icon, transcript: transcript, topics: topics, restoring: true)
+            return await newTopic(chosen.name, icon: chosen.icon, topics: topics, restoring: true)
         case let .new(name, icon):
-            return await newTopic(name, icon: icon, transcript: transcript, topics: topics, restoring: false)
+            return await newTopic(name, icon: icon, topics: topics, restoring: false)
         }
     }
 
-    /// Doppel-Schranke und beschriebene Themen gegen alle Themen; sonst ein neues KI-Thema (noch nicht gespeichert).
-    private func newTopic(_ name: String, icon: TopicIcon, transcript: String, topics: [Topic], restoring: Bool) async -> Topic? {
-        let thoughts = await store.all()
-        let summaries = TopicIndex.summaries(topics: topics, thoughts: thoughts)
-        let entries = summaries.map {
-            TopicIndexEntry(topicID: $0.topic.id, name: $0.topic.title, count: $0.count, hint: [], about: $0.topic.describedNote)
-        }
-        if let match = TopicHygiene.matchExisting(name, among: entries) { return ThoughtStore.resolve(match.topicID, in: topics) }
-        if let match = TopicMentions.describedMatch(name, transcript: transcript, among: entries) {
-            return ThoughtStore.resolve(match.topicID, in: topics)
-        }
+    /// Doppel-Schranke gegen alle lebenden Themen (nicht nur den gesendeten Index); sonst ein neues KI-Thema (noch nicht
+    /// gespeichert). Mehrdeutig (mehrere gleich gute Titel): ohne Thema. Der Speicher prüft den Namen beim Übernehmen
+    /// noch einmal im selben Schritt (`ThoughtStore.update(_:topic:_:)`).
+    private func newTopic(_ name: String, icon: TopicIcon, topics: [Topic], restoring: Bool) async -> Topic? {
+        let same = TopicHygiene.sameNamed(name, among: topics)
+        if same.count == 1 { return same[0] }
+        guard same.isEmpty else { return nil }
         if restoring {
             guard !name.trimmed.isEmpty else { return nil }
         } else {
+            let summaries = TopicIndex.summaries(topics: topics, thoughts: await store.all())
             guard TopicHygiene.isValidNewName(name), summaries.filter(\.isActive).count < TopicIndex.maxActive else { return nil }
         }
         return Topic(title: name.trimmed, icon: icon, owner: .ai, createdAt: now())

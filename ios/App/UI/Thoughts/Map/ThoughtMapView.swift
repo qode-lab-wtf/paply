@@ -55,8 +55,10 @@ struct ThoughtMapView: View {
     var body: some View {
         let anchors = MapAnchors.shared
         let now = Date()
-        // Vor dem ersten Entsperren sind die gemerkten Plätze nicht lesbar: dann nichts anlegen und nichts zeichnen
-        let request = anchors.isReady ? MapEngine.makeRequest(model: model, anchors: anchors.anchors) : nil
+        // Vor dem ersten Entsperren sind die gemerkten Plätze nicht lesbar: dann nichts anlegen und nichts zeichnen.
+        // `revision` ist beobachtet: Nachgeladene Plätze lösen eine neue Anfrage aus.
+        let request = anchors.isReady
+            ? MapEngine.makeRequest(model: model, anchors: anchors.anchors, anchorRevision: anchors.revision) : nil
         let scene = engine.scene(model: model, total: request?.total ?? 0, now: now) ?? .empty
         let _ = motion.update(scene, now: now)
         let _ = settled // nach Übergängen neu zeichnen, damit die Zeitleiste anhält

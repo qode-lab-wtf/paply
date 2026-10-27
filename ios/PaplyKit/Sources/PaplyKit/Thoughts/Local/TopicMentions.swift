@@ -16,8 +16,9 @@ import Synchronization
 ///   (großgeschrieben, kein gewöhnliches Wort: „Beueler“ ← „Beuel“).
 /// - Themen ohne Beschreibung bekommen keine Treffer (ihr Name zählt schon in der lokalen Passung).
 ///
-/// Treffer sind nur Hinweise für die KI. Ein neues Thema leitet der Code nur bei eindeutiger Gleichheit um
-/// (`describedMatch`).
+/// Treffer sind nur Hinweise für die KI (`mentioned`, dazu `about`) und entscheiden nie selbst – auch nicht bei
+/// Eigennamen oder mehreren Treffer-Themen. Verbindlich umgeleitet wird ein neues Thema nur, wenn sein Name dem
+/// **Titel** eines vorhandenen Themas ohne Zweifel gleich ist (`TopicHygiene.matchExisting`).
 public enum TopicMentions {
     /// Ein Begriff: Vergleichsformen und die Schreibweise aus Name/Beschreibung.
     public struct Term: Sendable, Equatable {
@@ -90,106 +91,6 @@ public enum TopicMentions {
 
     public static func matches(_ topic: Topic, in text: String) -> [String] {
         matches(terms(topic), in: Haystack(text))
-    }
-
-    // MARK: Umleitung (Validator und Prozessor)
-
-    /// Meint `name` – ein von der KI vorgeschlagenes **neues** Thema – eindeutig ein beschriebenes Thema? Nur dann
-    /// leitet der Code um; eine falsche Umleitung wiegt schwerer als keine.
-    /// 1. Der Name ist der Titel des Themas oder eine klare Variante davon (Groß/Klein, Umlaut, Plural/Genitiv).
-    /// 2. Oder er besteht nur aus Eigennamen aus Titel oder Beschreibung – Wörter, die dort großgeschrieben stehen
-    ///    und keine gewöhnlichen Wörter sind („Kowalski“, „Brandts“ ← „Brandt“), oder ein dort zusammenhängend
-    ///    geschriebener Name aus mehreren Wörtern („Müller Bau“) – **und** das Transkript nennt mindestens einen
-    ///    weiteren Begriff desselben Themas.
-    ///
-    /// Gewöhnliche Wörter („Köln“, „Pflege“, „Training“, „Garten“) leiten so nie um, Stammvergleiche ebenso wenig
-    /// („Reisen“ ↛ „Reis“, „Fisch“ ↛ „Fischer“). Bei mehreren: Titel vor Eigennamen, dann das mit den meisten Gedanken.
-    public static func describedMatch(_ name: String, transcript: String, among topics: [TopicIndexEntry]) -> TopicIndexEntry? {
-        let nameTerms = words(name)
-        guard !nameTerms.isEmpty else { return nil }
-        let heard = Haystack(transcript)
-        let spokenName = Haystack(name)
-        var best: (entry: TopicIndexEntry, rank: Int)?
-        for entry in topics {
-            guard let note = Topic.normalizedNote(entry.about) else { continue }
-            let rank: Int
-            if isTitleVariant(name, of: entry.name) {
-                rank = 0
-            } else if consistsOfProperNames(nameTerms, title: entry.name, note: note),
-                      words(entry.name + " " + note).contains(where: { !spokenName.contains($0) && heard.contains($0) }) {
-                rank = 1
-            } else {
-                continue
-            }
-            if best == nil || rank < best!.rank || (rank == best!.rank && entry.count > best!.entry.count) {
-                best = (entry, rank)
-            }
-        }
-        return best?.entry
-    }
-
-    /// Gleich bis auf Groß/Klein, Umlaute, Akzente und Plural/Genitiv je Wort („brandt logistik“, „Gärten“ ↔ „Garten“).
-    static func isTitleVariant(_ name: String, of title: String) -> Bool {
-        let a = TextAnalysis.alphanumericRuns(name), b = TextAnalysis.alphanumericRuns(title)
-        guard !a.isEmpty, a.count == b.count else { return false }
-        return zip(a, b).allSatisfy { sameWord($0, $1, plural: true) }
-    }
-
-    /// Jedes Wort des Namens ist ein Eigenname des Themas, oder der Name steht dort zusammenhängend
-    /// aus mehreren großgeschriebenen Wörtern. Verglichen wird genau (bis auf Groß/Klein, Umlaut) oder mit -s.
-    static func consistsOfProperNames(_ nameTerms: [Term], title: String, note: String) -> Bool {
-        let terms = words(title + " " + note)
-        let properNames = terms.filter { isProperName($0.original) }
-        if nameTerms.allSatisfy({ word in properNames.contains { sameWord(word.original, $0.original, plural: false) } }) {
-            return true
-        }
-        guard nameTerms.count >= 2 else { return false }
-        for phrase in namePhrases(title) + namePhrases(note) where phrase.count >= nameTerms.count {
-            for start in 0...(phrase.count - nameTerms.count) {
-                let window = phrase[start..<(start + nameTerms.count)]
-                if zip(nameTerms, window).allSatisfy({ sameWord($0.original, $1.original, plural: false) }) { return true }
-            }
-        }
-        return false
-    }
-
-    /// Eigenname: im Original großgeschrieben und kein gewöhnliches Wort (`CommonWords`).
-    static func isProperName(_ word: String) -> Bool {
-        guard let first = word.first, first.isUppercase else { return false }
-        return !CommonWords.contains(word)
-    }
-
-    /// Zusammenhängend geschriebene Namen: Folgen großgeschriebener Wörter ohne Satzzeichen dazwischen, als Begriffe
-    /// („Kunden Müller Bau und Kowalski“ → [Müller, Bau], [Kowalski]). Stoppwörter fallen heraus, trennen aber nicht.
-    static func namePhrases(_ text: String) -> [[Term]] {
-        var phrases: [[Term]] = []
-        for segment in text.split(whereSeparator: { phraseBreakers.contains($0) || $0.isNewline }) {
-            var run: [Term] = []
-            for word in TextAnalysis.alphanumericRuns(String(segment)) {
-                guard word.first?.isUppercase == true else {
-                    if !run.isEmpty { phrases.append(run) }
-                    run = []
-                    continue
-                }
-                if let term = term(word) { run.append(term) }
-            }
-            if !run.isEmpty { phrases.append(run) }
-        }
-        return phrases
-    }
-
-    private static let phraseBreakers: Set<Character> = [",", ".", ";", ":", "!", "?", "(", ")", "[", "]", "{", "}", "/",
-                                                         "\\", "|", "–", "—", "\"", "„", "“", "”", "‚", "‘", "’", "«", "»"]
-
-    /// Gleiches Wort: gleiche Vergleichsform, sonst `plural` ? Plural/Genitiv (ohne Herkunfts-„-er“) : nur Genitiv-/Plural-s.
-    static func sameWord(_ a: String, _ b: String, plural: Bool) -> Bool {
-        let formsA = forms(a), formsB = forms(b)
-        if !formsA.isDisjoint(with: formsB) { return true }
-        func variants(_ word: String) -> Set<String> {
-            let bases = plural ? bases(word, derivedNames: false) : sBase(word).map { [$0] } ?? []
-            return Set(bases.flatMap(forms))
-        }
-        return !variants(a).isDisjoint(with: formsB) || !variants(b).isDisjoint(with: formsA)
     }
 
     // MARK: Vergleichsformen
@@ -266,13 +167,15 @@ public enum TopicMentions {
     }()
 }
 
-/// Gewöhnliche Wörter (de, en) – trennt Eigennamen („Kowalski“, „Brandt“) von Alltagswörtern („Pflege“, „Garten“).
+/// Gewöhnliche Wörter (de, en) – nur noch für die Herkunftsendung -er der Treffer-Erkennung (`TopicMentions.bases`):
+/// „Beueler“ ← „Beuel“ ist ein Hinweis, „Fischer“ ← „Fisch“ und „Kölner“ ← „Köln“ nicht. Eine Umleitung hängt nie
+/// davon ab.
 ///
 /// Quelle ist der Wortschatz der eingebauten Wort-Embeddings (`NLEmbedding.wordEmbedding`, auf dem Gerät, ohne Netz;
 /// Deutsch ≈ 49 000 Wörter in Originalschreibung, Englisch ≈ 57 000 klein). Zusammensetzungen zählen mit, wenn
 /// ihr hinterer Teil (≥ 4 Buchstaben, vorn ≥ 3) ein gewöhnliches Substantiv ist („Arzttermine“, „Ruderverein“).
-/// Der Wortschatz kennt auch bekannte Namen („Köln“, „Müller“) – im Zweifel gilt ein Wort als gewöhnlich, dann leitet
-/// der Code nicht um. Fehlt der Wortschatz ganz, gilt jedes Wort als gewöhnlich.
+/// Der Wortschatz kennt auch bekannte Namen („Köln“, „Müller“) – im Zweifel gilt ein Wort als gewöhnlich, dann gibt
+/// es keinen -er-Treffer. Fehlt der Wortschatz ganz, gilt jedes Wort als gewöhnlich.
 enum CommonWords {
     private struct State {
         var loaded = false
