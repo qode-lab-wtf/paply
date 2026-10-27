@@ -87,6 +87,12 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { TaskDay.shared.refresh() }
         }
+        .onChange(of: nav.toast) { old, new in
+            // Hinweis abgelaufen oder ersetzt: Widerrufen ist vorbei (auch per Schütteln)
+            guard let token = old?.undo, token != new?.undo else { return }
+            model.forgetUndo(token)
+            ThoughtsUndo.forget(token)
+        }
         .preferredColorScheme(.dark)
         #if DEBUG
         .task { await ThoughtsDebug.apply(nav: nav, flow: flow, model: model) }

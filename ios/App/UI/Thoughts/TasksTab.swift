@@ -269,7 +269,7 @@ struct TasksPage: View {
     private func row(_ item: TaskAgenda.Item, group: TaskAgenda.Group?) -> some View {
         let zoomID = "task:\(item.id)"
         let shownDone = checkoff.isShownDone(item.task)
-        return TaskAgendaRow(item: item, group: group)
+        return TaskAgendaRow(item: item, group: group, today: TaskDay.shared.today)
             .contentShape(Rectangle())
             .onTapGesture { open(item, zoomID: zoomID) }
             .modifier(TaskZoomSource(id: zoomID, namespace: zoom))
@@ -468,6 +468,9 @@ struct TaskAgendaRow: View {
     let item: TaskAgenda.Item
     /// nil = Abschnitt „Erledigt“
     let group: TaskAgenda.Group?
+    /// Beginn des heutigen Tages (`TaskDay`): Wechselt er um Mitternacht, beschriftet sich die Zeile neu
+    /// („Morgen“ → „Heute“, „Heute“ → „Gestern“) – auch wenn ihre Aufgabe gleich bleibt
+    let today: Date
 
     @Environment(ThoughtsModel.self) private var model
     @Environment(TaskCheckoff.self) private var checkoff
@@ -520,11 +523,12 @@ struct TaskAgendaRow: View {
 
     /// Fälligkeit; im Abschnitt „Erledigt“ wann erledigt
     private var dueText: (text: String, color: Color)? {
+        let now = max(Date(), today)
         guard let group else {
             guard let doneAt = item.task.doneAt else { return nil }
-            return (ThoughtDate.card(doneAt), Color.paplyTertiaryText)
+            return (ThoughtDate.card(doneAt, now: now), Color.paplyTertiaryText)
         }
-        guard let label = TaskDueLabel.make(task: item.task, recordedAt: item.thought.createdAt) else { return nil }
+        guard let label = TaskDueLabel.make(task: item.task, recordedAt: item.thought.createdAt, now: now) else { return nil }
         let text: String?
         switch (group, label) {
         case (.today, .today(let time)):
@@ -533,7 +537,7 @@ struct TaskAgendaRow: View {
         case (.today, .wording(let wording)) where wording.lowercased() == "heute":
             text = nil
         default:
-            text = TaskDueText.text(label)
+            text = TaskDueText.text(label, now: now)
         }
         guard let text else { return nil }
         let color: Color = switch group {

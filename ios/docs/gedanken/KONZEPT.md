@@ -662,7 +662,8 @@ Version 5 („v4.1“, nach dem Lauf p4, EVAL.md): die zwei Sätze aus v4 umform
   wird der laufende Bereich neu benannt (p4 e26: „Milas Schwimmkurs“ statt Familie, n05: „Reisepass“).
 - Geprüft und verworfen: eine Code-Umleitung eines neuen Themas auf das Thema der Kandidaten oder auf das erste Thema
   des Index. In p4 hätte sie e26 auf Auto/Fitness, n05 auf Freunde und e18 auf Auto gelegt – nicht sicher.
-- Code: Der Zeitausdruck fällt jetzt auch in der Mitte des Aufgabentexts weg (§6.7).
+- Code: Der Zeitausdruck fällt jetzt auch in der Mitte des Aufgabentexts weg (§6.7). *(Nach der dritten Prüfrunde
+  wieder gestrichen: nur noch ganz am Rand und nur, wenn der Sinn sicher bleibt – §6.7.)*
 
 Version 6 (Entscheidung des Bauleiters nach dem Nachlauf p4b): v5 **ohne den Termin-Satz**. Er hatte in p4 und p4b
 beide Male die Handlung des Kunden zur Aufgabe des Sprechers gemacht („Fluxo Lizenzen kaufen“); unter v3 ergab derselbe
@@ -837,7 +838,7 @@ beide leer sind.
 | `topic.existing` | Alias im gesendeten Index → echte ID | wie `none` |
 | `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke** (`TopicHygiene.matchExisting`, für alle Themen, beschrieben oder nicht): Umgeleitet wird nur, wenn der Name dem **Titel** eines vorhandenen Themas ohne Zweifel gleich ist – (1) gleich bis auf Groß/Klein, Umlaut ä = ae, Leer-, Binde- und Satzzeichen („Paply-App“ = „paply app“, „Mueller-Bau“ = „Müller Bau“); (2) Wort für Wort gleich bis auf Plural/Genitiv mit den geprüften Endungen aus §6.3 (-s ab 4 Zeichen Stamm, -es ab 4, -e und -en ab 5, -n nach -e/-el/-er ab 4; kein -er): „Wohnungen“ → „Wohnung“, „Lissabon-Reisen“ → „Lissabon-Reise“; (3) Tippfehler nur in langen Namen (beide ≥ 8 Zeichen): zwei Nachbarbuchstaben vertauscht oder ein Buchstabe innen fehlt bzw. ist zu viel – nie am Anfang oder Ende, nie eine Ziffer, nie ein „e“ nach a/o/u. Nicht sicher und daher **keine** Umleitung: ä = a („Gärten“/„Garten“, „Umzüge“/„Umzug“, „Küchen“/„Kuchen“), ß = ss, andere Akzente, Wortanfänge („Reisen“/„Reis“, „Umzugsplanung“/„Umzug“), -er („Fisch“/„Fischer“), andere Sprachen („Lisbon“) und Namen aus Beschreibungen („Müller Bau“ in „… Kunden Müller Bau …“, „Kowalski“, „Köln“/„Koeln“, „Home Office“) – das bleibt ein neues Thema; die KI hatte den Hinweis (`mentioned`, `about`), und unscharf Nahes kann später die Themenpflege als Vorschlag bringen (§6.10). Passen mehrere Themen gleich gut (zwei Titel, die nach (1) gleich sind): keine Umleitung und kein weiteres gleichnamiges Thema → `none` (Code `topic:ambiguous`). Geprüft wird im Validator gegen den gesendeten Index (`topic:duplicate`), im Prozessor gegen alle lebenden Themen und beim Übernehmen noch einmal im selben Schritt im Speicher (`ThoughtStore.update(_:topic:_:)`), sodass parallele Läufe oder ein gleichzeitig vom Nutzer angelegtes Thema nie zwei gleichnamige ergeben. `topics_full` → `none` (die Umleitung auf einen gleichen Titel gilt trotzdem). | `none` |
 | Thema vom Nutzer gesetzt | Die KI-Wahl wird ignoriert | – |
-| `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `due_hint` muss im Zitat stehen – wörtlich an Wortgrenzen oder (ab v4) aus ≤ 3 Stücken des Zitats in Reihenfolge innerhalb von ≤ 20 Wörtern („morgen, am besten vormittags“ → „morgen vormittags“) –, sonst `null`. **Form (ab v4, `TaskText`, nur Weglassen):** Zeitausdruck gleich `due_hint` (wörtlich, zusammenhängend) fällt weg – am Anfang, am Ende oder (ab v5) in der Mitte, wenn ≥ 2 Wörter bleiben; nicht mit Verneinung und nicht nach einem Wort, das ihn regiert („wegen Freitag“, „für morgen“); „noch“/„mal“/„eben“ am Anfang nur vor einem großgeschriebenen Wort oder bestimmten Artikel, am Ende nur kleingeschrieben nach einem Infinitiv („noch nicht …“, „noch einen …“, „noch mal …“, „erst mal“ bleiben); erster Buchstabe groß, außer bei „iPhone“-Schreibung, Ziffern bleiben. Danach: `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). Doppelte (normalisiert) fallen weg. | Aufgabe fällt weg |
+| `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `due_hint` muss im Zitat stehen – wörtlich an Wortgrenzen oder (ab v4) aus ≤ 3 Stücken des Zitats in Reihenfolge innerhalb von ≤ 20 Wörtern („morgen, am besten vormittags“ → „morgen vormittags“) –, sonst `null`. **Form (ab v4, `TaskText`, nur Weglassen; Leitsatz seit der dritten Prüfrunde: nie den Sinn ändern, im Zweifel nichts streichen – lieber ein doppelter Zeitausdruck als eine falsche Aufgabe):** Zeitausdruck gleich `due_hint` (wörtlich, zusammenhängend) fällt nur **ganz am Anfang oder Ende** weg, aus der Mitte nie („Reisepass bis Ende November verlängern“ bleibt), und nur wenn alles gilt: (a) keine Verneinung im ganzen Text und im `due_hint` („nicht morgen anrufen“, „Kein Termin morgen“, „Anna anrufen, aber nicht morgen“, „ohne“, „don’t“); (b) das Nachbarwort auf der verbleibenden Seite steht in keiner Sperrliste – Bindewörter, Gradpartikeln, Präpositionen (und, oder, bzw, aber, sondern, statt, erst, nur, bis, ab, seit, für, wegen, am, an, zum, zur, vor, nach, and, or, but, instead, until, by, for, before, after …), Zahlen und Tageszeiten („morgen früh und abends gießen“, „morgen | Abend …“), am Ende auch kein Artikel oder Begleiter („nächsten Freitag“); (c) danach ≥ 2 Wörter („Freitag absagen“, „Weihnachten planen“ bleiben); (d) `due_hint` ist ein Zeitpunkt oder eine Frist, kein Zeitraum – nicht mit „bis“, „ab“, „seit“, „von“, „until“, „from“ …, weil der Endtermin zum Objekt gehören kann („Urlaub verlängern bis Freitag“) und das im Text nicht sicher zu unterscheiden ist; „bis spätestens …“ ist eine Frist; (e) am Ende zusätzlich keine Präposition im übrigen Text, an der die Zeit hängen kann („Frau Brandt fragen wegen Ausmessen am Samstag“). „noch“/„mal“/„eben“ am Anfang nur vor einem großgeschriebenen Wort oder bestimmten Artikel, am Ende nur kleingeschrieben nach einem Infinitiv, nie mit einer Verneinung im selben Teilsatz („noch nicht …“, „noch Milch nicht kaufen“, „noch einen …“, „noch mal …“, „erst mal“ bleiben); erster Buchstabe groß, außer bei „iPhone“-Schreibung, Ziffern bleiben. Danach: `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). Doppelte fallen weg – Schlüssel ist Text **und** `due_hint` (normalisiert), auch beim Zusammensetzen der Teile: „Morgen Mama anrufen“ und „Übermorgen Mama anrufen“ bleiben zwei Aufgaben. Bei „Erneut ordnen“ gegen erledigte und eigene Aufgaben: gleicher Text und gleicher `due_hint`; fehlt er auf einer Seite, zählt nur der Text. | Aufgabe fällt weg |
 | `related` | ≤ 3; `ref` ∈ gesendete Kandidaten; kein Selbstbezug; `reason` ≤ 60 Zeichen, nur Ziffern aus einem der beiden Texte. **Annahme:** `high` → ja; `medium` → nur bei lokalem Wert ≥ 0,75; `low` → nein. | Verbindung fällt weg |
 
 Zusätzlich:
@@ -845,8 +846,13 @@ Zusätzlich:
   lokaler Schreibfehler kauft nie dieselbe Antwort neu).
 - Übernommen werden nur Felder mit `owner == ai`. Geänderte Felder des Nutzers bleiben. Ist der Gedanke
   inzwischen gelöscht, wird nichts übernommen.
-- Fälligkeit: `due_hint` steht als Wortlaut im UI. `NSDataDetector` (Bezug = Aufnahmezeit) liefert nur ein
-  Sortierdatum. Erkennt er nichts, gibt es eben kein Datum.
+- Fälligkeit: `due_hint` steht als Wortlaut im UI (am Tag der Aufnahme; danach der Tag aus `dueAt`). `NSDataDetector`
+  liefert den Tag, relative Angaben („morgen“, auch „morgen um 15 Uhr“) gezählt ab dem Aufnahmetag. Erkennt er nichts,
+  gibt es eben kein Datum. Die Uhrzeit liest `SpokenTime` aus dem Wortlaut, weil der Detektor Zahlwörter („um acht
+  Uhr“), „halb drei“, „Viertel nach acht“ und „Mitternacht“ übergeht (dann bliebe seine Vorgabe 12:00) und eine
+  nachgestellte Tageszeit nicht sieht („um 7 Uhr früh“ → 19:00). Ohne Tageszeit gilt seine Regel: 1–7 Uhr =
+  nachmittags. Ob eine Uhrzeit gesprochen wurde, hält `dueHasTime` fest; nur dann zeigt die Liste sie – auch 0:00 und
+  12:00. Ältere Aufgaben ohne das Feld: Uhrzeit nur, wenn der Wortlaut eine nennt und `dueAt` genau auf ihr liegt.
 - Prompt-Injektion: Das Transkript steckt in einem JSON-Feld, und der Prompt erklärt es zu Daten. Weil Titel,
   Aufgaben und Verbindungen am Wortlaut geprüft werden, kann eine Injektion höchstens einen seltsamen Titel
   erzeugen, aber keine Inhalte oder Aktionen.
@@ -1010,7 +1016,7 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
   "topicId": "t_8a1d…", "topicOwner": "ai",
   "tasks": [
     {"id": "k_51e2…", "text": "Steuerelement im Sperrbildschirm testen", "quote": "das muss ich morgen im Sperrbildschirm testen",
-     "dueHint": "morgen", "dueAt": 1793145600000, "done": false, "doneAt": null, "owner": "ai", "createdAt": 1793085251000}
+     "dueHint": "morgen", "dueAt": 1793145600000, "dueHasTime": false, "done": false, "doneAt": null, "owner": "ai", "createdAt": 1793085251000}
   ],
   "links": [
     {"target": "s_77b0…", "kind": "continues", "reason": "Gleicher Knopf im Sperrbildschirm", "origin": "ai", "createdAt": 1793085251000}
@@ -1040,6 +1046,9 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
              "note": "Meine Firma Aram UG – Kunden Müller Bau und Kowalski, Steuerberaterin Frau Albrecht"}],
  "declinedMerges": [["t_aa…", "t_bb…"]], "lastHygieneAt": 1793000000000}
 ```
+`dueHasTime` (optional, ab der dritten Prüfrunde): Im Wortlaut stand eine Uhrzeit, und `dueAt` liegt auf ihr. Ältere
+Dateien ohne das Feld lesen sich unverändert (§6.7, Fälligkeit).
+
 Ob ein Thema „aktiv“ ist, wird abgeleitet: ≥ 2 Gedanken oder `owner == "user"`. `note` (optional, ≤ 200 Zeichen)
 fehlt, wenn es keine Beschreibung gibt. Ältere Dateien ohne `note` lesen sich unverändert.
 
@@ -1219,7 +1228,7 @@ public enum LinkKind: String, Codable, Sendable { case continues, sameMatter = "
 
 public struct ThoughtTask: Codable, Sendable, Identifiable, Equatable {
     public var id: String; public var text: String; public var quote: String?
-    public var dueHint: String?; public var dueAt: Date?; public var done: Bool; public var doneAt: Date?
+    public var dueHint: String?; public var dueAt: Date?; public var dueHasTime: Bool?; public var done: Bool; public var doneAt: Date?
     public var owner: Owner; public var createdAt: Date
 }
 public struct ThoughtLink: Codable, Sendable, Equatable {

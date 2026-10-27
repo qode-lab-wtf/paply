@@ -19,8 +19,13 @@ enum TopicImageChange: Equatable {
 /// Sie sind kein Teil von Gedanken, Themen oder Anfragen.
 ///
 /// - Aliasse zeigen das Bild ihres Ziels (`image(for:)` löst auf).
-/// - Ein gelöschtes Thema verliert sein Bild sofort. Ein zusammengeführtes parkt es bis zum nächsten Start
-///   (`.parked-<id>.jpg`): Widerrufen bringt es zurück, danach ist es weg.
+/// - Aufräumen nach der Themenliste (`TopicImageFile.plan`): Ein gelöschtes Thema verliert sein Bild sofort aus
+///   der Anzeige; die Datei parkt (`.parked-<id>.jpg`), bis die Liste gespeichert ist – scheitert das Speichern,
+///   kommt das Thema samt Bild zurück. Ein zusammengeführtes parkt es bis zum nächsten Start: Widerrufen bringt es
+///   zurück, danach ist es weg. Hat das Ziel kein Bild, übernimmt es das Bild des aufgehenden Themas (Widerrufen
+///   nimmt es wieder weg).
+/// - Eine noch unbekannte Themenliste (Speicher nicht gelesen) ändert nichts; eine vollständig gelesene leere
+///   Liste heißt: alle Bilder sind verwaist.
 /// - Vor dem ersten Entsperren wird weder gelesen noch geschrieben (`ProtectedData`).
 /// - Beispieldaten (`-PaplyPreviewData`, `-PaplyMany`, `-PaplyCount`, `-PaplyEmpty`) und SwiftUI-Vorschauen halten
 ///   Bilder nur im Speicher und nehmen nur Meldungen der Beispielmodelle an – die Ablage bleibt unberührt.
@@ -50,8 +55,13 @@ final class TopicImages {
     @ObservationIgnored private var memory: [String: Data] = [:]
     @ObservationIgnored private var memoryParked: [String: Data] = [:]
     @ObservationIgnored private var aliases: [String: String] = [:]
-    /// letzte vollständige Themenliste des geladenen Modells
+    /// letzte vollständige Themenliste des geladenen Modells (nil = noch unbekannt)
     @ObservationIgnored private var topics: [Topic]?
+    /// `topics` ist gespeichert (aus dem Speicher gelesen) – erst dann wird endgültig gelöscht
+    @ObservationIgnored private var topicsConfirmed = false
+    /// übernommene Bilder (Zusammenführen): Ziel → Quelle. Fällt weg, sobald das Ziel ein eigenes Bild bekommt
+    /// oder seines verliert.
+    @ObservationIgnored private var adopted: [String: String] = [:]
     @ObservationIgnored private var io: Task<Void, Never>?
     @ObservationIgnored private var waitsForUnlock = false
     @ObservationIgnored private var indexRequested = false
@@ -165,6 +175,7 @@ final class TopicImages {
         cache[topicID] = image.preparingForDisplay() ?? image
         stored?.insert(topicID)
         parked.remove(topicID)
+        adopted[topicID] = nil
         if let directory {
             guard ProtectedData.isReadable, let url = Self.imageURL(topicID, in: directory) else { return }
             let parkedURL = Self.parkedURL(topicID, in: directory)
@@ -186,9 +197,10 @@ final class TopicImages {
         revision += 1
     }
 
-    /// Meldung des Modells: alle gespeicherten Themen (auch zusammengeführte). `persistent`: angebundenes Modell;
-    /// `loaded`: der Speicher ist gelesen – erst dann wird aufgeräumt.
-    func update(topics: [Topic], persistent: Bool, loaded: Bool, from model: AnyObject) {
+    /// Meldung des Modells: alle Themen (auch zusammengeführte). `persistent`: angebundenes Modell; `loaded`: die
+    /// Themenliste ist vollständig gelesen – erst dann wird aufgeräumt (auch eine leere Liste zählt dann);
+    /// `confirmed`: die Liste ist gespeichert (sonst Stand der Oberfläche vor dem Speichern – dann wird nur geparkt).
+    func update(topics: [Topic], persistent: Bool, loaded: Bool, confirmed: Bool, from model: AnyObject) {
         guard accepts(persistent: persistent, from: model) else { return }
         let next = Dictionary(topics.compactMap { topic in topic.mergedInto.map { (topic.id, $0) } }, uniquingKeysWith: { a, _ in a })
         if next != aliases {
@@ -197,20 +209,8 @@ final class TopicImages {
         }
         guard loaded else { return }
         self.topics = topics
+        topicsConfirmed = confirmed
         retireIfPossible()
-    }
-
-    /// Themen ausdrücklich gelöscht (auch das letzte): Bilder sofort weg
-    func topicsDeleted(_ ids: Set<String>, persistent: Bool, from model: AnyObject) {
-        guard accepts(persistent: persistent, from: model) else { return }
-        var changed = false
-        for id in ids where TopicImageFile.isValidID(id) {
-            if stored?.contains(id) == true || parked.contains(id) || memory[id] != nil || memoryParked[id] != nil {
-                discard(id)
-                changed = true
-            }
-        }
-        if changed { revision += 1 }
     }
 
     /// Ablage nimmt nur das angebundene Modell an, der Speicher nur das erste Beispielmodell
@@ -226,32 +226,36 @@ final class TopicImages {
     // MARK: Aufräumen
 
     private func retireIfPossible() {
-        guard let topics, let current = stored, !topics.isEmpty else { return }
-        var changed = false
-        // Zusammenführen widerrufen: geparkte Bilder wieder eigenständiger Themen zurück
-        let parkedNow = directory == nil ? Set(memoryParked.keys) : parked.union(staleParked)
-        for id in TopicImageFile.restorable(parkedIDs: parkedNow, topics: topics) where !current.contains(id) {
-            unpark(id)
-            changed = true
-        }
-        // aus einer früheren Sitzung Geparktes: Widerrufen ist vorbei
+        guard let topics, let current = stored else { return }
+        let inMemory = directory == nil
+        let plan = TopicImageFile.plan(images: current, parked: inMemory ? Set(memoryParked.keys) : parked,
+                                       staleParked: inMemory ? [] : staleParked, adopted: adopted,
+                                       topics: topics, confirmed: topicsConfirmed)
+        guard !plan.isEmpty else { return }
+        // Übernehmen vor dem Parken: Die Kopie entsteht aus dem Bild der Quelle, bevor es geparkt wird
+        for (target, source) in plan.adopt.sorted(by: { $0.key < $1.key }) { adopt(target, from: source) }
+        for id in plan.unadopt { discard(id) }
+        for id in plan.delete { discard(id) }
+        for id in plan.park { park(id) }
+        for id in plan.restore { unpark(id) }
+        for id in plan.dropParked { dropParked(id) }
+        revision += 1
+    }
+
+    /// Ziel ohne Bild übernimmt das Bild der Quelle (Kopie; die Quelle parkt ihres gleich danach)
+    private func adopt(_ target: String, from source: String) {
+        guard TopicImageFile.isValidID(target) else { return }
+        edits[target, default: 0] += 1
+        stored?.insert(target)
+        adopted[target] = source
+        if let image = cache[source] { cache[target] = image }
         if let directory {
-            for id in staleParked {
-                guard let url = Self.parkedURL(id, in: directory) else { continue }
-                perform { try? FileManager.default.removeItem(at: url) }
-            }
+            guard let from = Self.imageURL(source, in: directory), let to = Self.imageURL(target, in: directory) else { return }
+            perform { Self.copy(from, to: to, directory: directory) }
+            preload([target])
+        } else if let data = memory[source] {
+            memory[target] = data
         }
-        staleParked = []
-        let retire = TopicImageFile.retirement(imageIDs: stored ?? [], topics: topics)
-        for id in retire.delete {
-            discard(id)
-            changed = true
-        }
-        for id in retire.park {
-            park(id)
-            changed = true
-        }
-        if changed { revision += 1 }
     }
 
     private func discard(_ id: String) {
@@ -260,6 +264,7 @@ final class TopicImages {
         stored?.remove(id)
         parked.remove(id)
         staleParked.remove(id)
+        adopted[id] = nil
         if let directory {
             let urls = [Self.imageURL(id, in: directory), Self.parkedURL(id, in: directory)].compactMap { $0 }
             perform { for url in urls { try? FileManager.default.removeItem(at: url) } }
@@ -273,6 +278,7 @@ final class TopicImages {
         edits[id, default: 0] += 1
         cache[id] = nil
         stored?.remove(id)
+        adopted[id] = nil
         if let directory {
             guard let from = Self.imageURL(id, in: directory), let to = Self.parkedURL(id, in: directory) else { return }
             parked.insert(id)
@@ -293,6 +299,18 @@ final class TopicImages {
             preload([id])
         } else if let data = memoryParked.removeValue(forKey: id) {
             memory[id] = data
+        }
+    }
+
+    /// Geparktes endgültig weg (Thema gespeichert gelöscht, Widerrufen vorbei, überholt)
+    private func dropParked(_ id: String) {
+        parked.remove(id)
+        staleParked.remove(id)
+        if let directory {
+            guard let url = Self.parkedURL(id, in: directory) else { return }
+            perform { try? FileManager.default.removeItem(at: url) }
+        } else {
+            memoryParked[id] = nil
         }
     }
 
@@ -371,6 +389,14 @@ final class TopicImages {
         } catch {
             Diag.log("topic.image.write.failed", ["error": .s(String(describing: type(of: error)))])
         }
+    }
+
+    nonisolated private static func copy(_ from: URL, to: URL, directory: URL) {
+        guard let data = try? Data(contentsOf: from) else {
+            Diag.log("topic.image.copy.failed")
+            return
+        }
+        write(data, to: to, directory: directory)
     }
 
     nonisolated private static func move(_ from: URL, to: URL) {

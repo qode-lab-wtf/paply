@@ -54,6 +54,9 @@ final class ThoughtsModel {
     @ObservationIgnored private var pendingWrites: [String: Int] = [:]
     @ObservationIgnored private var writeChain: Task<Void, Never>?
     @ObservationIgnored private var changedWhileLoading: Set<String> = []
+    /// Themenliste vollständig gelesen (Speicher meldet „alles gelesen“): Erst dann heißt eine leere Liste „keine
+    /// Themen“ – vorher räumt `TopicImages` nichts auf
+    @ObservationIgnored private var topicsKnown = false
     @ObservationIgnored private var requestedSources: Set<String> = []
     @ObservationIgnored private var listeners: [Task<Void, Never>] = []
 
@@ -274,10 +277,9 @@ final class ThoughtsModel {
         for thought in byID.values where removed.contains(thought.topicId ?? "") {
             change(thought.id) { if let topic = $0.topicId, removed.contains(topic) { $0.topicId = nil } }
         }
+        // Bild: verschwindet sofort aus der Anzeige, die Datei parkt, bis die Liste gespeichert ist (`TopicImages`)
         changeTopics { $0.removeAll { removed.contains($0.id) } }
         setSuggestions(suggestions.filter { !removed.contains($0.a) && !removed.contains($0.b) })
-        // Bild weg (ausdrücklich – auch beim letzten Thema, das das Aufräumen über die Liste nicht erfasst)
-        TopicImages.shared.topicsDeleted(removed, persistent: backend != nil, from: self)
     }
 
     /// Vorläufiges Thema übernehmen („Behalten“ macht es aktiv)
@@ -393,6 +395,12 @@ final class ThoughtsModel {
         undoActions.removeValue(forKey: token)?()
     }
 
+    /// Hinweis abgelaufen (oder ersetzt): Widerrufen ist vorbei, die Aktion wird vergessen – sonst wüchse die Liste
+    /// mit jeder Löschung
+    func forgetUndo(_ token: UndoToken) {
+        undoActions[token] = nil
+    }
+
     // MARK: Entwicklerbereich
 
     /// Verbrauch der letzten 24 h aus dem Ledger neu lesen.
@@ -418,10 +426,11 @@ final class ThoughtsModel {
         let all = await store.all()
         let storedTopics = await store.topics()
         let pending = await store.pendingSuggestions()
+        topicsKnown = await store.reloadIfNeeded()
         replaceAll(all, topics: storedTopics)
         suggestions = pending
         isLoaded = true
-        TopicImages.shared.update(topics: allTopics, persistent: true, loaded: true, from: self)
+        TopicImages.shared.update(topics: allTopics, persistent: true, loaded: topicsKnown, confirmed: true, from: self)
         for id in changedWhileLoading { await refresh(id) }
         changedWhileLoading = []
         refreshUsage()
@@ -438,9 +447,14 @@ final class ThoughtsModel {
         if !isLoaded { changedWhileLoading.insert(id) }
         if id == ThoughtStore.topicsChangeID {
             guard (pendingWrites[id] ?? 0) == 0 else { return }
+            let known = await store.reloadIfNeeded()
             let stored = await store.topics()
-            suggestions = await store.pendingSuggestions()
-            setTopics(stored)
+            let pending = await store.pendingSuggestions()
+            // inzwischen eine neue Änderung der Oberfläche: Deren Schreiben meldet gleich den neueren Stand
+            guard (pendingWrites[id] ?? 0) == 0 else { return }
+            topicsKnown = topicsKnown || known
+            suggestions = pending
+            setTopics(stored, confirmed: true)
             return
         }
         guard (pendingWrites[id] ?? 0) == 0 else { return }
@@ -469,7 +483,7 @@ final class ThoughtsModel {
     private func changeTopics(_ edit: @escaping @Sendable (inout [Topic]) -> Void) {
         var next = allTopics
         edit(&next)
-        setTopics(next)
+        setTopics(next, confirmed: false) // gespeichert ist es erst, wenn `refresh` den Stand des Speichers liest
         write(ThoughtStore.topicsChangeID) { _ = try await $0.updateTopics(edit) }
     }
 
@@ -520,16 +534,24 @@ final class ThoughtsModel {
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         TopicPalette.register(stored, persistent: backend != nil) // Themenfarben (Oberfläche)
-        TopicImages.shared.update(topics: stored, persistent: backend != nil, loaded: backend == nil || isLoaded, from: self)
+        reportTopicImages(stored, confirmed: true)
         recomputeDerived()
     }
 
-    private func setTopics(_ stored: [Topic]) {
+    /// Themenbilder aufräumen lassen. `confirmed`: Die Liste ist gespeichert (aus dem Speicher gelesen) – sonst
+    /// parkt `TopicImages` nur, statt zu löschen.
+    private func reportTopicImages(_ stored: [Topic], confirmed: Bool) {
+        TopicImages.shared.update(topics: stored, persistent: backend != nil, loaded: backend == nil || (isLoaded && topicsKnown),
+                                  confirmed: backend == nil || confirmed, from: self)
+    }
+
+    /// `confirmed`: Stand des Speichers (sonst Änderung der Oberfläche, noch nicht geschrieben)
+    private func setTopics(_ stored: [Topic], confirmed: Bool) {
         let renamed = Set(stored.filter { topicByID[$0.id]?.title != $0.title || topicByID[$0.id]?.mergedInto != $0.mergedInto }.map(\.id))
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         TopicPalette.register(stored, persistent: backend != nil)
-        TopicImages.shared.update(topics: stored, persistent: backend != nil, loaded: backend == nil || isLoaded, from: self)
+        reportTopicImages(stored, confirmed: confirmed)
         recomputeDerived()
         guard !renamed.isEmpty else { return }
         for thought in thoughts where renamed.contains(thought.topicId ?? "") || renamed.contains(resolvedTopic(thought.topicId)?.id ?? "") {

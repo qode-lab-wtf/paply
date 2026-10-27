@@ -341,6 +341,29 @@ struct ProcessingTests {
         #expect(await h.structurer.calls == 0)
     }
 
+    /// Dritte Prüfrunde: Gleicher Text an einem anderen Tag ist eine neue Aufgabe – auch neben einer erledigten.
+    @Test func reorganizeKeepsTheSameTaskOnAnotherDay() async throws {
+        let structurer = MockStructurer()
+        let h = try Harness.make(structurer: structurer)
+        defer { h.cleanup() }
+        let id = try await h.capture()
+        await h.run()
+        try await h.store.update(id) { t in
+            t.tasks[0].done = true
+            t.tasks[0].doneAt = Date()
+        }
+        await structurer.push(Self.success(tasks: [
+            TaskDraft(text: "Tomaten gießen", quote: "tomaten", dueHint: "morgen"),
+            TaskDraft(text: "Tomaten gießen", quote: "tomaten", dueHint: "übermorgen"),
+        ]))
+        await h.processor.reorganize(id)
+        await h.processor.waitUntilIdle()
+        let thought = try #require(await h.thought(id))
+        #expect(thought.tasks.map(\.dueHint) == ["morgen", "übermorgen"])
+        #expect(thought.tasks.map(\.done) == [true, false])
+        #expect(thought.tasks[1].dueAt != nil && thought.tasks[1].dueHasTime == false)
+    }
+
     @Test func userFieldsSurviveReorganize() async throws {
         let structurer = MockStructurer()
         let h = try Harness.make(structurer: structurer)

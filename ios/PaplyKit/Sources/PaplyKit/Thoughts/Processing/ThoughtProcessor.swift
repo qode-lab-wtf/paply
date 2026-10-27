@@ -569,7 +569,8 @@ public actor ThoughtProcessor {
         let allRaw = first.result.cleanText == nil && progress.rest.allSatisfy { $0.cleanText == nil }
         var tasks: [TaskDraft] = []
         var seen: Set<String> = []
-        for task in first.result.tasks + progress.rest.flatMap({ $0.tasks.map(\.draft) }) where seen.insert(RawText.key(task.text)).inserted {
+        for task in first.result.tasks + progress.rest.flatMap({ $0.tasks.map(\.draft) })
+        where seen.insert(RawText.taskKey(task.text, dueHint: task.dueHint)).inserted {
             tasks.append(task)
         }
         var rejections = first.result.rejections
@@ -601,8 +602,9 @@ public actor ThoughtProcessor {
         let keywords = await keywords(for: (result.title) + "\n" + (result.cleanText ?? source.text), language: source.languages.first)
         let createdAt = current.createdAt
         let drafts = result.tasks.map { draft in
-            ThoughtTask(text: draft.text, quote: draft.quote, dueHint: draft.dueHint,
-                        dueAt: DueDate.resolve(draft.dueHint, reference: createdAt, now: clock), owner: .ai, createdAt: clock)
+            let due = DueDate.resolved(draft.dueHint, reference: createdAt, now: clock)
+            return ThoughtTask(text: draft.text, quote: draft.quote, dueHint: draft.dueHint, dueAt: due?.date,
+                               dueHasTime: due?.hasTime, owner: .ai, createdAt: clock)
         }
         let raw = RawText.tidy(source.text)
         let ai = Thought.AIInfo(model: record.model ?? "", promptVersion: options.promptVersion,
@@ -627,8 +629,8 @@ public actor ThoughtProcessor {
                 t.topicOwner = .ai
             }
             let kept = t.tasks.filter { $0.owner == .user || $0.done }
-            var keys = Set(kept.map { RawText.key($0.text) })
-            t.tasks = kept + drafts.filter { keys.insert(RawText.key($0.text)).inserted }
+            // Die Entwürfe sind schon ohne Doppelte (Text und Zeitausdruck); gegen Erledigte und Eigene zählt `sameTask`
+            t.tasks = kept + drafts.filter { draft in !kept.contains { RawText.sameTask($0, draft) } }
             let userLinks = t.links.filter { $0.origin == .user }
             let linked = Set(userLinks.map(\.target))
             t.links = userLinks + aiLinks.filter { !linked.contains($0.target) }
@@ -901,13 +903,39 @@ enum RawText {
     static func key(_ text: String) -> String {
         TextAnalysis.alphanumericRuns(Keywords.fold(text)).joined(separator: " ")
     }
+
+    /// Schlüssel für doppelte Aufgaben: Text und Zeitausdruck. „Mama anrufen“ morgen und übermorgen sind zwei Aufgaben.
+    static func taskKey(_ text: String, dueHint: String?) -> String {
+        key(text) + "\u{1F}" + key(dueHint ?? "")
+    }
+
+    /// „Erneut ordnen“: Ist der Entwurf eine erledigte oder eigene Aufgabe? Gleicher Text und gleicher Zeitausdruck –
+    /// fehlt er auf einer Seite, zählt nur der Text (die erledigte „Tomaten gießen · morgen“ kommt nicht als „Tomaten
+    /// gießen“ zurück). Zwei verschiedene Tage bleiben zwei Aufgaben.
+    static func sameTask(_ kept: ThoughtTask, _ draft: ThoughtTask) -> Bool {
+        guard key(kept.text) == key(draft.text) else { return false }
+        let a = key(kept.dueHint ?? ""), b = key(draft.dueHint ?? "")
+        return a.isEmpty || b.isEmpty || a == b
+    }
 }
 
-/// Fälligkeit nur als Sortierdatum (§6.7): `NSDataDetector` auf den Wortlaut, bezogen auf die Aufnahmezeit.
+/// Fälligkeit (§6.7): `NSDataDetector` liefert den Tag, bezogen auf die Aufnahmezeit; die Uhrzeit liest `SpokenTime`
+/// aus dem Wortlaut (auch Zahlwörter, „halb drei“, „um 7 Uhr früh“). Ohne gesprochene Uhrzeit bleibt die Vorgabe des
+/// Detektors (12:00, „morgen früh“ 9:00) – nur zum Sortieren; angezeigt wird eine Uhrzeit nur mit `hasTime`.
 enum DueDate {
+    struct Resolved: Equatable, Sendable {
+        var date: Date
+        /// Im Wortlaut steht eine Uhrzeit, und `date` liegt genau auf ihr
+        var hasTime: Bool
+    }
+
     private static let leading = ["bis zum", "bis", "am", "ab", "spätestens", "by", "until", "on", "before"]
 
-    static func resolve(_ hint: String?, reference: Date, now: Date) -> Date? {
+    static func resolve(_ hint: String?, reference: Date, now: Date, calendar: Calendar = .current) -> Date? {
+        resolved(hint, reference: reference, now: now, calendar: calendar)?.date
+    }
+
+    static func resolved(_ hint: String?, reference: Date, now: Date, calendar: Calendar = .current) -> Resolved? {
         guard var text = hint?.trimmed, !text.isEmpty,
               let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return nil }
         let lower = text.lowercased()
@@ -915,11 +943,33 @@ enum DueDate {
             text = String(text.dropFirst(word.count + 1))
             break
         }
-        guard let date = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.date else { return nil }
-        // Relative Angaben („morgen“) gelten ab der Aufnahme, nicht ab dem Verarbeiten
-        let absolute = text.contains(where: \.isNumber)
-        let resolved = absolute ? date : date.addingTimeInterval(reference.timeIntervalSince(now))
-        guard resolved > reference.addingTimeInterval(-86_400), resolved < reference.addingTimeInterval(2 * 365 * 86_400) else { return nil }
-        return resolved
+        guard let detected = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.date else { return nil }
+        let spoken = SpokenTime.find(in: text)
+        // Ein Datum mit Ziffern („am 10. November“) gilt, wie es dasteht. Relative Angaben („morgen“, auch „morgen um
+        // 15 Uhr“) gelten ab der Aufnahme, nicht ab dem Verarbeiten: so viele Kalendertage nach dem Aufnahmetag.
+        let absolute = spoken.map(\.otherDigits) ?? text.contains(where: \.isNumber)
+        var date = detected
+        if !absolute {
+            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: detected)).day ?? 0
+            let time = calendar.dateComponents([.hour, .minute, .second], from: detected)
+            guard let day = calendar.date(byAdding: .day, value: days, to: calendar.startOfDay(for: reference)),
+                  let shifted = calendar.date(bySettingHour: time.hour ?? 12, minute: time.minute ?? 0, second: time.second ?? 0, of: day)
+            else { return nil }
+            date = shifted
+        }
+        if let clock = spoken?.clock {
+            if clock.hour == 24 {
+                // Mitternacht = 0:00 des Folgetags; liegt der Detektor schon dort („tomorrow at midnight“), bleibt es
+                if !SpokenTime.matches(clock, date: date, calendar: calendar) {
+                    guard let next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date)) else { return nil }
+                    date = next
+                }
+            } else {
+                guard let set = calendar.date(bySettingHour: clock.hour, minute: clock.minute, second: 0, of: date) else { return nil }
+                date = set
+            }
+        }
+        guard date > reference.addingTimeInterval(-86_400), date < reference.addingTimeInterval(2 * 365 * 86_400) else { return nil }
+        return Resolved(date: date, hasTime: spoken != nil)
     }
 }

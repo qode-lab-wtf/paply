@@ -13,6 +13,7 @@ import UIKit
 //                         mit -PaplyPreviewData starten, damit die Anker nur im Speicher liegen
 //   -PaplyMapPending <n>  die n neuesten Gedanken werden gerade geordnet (Kugel des Eingangs)
 //   -PaplyMapWaiting <z>  … stattdessen in diesem Zustand (waitingNetwork, waitingKey, needsAttention …)
+//   -PaplyMapCycle <s>    Kugel im Wechsel: nach s Sekunden warten alle auf Netz, nach weiteren s wird wieder geordnet
 //   -PaplyMapLand <s>     nach s Sekunden sind alle fertig: der erste in ein neues Thema „Aram“, der zweite ins
 //                         größte Thema, der dritte ohne Thema, die übrigen in ihr altes Thema (Flüge)
 //   -PaplyMapCamera <z>,<dx>,<dy>  Übersicht verschoben/gezoomt starten (z × Übersicht, Versatz in Kartenpunkten)
@@ -65,6 +66,12 @@ struct MapDebugScreen: View {
                 try? await Task.sleep(for: .seconds(after))
                 land()
             }
+            if let every = Self.value(after: "-PaplyMapCycle").flatMap(Double.init), every > 0 {
+                for state in [ThoughtState.waitingNetwork, .structuring] {
+                    try? await Task.sleep(for: .seconds(every))
+                    setPending(state)
+                }
+            }
             if Self.args.contains("-PaplyMapGrow") {
                 try? await Task.sleep(for: .seconds(2))
                 if let gone = model.deleted.first { model.restore(gone.id) }
@@ -103,6 +110,16 @@ struct MapDebugScreen: View {
         let next = ThoughtsModel(thoughts: thoughts + model.deleted, topics: model.topics + [aram])
         TopicPalette.register(next.topics)
         model = next
+    }
+
+    /// Alle Gedanken im Eingang wechseln in diesen Zustand (neues Modell, wie nach einer Meldung der Warteschlange)
+    private func setPending(_ state: ThoughtState) {
+        let thoughts = model.thoughts.map { thought in
+            var next = thought
+            if thought.isInMapInbox { next.state = state }
+            return next
+        }
+        model = ThoughtsModel(thoughts: thoughts + model.deleted, topics: model.topics)
     }
 
     private static func value(after flag: String) -> String? {

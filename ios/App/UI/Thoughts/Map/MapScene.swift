@@ -23,18 +23,24 @@ extension Thought {
 struct MapInbox: Equatable {
     var ids: Set<String> = []
     var status: MapInboxStatus?
+    /// alle Gedanken, die es gibt (ohne „Zuletzt gelöscht“): Wer fehlt, fliegt nicht und zählt nicht mehr
+    var existing: Set<String> = []
 
     static let empty = MapInbox()
 
     @MainActor
     init(model: ThoughtsModel) {
         var ids = Set<String>()
+        var existing = Set<String>(minimumCapacity: model.thoughts.count)
         var states: [ThoughtState] = []
-        for thought in model.thoughts where thought.isInMapInbox {
+        for thought in model.thoughts {
+            existing.insert(thought.id)
+            guard thought.isInMapInbox else { continue }
             ids.insert(thought.id)
             states.append(thought.state)
         }
         self.ids = ids
+        self.existing = existing
         status = MapInboxStatus.of(states)
     }
 
@@ -271,7 +277,8 @@ extension ThoughtsModel {
 
 /// Übergänge zwischen zwei Ständen der Karte (zeitgesteuert, damit das erste Bild nie springt), das Einblenden neuer
 /// Punkte und Kreise und die Flüge aus dem Eingang (`MapLandings`). Wird im `body` fortgeschrieben – reine
-/// Buchführung, löst nichts aus. Wann wieder etwas zu tun ist, sagt `nextWake`.
+/// Buchführung, löst nichts aus. Wann wieder etwas zu tun ist, sagt `nextWake` (die Karte plant bei jeder neuen
+/// Frist neu).
 @MainActor
 final class MapMotion {
     /// Feder für Datenwechsel (kritisch gedämpft, ≈ 0,6 s)
@@ -296,20 +303,18 @@ final class MapMotion {
     private(set) var start = Date.distantPast
     private(set) var appear: [String: Date] = [:]
     private(set) var landings = MapLandings()
-    /// steigt, sobald etwas Neues geplant ist (weckt die Zeitleiste)
-    private(set) var generation = 0
     private var knownDots: Set<String> = []
     private var knownTopics: Set<String> = []
 
-    /// Neuen Stand übernehmen. `inbox`: Gedanken im Eingang. `flights`: Flüge erlaubt (Kugel sichtbar, Bewegung an).
-    /// `bubbleOf`: Kreis eines Gedankens in `scene` (nil = noch nicht auf der Karte).
-    func update(_ scene: MapScene, inbox: Set<String>, flights: Bool, bubbleOf: (String) -> String?, now: Date) {
-        landings.observe(pending: inbox, now: now)
+    /// Neuen Stand übernehmen. `inbox`: Gedanken im Eingang (`ids`) und alle, die es gibt (`existing`). `flights`:
+    /// Flüge erlaubt (Kugel sichtbar, Bewegung an). `bubbleOf`: Kreis eines Gedankens in `scene` (nil = noch nicht
+    /// auf der Karte).
+    func update(_ scene: MapScene, inbox: MapInbox, flights: Bool, bubbleOf: (String) -> String?, now: Date) {
+        landings.observe(pending: inbox.ids, existing: inbox.existing, now: now)
         var born: Set<String> = []
         if let current, current.version != scene.version {
             previous = current
             start = now
-            generation &+= 1
             let dots = Set(scene.layout.dots.map(\.id)), topics = Set(scene.layout.bubbles.map(\.id))
             let newDots = dots.subtracting(knownDots), newTopics = topics.subtracting(knownTopics)
             appear = appear.filter { now.timeIntervalSince($0.value) < Self.appearDuration }
@@ -338,7 +343,6 @@ final class MapMotion {
             return bubble
         }
         guard !added.isEmpty else { return }
-        generation &+= 1
         for flight in added {
             appear[flight.id] = flight.land
             guard born.contains(flight.topicID) else { continue }

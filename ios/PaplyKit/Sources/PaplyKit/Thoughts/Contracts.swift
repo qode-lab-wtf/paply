@@ -40,18 +40,23 @@ public struct ThoughtTask: Codable, Sendable, Identifiable, Equatable {
     public var quote: String?
     public var dueHint: String?
     public var dueAt: Date?
+    /// Im Wortlaut stand eine Uhrzeit, und `dueAt` liegt auf ihr („morgen um 12 Uhr“, „um halb drei“) – festgehalten
+    /// beim Auflösen von `dueHint`. Fehlt in älteren Dateien (nil): Dann entscheidet der Wortlaut (`TaskDueLabel`).
+    public var dueHasTime: Bool?
     public var done: Bool
     public var doneAt: Date?
     public var owner: Owner
     public var createdAt: Date
 
     public init(id: String = ThoughtIDs.task(), text: String, quote: String? = nil, dueHint: String? = nil,
-                dueAt: Date? = nil, done: Bool = false, doneAt: Date? = nil, owner: Owner, createdAt: Date = Date()) {
+                dueAt: Date? = nil, dueHasTime: Bool? = nil, done: Bool = false, doneAt: Date? = nil, owner: Owner,
+                createdAt: Date = Date()) {
         self.id = id
         self.text = text
         self.quote = quote
         self.dueHint = dueHint
         self.dueAt = dueAt
+        self.dueHasTime = dueHasTime
         self.done = done
         self.doneAt = doneAt
         self.owner = owner

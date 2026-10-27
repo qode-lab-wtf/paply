@@ -5,6 +5,9 @@ import SwiftUI
 // die Zahl der Gedanken, die Paply gerade ordnet oder die warten; darunter klein, was passiert. Solange etwas
 // geordnet wird, atmet sie und ein Lichtschimmer läuft über ihren Rand. Warten alle (Netz, Schlüssel …), ruht sie
 // gedämpft. Bei jedem Abflug eines fertigen Gedankens stößt sie kurz nach. Antippen öffnet „Noch nicht geordnet“.
+//
+// Atmen und Schimmer gibt es nur, solange geordnet wird: Beide stecken in einem eigenen Zweig, der bei jedem Wechsel
+// zu „Wird geordnet …“ neu beginnt und beim Warten ganz verschwindet – dann läuft nichts (auch nicht unsichtbar).
 
 struct MapInboxOrb: View {
     let count: Int
@@ -15,8 +18,6 @@ struct MapInboxOrb: View {
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduce
-    @State private var breathe = false
-    @State private var spin = false
 
     /// Durchmesser der Kugel
     static let size: CGFloat = 26
@@ -40,10 +41,6 @@ struct MapInboxOrb: View {
         .buttonStyle(PressScaleStyle(scale: 0.94))
         .accessibilityLabel(spoken)
         .accessibilityHint("Zeigt die Gedanken, die Paply noch ordnet.")
-        .onAppear {
-            breathe = true
-            spin = true
-        }
     }
 
     // MARK: Kugel
@@ -51,34 +48,46 @@ struct MapInboxOrb: View {
     private var orb: some View {
         let size = Self.size
         let still = reduce
+        let lively = active && !still
         return ZStack {
-            // Schein: atmet, solange geordnet wird
-            Circle()
-                .fill(style.inbox)
-                .frame(width: size, height: size)
-                .blur(radius: 7)
-                .opacity(active ? (breathe && !reduce ? 0.75 : 0.42) : 0.18)
-                .scaleEffect(active && !reduce ? (breathe ? 1.32 : 1.02) : 1)
-                .animation(active && !reduce ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true) : .smooth,
-                           value: breathe)
-                .animation(.smooth, value: active)
+            // Schein: atmet, solange geordnet wird (eigener Zweig – beginnt bei jedem Wechsel neu)
+            ZStack {
+                if lively {
+                    glow
+                        .phaseAnimator([false, true]) { view, inhale in
+                            view
+                                .opacity(inhale ? 0.75 : 0.42)
+                                .scaleEffect(inhale ? 1.32 : 1.02)
+                        } animation: { _ in
+                            .easeInOut(duration: 1.5)
+                        }
+                        .transition(.opacity)
+                } else {
+                    glow
+                        .opacity(active ? 0.42 : 0.18)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.smooth, value: lively)
+            .animation(.smooth, value: active)
             Circle()
                 .fill(RadialGradient(colors: active ? [Color(uiColor: UIColor(hex: 0x9AF5BC)), .paplyGreenBright, .paplyGreenDeep]
                                                     : [Color.paplyGreen.opacity(0.75), Color.paplyGreenDeep.opacity(0.85), Color.paplyForest],
                                      center: UnitPoint(x: 0.34, y: 0.28), startRadius: 0, endRadius: size * 0.82))
                 .frame(width: size, height: size)
-            // Lichtschimmer, der über den Rand läuft
-            Circle()
-                .strokeBorder(AngularGradient(stops: [
-                    .init(color: .white.opacity(0), location: 0),
-                    .init(color: .white.opacity(0.85), location: 0.12),
-                    .init(color: .white.opacity(0), location: 0.3),
-                    .init(color: .white.opacity(0), location: 1),
-                ], center: .center), lineWidth: 1.3)
-                .frame(width: size, height: size)
-                .rotationEffect(.degrees(spin && !reduce ? 360 : 0))
-                .animation(reduce ? nil : .linear(duration: 2.2).repeatForever(autoreverses: false), value: spin)
-                .opacity(active && !reduce ? 1 : 0)
+            // Lichtschimmer, der über den Rand läuft – nur, solange geordnet wird
+            ZStack {
+                if lively {
+                    shimmer
+                        .keyframeAnimator(initialValue: 0.0, repeating: true) { view, angle in
+                            view.rotationEffect(.degrees(angle))
+                        } keyframes: { _ in
+                            LinearKeyframe(360.0, duration: 2.2)
+                        }
+                        .transition(.opacity)
+                }
+            }
+            .animation(.smooth, value: lively)
             Circle()
                 .strokeBorder(Color.white.opacity(active ? 0.22 : 0.12), lineWidth: 0.6)
                 .frame(width: size, height: size)
@@ -101,6 +110,24 @@ struct MapInboxOrb: View {
             CubicKeyframe(0.84, duration: 0.09)
             SpringKeyframe(1.0, duration: 0.4, spring: .bouncy)
         }
+    }
+
+    private var glow: some View {
+        Circle()
+            .fill(style.inbox)
+            .frame(width: Self.size, height: Self.size)
+            .blur(radius: 7)
+    }
+
+    private var shimmer: some View {
+        Circle()
+            .strokeBorder(AngularGradient(stops: [
+                .init(color: .white.opacity(0), location: 0),
+                .init(color: .white.opacity(0.85), location: 0.12),
+                .init(color: .white.opacity(0), location: 0.3),
+                .init(color: .white.opacity(0), location: 1),
+            ], center: .center), lineWidth: 1.3)
+            .frame(width: Self.size, height: Self.size)
     }
 
     private var caption: some View {

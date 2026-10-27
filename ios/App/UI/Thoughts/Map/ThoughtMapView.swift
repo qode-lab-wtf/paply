@@ -75,8 +75,10 @@ struct ThoughtMapView: View {
         let focus = Self.validFocus(focusedTopic, scene)
         // Flüge nur, wenn die Kugel zu sehen ist: Übersicht, Panel „Noch nicht geordnet“ zu, Bewegung an
         let flights = !reduceMotion && focus == nil && focusedTopic != ThoughtsHome.pendingID
-        let _ = motion.update(scene, inbox: inbox.ids, flights: flights, bubbleOf: { engine.bubble(ofThought: $0) }, now: now)
+        let _ = motion.update(scene, inbox: inbox, flights: flights, bubbleOf: { engine.bubble(ofThought: $0) }, now: now)
         let _ = clock // geweckt: neu zeichnen (Zahl der Kugel, Zeitleiste anhalten)
+        // nächste Frist (Abflug, Landung, Ende eines Übergangs, Ende des Wartens): Jede neue plant den Wecker neu
+        let wakeAt = motion.nextWake(after: now)
         let style = MapStyle(scheme)
         GeometryReader { outer in
             let insets = outer.safeAreaInsets
@@ -106,7 +108,7 @@ struct ThoughtMapView: View {
             lastFocus = id
             if !legendSeen { legendSeen = true }
         }
-        .task(id: motion.generation) { await wake() }
+        .task(id: wakeAt) { await wake(at: wakeAt) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Karte der Gedanken")
         .accessibilityAction(.escape) {
@@ -114,16 +116,13 @@ struct ThoughtMapView: View {
         }
     }
 
-    /// Bis alles Geplante vorbei ist, zu jedem nächsten Zeitpunkt neu zeichnen (Abflug: Zahl sinkt; Ende: die
-    /// Zeitleiste hält an). Nichts läuft dauerhaft.
-    private func wake() async {
-        while !Task.isCancelled {
-            let now = Date()
-            guard let next = motion.nextWake(after: now) else { return }
-            try? await Task.sleep(for: .seconds(max(0.01, next.timeIntervalSince(now) + 0.02)))
-            guard !Task.isCancelled else { return }
-            clock &+= 1
-        }
+    /// Zur nächsten Frist neu zeichnen (Abflug: Zahl sinkt; Ende: die Zeitleiste hält an). Das Neuzeichnen
+    /// liefert die nächste Frist und damit einen neuen Wecker – bis alles Geplante vorbei ist. Nichts läuft dauerhaft.
+    private func wake(at date: Date?) async {
+        guard let date else { return }
+        try? await Task.sleep(for: .seconds(max(0.01, date.timeIntervalSinceNow + 0.02)))
+        guard !Task.isCancelled else { return }
+        clock &+= 1
     }
 
     static func validFocus(_ focusedTopic: String?, _ scene: MapScene) -> String? {

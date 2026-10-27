@@ -52,12 +52,14 @@ public enum MapInboxStatus: Sendable, Equatable {
 
 /// Buchführung der Flüge von der Kugel zu den Kreisen (ohne Uhr und ohne Oberfläche – die Zeit kommt von außen).
 ///
-/// - `observe` meldet, wer gerade im Eingang ist. Wer ihn verlässt, wartet (`awaiting`), bis die Karte ihn zeigt –
-///   die Anordnung rechnet im Hintergrund. Bis dahin zählt er an der Kugel weiter, damit die Zahl nicht springt.
+/// - `observe` meldet, wer gerade im Eingang ist und welche Gedanken es überhaupt gibt. Wer den Eingang fertig
+///   verlässt, wartet (`awaiting`), bis die Karte ihn zeigt – die Anordnung rechnet im Hintergrund. Bis dahin zählt
+///   er an der Kugel weiter, damit die Zahl nicht springt. Wer nicht mehr existiert (gelöscht, Aufnahme ohne
+///   Sprache verworfen), fällt sofort heraus – samt geplantem oder laufendem Flug.
 /// - `place` plant für jeden, der jetzt auf der Karte steht, einen Flug. Mehrere fliegen nacheinander (`stagger`,
 ///   eine Welle startet höchstens über `spread`); die Zahl an der Kugel sinkt mit jedem Abflug.
 /// - Ohne Bewegung (reduzierte Bewegung, Fokus auf ein Thema) gibt es keinen Flug: Der Gedanke erscheint einfach.
-/// - Kommt ein fertiger Gedanke nicht auf die Karte (gelöscht, leer), fällt er nach `patience` heraus.
+/// - Kommt ein fertiger Gedanke trotzdem nicht auf die Karte, fällt er nach `patience` heraus (Sicherheitsnetz).
 public struct MapLandings: Sendable, Equatable {
     public struct Flight: Sendable, Equatable, Identifiable {
         /// Gedanke
@@ -99,22 +101,23 @@ public struct MapLandings: Sendable, Equatable {
 
     public init() {}
 
-    /// Eingang melden (bei jedem Neuzeichnen). Das erste Melden merkt nur – wer schon fertig war, fliegt nicht.
-    public mutating func observe(pending ids: Set<String>, now: Date) {
+    /// Eingang melden (bei jedem Neuzeichnen). `existing`: alle Gedanken, die es gibt (ohne gelöschte) – wer fehlt,
+    /// wartet nicht und fliegt nicht. Das erste Melden merkt nur – wer schon fertig war, fliegt nicht.
+    public mutating func observe(pending ids: Set<String>, existing: Set<String>, now: Date) {
         guard started else {
             started = true
             pending = ids
             return
         }
-        for id in pending where !ids.contains(id) { awaiting[id] = now }
+        // fertig: wartet auf die Karte – nur wer noch existiert
+        for id in pending where !ids.contains(id) && existing.contains(id) { awaiting[id] = now }
         for id in ids {
             // wieder in Arbeit („Erneut ordnen“): wartet nicht mehr und fliegt nicht
             awaiting[id] = nil
         }
-        if !ids.isEmpty { flights.removeAll { ids.contains($0.id) } }
         pending = ids
-        awaiting = awaiting.filter { now.timeIntervalSince($0.value) <= Self.patience }
-        flights.removeAll { now.timeIntervalSince($0.land) > Self.glow }
+        awaiting = awaiting.filter { existing.contains($0.key) && now.timeIntervalSince($0.value) <= Self.patience }
+        flights.removeAll { ids.contains($0.id) || !existing.contains($0.id) || now.timeIntervalSince($0.land) > Self.glow }
     }
 
     /// Wer wartet und jetzt auf der Karte steht (`target` liefert seinen Kreis, nil = noch nicht da), bekommt einen

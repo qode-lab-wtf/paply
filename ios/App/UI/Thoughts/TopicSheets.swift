@@ -516,14 +516,33 @@ extension View {
     }
 }
 
-/// Schütteln = Widerrufen (System-Undo) zusätzlich zum Hinweis unten
+/// Schütteln = Widerrufen (System-Undo) zusätzlich zum Hinweis unten – so lange wie der Hinweis: Läuft er ab,
+/// trägt `forget` die Aktion wieder aus (das Modell hat sie dann vergessen).
+@MainActor
 enum ThoughtsUndo {
-    @MainActor
+    /// je Aktion ein eigenes Ziel, damit sie sich einzeln austragen lässt (UndoManager hält Ziele nicht fest)
+    private final class Target {}
+
+    private struct Entry {
+        weak var manager: UndoManager?
+        let target: Target
+    }
+
+    private static var entries: [UndoToken: Entry] = [:]
+
     static func register(_ manager: UndoManager?, name: String, model: ThoughtsModel, token: UndoToken) {
         guard let manager else { return }
-        manager.registerUndo(withTarget: model) { model in
+        let target = Target()
+        entries[token] = Entry(manager: manager, target: target)
+        // Ziel bleibt bis `forget` gehalten (der Hinweis endet immer – auch nach Schütteln)
+        manager.registerUndo(withTarget: target) { _ in
             MainActor.assumeIsolated { model.undo(token) }
         }
         manager.setActionName(name)
+    }
+
+    static func forget(_ token: UndoToken) {
+        guard let entry = entries.removeValue(forKey: token) else { return }
+        entry.manager?.removeAllActions(withTarget: entry.target)
     }
 }

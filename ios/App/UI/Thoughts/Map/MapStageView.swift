@@ -11,8 +11,9 @@ import SwiftUI
 // - Doppeltipp zoomt an der Stelle zweifach hinein, bei starkem Zoom zurück zur Übersicht.
 //
 // Freie Ansicht: Die Übersicht und jedes Thema im Fokus haben eine eigene. Schließt das Panel, geht es zurück zur
-// letzten freien Ansicht der Übersicht – dort war man, das ist das Ruhigste. Die Kamera wird nie gespeichert und
-// ändert keinen Anker. Mit VoiceOver gilt immer die Übersicht (alle Elemente im Bild).
+// letzten freien Ansicht der Übersicht – dort war man, das ist das Ruhigste. Ändert sich die Anordnung (oder kommt
+// man zur Übersicht zurück), federt die freie Ansicht weich in die dann geltenden Grenzen. Die Kamera wird nie
+// gespeichert und ändert keinen Anker. Mit VoiceOver gilt immer die Übersicht (alle Elemente im Bild).
 
 struct MapStageView: View {
     struct Inbox: Equatable {
@@ -187,7 +188,10 @@ struct MapStageView: View {
         .onChange(of: g.focus) { _, focus in
             // neues Thema im Fokus: seine Ansicht beginnt ganz
             if focusFree != nil, focusFree?.id != focus { focusFree = nil }
+            // zurück in der Übersicht: Die Anordnung kann sich inzwischen geändert haben
+            if focus == nil { reclamp() }
         }
+        .onChange(of: scene.version) { _, _ in reclamp() }
         #if DEBUG
         .onChange(of: scene.version, initial: true) { _, _ in applyDebugCamera() }
         #endif
@@ -317,6 +321,20 @@ struct MapStageView: View {
         let keep: MapCamera? = viewport.differs(target, from: g.home) ? target : nil
         withAnimation(reduceMotion ? .easeOut(duration: 0.2) : animation) {
             drag = MapDrag()
+            store(keep, focus: g.focus)
+        }
+    }
+
+    /// Neue Anordnung: Die freie Ansicht, die gerade gilt, federt weich in die neuen Grenzen (sonst bliebe die Karte
+    /// womöglich halb aus dem Bild). Während einer Geste begrenzt das Loslassen.
+    private func reclamp() {
+        guard drag.raw == nil else { return }
+        let g = geometry()
+        guard let current = resting(g.focus) else { return }
+        let clamped = g.viewport.clamped(current)
+        let keep: MapCamera? = g.viewport.differs(clamped, from: g.home) ? clamped : nil
+        guard keep != current else { return }
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : ThoughtMapView.cameraSpring) {
             store(keep, focus: g.focus)
         }
     }

@@ -121,4 +121,64 @@ struct MapInboxTests {
         #expect(landings.flights.isEmpty)
         #expect(landings.count(at: at(1.1)) == 2)
     }
+
+    @Test("Aus dem Eingang gelöscht (Aufnahme ohne Sprache, Panel „Noch nicht geordnet“): sofort weg, kein Warten")
+    func deletedWhilePending() {
+        var landings = MapLandings()
+        landings.observe(pending: ["a", "b"], now: at(0))
+        landings.observe(pending: ["b"], existing: ["b"], now: at(1))
+        #expect(landings.awaiting.isEmpty)
+        #expect(landings.count(at: at(1)) == 1)
+        landings.observe(pending: [], existing: [], now: at(2))
+        #expect(landings.count(at: at(2)) == 0)
+        #expect(landings.nextEvent(after: at(2)) == nil) // nichts zu wecken
+    }
+
+    @Test("Fertig, aber gelöscht, bevor die Karte ihn zeigt: fällt sofort heraus, nicht erst nach der Geduld")
+    func deletedWhileAwaiting() {
+        var landings = MapLandings()
+        landings.observe(pending: ["a", "b"], now: at(0))
+        landings.observe(pending: [], now: at(1))
+        #expect(landings.count(at: at(1)) == 2)
+        landings.observe(pending: [], existing: ["b"], now: at(1.5))
+        #expect(Set(landings.awaiting.keys) == ["b"])
+        #expect(landings.count(at: at(1.5)) == 1)
+        #expect(landings.place(animate: true, now: at(1.6)) { _ in "t" }.map(\.id) == ["b"])
+    }
+
+    @Test("Gelöscht während des Flugs: Flug und Nachleuchten fallen weg, der Kreis zählt ihn nicht mehr")
+    func deletedInFlight() {
+        var landings = MapLandings()
+        landings.observe(pending: ["a", "b"], now: at(0))
+        landings.observe(pending: [], now: at(1))
+        let flights = landings.place(animate: true, now: at(1)) { _ in "t" }
+        #expect(flights.map(\.id) == ["a", "b"])
+        // a ist in der Luft, b wartet noch auf den Abflug – beide gelöscht
+        landings.observe(pending: [], existing: [], now: at(1.2))
+        #expect(landings.flights.isEmpty)
+        #expect(landings.unlanded(at: at(1.2)).isEmpty)
+        #expect(landings.count(at: at(1.2)) == 0)
+        #expect(!landings.isRunning(at: at(1.2)))
+        #expect(landings.nextEvent(after: at(1.2)) == nil)
+    }
+
+    @Test("Nur einer von zwei Fliegenden gelöscht: der andere fliegt weiter wie geplant")
+    func deletedInFlightKeepsOthers() {
+        var landings = MapLandings()
+        landings.observe(pending: ["a", "b"], now: at(0))
+        landings.observe(pending: [], now: at(1))
+        let flights = landings.place(animate: true, now: at(1)) { _ in "t" }
+        landings.observe(pending: [], existing: ["b"], now: at(1.1))
+        #expect(landings.flights.map(\.id) == ["b"])
+        #expect(same(landings.flights.first?.launch, flights[1].launch))
+        #expect(landings.count(at: at(1.1)) == 1) // b noch nicht abgeflogen
+    }
+}
+
+private extension MapLandings {
+    /// Melden, wenn alle bekannten Gedanken noch existieren
+    mutating func observe(pending ids: Set<String>, now: Date) {
+        let everyone = ids.union(pending).union(awaiting.keys).union(flights.map(\.id))
+        observe(pending: ids, existing: everyone, now: now)
+    }
 }

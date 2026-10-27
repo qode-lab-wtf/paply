@@ -120,7 +120,7 @@ public enum ThoughtValidator {
     /// Setzt Teil 1 (voller Aufruf) und die Folgeteile zusammen.
     /// - Text: Teile in Reihenfolge, getrennt durch eine Leerzeile. Ein abgelehnter Teil steht als
     ///   Rohtext dieses Teils da (Code `text:part<k>:…` bleibt). Sind alle Teile abgelehnt: nil.
-    /// - Aufgaben: aneinandergehängt, doppelte (normalisiert) fallen weg, höchstens 10.
+    /// - Aufgaben: aneinandergehängt, doppelte (Text und Zeitausdruck normalisiert, `taskKey`) fallen weg, höchstens 10.
     /// - Titel, Thema, Verwandte aus Teil 1.
     public static func assemble(first: StructureResult, firstTranscript: String,
                                 parts: [(result: StructureResult, transcript: String)]) -> StructureResult {
@@ -136,7 +136,7 @@ public enum ThoughtValidator {
             tasks += part.result.tasks
         }
         var seen = Set<String>()
-        tasks = tasks.filter { seen.insert(normalizedForMatch($0.text)).inserted }
+        tasks = tasks.filter { seen.insert(taskKey($0.text, dueHint: $0.dueHint)).inserted }
         return StructureResult(title: first.title, cleanText: anyClean ? pieces.joined(separator: "\n\n") : nil,
                                topic: first.topic, tasks: Array(tasks.prefix(10)), related: first.related,
                                rejections: rejections)
@@ -231,17 +231,24 @@ public enum ThoughtValidator {
             guard let quote = locateQuote(task.quote, in: transcript) else { rejections.append("task:quote"); continue }
             let hint = task.due_hint?.trimmed ?? ""
             let due = hint.isEmpty || !dueHintInQuote(hint, quote: quote) ? nil : hint
-            // Form nach v4 (TaskText): Zeitausdruck nicht doppelt, Füllwort am Rand weg, groß – nur Weglassen
+            // Form nach v4 (TaskText): Zeitausdruck nicht doppelt, Füllwort am Rand weg, groß – nur Weglassen, und nur
+            // wo es den Sinn sicher nicht ändert (nie neben einer Verneinung, nie aus der Mitte)
             let text = TaskText.tidy(task.text.replacingOccurrences(of: "\n", with: " "), dueHint: due)
             guard (2...maxTaskLength).contains(text.count) else { rejections.append("task:text"); continue }
             guard taskWordsGrounded(text, quote: quote) else { rejections.append("task:words"); continue }
             guard digitsContained(text, in: quote) else { rejections.append("task:digits"); continue }
             guard effectiveNegations(text) == effectiveNegations(quote) else { rejections.append("task:negation"); continue }
             if !hint.isEmpty, due == nil { rejections.append("task:due") }
-            guard seen.insert(normalizedForMatch(text)).inserted else { rejections.append("task:duplicate"); continue }
+            guard seen.insert(taskKey(text, dueHint: due)).inserted else { rejections.append("task:duplicate"); continue }
             result.append(TaskDraft(text: text, quote: quote, dueHint: due))
         }
         return result
+    }
+
+    /// Schlüssel für doppelte Aufgaben: Text und Zeitausdruck, normalisiert. Ohne den Zeitausdruck wären „Morgen Mama
+    /// anrufen“ und „Übermorgen Mama anrufen“ nach `TaskText` gleich – und die zweite Aufgabe ginge verloren.
+    static func taskKey(_ text: String, dueHint: String?) -> String {
+        normalizedForMatch(text) + "\u{1F}" + normalizedForMatch(dueHint ?? "")
     }
 
     /// Höchstens so viele Wörter zwischen erstem und letztem Wort eines `due_hint` aus Stücken (inklusive).

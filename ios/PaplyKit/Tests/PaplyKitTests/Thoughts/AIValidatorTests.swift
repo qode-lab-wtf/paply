@@ -281,6 +281,48 @@ private typealias F = AIFixture
         #expect(result.tasks.count == 1)
     }
 
+    /// Dritte Prüfrunde (Astra): Gleicher Text an zwei Tagen sind zwei Aufgaben. Der Schlüssel für Doppelte enthält
+    /// den Zeitausdruck – sonst wären „Morgen Mama anrufen“ und „Übermorgen Mama anrufen“ nach `TaskText` gleich.
+    @Test func sameTextOnDifferentDaysStaysTwoTasks() {
+        let transcript = "Ich muss morgen Mama anrufen. Und übermorgen nochmal Mama anrufen."
+        let input = F.input(transcript: transcript)
+        func run(_ tasks: [[String: Any]]) -> StructureResult {
+            F.validate(F.answer(title: "Mama anrufen", clean: transcript, topic: F.topic("none"), tasks: tasks), input)
+        }
+        let withTime = run([F.task("Morgen Mama anrufen", "morgen Mama anrufen", due: "morgen"),
+                            F.task("Übermorgen Mama anrufen", "übermorgen nochmal Mama anrufen", due: "übermorgen")])
+        #expect(withTime.tasks.map(\.text) == ["Mama anrufen", "Mama anrufen"])
+        #expect(withTime.tasks.map(\.dueHint) == ["morgen", "übermorgen"])
+        #expect(!withTime.rejections.contains("task:duplicate"))
+        // die KI hat den Zeitausdruck schon weggelassen
+        let withoutTime = run([F.task("Mama anrufen", "morgen Mama anrufen", due: "morgen"),
+                               F.task("Mama anrufen", "übermorgen nochmal Mama anrufen", due: "übermorgen")])
+        #expect(withoutTime.tasks.map(\.dueHint) == ["morgen", "übermorgen"])
+        // wirklich doppelt (gleicher Text, gleicher Tag): eine Aufgabe
+        let twice = run([F.task("Morgen Mama anrufen", "morgen Mama anrufen", due: "morgen"),
+                         F.task("Mama anrufen", "morgen Mama anrufen", due: "Morgen")])
+        #expect(twice.tasks.count == 1 && twice.rejections.contains("task:duplicate"))
+    }
+
+    @Test func assembledPartsKeepTasksOnDifferentDays() {
+        let first = StructureResult(title: "Mama", cleanText: "Teil eins.", topic: .none,
+                                    tasks: [TaskDraft(text: "Mama anrufen", quote: "morgen Mama anrufen", dueHint: "morgen")], related: [])
+        let part = StructureResult(title: "", cleanText: "Teil zwei.", topic: .none,
+                                   tasks: [TaskDraft(text: "Mama anrufen", quote: "übermorgen Mama anrufen", dueHint: "übermorgen"),
+                                           TaskDraft(text: "mama anrufen", quote: "morgen Mama anrufen", dueHint: "morgen")],
+                                   related: [])
+        let result = ThoughtValidator.assemble(first: first, firstTranscript: "a", parts: [(part, "b")])
+        #expect(result.tasks.map(\.dueHint) == ["morgen", "übermorgen"])
+        #expect(RawText.taskKey("Mama anrufen", dueHint: "morgen") != RawText.taskKey("Mama anrufen", dueHint: "übermorgen"))
+        #expect(RawText.taskKey("Mama anrufen!", dueHint: "Morgen") == RawText.taskKey("mama anrufen", dueHint: "morgen"))
+        // „Erneut ordnen“ gegen Erledigte/Eigene: ohne Zeitausdruck zählt nur der Text, zwei Tage bleiben zwei
+        let done = ThoughtTask(text: "Mama anrufen", dueHint: "morgen", owner: .ai)
+        #expect(RawText.sameTask(done, ThoughtTask(text: "mama anrufen", dueHint: "Morgen", owner: .ai)))
+        #expect(RawText.sameTask(done, ThoughtTask(text: "Mama anrufen", owner: .ai)))
+        #expect(RawText.sameTask(ThoughtTask(text: "Mama anrufen", owner: .user), ThoughtTask(text: "Mama anrufen", dueHint: "morgen", owner: .ai)))
+        #expect(!RawText.sameTask(done, ThoughtTask(text: "Mama anrufen", dueHint: "übermorgen", owner: .ai)))
+    }
+
     @Test func tooLongTaskTextDropsIt() {
         let text = "Unterlagen schicken " + String(repeating: "Unterlagen ", count: 7)
         #expect(F.validate(F.answer(tasks: [F.task(text, "Ich muss bis Freitag die Unterlagen schicken")])).tasks.isEmpty)
@@ -400,31 +442,104 @@ private typealias F = AIFixture
         #expect(TaskText.tidy(raw, dueHint: nil) == expected)
     }
 
+    /// Gestrichen wird nur ganz am Anfang oder Ende – ohne Verneinung, mit freiem Nachbarwort, ≥ 2 Wörtern danach,
+    /// Zeitpunkt oder Frist (kein Zeitraum) und am Ende ohne Präposition davor im Text.
     @Test(arguments: [
         ("morgen einkaufen gehen", "morgen", "Einkaufen gehen"),
         ("Morgen, einkaufen gehen", "morgen", "Einkaufen gehen"),
+        ("Morgen Mama anrufen", "morgen", "Mama anrufen"),
+        ("Übermorgen Mama anrufen", "übermorgen", "Mama anrufen"),
+        ("am Freitag Anna anrufen", "am Freitag", "Anna anrufen"),
         ("Anna anrufen, morgen früh", "morgen früh", "Anna anrufen"),
         ("Morgen um 10 Uhr Kunden empfangen", "morgen um 10 Uhr", "Kunden empfangen"),
         ("call the bank tomorrow", "tomorrow", "Call the bank"),
-        // ab v5 auch in der Mitte, wenn wörtlich und zusammenhängend und mindestens 2 Wörter bleiben
-        ("Reisepass bis Ende November verlängern", "bis Ende November", "Reisepass verlängern"),
-        ("Unterlagen bis Freitag schicken", "bis Freitag", "Unterlagen schicken"),
-        ("Reisepass, bis Ende November, verlängern", "bis Ende November", "Reisepass verlängern"),
-        ("Laufrad im Dezember kaufen", "im Dezember", "Laufrad kaufen"),
-        ("Anna morgen anrufen", "morgen", "Anna anrufen"),
-        // nicht, wenn ein Wort davor ihn regiert (sonst „Anna wegen anrufen“), und nur wörtlich gleich
+        ("renew the fluxo dot app domain before November third", "before November third", "Renew the fluxo dot app domain"),
+        // „bis spätestens …“ ist eine Frist
+        ("bis spätestens Freitag Unterlagen schicken", "bis spätestens Freitag", "Unterlagen schicken"),
+    ])
+    func timeExpressionAtTheEdgeIsRemoved(raw: String, due: String, expected: String) {
+        #expect(TaskText.tidy(raw, dueHint: due) == expected)
+    }
+
+    @Test(arguments: [
+        // aus der Mitte nie (bis v5 gestrichen)
+        ("Reisepass bis Ende November verlängern", "bis Ende November", "Reisepass bis Ende November verlängern"),
+        ("Reisepass, bis Ende November, verlängern", "bis Ende November", "Reisepass, bis Ende November, verlängern"),
+        ("Unterlagen bis Freitag schicken", "bis Freitag", "Unterlagen bis Freitag schicken"),
+        ("Laufrad im Dezember kaufen", "im Dezember", "Laufrad im Dezember kaufen"),
+        ("Anna morgen anrufen", "morgen", "Anna morgen anrufen"),
+        // d) Zeitraum: Der Endtermin kann zum Objekt gehören – Frist oder Endtermin steht nicht sicher im Text
+        ("Urlaub verlängern bis Freitag", "bis Freitag", "Urlaub verlängern bis Freitag"),
+        ("bis Freitag Urlaub verlängern", "bis Freitag", "Bis Freitag Urlaub verlängern"),
+        ("bis Freitag die Unterlagen schicken", "bis Freitag", "Bis Freitag die Unterlagen schicken"),
+        ("ab Montag Sport machen", "ab Montag", "Ab Montag Sport machen"),
+        ("extend the lease until May", "until May", "Extend the lease until May"),
+        // b) Nachbarwort regiert oder gehört zur Zeitangabe
         ("Anna wegen Freitag anrufen", "Freitag", "Anna wegen Freitag anrufen"),
         ("Kuchen backen für morgen", "morgen", "Kuchen backen für morgen"),
+        ("morgen nur Anna anrufen", "morgen", "Morgen nur Anna anrufen"),
+        ("morgen erst Anna anrufen", "morgen", "Morgen erst Anna anrufen"),
+        ("morgen oder übermorgen Anna anrufen", "morgen", "Morgen oder übermorgen Anna anrufen"),
+        ("morgen Abend Anna anrufen", "morgen", "Morgen Abend Anna anrufen"),
+        ("Anna anrufen nächsten Freitag", "Freitag", "Anna anrufen nächsten Freitag"),
+        ("Anna anrufen am 3. Mai", "Mai", "Anna anrufen am 3. Mai"),
+        // e) Am Ende hängt die Zeit womöglich an einer Präposition davor (Samstag = das Ausmessen, E1 e29)
+        ("Frau Brandt fragen wegen Ausmessen am Samstag", "am Samstag", "Frau Brandt fragen wegen Ausmessen am Samstag"),
+        ("ask Anna about the meeting on Friday", "on Friday", "Ask Anna about the meeting on Friday"),
+        // nur wörtlich gleich
         ("Reisepass bis Ende November verlängern", "Ende November", "Reisepass bis Ende November verlängern"),
         ("am Freitag Anna anrufen", "Freitag", "Am Freitag Anna anrufen"),
         ("Unterlagen bis spätestens Freitag schicken", "bis Freitag", "Unterlagen bis spätestens Freitag schicken"),
         ("Halteverbotszone beantragen bis Freitag", "bis spätestens Freitag", "Halteverbotszone beantragen bis Freitag"),
-        // Verneinung bleibt, auch im Zeitausdruck
-        ("nicht vor Freitag bezahlen", "nicht vor Freitag", "Nicht vor Freitag bezahlen"),
         // nichts übrig → Text bleibt
         ("morgen", "morgen", "Morgen"),
     ])
-    func timeExpressionIsNotDoubled(raw: String, due: String, expected: String) {
+    func timeExpressionStaysWhenInDoubt(raw: String, due: String, expected: String) {
+        #expect(TaskText.tidy(raw, dueHint: due) == expected)
+    }
+
+    /// Dritte Prüfrunde, Befund 1 (Blocker): Neben einer Verneinung fällt nie etwas weg.
+    @Test(arguments: [
+        ("nicht morgen anrufen", "morgen", "Nicht morgen anrufen"),
+        ("morgen nicht anrufen", "morgen", "Morgen nicht anrufen"),
+        ("bis morgen nicht anrufen", "bis morgen", "Bis morgen nicht anrufen"),
+        ("bis morgen nicht anrufen", "morgen", "Bis morgen nicht anrufen"),
+        ("Kein Termin morgen", "morgen", "Kein Termin morgen"),
+        ("Anna anrufen, aber nicht morgen", "morgen", "Anna anrufen, aber nicht morgen"),
+        ("nicht heute, sondern morgen anrufen", "morgen", "Nicht heute, sondern morgen anrufen"),
+        ("nicht heute, sondern morgen anrufen", "heute", "Nicht heute, sondern morgen anrufen"),
+        ("Nicht morgen bezahlen", "morgen", "Nicht morgen bezahlen"),
+        ("Nicht morgen Mama besuchen", "morgen", "Nicht morgen Mama besuchen"),
+        ("Mama besuchen, nur nicht morgen", "morgen", "Mama besuchen, nur nicht morgen"),
+        ("morgen keine Pakete annehmen", "morgen", "Morgen keine Pakete annehmen"),
+        ("morgen ohne Auto zum Arzt fahren", "morgen", "Morgen ohne Auto zum Arzt fahren"),
+        ("don't call the bank tomorrow", "tomorrow", "Don't call the bank tomorrow"),
+        ("dont call the bank tomorrow", "tomorrow", "Dont call the bank tomorrow"),
+        ("tomorrow never call the bank", "tomorrow", "Tomorrow never call the bank"),
+        ("nicht vor Freitag bezahlen", "nicht vor Freitag", "Nicht vor Freitag bezahlen"),
+        // Astra: Endtermin als Objekt
+        ("Urlaub bis Freitag verlängern", "bis Freitag", "Urlaub bis Freitag verlängern"),
+    ])
+    func negationKeepsEverything(raw: String, due: String, expected: String) {
+        #expect(TaskText.tidy(raw, dueHint: due) == expected)
+    }
+
+    /// Befund 2: Ein einzelnes Wort bleibt nie übrig. Befund 3: kein Torso mit Bindewort am Rand.
+    @Test(arguments: [
+        ("Freitag absagen", "Freitag", "Freitag absagen"),
+        ("absagen Freitag", "Freitag", "Absagen Freitag"),
+        ("Weihnachten planen", "Weihnachten", "Weihnachten planen"),
+        ("morgen anrufen", "morgen", "Morgen anrufen"),
+        ("morgen früh und abends gießen", "morgen früh", "Morgen früh und abends gießen"),
+        ("morgen früh und abends gießen", "morgen", "Morgen früh und abends gießen"),
+        ("statt morgen übermorgen kommen", "übermorgen", "Statt morgen übermorgen kommen"),
+        ("statt morgen übermorgen kommen", "morgen", "Statt morgen übermorgen kommen"),
+        ("morgen statt heute Anna anrufen", "morgen", "Morgen statt heute Anna anrufen"),
+        ("morgen bzw. übermorgen Anna anrufen", "morgen", "Morgen bzw. übermorgen Anna anrufen"),
+        ("Anna anrufen und morgen", "morgen", "Anna anrufen und morgen"),
+        ("call Anna and tomorrow", "tomorrow", "Call Anna and tomorrow"),
+    ])
+    func noSingleWordAndNoTorso(raw: String, due: String, expected: String) {
         #expect(TaskText.tidy(raw, dueHint: due) == expected)
     }
 
@@ -447,6 +562,11 @@ private typealias F = AIFixture
         ("einmal Pizza bestellen", "Einmal Pizza bestellen"),
         ("nicht mal anrufen", "Nicht mal anrufen"),
         ("noch", "Noch"),
+        // mit Verneinung im Text bleibt jedes Füllwort („noch … nicht“ = noch nicht)
+        ("noch Milch nicht kaufen", "Noch Milch nicht kaufen"),
+        ("noch die Miete nicht überweisen", "Noch die Miete nicht überweisen"),
+        ("Anna nicht anrufen noch", "Anna nicht anrufen noch"),
+        ("mal Anna nicht stören", "Mal Anna nicht stören"),
     ])
     func onlySafeFillersAtTheEdgesAreRemoved(raw: String, expected: String) {
         #expect(TaskText.tidy(raw, dueHint: nil) == expected)
@@ -454,11 +574,16 @@ private typealias F = AIFixture
 
     @Test func validatorAppliesTheFormAndStillChecksTheQuote() {
         let result = F.validate(F.answer(tasks: [
-            F.task("bis Freitag noch die Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken", due: "bis Freitag"),
+            F.task("noch die Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken", due: "bis Freitag"),
             F.task("schufa-Auskunft bestellen", "nicht vergessen, die Schufa-Auskunft zu bestellen"),
         ]))
         #expect(result.tasks.map(\.text) == ["Die Unterlagen schicken", "Schufa-Auskunft bestellen"])
         #expect(result.tasks.first?.dueHint == "bis Freitag")
+        // „bis Freitag“ am Anfang: Frist oder Endtermin ist nicht sicher – bleibt (ab der dritten Prüfrunde)
+        let span = F.validate(F.answer(tasks: [
+            F.task("bis Freitag noch die Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken", due: "bis Freitag"),
+        ]))
+        #expect(span.tasks.map(\.text) == ["Bis Freitag noch die Unterlagen schicken"])
         // Doppelte nach der Form fallen weg
         let doubled = F.validate(F.answer(tasks: [F.task("Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken"),
                                                   F.task("noch Unterlagen schicken", "die Unterlagen schicken")]))
