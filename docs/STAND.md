@@ -1,6 +1,6 @@
 # Paply — Stand
 
-**Zeitpunkt:** 27.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS Version 1 vor TestFlight (Branch `feat/ios-v1`)
+**Zeitpunkt:** 27.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight hochgeladen (Builds 1–3, Branch `feat/ios-v1`)
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
@@ -11,6 +11,10 @@
   Fertig/Verwerfen in der Live Activity, KI ordnet Titel/Thema/Aufgaben/Verknüpfungen, Reiter Gedanken),
   Einrichtungskarte, Datenschutz-Klartext, Feedback senden. Konzept `ios/docs/gedanken/KONZEPT.md`,
   KI-Bewertung `ios/docs/gedanken/EVAL.md`, TestFlight-Ablauf und Texte `ios/docs/TESTFLIGHT.md`.
+- **TestFlight (27.10., abends):** 0.1.0 Builds 1, 2, 3 per SSH vom MacBook hochgeladen (Ablauf in der Erinnerung
+  „TestFlight-Upload per SSH“). Build 3 ist der Kandidat für Freunde: Landkarte, Aufgaben-Reiter, Themenbilder, KI-Regeln
+  v6, Mikro startet erst bei aktiver App, Selbstheilung bei stummem Mikro. Offen bei Allan in App Store Connect: interne
+  Gruppe, externe Gruppe „Freunde“, Testinformationen, Prüf-Schlüssel für Apple.
 - Geprüft: PaplyKit 384 Tests grün, App/Tastatur/Widgets bauen Debug und Release; mehrere Opus-Reviews und ein
   unabhängiger Sonnet-Produkttest. Der zusammengeführte Stand ist auf dem Gerät noch nicht getestet.
 - Bauen/Signieren: Mac mini entwickelt, MacBook (Xcode 26.5, iOS-Plattform installiert) signiert; Signieren nur
