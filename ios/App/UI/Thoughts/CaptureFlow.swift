@@ -33,6 +33,8 @@ final class CaptureFlow {
         case saved(String)
         case waiting(String, icon: Lucide, text: String)
         case nothing
+        /// nichts verstanden, und es lag am Mikro (stumm bzw. wird neu gestartet)
+        case micNote(String)
         case note(String)
         /// verworfen – 10 s „Widerrufen“
         case discarded(String)
@@ -206,10 +208,10 @@ final class CaptureFlow {
         guard let id = trackedID, driver.active == nil else { return }
         guard let state else {
             if trackedSeen {
-                // war da und ist weg: nichts verstanden, nichts gespeichert
+                // war da und ist weg: nichts verstanden, nichts gespeichert – oder das Mikro war stumm
                 trackedID = nil
                 nothingPulse += 1
-                setBar(.nothing, hideAfter: 3)
+                setBar(ThoughtBridge.takeMicNote(id: id).map { .micNote($0.barText) } ?? .nothing, hideAfter: 4)
             }
             return
         }
@@ -229,7 +231,7 @@ final class CaptureFlow {
         case .empty:
             trackedID = nil
             nothingPulse += 1
-            setBar(.nothing, hideAfter: 3)
+            setBar(ThoughtBridge.takeMicNote(id: id).map { .micNote($0.barText) } ?? .nothing, hideAfter: 4)
         }
     }
 
@@ -250,6 +252,7 @@ final class CaptureFlow {
         case .keyboardTookOver: "Diktat übernimmt – Aufnahme gesichert"
         case .limit: "Nach 10 Min. gespeichert"
         case .storage: "Speicher voll · bisheriger Ton gesichert"
+        case .micSilent: "Mikro war stumm – Aufnahme beendet"
         case .liveActivity, .button, .app, nil: "Aufnahme gesichert"
         }
     }

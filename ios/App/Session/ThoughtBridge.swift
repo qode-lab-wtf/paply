@@ -18,6 +18,31 @@ enum ThoughtBridge {
     private static var resultTimeout: Task<Void, Never>?
     private static var eventsTask: Task<Void, Never>?
     private static var lastCommandSeq: UInt64 = 0
+    /// Warum ein leerer Gedanke leer blieb, wenn es am Mikro lag (statt „Nichts verstanden“)
+    enum MicNote {
+        /// nur digitale Stille
+        case silent
+        /// zweimal nichts verstanden – Mikro wird neu gestartet
+        case restart
+
+        /// Live Activity
+        var activityText: String {
+            switch self {
+            case .silent: "Mikro war stumm – Paply öffnen, dann neu aufnehmen"
+            case .restart: "Nichts verstanden – Mikro wird neu gestartet, bitte nochmal sprechen"
+            }
+        }
+
+        /// Leiste in der App
+        var barText: String {
+            switch self {
+            case .silent: "Mikro war stumm – bitte neu aufnehmen"
+            case .restart: "Mikro neu gestartet – bitte nochmal sprechen"
+            }
+        }
+    }
+
+    private static var micNotes: [String: MicNote] = [:]
 
     /// Beim App-Start (PaplyApp): Reste aufräumen, Weiterleitung aus dem Widget-Prozess empfangen.
     static func bootstrap() {
@@ -216,6 +241,21 @@ enum ThoughtBridge {
         handle(event)
     }
 
+    /// Das Mikro lieferte bei diesem Gedanken nur digitale Stille (ThoughtCapture).
+    static func markSilentMic(id: String) {
+        micNotes[id] = .silent
+    }
+
+    /// Nach diesem Gedanken wird das Mikro neu gestartet (zweimal nichts verstanden).
+    static func markMicRestart(id: String) {
+        if micNotes[id] == nil { micNotes[id] = .restart }
+    }
+
+    /// Lag es bei diesem (leeren) Gedanken am Mikro? Gibt die Markierung dabei frei.
+    static func takeMicNote(id: String) -> MicNote? {
+        micNotes.removeValue(forKey: id)
+    }
+
     /// Ereignisse der Warteschlange (H2) → Phasen
     private static func handle(_ event: ProcessorEvent) {
         switch event {
@@ -234,8 +274,10 @@ enum ThoughtBridge {
             finishActivity(id: id, state: state, dwell: 3, alert: nil)
         case .empty(let id):
             var state = content(.empty, startedAt: activityStartedAt)
-            state.note = "Nichts verstanden – nichts gespeichert"
-            finishActivity(id: id, state: state, dwell: 3, alert: "Nichts verstanden – nichts gespeichert")
+            // Stummes Mikro: ehrlich sagen, woran es lag (nicht „Nichts verstanden“)
+            let note = micNotes[id]?.activityText ?? "Nichts verstanden – nichts gespeichert"
+            state.note = note
+            finishActivity(id: id, state: state, dwell: 4, alert: note)
         case .failed(let id, let message):
             var state = content(.failed, startedAt: activityStartedAt)
             state.note = message.isEmpty ? "Ton gesichert · Paply versucht es später" : message

@@ -19,6 +19,8 @@ enum ThoughtToggleOutcome: Sendable, Equatable {
 
 enum ThoughtFinishReason: String, Sendable {
     case button, liveActivity, app, interruption, keyboardTookOver, limit, storage
+    /// Mikro lieferte nur digitale Stille und durfte im Hintergrund nicht neu starten
+    case micSilent
 }
 
 @MainActor
@@ -189,10 +191,13 @@ final class ThoughtCapture {
         let liveFeed = live?.continuation
         let sink: @Sendable ([Float]) -> Void = { samples in
             file.append(samples)
-            liveFeed?.yield(samples)
+            liveFeed?.yield(.samples(samples))
             levelBox.update(with: samples)
         }
-        guard await session.attachThought(id: id, sink: sink) else {
+        // Mikro wegen digitaler Stille neu gestartet: Die Live-Pipeline verwirft den stummen Anfang.
+        // Die WAV behält ihn (Stille stört den Dateiweg nicht; abschneiden ginge nur mit Umschreiben).
+        let onRestart: @Sendable () -> Void = { liveFeed?.yield(.restart) }
+        guard await session.attachThought(id: id, sink: sink, onRestart: onRestart) else {
             // Kein Mikro: Eintrag ohne Ton verwerfen (keine Leiche), App kurz nach vorne holen
             live?.cancel()
             file.discard()
@@ -253,6 +258,7 @@ final class ThoughtCapture {
         let stopNs = MonoClock.now()
         let id = rec.id
         if reason == .interruption { lastInterruptionStop = (id, Date()) }
+        if reason == .micSilent { ThoughtBridge.markSilentMic(id: id) }
         lastStop = LastStop(id: id, reason: reason, at: Date())
         ticker?.cancel()
         ticker = nil
@@ -267,7 +273,9 @@ final class ThoughtCapture {
             while SessionController.shared.lastAudioArrivalNs < stopNs + 20_000_000, MonoClock.msSince(flushStart) < 300 {
                 try? await Task.sleep(for: .milliseconds(10))
             }
-            SessionController.shared.detachThought(id: id)
+            let micStats = SessionController.shared.detachThought(id: id)
+            // Ganze Aufnahme nur digitale Stille: Ergebnis „Mikro war stumm“ statt „Nichts verstanden“
+            if micStats?.wasSilent == true { ThoughtBridge.markSilentMic(id: id) }
             let durationMs = rec.file.close()
             // Zustand `captured` + Dauer; ohne Ton (0 ms) entfernt der Store den Eintrag
             let saved: Thought?
@@ -278,12 +286,22 @@ final class ThoughtCapture {
                 Diag.log("thought.save.failed", ["id": .s(Self.short(id)), "code": .i((error as NSError).code)])
             }
             if recording === rec { recording = nil }
-            Diag.log("thought.stop", [
+            var stopFields: DiagFields = [
                 "id": .s(Self.short(id)), "reason": .s(reason.rawValue), "durationMs": .i(durationMs),
                 "saved": .b(saved != nil), "live": .b(rec.live != nil), "app": .s(SessionController.appState),
-            ])
+                "micSilent": .b(micStats?.wasSilent == true || reason == .micSilent),
+            ]
+            // Pegel der Rohpuffer (dBFS, −160 = exakt 0) und Zahl der Null-Puffer – nie Inhalte
+            stopFields.merge(micStats?.diagFields ?? [:]) { a, _ in a }
+            Diag.log("thought.stop", stopFields)
             if saved == nil {
                 ThoughtBridge.showResult(.empty(id))
+            }
+            // „Zweimal nichts verstanden“: nur abgeschlossene Gedanken („Fertig“) mit Live-Pipeline (VAD)
+            if let live = rec.live, [.button, .liveActivity, .app].contains(reason) {
+                let speech = await live.speechDetected()
+                let outcome = SessionController.shared.completedRecording(speech: speech, seconds: Double(durationMs) / 1000, kind: "thought")
+                if outcome != .none { ThoughtBridge.markMicRestart(id: id) }
             }
             // Live-Pipeline: Rohtext Sekunden nach dem Stopp an die Warteschlange, sonst Dateiweg
             if let live = rec.live, let processor {
@@ -357,6 +375,7 @@ final class ThoughtCapture {
                 if !current.speechDetected, await rec.live?.speechDetected() ?? levelBox.heardSpeech {
                     current.speechDetected = true
                     active = current
+                    SessionController.shared.noteSpeechHeard()
                 }
                 if !warned, elapsed >= Self.warnAfter {
                     warned = true
@@ -382,6 +401,7 @@ final class ThoughtCapture {
         case .keyboardTookOver: "Gesichert – Diktat hat übernommen"
         case .limit: "Nach 10 Min. gespeichert"
         case .storage: "Speicher voll · bisheriger Ton gesichert"
+        case .micSilent: "Mikro war stumm – Aufnahme beendet"
         default: nil
         }
     }
@@ -487,17 +507,22 @@ final class CaptureFile: Sendable {
 
 /// Live-Verschriftlichung während der Aufnahme (ohne Polieren, mit Stücken).
 final class LivePipeline: @unchecked Sendable {
-    let continuation: AsyncStream<[Float]>.Continuation
+    let continuation: AsyncStream<TapFeed>.Continuation
     private let pipeline: DictationPipeline
     private let feed: Task<Void, Never>
     private(set) var abandoned = false
 
     init(pipeline: DictationPipeline) {
         self.pipeline = pipeline
-        let (stream, continuation) = AsyncStream<[Float]>.makeStream(bufferingPolicy: .unbounded)
+        let (stream, continuation) = AsyncStream<TapFeed>.makeStream(bufferingPolicy: .unbounded)
         self.continuation = continuation
         feed = Task.detached(priority: .userInitiated) { [pipeline] in
-            for await chunk in stream { await pipeline.append(chunk) }
+            for await item in stream {
+                switch item {
+                case .samples(let chunk): await pipeline.append(chunk)
+                case .restart: await pipeline.discardSilentStart()
+                }
+            }
         }
     }
 

@@ -104,6 +104,19 @@ public actor DictationPipeline {
         }
     }
 
+    /// Bisheriges Audio verwerfen und die Aufnahme frisch weiterführen – nach einem Neustart
+    /// des Mikros, weil es nur digitale Stille lieferte. Wirkt nur, solange noch nichts
+    /// erkannt und nichts hochgeladen wurde (dann war das Bisherige ohnehin wertlos).
+    /// Liefert true, wenn verworfen wurde.
+    @discardableResult
+    public func discardSilentStart() -> Bool {
+        guard !finished, !cancelled, chunks.isEmpty, !vad.speechDetected else { return false }
+        samples = []
+        vad = VoiceActivityDetector()
+        planner = ChunkPlanner()
+        return true
+    }
+
     /// true, sobald echte Sprache erkannt wurde (nicht Rauschen/Klick/Atmen).
     public var speechDetected: Bool { vad.speechDetected }
 

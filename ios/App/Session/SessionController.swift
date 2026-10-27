@@ -75,6 +75,23 @@ final class SessionController {
     @ObservationIgnored private var lastHousekeepingTick = Date()
     /// Wann die App zuletzt aktiv wurde (für den Aufblitz-Bildschirm nach Start per URL)
     @ObservationIgnored var lastActivatedAt: Date?
+    /// Mikro lieferte nur digitale Stille und ließ sich nicht neu starten (Hintergrund) oder
+    /// der Neustart half nicht: Die Sitzung „muss neu starten“ (Status `.interrupted`).
+    /// Die Tastatur öffnet dann die App; im Vordergrund startet das Mikro sofort neu.
+    /// Warum die Sitzung neu starten muss: Mikro lieferte digitale Stille, oder zweimal hintereinander
+    /// nichts verstanden (`NoSpeechStreak` – fängt auch einen lauten Eingang ohne Sprache).
+    enum MicRestartCause: String {
+        case silent, noSpeech
+    }
+
+    @ObservationIgnored private var micRestartCause: MicRestartCause?
+    private var micSilent: Bool { micRestartCause != nil }
+    /// Zwei abgeschlossene Aufnahmen ohne erkannte Sprache (≥ 2 s, ≤ 3 Min. auseinander) → Neustart
+    @ObservationIgnored private var noSpeechStreak = NoSpeechStreak()
+    @ObservationIgnored private var silenceRestartTask: Task<Void, Never>?
+    /// Zeitpunkte der Neustarts wegen Stille (MonoClock) – höchstens zwei je Minute, keine Schleife
+    @ObservationIgnored private var silenceRestarts: [UInt64] = []
+    static let maxSilenceRestartsPerMinute = 2
 
     private init() {}
 
@@ -103,12 +120,22 @@ final class SessionController {
         bus.observe(.shortcut) { SessionController.shared.handleShortcutSignal() }
         registerAudioObservers()
         registerAppObservers()
+        // Jeder Motorstart mit App-Zustand und Mikro-Freigabe ins Protokoll
+        audio.onEngineStarted { reason, rate, channels in
+            Task { @MainActor in SessionController.shared.logEngineStart(reason: reason, rate: rate, channels: channels) }
+        }
+        // Totes Mikro (≥ 1,5 s digitale Stille) bzw. wieder Ton
+        audio.processor.setSilenceHandler { change in
+            Task { @MainActor in SessionController.shared.handleMicSilence(change) }
+        }
     }
 
     // MARK: Sitzung
 
     @discardableResult
     func startSession(trigger: String) async -> Bool {
+        // Läuft gerade ein Neustart wegen stummen Mikros, erst sein Ergebnis abwarten
+        if let silenceRestartTask { await silenceRestartTask.value }
         if (status == .ready || status == .recording), audio.isRunning { return true }
         // Läuft schon ein Start (z. B. Knopf und URL gleichzeitig), auf ihn warten
         if let startTask { return await startTask.value }
@@ -139,8 +166,10 @@ final class SessionController {
             return failStart(trigger: trigger, stage: "permission", code: 0, text: "Mikrofon nicht erlaubt – in den iOS-Einstellungen freigeben")
         }
 
-        // Sitzung und Engine auf der Audio-Queue starten – der Main-Thread bleibt frei
-        if case .failure(let error) = await audio.start() {
+        // Sitzung und Engine auf der Audio-Queue starten – der Main-Thread bleibt frei.
+        // War das Mikro stumm, alles neu aufbauen (Sitzung ab- und wieder anmelden, neue Engine).
+        let fresh = micSilent
+        if case .failure(let error) = await audio.start(fresh: fresh) {
             return failStart(trigger: trigger, stage: error.stage, code: error.code, text: "Mikro ließ sich nicht starten (\(error.fourCC.isEmpty ? String(error.code) : error.fourCC))", fourCC: error.fourCC)
         }
 
@@ -150,12 +179,15 @@ final class SessionController {
         status = .ready
         detail = nil
         idlePaused = false
+        micRestartCause = nil
         publish()
         startHousekeeping()
         monitor.start()
         var fields: DiagFields = [
             "trigger": .s(trigger),
             "app": .s(Self.appState),
+            "mic": .s(Self.micPermission),
+            "fresh": .b(fresh),
             "ms": .ms(MonoClock.msSince(begin)),
             "hold": .s(AppSettings.shared.holdDuration.rawValue),
         ]
@@ -168,6 +200,7 @@ final class SessionController {
         lastStartFailure = (stage, code, fourCC)
         Diag.log("session.start.failed", [
             "trigger": .s(trigger), "stage": .s(stage), "code": .i(code), "fourCC": .s(fourCC), "app": .s(Self.appState),
+            "mic": .s(Self.micPermission),
         ])
         status = .off
         detail = text
@@ -180,6 +213,10 @@ final class SessionController {
         if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.app) }
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
+        micRestartCause = nil
+        silenceRestartTask?.cancel()
+        silenceRestartTask = nil
+        silenceRestarts = []
         startedForThought = false
         thoughtSessionEnd?.cancel()
         pauseTask?.cancel()
@@ -237,14 +274,21 @@ final class SessionController {
             options: AppSettings.shared.testOptions.pipelineOptions
         )
 
-        let (stream, continuation) = AsyncStream<[Float]>.makeStream(bufferingPolicy: .unbounded)
+        let (stream, continuation) = AsyncStream<TapFeed>.makeStream(bufferingPolicy: .unbounded)
         let feedTask = Task.detached(priority: .userInitiated) { [pipeline] in
             var reported = false
-            for await chunk in stream {
-                await pipeline.append(chunk)
-                if !reported, await pipeline.speechDetected {
-                    reported = true
-                    await SessionController.shared.speechDetected(id: id)
+            for await item in stream {
+                switch item {
+                case .samples(let chunk):
+                    await pipeline.append(chunk)
+                    if !reported, await pipeline.speechDetected {
+                        reported = true
+                        await SessionController.shared.speechDetected(id: id)
+                    }
+                case .restart:
+                    // Mikro wurde wegen digitaler Stille neu gestartet: stummen Anfang verwerfen
+                    let dropped = await pipeline.discardSilentStart()
+                    Diag.log("dictation.micRestart", ["id": .s(String(id.prefix(8))), "dropped": .b(dropped)])
                 }
             }
         }
@@ -254,7 +298,8 @@ final class SessionController {
         dictation = entry
 
         if levelChannel == nil { levelChannel = LevelChannel.openWriter() }
-        let prerollSamples = audio.processor.attach(owner: id, sink: { continuation.yield($0) }, levels: levelChannel)
+        let prerollSamples = audio.processor.attach(owner: id, sink: { continuation.yield(.samples($0)) }, levels: levelChannel,
+                                                    onRestart: { continuation.yield(.restart) })
         // Experiment: Engine war angehalten → im Hintergrund wieder starten (ohne Vorlauf).
         // Die Tastatur zeigt schon „Aufnahme“; bis zum ersten Sample kommt einfach nichts an.
         let resuming = idlePaused
@@ -279,6 +324,7 @@ final class SessionController {
     }
 
     private func speechDetected(id: String) {
+        noSpeechStreak.speechHeard()
         guard let current = dictation, current.id == id, !current.speechDetected else { return }
         current.speechDetected = true
         if shared.dictation?.id == id { shared.dictation?.speechDetected = true }
@@ -319,7 +365,7 @@ final class SessionController {
         Task {
             // Letzte Audio-Blöcke abwarten: Ein Block, der nach dem Tipp ankommt, enthält das Ende.
             let flushMs = await waitForFlush(after: finishReceivedNs + 20_000_000, maxMs: 300)
-            audio.processor.detach(owner: id)
+            entry.micStats = audio.processor.detach(owner: id)
             entry.continuation.finish()
             if dictation === entry {
                 dictation = nil
@@ -338,7 +384,7 @@ final class SessionController {
 
     func cancelDictation(reason: String) {
         guard let entry = dictation else { return }
-        audio.processor.detach(owner: entry.id)
+        let micStats = audio.processor.detach(owner: entry.id)
         entry.continuation.finish()
         entry.feedTask.cancel()
         let pipeline = entry.pipeline
@@ -350,13 +396,15 @@ final class SessionController {
         stopWatchdog()
         publish()
         schedulePauseIfIdle(reason: "dictation-cancel")
-        Diag.log("dictation.cancel", [
+        var cancelFields: DiagFields = [
             "id": .s(entry.shortID),
             "source": .s(entry.source.rawValue),
             "reason": .s(reason),
             "speech": .b(entry.speechDetected),
             "ms": .ms(MonoClock.msSince(entry.startedNs)),
-        ])
+        ]
+        cancelFields.merge(micStats?.diagFields ?? [:]) { a, _ in a }
+        Diag.log("dictation.cancel", cancelFields)
         if entry.source == .shortcut {
             ShortcutBridge.dictationCancelled(id: entry.id)
         }
@@ -393,8 +441,15 @@ final class SessionController {
         if !outcome.noSpeech, !outcome.raw.isEmpty || outcome.errorMessage != nil {
             HistoryStore.shared.add(id: entry.id, source: entry.source, outcome: outcome, timings: timings, retries: entry.retries)
         }
+        // Nichts erkannt, weil das Mikro stumm war (nur digitale Stille): ehrlich sagen, nicht „Nichts verstanden“
+        let silentMic = outcome.noSpeech && (entry.micStats?.wasSilent == true || micRestartCause == .silent)
+        // Abgeschlossenes Diktat (nicht: Neuversuch) für „zweimal nichts verstanden“. true = Sitzung
+        // ist jetzt „muss neu starten“ (App nicht vorne) → die Tastatur bietet den Neustart an.
+        let micRestart = entry.retries == 0 && !silentMic
+            && completedRecording(speech: entry.speechDetected, seconds: t.audioSeconds, kind: "dictation") == .marked
         if outcome.noSpeech {
-            Diag.log("dictation.noSpeech", ["id": .s(entry.shortID), "source": .s(entry.source.rawValue), "audioS": .d((t.audioSeconds * 10).rounded() / 10)])
+            Diag.log("dictation.noSpeech", ["id": .s(entry.shortID), "source": .s(entry.source.rawValue),
+                                            "audioS": .d((t.audioSeconds * 10).rounded() / 10), "micSilent": .b(silentMic)])
         }
         // Scheiterte es und hat die Pipeline das Audio noch, für „Erneut versuchen“ behalten
         // (nur Tastatur, max. 10 Min). Sonst Audio sofort freigeben – das Ergebnis bleibt.
@@ -422,6 +477,8 @@ final class SessionController {
                 unpolished: outcome.polishError != nil,
                 retryable: keepForRetry,
                 noSpeech: outcome.noSpeech,
+                micSilent: silentMic ? true : nil,
+                micRestart: micRestart ? true : nil,
                 finishReceivedNs: finishReceivedNs,
                 writtenNs: MonoClock.now()
             )
@@ -469,8 +526,12 @@ final class SessionController {
             "levelsWritten": .i(Int(levelChannel?.count ?? 0)),
             "deferred": .b(entry.deliverAsPending),
             "app": .s(Self.appState),
+            "micSilent": .b(silentMic),
+            "micRestart": .b(micRestart),
         ]
         fields.merge(audio.tapFields) { a, _ in a }
+        // Pegel der Rohpuffer dieser Aufnahme (dBFS, −160 = exakt 0) und Zahl der Null-Puffer
+        fields.merge(entry.micStats?.diagFields ?? [:]) { a, _ in a }
         Diag.log("dictation.result", fields)
     }
 
@@ -735,6 +796,8 @@ final class SessionController {
         case ("session", "/start"):
             if cameForward { flash = .starting }
             Task {
+                // Erst starten, wenn die App wirklich aktiv ist (Vorfall 27.10.2026, siehe waitUntilActive)
+                await waitUntilActive(trigger: "url-\(source)")
                 let ok = await startSession(trigger: "url-\(source)")
                 guard ok else {
                     flash = .failed(detail ?? "Mikro ließ sich nicht starten")
@@ -757,13 +820,200 @@ final class SessionController {
                 } else if source == "shortcut" {
                     dictating = await ShortcutBridge.toggle(trigger: "url") == .started
                 }
-                flash = cameForward ? .running(dictating: dictating) : nil
+                // „Mikro ist an“ erst, wenn echter Ton kommt – so lange bleibt „Mikro startet …“ stehen
+                // (meist 0,1–0,3 s). Ist es stumm, startet die Stille-Erkennung es hier im Vordergrund neu.
+                let live = await waitForLiveMic(trigger: "url-\(source)")
+                let stillFront = UIApplication.shared.applicationState == .active
+                if live {
+                    flash = cameForward && stillFront ? .running(dictating: dictating) : nil
+                } else {
+                    flash = cameForward && stillFront
+                        ? .failed("Das Mikro liefert keinen Ton. Läuft gerade ein Anruf oder eine andere Aufnahme? Sonst Paply einmal ganz schließen und neu öffnen.")
+                        : nil
+                }
             }
         case ("session", "/stop"):
             stopSession(reason: "url")
         default:
             break
         }
+    }
+
+    // MARK: Totes Mikro (Vorfall 27.10.2026)
+    //
+    // Der Motor lief, die Tap-Puffer kamen pünktlich – aber kein Diktat und kein Gedanke fand Sprache.
+    // Einziger Unterschied zu allen anderen Sitzungen des Tages: Sie startete per URL aus der Tastatur,
+    // während die App noch „inactive“ war und gerade erst nach vorne kam. Deshalb:
+    // 1. Start per URL erst, wenn die App aktiv ist, und „Mikro ist an“ erst bei echtem Ton.
+    // 2. Liefert der laufende Motor 1,5 s nur digitale Stille, gilt das Mikro als tot: vorne sofort
+    //    neu starten (laufende Aufnahme läuft nahtlos weiter), im Hintergrund „muss neu starten“.
+
+    /// Start per URL aus der Tastatur: Die App ist dabei erst „inactive“ (sie kommt gerade nach vorne;
+    /// `url.open` kam im Vorfall sogar vor `willEnterForeground`). Eine Aufnahme, die in diesem Moment
+    /// startet, kann iOS stumm lassen. Darum warten, bis die App aktiv ist – typisch 0,3–0,5 s, der
+    /// Aufblitz-Bildschirm steht dabei schon. Wird sie es nicht (Nutzer ist schon weg), nach 3 s
+    /// trotzdem starten; dann greift die Stille-Erkennung.
+    private func waitUntilActive(trigger: String) async {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let begin = MonoClock.now()
+        let from = Self.appState
+        while UIApplication.shared.applicationState != .active, MonoClock.msSince(begin) < 3_000 {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        Diag.log("session.waitActive", [
+            "trigger": .s(trigger), "from": .s(from), "app": .s(Self.appState), "ms": .ms(MonoClock.msSince(begin)),
+        ])
+    }
+
+    /// Nach dem Start im Vordergrund: Kommt echter Ton? Wartet höchstens 5 s – genug für die
+    /// 1,5-s-Erkennung, einen Neustart und dessen erste Puffer. Ein gesundes Mikro liefert seinen
+    /// ersten echten Puffer nach 0,1–0,3 s.
+    private func waitForLiveMic(trigger: String) async -> Bool {
+        let begin = MonoClock.now()
+        var live = false
+        while MonoClock.msSince(begin) < 5_000, status != .off {
+            // echter Ton seit dem letzten Motorstart, und gerade keine längere Stille
+            if !micSilent, audio.processor.heardSignal, audio.processor.silentMs < 500 {
+                live = true
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        Diag.log("session.micCheck", [
+            "trigger": .s(trigger), "live": .b(live), "ms": .ms(MonoClock.msSince(begin)),
+            "restarts": .i(silenceRestarts.count), "app": .s(Self.appState), "mic": .s(Self.micPermission),
+        ])
+        return live
+    }
+
+    private func logEngineStart(reason: String, rate: Double, channels: Int) {
+        Diag.log("audio.engineStart", [
+            "reason": .s(reason), "app": .s(Self.appState), "mic": .s(Self.micPermission),
+            "status": .s(status.rawValue), "inRate": .d(rate), "inCh": .i(channels),
+        ])
+    }
+
+    private func handleMicSilence(_ change: MicSilenceDetector.Change) {
+        var fields: DiagFields = [
+            "app": .s(Self.appState), "mic": .s(Self.micPermission), "status": .s(status.rawValue),
+            "dictating": .b(dictation != nil), "thought": .b(isThoughtActive), "idlePaused": .b(idlePaused),
+        ]
+        fields.merge(audio.routeFields) { a, _ in a }
+        fields.merge(audio.tapFields) { a, _ in a }
+        switch change {
+        case .becameSilent:
+            Diag.log("audio.micSilent", fields)
+            // Unterbrechung o. Ä. hat schon übernommen, oder die Engine ist absichtlich angehalten
+            guard status == .ready || status == .recording, !idlePaused else { return }
+            if UIApplication.shared.applicationState == .active {
+                restartSilentMic(trigger: "detected")
+            } else {
+                // Hintergrund: Neustart nicht erlaubt. „inactive“: didBecomeActive startet gleich neu.
+                markMicSilent(reason: Self.appState)
+            }
+        case .becameAlive:
+            Diag.log("audio.micAlive", fields)
+            // Ton kam von selbst zurück (z. B. nach Siri): Markierung aufheben
+            guard micRestartCause == .silent, status == .interrupted, silenceRestartTask == nil else { return }
+            micRestartCause = nil
+            status = dictation == nil ? .ready : .recording
+            detail = nil
+            publish()
+        }
+    }
+
+    /// Vordergrund: Mikro sofort neu starten (Sitzung ab- und wieder anmelden, neue Engine). Eine
+    /// laufende Aufnahme verwirft ihren stummen Ton und läuft nahtlos weiter. Höchstens zwei
+    /// Neustarts je Minute – liefert das Mikro dann immer noch nichts, ehrlich „muss neu starten“.
+    private func restartSilentMic(trigger: String, cause: MicRestartCause = .silent) {
+        guard silenceRestartTask == nil, status != .off else { return }
+        let now = MonoClock.now()
+        silenceRestarts = silenceRestarts.filter { MonoClock.ms(from: $0, to: now) < 60_000 }
+        guard silenceRestarts.count < Self.maxSilenceRestartsPerMinute else {
+            Diag.log("audio.micSilent.giveUp", ["restarts": .i(silenceRestarts.count), "app": .s(Self.appState)])
+            markMicSilent(reason: "restarts-exhausted", cause: cause)
+            return
+        }
+        silenceRestarts.append(now)
+        pauseTask?.cancel()
+        let attempt = silenceRestarts.count
+        silenceRestartTask = Task {
+            let begin = MonoClock.now()
+            let outcome = await audio.restartFresh()
+            var fields: DiagFields = [
+                "trigger": .s(trigger), "attempt": .i(attempt), "ms": .ms(MonoClock.msSince(begin)),
+                "app": .s(Self.appState), "mic": .s(Self.micPermission),
+                "dictating": .b(dictation != nil), "thought": .b(isThoughtActive),
+            ]
+            switch outcome {
+            case .success:
+                micRestartCause = nil
+                idlePaused = false
+                if status != .off {
+                    status = dictation == nil ? .ready : .recording
+                    detail = nil
+                }
+                fields["ok"] = .b(true)
+                Diag.log("audio.micSilent.restart", fields)
+                silenceRestartTask = nil
+                publish()
+            case .failure(let error):
+                fields["ok"] = .b(false)
+                fields["stage"] = .s(error.stage)
+                fields["code"] = .i(error.code)
+                fields["fourCC"] = .s(error.fourCC)
+                Diag.log("audio.micSilent.restart", fields)
+                silenceRestartTask = nil
+                markMicSilent(reason: "restart-failed", cause: cause)
+            }
+        }
+    }
+
+    enum StreakOutcome {
+        case none, restarted, marked
+    }
+
+    /// Abgeschlossene Aufnahme (Diktat per „fertig“, Gedanke per „Fertig“) für die Regel „zweimal
+    /// nichts verstanden“ (`NoSpeechStreak`). Abbrechen, Wischen und Durchschalten melden nichts.
+    /// Löst die Regel aus: App vorne → Motor sofort neu starten; sonst „muss neu starten“ markieren
+    /// (Tastatur öffnet beim nächsten 🌐 die App, ein Gedanke startet beim nächsten Druck neu).
+    @discardableResult
+    func completedRecording(speech: Bool, seconds: Double, kind: String) -> StreakOutcome {
+        let now = Double(MonoClock.now()) / 1_000_000_000
+        guard noSpeechStreak.completed(speech: speech, seconds: seconds, now: now) else { return .none }
+        let fields: DiagFields = [
+            "kind": .s(kind), "seconds": .d((seconds * 10).rounded() / 10), "app": .s(Self.appState),
+            "status": .s(status.rawValue), "marked": .b(micSilent),
+        ]
+        Diag.log("session.noSpeechStreak", fields)
+        guard status == .ready || status == .recording, !micSilent, silenceRestartTask == nil else { return .none }
+        if UIApplication.shared.applicationState == .active {
+            restartSilentMic(trigger: "no-speech", cause: .noSpeech)
+            return .restarted
+        }
+        markMicSilent(reason: "no-speech-streak", cause: .noSpeech)
+        return .marked
+    }
+
+    /// Sprache in einem Gedanken erkannt (setzt „zweimal nichts verstanden“ zurück).
+    func noteSpeechHeard() {
+        noSpeechStreak.speechHeard()
+    }
+
+    /// Mikro stumm und kein Neustart möglich: Die Sitzung „muss neu starten“. Die Tastatur nimmt
+    /// beim nächsten 🌐 den Weg „App kurz öffnen“; ein laufendes Diktat endet mit „Mikro war stumm“
+    /// (statt „Nichts verstanden“), ein laufender Gedanke wird gesichert und beendet.
+    private func markMicSilent(reason: String, cause: MicRestartCause = .silent) {
+        guard status != .off else { return }
+        micRestartCause = cause
+        status = .interrupted
+        detail = cause == .silent ? "Mikro war stumm – Paply startet neu" : "Zweimal nichts verstanden – Paply startet das Mikro neu"
+        Diag.log("session.micSilent", ["reason": .s(reason), "cause": .s(cause.rawValue), "app": .s(Self.appState),
+                                        "dictating": .b(dictation != nil), "thought": .b(isThoughtActive)])
+        if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.micSilent) }
+        // Erst den Status setzen, dann verwerfen: Die Tastatur sieht beides in einem Stand
+        if dictation != nil { cancelDictation(reason: "mic-silent") }
+        publish()
     }
 
     // MARK: Gemeinsamer Zustand
@@ -778,6 +1028,8 @@ final class SessionController {
         shared.updatedNs = MonoClock.now()
         shared.hasAPIKey = AppSettings.shared.hasAPIKey
         shared.detail = detail
+        shared.micSilent = micSilent ? true : nil
+        shared.micNoSpeech = micRestartCause == .noSpeech ? true : nil
         let snapshot = shared
         SharedIO.async {
             SharedStore.write(snapshot, .session)
@@ -895,6 +1147,12 @@ final class SessionController {
     /// Nach einer Unterbrechung selbst wieder anlaufen (auch im Hintergrund). Erfolg oder
     /// Fehlercode wird protokolliert; nach drei Versuchen bleibt der Zustand „unterbrochen“.
     func attemptResume(trigger: String, attempt: Int) {
+        // Stummes Mikro bei laufender Engine: Ein bloßes Fortsetzen hilft nicht – nur ein Neustart,
+        // und den erlaubt iOS nur im Vordergrund (dort übernimmt `didBecomeActive`).
+        if micSilent, audio.isRunning {
+            if UIApplication.shared.applicationState == .active { restartSilentMic(trigger: trigger, cause: micRestartCause ?? .silent) }
+            return
+        }
         resumeTask?.cancel()
         resumeTask = Task {
             let begin = MonoClock.now()
@@ -905,6 +1163,7 @@ final class SessionController {
                 status = dictation == nil ? .ready : .recording
                 detail = nil
                 idlePaused = false
+                micRestartCause = nil // Engine lief neu an; ist sie wieder stumm, meldet die Erkennung es erneut
                 lastActivityAt = Date()
                 publish()
                 Diag.log("audio.resume.ok", ["trigger": .s(trigger), "attempt": .i(attempt), "app": .s(Self.appState), "ms": .ms(MonoClock.msSince(begin))])
@@ -954,6 +1213,7 @@ final class SessionController {
                 status = .ready
                 detail = nil
                 idlePaused = false
+                micRestartCause = nil
                 Diag.log("audio.mediaServicesReset.recovered")
                 schedulePauseIfIdle(reason: "after-reset")
             case .failure(let error):
@@ -998,8 +1258,19 @@ final class SessionController {
         observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
                 let session = SessionController.shared
-                Diag.log("app.foreground", ["status": .s(session.status.rawValue), "engine": .b(session.audio.isRunning)])
+                Diag.log("app.foreground", ["status": .s(session.status.rawValue), "engine": .b(session.audio.isRunning),
+                                            "micSilent": .b(session.micSilent)])
+                // Stummes Mikro bei laufender Engine wartet in attemptResume auf „aktiv“ (didBecomeActive)
                 if session.status == .interrupted { session.attemptResume(trigger: "foreground", attempt: 1) }
+            }
+        })
+        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                let session = SessionController.shared
+                // Im Hintergrund als stumm erkannt: jetzt (vorne, aktiv) darf das Mikro neu starten
+                if session.micSilent, session.status == .interrupted {
+                    session.attemptResume(trigger: "active", attempt: 1)
+                }
             }
         })
         observers.append(center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
@@ -1024,14 +1295,30 @@ final class SessionController {
         @unknown default: "unknown"
         }
     }
+
+    /// Mikrofon-Freigabe fürs Protokoll
+    nonisolated static var micPermission: String {
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted: "granted"
+        case .denied: "denied"
+        case .undetermined: "undetermined"
+        @unknown default: "unknown"
+        }
+    }
 }
 
 /// Ein laufendes Diktat: Pipeline + geordneter Zulauf der Samples.
+/// Zulauf einer Aufnahme aus dem Audio-Tap: Samples oder „Mikro neu gestartet, stummen Anfang verwerfen“.
+enum TapFeed: Sendable {
+    case samples([Float])
+    case restart
+}
+
 private final class ActiveDictation {
     let id: String
     let source: DictationSource
     let pipeline: DictationPipeline
-    let continuation: AsyncStream<[Float]>.Continuation
+    let continuation: AsyncStream<TapFeed>.Continuation
     let feedTask: Task<Void, Never>
     let startedNs: UInt64
     let apiKey: String
@@ -1047,11 +1334,13 @@ private final class ActiveDictation {
     /// Testvarianten der Pipeline beim Start, z. B. „flac·primer·polish“
     let options: String
     var commandLatencyMs: Double?
+    /// Pegel der Rohpuffer (beim Lösen vom Tap ermittelt)
+    var micStats: MicInputStats?
 
     var shortID: String { String(id.prefix(8)) }
 
     @MainActor
-    init(id: String, source: DictationSource, apiKey: String, pipeline: DictationPipeline, continuation: AsyncStream<[Float]>.Continuation, feedTask: Task<Void, Never>, startedNs: UInt64) {
+    init(id: String, source: DictationSource, apiKey: String, pipeline: DictationPipeline, continuation: AsyncStream<TapFeed>.Continuation, feedTask: Task<Void, Never>, startedNs: UInt64) {
         self.id = id
         self.source = source
         self.apiKey = apiKey
@@ -1071,7 +1360,8 @@ extension SessionController {
     /// Gedanke hängt sich an den Audio-Strom. Fall A: Sitzung läuft (ggf. Engine aus dem
     /// Leerlauf fortsetzen). Fall B: keine Sitzung → im Hintergrund starten (AudioRecordingIntent).
     /// false = Mikro ließ sich nicht starten (Aufrufer holt die App nach vorne).
-    func attachThought(id: String, sink: @escaping @Sendable ([Float]) -> Void) async -> Bool {
+    func attachThought(id: String, sink: @escaping @Sendable ([Float]) -> Void,
+                       onRestart: (@Sendable () -> Void)? = nil) async -> Bool {
         let begin = MonoClock.now()
         let ready = (status == .ready || status == .recording) && (audio.isRunning || idlePaused)
         let fall = ready ? "A" : "B"
@@ -1097,7 +1387,7 @@ extension SessionController {
             }
         }
         // Vorlauf 0,5 s kommt mit (wie beim Diktat); Pegel rechnet ThoughtCapture selbst.
-        let preroll = audio.processor.attach(owner: id, sink: sink, levels: nil)
+        let preroll = audio.processor.attach(owner: id, sink: sink, levels: nil, onRestart: onRestart)
         lastActivityAt = Date()
         publish()
         Diag.log("thought.attach", [
@@ -1109,12 +1399,15 @@ extension SessionController {
     }
 
     /// Gedanke löst sich vom Audio-Strom (nach dem Nachlauf). Danach ggf. Leerlauf-Pause.
-    func detachThought(id: String) {
-        audio.processor.detach(owner: id)
+    /// Liefert die Pegel der Rohpuffer dieser Aufnahme (fürs Protokoll).
+    @discardableResult
+    func detachThought(id: String) -> MicInputStats? {
+        let stats = audio.processor.detach(owner: id)
         lastActivityAt = Date()
         publish()
         schedulePauseIfIdle(reason: "thought-end")
         if startedForThought, !dictationInUse { scheduleThoughtSessionEnd() }
+        return stats
     }
 
     /// Die Paply-Tastatur wurde schon zum Diktieren benutzt → normale Bereithalte-Einstellung.
@@ -1150,4 +1443,26 @@ extension SessionController {
 
     /// Für ThoughtCapture: letzter Tap-Block (Nachlauf beim Stopp).
     var lastAudioArrivalNs: UInt64 { audio.processor.lastArrivalNs }
+}
+
+// MARK: - Pegel der Rohpuffer fürs Protokoll (nur Zahlen, nie Inhalte)
+
+extension MicInputStats {
+    /// dBFS auf eine Nachkommastelle; −160 = exakt 0. `rawHfRmsDb`: RMS der Differenzen (grober
+    /// Hochpass) – zeigt, ob überhaupt Bewegung im Signal ist (Gleichanteil/Drift ≈ −160).
+    var diagFields: DiagFields {
+        func db(_ value: Double) -> DiagValue { .d((value * 10).rounded() / 10) }
+        return [
+            "rawPeakDb": db(peakDbfs),
+            "rawRmsDb": db(rmsDbfs),
+            "rawAcRmsDb": db(acRmsDbfs),
+            "rawHfRmsDb": db(diffRmsDbfs),
+            "convPeakDb": db(convertedPeakDbfs),
+            "rawBuffers": .i(buffers),
+            "zeroBuffers": .i(zeroBuffers),
+            "silentBuffers": .i(silentBuffers),
+            "offsetBuffers": .i(offsetBuffers),
+            "micRestarts": .i(restarts),
+        ]
+    }
 }

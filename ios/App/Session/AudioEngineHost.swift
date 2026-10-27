@@ -30,6 +30,8 @@ final class AudioEngineHost: @unchecked Sendable {
     // Schnappschuss für den Main-Thread
     private let snapshotLock = NSLock()
     private var runningSnapshot = false
+    /// Meldung nach jedem erfolgreichen Motorstart (auf der Audio-Queue): Anlass, Eingangsformat
+    private var engineStarted: (@Sendable (_ reason: String, _ rate: Double, _ channels: Int) -> Void)?
 
     enum StartError: Error {
         case noInput
@@ -70,13 +72,44 @@ final class AudioEngineHost: @unchecked Sendable {
 
     // MARK: Abläufe (laufen auf der Audio-Queue, der Aufrufer wartet nur asynchron)
 
+    /// Wird einmal beim Start der App gesetzt (vor dem ersten Motorstart).
+    func onEngineStarted(_ handler: @escaping @Sendable (_ reason: String, _ rate: Double, _ channels: Int) -> Void) {
+        snapshotLock.lock()
+        engineStarted = handler
+        snapshotLock.unlock()
+    }
+
     /// Sitzung einrichten, aktivieren und Engine mit frischem Tap starten.
-    func start() async -> Outcome {
-        await onQueue { host in
+    /// `fresh`: wie `restartFresh()` – nach einem stummen Mikro alles neu aufbauen.
+    func start(fresh: Bool = false) async -> Outcome {
+        if fresh { return await restartFresh(reason: "start-fresh", discardRecording: false) }
+        return await onQueue { host in
             do throws(StartError) {
                 try host.configureSession()
                 try host.activateSession()
-                try host.startEngine()
+                try host.startEngine(reason: "start")
+                return .success(())
+            } catch {
+                host.stopEngine()
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Mikro lieferte nur digitale Stille: Engine anhalten, Sitzung einmal ab- und wieder
+    /// anmelden, neue Engine mit frischem Tap. Nur im Vordergrund (iOS erlaubt den Neustart
+    /// einer Aufnahme im Hintergrund nicht). `discardRecording`: Eine angehängte Aufnahme
+    /// verwirft ihren bisherigen (stummen) Ton, bevor der erste neue Block kommt.
+    func restartFresh(reason: String = "silence", discardRecording: Bool = true) async -> Outcome {
+        await onQueue { host in
+            host.stopEngine()
+            try? AVAudioSession.sharedInstance().setActive(false)
+            host.engine = AVAudioEngine()
+            if discardRecording { host.processor.prepareSilenceRestart() }
+            do throws(StartError) {
+                try host.configureSession()
+                try host.activateSession()
+                try host.startEngine(reason: reason)
                 return .success(())
             } catch {
                 host.stopEngine()
@@ -90,7 +123,7 @@ final class AudioEngineHost: @unchecked Sendable {
         await onQueue { host in
             do throws(StartError) {
                 try host.activateSession()
-                if !host.engine.isRunning { try host.startEngine() }
+                if !host.engine.isRunning { try host.startEngine(reason: "resume") }
                 return .success(())
             } catch {
                 return .failure(error)
@@ -102,7 +135,7 @@ final class AudioEngineHost: @unchecked Sendable {
     func restartEngine() async -> Outcome {
         await onQueue { host in
             do throws(StartError) {
-                try host.startEngine()
+                try host.startEngine(reason: "config-change")
                 return .success(())
             } catch {
                 return .failure(error)
@@ -118,7 +151,7 @@ final class AudioEngineHost: @unchecked Sendable {
             do throws(StartError) {
                 try host.configureSession()
                 try host.activateSession()
-                try host.startEngine()
+                try host.startEngine(reason: "media-reset")
                 return .success(())
             } catch {
                 return .failure(error)
@@ -170,8 +203,9 @@ final class AudioEngineHost: @unchecked Sendable {
                     } catch {
                         throw .engine(error as NSError)
                     }
+                    host.reportStart(reason: "idle-resume")
                 } else {
-                    try host.startEngine()
+                    try host.startEngine(reason: "idle-resume")
                 }
                 return .success(())
             } catch {
@@ -231,7 +265,7 @@ final class AudioEngineHost: @unchecked Sendable {
 
     /// Startet die Engine immer mit frisch ermitteltem Eingangsformat: Ein vorhandener Tap
     /// (z. B. nach einer Unterbrechung oder Routenwechsel) wird ersetzt.
-    private func startEngine() throws(StartError) {
+    private func startEngine(reason: String) throws(StartError) {
         if engine.isRunning { engine.stop() }
         let input = engine.inputNode
         if tapInstalled {
@@ -249,6 +283,15 @@ final class AudioEngineHost: @unchecked Sendable {
         } catch {
             throw .engine(error as NSError)
         }
+        reportStart(reason: reason)
+    }
+
+    private func reportStart(reason: String) {
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        snapshotLock.lock()
+        let handler = engineStarted
+        snapshotLock.unlock()
+        handler?(reason, format.sampleRate, Int(format.channelCount))
     }
 
     private func stopEngine() {

@@ -1,9 +1,16 @@
+import Accelerate
 @preconcurrency import AVFoundation
 import Foundation
+import PaplyKit
 
 /// Läuft im Audio-Tap (eigener Thread): wandelt auf 16 kHz mono Float32, hält den
 /// Vorlauf (~0,5 s) und reicht während eines Diktats die Samples weiter.
 /// Im Leerlauf wird nichts gespeichert oder gesendet – nur der Ringpuffer im Speicher.
+///
+/// Jeder Rohpuffer wird außerdem gemessen (nur Zahlen): Liefert der Motor 1,5 s lang nur
+/// digitale Stille, gilt das Mikro als tot (`MicSilenceDetector`, Vorfall 27.10.2026) –
+/// der Wechsel geht an `silenceHandler`. Während einer Aufnahme sammeln sich die Pegel
+/// in `MicInputStats` fürs Protokoll.
 final class AudioTapProcessor: @unchecked Sendable {
     static let sampleRate: Double = 16_000
     static let prerollSamples = 8_000 // 0,5 s
@@ -33,6 +40,15 @@ final class AudioTapProcessor: @unchecked Sendable {
     /// Wird auch im Leerlauf mitgeführt, damit das erste Diktat schon richtig skaliert.
     private var noiseFloorDb: Float = -60
     private var stats = TapStats()
+    /// Totes Mikro? (zählt seit dem letzten Motorstart)
+    private var silence = MicSilenceDetector()
+    private var silenceHandler: (@Sendable (MicSilenceDetector.Change) -> Void)?
+    /// Pegel der laufenden Aufnahme (seit `attach`)
+    private var recording = MicInputStats()
+    /// Nach einem Neustart wegen stummen Mikros: Die Aufnahme verwirft vor dem ersten neuen
+    /// Block ihren bisherigen (stummen) Ton – gemeldet im Tap-Thread, also in Reihenfolge.
+    private var pendingDiscard = false
+    private var onRestart: (@Sendable () -> Void)?
 
     struct TapStats: Sendable {
         var buffers = 0
@@ -48,19 +64,50 @@ final class AudioTapProcessor: @unchecked Sendable {
     // MARK: Tap
 
     func process(_ buffer: AVAudioPCMBuffer, arrivalNs: UInt64) {
+        let raw = Self.measure(buffer) // reine Rechnung, außerhalb des Locks
+        let seconds = buffer.format.sampleRate > 0 ? Double(buffer.frameLength) / buffer.format.sampleRate : 0
         lock.lock()
+        let change = silence.feed(raw, seconds: seconds)
+        let handler = change == nil ? nil : silenceHandler
+        if sink != nil { recording.add(raw) }
         let samples = convert(buffer)
         updateStats(buffer: buffer, arrivalNs: arrivalNs)
         guard let samples, !samples.isEmpty else {
             lock.unlock()
+            if let change { handler?(change) }
             return
         }
         appendPreroll(samples)
         measureLevels(samples, arrivalNs: arrivalNs)
         let sink = self.sink
-        if sink != nil { consumedUpTo = totalSamples } // gehört diesem Diktat
+        var restart: (@Sendable () -> Void)?
+        if sink != nil {
+            consumedUpTo = totalSamples // gehört diesem Diktat
+            var peak: Float = 0
+            samples.withUnsafeBufferPointer { vDSP_maxmgv($0.baseAddress!, 1, &peak, vDSP_Length($0.count)) }
+            recording.convertedPeak = max(recording.convertedPeak, peak)
+            if pendingDiscard { restart = onRestart }
+        }
+        pendingDiscard = false
         lock.unlock()
+        if let change { handler?(change) }
+        restart?()
         sink?(samples)
+    }
+
+    /// Pegel eines Rohpuffers über alle Kanäle (nur Float-Formate; sonst leer = nicht bewertet).
+    private static func measure(_ buffer: AVAudioPCMBuffer) -> MicBufferLevel {
+        let frames = Int(buffer.frameLength)
+        guard frames > 0, let data = buffer.floatChannelData else { return MicBufferLevel() }
+        let channels = Int(buffer.format.channelCount)
+        if buffer.format.isInterleaved {
+            return MicBufferLevel.measure(UnsafeBufferPointer(start: data[0], count: frames * channels))
+        }
+        var level = MicBufferLevel()
+        for channel in 0..<channels {
+            level.merge(MicBufferLevel.measure(UnsafeBufferPointer(start: data[channel], count: frames)))
+        }
+        return level
     }
 
     private func convert(_ buffer: AVAudioPCMBuffer) -> [Float]? {
@@ -162,8 +209,12 @@ final class AudioTapProcessor: @unchecked Sendable {
     /// Hängt einen Empfänger an und gibt ihm zuerst den Vorlauf – unter dem Lock,
     /// damit kein Tap-Block dazwischenrutscht (lückenlos, ohne Doppel).
     /// Liefert die Länge des Vorlaufs in Samples.
+    ///
+    /// `onRestart` meldet (im Tap-Thread, direkt vor dem ersten neuen Block), dass das Mikro
+    /// wegen digitaler Stille neu gestartet wurde: Der bisherige Ton war stumm und darf weg.
     @discardableResult
-    func attach(owner: String, sink: @escaping @Sendable ([Float]) -> Void, levels: LevelChannel?) -> Int {
+    func attach(owner: String, sink: @escaping @Sendable ([Float]) -> Void, levels: LevelChannel?,
+                onRestart: (@Sendable () -> Void)? = nil) -> Int {
         lock.lock()
         defer { lock.unlock() }
         // Hängt noch ein Diktat (z. B. im Nachlauf nach „fertig“), gehört alles Bisherige ihm.
@@ -178,24 +229,30 @@ final class AudioTapProcessor: @unchecked Sendable {
         self.sink = sink
         self.sinkOwner = owner
         self.levels = levels
+        self.onRestart = onRestart
+        pendingDiscard = false
+        recording = MicInputStats()
         levelSum = 0
         levelCount = 0
         return preroll.count
     }
 
-    /// Löst nur, wenn der Empfänger noch diesem Diktat gehört.
-    func detach(owner: String) {
+    /// Löst nur, wenn der Empfänger noch diesem Diktat gehört. Liefert die Pegel der Aufnahme.
+    @discardableResult
+    func detach(owner: String) -> MicInputStats? {
         lock.lock()
-        if sinkOwner == owner {
-            consumedUpTo = totalSamples
-            sink = nil
-            sinkOwner = nil
-            levels = nil
-        }
-        lock.unlock()
+        defer { lock.unlock() }
+        guard sinkOwner == owner else { return nil }
+        consumedUpTo = totalSamples
+        sink = nil
+        sinkOwner = nil
+        levels = nil
+        onRestart = nil
+        pendingDiscard = false
+        return recording
     }
 
-    /// Nach Engine-Neustart oder Formatwechsel: Wandler neu, Vorlauf leeren.
+    /// Nach Engine-Neustart oder Formatwechsel: Wandler neu, Vorlauf leeren, Stille-Zählung neu.
     func reset() {
         lock.lock()
         converter = nil
@@ -204,7 +261,42 @@ final class AudioTapProcessor: @unchecked Sendable {
         prerollFilled = 0
         consumedUpTo = totalSamples
         stats.lastArrivalNs = 0
+        silence.reset()
         lock.unlock()
+    }
+
+    // MARK: Totes Mikro
+
+    /// Wird einmal beim Start der App gesetzt; Aufruf im Tap-Thread.
+    func setSilenceHandler(_ handler: @escaping @Sendable (MicSilenceDetector.Change) -> Void) {
+        lock.lock()
+        silenceHandler = handler
+        lock.unlock()
+    }
+
+    /// Vor einem Neustart wegen stummen Mikros: Die angehängte Aufnahme verwirft ihren
+    /// bisherigen Ton, sobald der neue Motor liefert, und läuft dann nahtlos weiter.
+    func prepareSilenceRestart() {
+        lock.lock()
+        if sink != nil {
+            pendingDiscard = true
+            recording.restarts += 1
+        }
+        lock.unlock()
+    }
+
+    /// Seit dem letzten Motorstart kam echter Ton (mindestens ein Puffer ohne digitale Stille).
+    var heardSignal: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return silence.heardSignal
+    }
+
+    /// Wie lange die laufende Stille schon dauert (ms).
+    var silentMs: Double {
+        lock.lock()
+        defer { lock.unlock() }
+        return silence.silentSeconds * 1000
     }
 
     var currentStats: TapStats {

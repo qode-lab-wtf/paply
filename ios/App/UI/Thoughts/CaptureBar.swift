@@ -106,6 +106,8 @@ struct CaptureBarContent: View {
             line(icon: AnyView(glyphIcon(icon, tint: .paplySecondaryText)), text: text)
         case .nothing:
             line(icon: AnyView(glyphIcon(.triangleAlert, tint: .paplyBeak)), text: "Nichts verstanden – nichts gespeichert")
+        case .micNote(let text):
+            line(icon: AnyView(glyphIcon(.micOff, tint: .paplyBeak)), text: text)
         case .discarded(let id):
             discardedLine(id)
         case .note(let text):
@@ -232,7 +234,7 @@ struct CaptureBarContent: View {
             flow.openBig(source: CaptureFlow.barSource)
         case .ordering(let id), .saved(let id), .waiting(let id, _, _):
             nav.open(id)
-        case .nothing, .note, .hidden, .discarded:
+        case .nothing, .micNote, .note, .hidden, .discarded:
             break
         }
     }

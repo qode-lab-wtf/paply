@@ -62,6 +62,11 @@ struct SessionState: Codable, Sendable, Equatable {
     /// z. B. Unterbrechungsgrund
     var detail: String?
     var dictation: DictationStatus?
+    /// Mikro lieferte nur digitale Stille und muss neu starten (geht nur mit der App vorne).
+    /// Die Tastatur öffnet dann die App statt stumm aufzunehmen. nil = nein.
+    var micSilent: Bool?
+    /// Zusatz zu `micSilent`: Grund ist „zweimal nichts verstanden“ (Mikro liefert Ton, aber keine Sprache)
+    var micNoSpeech: Bool?
 }
 
 /// `keyboard-command.json` – letzter Wunsch der Tastatur. Darwin-Notifications
@@ -117,6 +122,10 @@ struct DictationResult: Codable, Sendable {
     var retryable: Bool?
     /// Keine Sprache erkannt (Stille, Rauschen) – nichts einsetzen, „Nichts verstanden“ zeigen
     var noSpeech: Bool?
+    /// Nichts erkannt, weil das Mikro stumm war (nur digitale Stille) – „Mikro war stumm“ zeigen
+    var micSilent: Bool?
+    /// Zweimal nichts verstanden: Paply muss das Mikro neu starten – Neustart anbieten
+    var micRestart: Bool?
     /// MonoClock: Befehl „finish“ in der App angekommen
     var finishReceivedNs: UInt64
     /// MonoClock: Ergebnis geschrieben

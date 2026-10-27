@@ -27,6 +27,10 @@ final class KeyboardViewController: UIInputViewController {
         case noKey
         case notResponding
         case openFailed
+        /// Das Mikro lieferte nur digitale Stille; es startet nur mit der App vorne neu
+        case micSilent
+        /// Zweimal nichts verstanden: Paply startet das Mikro sicherheitshalber neu (App vorne)
+        case micNoSpeech
         /// Endgültiger Fehler; `retryable` = die App hält das Audio noch (max. 10 Min)
         case network(String, retryable: Bool)
     }
@@ -56,6 +60,21 @@ final class KeyboardViewController: UIInputViewController {
     private var timers: [Task<Void, Never>] = []
     private var keepAlive: Task<Void, Never>?
     private var ignoreResult = false
+    /// Warum die App fürs Mikro geöffnet wird (eigener Text im Öffnen-Hinweis); nil = normal
+    private var openingFor: MicRestart?
+
+    /// Die App muss das Mikro neu starten (geht nur mit der App vorne)
+    private enum MicRestart {
+        /// nur digitale Stille
+        case silent
+        /// zweimal nichts verstanden
+        case noSpeech
+
+        init?(_ session: SessionState?) {
+            guard session?.micSilent == true else { return nil }
+            self = session?.micNoSpeech == true ? .noSpeech : .silent
+        }
+    }
 
     // Messpunkte (MonoClock)
     private let loadNs = MonoClock.now()
@@ -68,6 +87,10 @@ final class KeyboardViewController: UIInputViewController {
 
     private static let attachKey = "kbAttachID"
     private static let attachNsKey = "kbAttachNs"
+    /// Letztes automatisches Öffnen für einen Mikro-Neustart (MonoClock) – keine Öffnen-Schleife,
+    /// falls auch der Neustart in der App nichts bringt.
+    private static let silentOpenNsKey = "kbSilentOpenNs"
+    private static let silentAutoOpenPause: Double = 30_000
 
     /// Ohne Pong so lange warten, bevor die App geöffnet wird. Ist die Tastatur vorher weg
     /// (Durchschalten mit 🌐), passiert gar nichts.
@@ -310,14 +333,30 @@ final class KeyboardViewController: UIInputViewController {
             if alive {
                 schedule(after: .milliseconds(1_000)) { $0.checkAck(stage: .slow) }
             } else {
-                noSession(interrupted: session?.status == .interrupted)
+                noSession(interrupted: session?.status == .interrupted, restart: MicRestart(session))
             }
         case .slow:
             show(.failure(.notResponding))
         }
     }
 
-    private func noSession(interrupted: Bool) {
+    private func noSession(interrupted: Bool, restart: MicRestart? = nil) {
+        if let restart {
+            // Mikro muss neu starten (stumm bzw. zweimal nichts verstanden) – geht nur mit der App
+            // vorne. Automatisch öffnen höchstens alle 30 s; half der Neustart nicht, steht die
+            // Meldung mit „Paply starten“ da.
+            let last = AppGroup.defaults?.object(forKey: Self.silentOpenNsKey) as? Double
+            let recently = last.map { MonoClock.ms(from: UInt64($0), to: MonoClock.now()) < Self.silentAutoOpenPause } ?? false
+            Diag.log("kb.micRestart", ["cause": .s(restart == .silent ? "silent" : "noSpeech"),
+                                       "autoOpen": .b(SharedSettings.autoOpenApp && !recently)])
+            if SharedSettings.autoOpenApp, !recently {
+                AppGroup.defaults?.set(Double(MonoClock.now()), forKey: Self.silentOpenNsKey)
+                openApp(reason: restart == .silent ? "mic-silent" : "mic-no-speech", restart: restart)
+            } else {
+                show(.failure(restart == .silent ? .micSilent : .micNoSpeech))
+            }
+            return
+        }
         if SharedSettings.autoOpenApp {
             openApp(reason: interrupted ? "interrupted" : "no-session")
         } else {
@@ -374,8 +413,9 @@ final class KeyboardViewController: UIInputViewController {
         advanceToNextInputMode()
     }
 
-    private func openApp(reason: String) {
+    private func openApp(reason: String, restart: MicRestart? = nil) {
         guard let id = dictationID, let url = PaplyURL.sessionStart(dictationID: id, sentNs: MonoClock.now()) else { return }
+        openingFor = restart
         show(.opening)
         storeAttachID(id)
         Diag.log("kb.open", ["reason": .s(reason), "id": .s(String(id.prefix(8)))])
@@ -403,9 +443,10 @@ final class KeyboardViewController: UIInputViewController {
     private func readState() {
         guard let session = SharedStore.read(SessionState.self, .session) else { return }
         let waiting = state == .connecting || state == .opening
+        let restart = MicRestart(session)
         guard let id = dictationID, let dictation = session.dictation, dictation.id == id else {
             if session.status == .interrupted, state == .connecting || isRecording {
-                noSession(interrupted: true) // Variante A öffnet die App, B zeigt „Mikro aus“
+                noSession(interrupted: true, restart: restart) // Variante A öffnet die App, B zeigt „Mikro aus“
             }
             return
         }
@@ -415,7 +456,7 @@ final class KeyboardViewController: UIInputViewController {
             Diag.log("kb.refused", ["code": .s(code.rawValue)])
             switch code {
             case .noAPIKey: show(.failure(.noKey))
-            case .interrupted: noSession(interrupted: true)
+            case .interrupted: noSession(interrupted: true, restart: restart)
             case .sessionNotReady: noSession(interrupted: false)
             }
             return
@@ -439,7 +480,7 @@ final class KeyboardViewController: UIInputViewController {
             // z. B. Wiederanlauf aus dem Leerlauf gescheitert → „Mikro aus“ wie bei Unterbrechung
             if isRecording {
                 if session.status == .interrupted {
-                    noSession(interrupted: true)
+                    noSession(interrupted: true, restart: restart) // Mikro muss neu starten: Meldung statt stiller Aufnahme
                 } else {
                     show(.failure(.notResponding))
                 }
@@ -486,8 +527,16 @@ final class KeyboardViewController: UIInputViewController {
         } else if let error = result.errorMessage {
             show(.failure(.network(error, retryable: result.retryable ?? false)))
         } else {
-            Diag.log("kb.noSpeech", ["id": .s(String(id.prefix(8))), "flag": .b(result.noSpeech ?? false)])
-            show(.empty)
+            Diag.log("kb.noSpeech", ["id": .s(String(id.prefix(8))), "flag": .b(result.noSpeech ?? false),
+                                     "micSilent": .b(result.micSilent ?? false), "micRestart": .b(result.micRestart ?? false)])
+            // Lag es am Mikro: ehrlich sagen und den Neustart anbieten (Tipp öffnet Paply kurz)
+            if result.micSilent == true {
+                show(.failure(.micSilent))
+            } else if result.micRestart == true {
+                show(.failure(.micNoSpeech))
+            } else {
+                show(.empty)
+            }
         }
     }
 
@@ -501,6 +550,10 @@ final class KeyboardViewController: UIInputViewController {
         case .empty: startRecording()
         case .failure(.interrupted), .failure(.noSession), .failure(.notResponding), .failure(.openFailed):
             openApp(reason: "tap")
+        case .failure(.micSilent):
+            openApp(reason: "tap", restart: .silent)
+        case .failure(.micNoSpeech):
+            openApp(reason: "tap", restart: .noSpeech)
         default: break
         }
     }
@@ -511,6 +564,10 @@ final class KeyboardViewController: UIInputViewController {
         case .failure(.noFullAccess): advance(reason: "noFullAccess")
         case .failure(.noKey), .failure(.noSession), .failure(.interrupted), .failure(.notResponding), .failure(.openFailed):
             openApp(reason: "button")
+        case .failure(.micSilent):
+            openApp(reason: "button", restart: .silent)
+        case .failure(.micNoSpeech):
+            openApp(reason: "button", restart: .noSpeech)
         case .failure(.network(_, let retryable)): retryable ? retry() : startRecording()
         case .empty: startRecording()
         default: break
@@ -606,7 +663,14 @@ final class KeyboardViewController: UIInputViewController {
             let preview = String(text.prefix(90)) + (text.count > 90 ? " …" : "")
             panel.showMessage(.init(title: "Wartender Text", subtitle: "„\(preview)“", action: "Einsetzen", secondary: "Neu sprechen"), look: .forest)
         case .opening:
-            panel.showMessage(.init(title: "Paply schaltet das Mikro ein …", subtitle: "Danach oben links auf „◀︎“ tippen – du kannst gleich losreden.", spinner: true), look: .forest)
+            switch openingFor {
+            case .silent?:
+                panel.showMessage(.init(title: "Mikro war stumm – Paply startet neu …", subtitle: "Danach oben links auf „◀︎“ tippen – du kannst gleich losreden.", spinner: true), look: .forest)
+            case .noSpeech?:
+                panel.showMessage(.init(title: "Mikro wird neu gestartet …", subtitle: "Danach oben links auf „◀︎“ tippen und bitte nochmal sprechen.", spinner: true), look: .forest)
+            case nil:
+                panel.showMessage(.init(title: "Paply schaltet das Mikro ein …", subtitle: "Danach oben links auf „◀︎“ tippen – du kannst gleich losreden.", spinner: true), look: .forest)
+            }
         case .failure(let failure):
             panel.showMessage(message(for: failure), look: .forest)
             Diag.log("kb.failure", ["kind": .s(name(of: newState))])
@@ -630,6 +694,10 @@ final class KeyboardViewController: UIInputViewController {
             .init(title: "Paply antwortet nicht", subtitle: "Ein Tipp öffnet Paply und startet das Mikro neu.", action: "Paply öffnen", secondary: "Andere Tastatur")
         case .openFailed:
             .init(title: "Paply ließ sich nicht öffnen", subtitle: "Öffne Paply einmal selbst und komm dann zurück.", action: "Nochmal versuchen", secondary: "Andere Tastatur")
+        case .micSilent:
+            .init(title: "Mikro war stumm", subtitle: "Paply muss das Mikro neu starten. Ein Tipp öffnet Paply kurz.", action: "Paply starten", secondary: "Andere Tastatur")
+        case .micNoSpeech:
+            .init(title: "Zweimal nichts verstanden", subtitle: "Paply startet das Mikro sicherheitshalber neu. Ein Tipp öffnet Paply kurz – dann bitte nochmal sprechen.", action: "Paply starten", secondary: "Andere Tastatur")
         case .network(let text, let retryable):
             retryable
                 ? .init(title: "Das hat nicht geklappt", subtitle: "\(text)\nTippen = erneut senden · ← wischen = verwerfen", action: "Erneut versuchen")
@@ -879,6 +947,8 @@ final class KeyboardViewController: UIInputViewController {
             case .noKey: "noKey"
             case .notResponding: "notResponding"
             case .openFailed: "openFailed"
+            case .micSilent: "micSilent"
+            case .micNoSpeech: "micNoSpeech"
             case .network: "network"
             }
         }
