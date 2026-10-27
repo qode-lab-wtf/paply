@@ -4,19 +4,25 @@ import SwiftUI
 /// „Landkarte“ der Gedanken (Entwurf docs/prototypes/paply-ios/gedanken-richtungen.html, Richtung 2).
 ///
 /// Themen sind leuchtende Kreise (Größe = Anzahl), Gedanken kleine Punkte auf einem Bogen darüber, feine
-/// Linien zeigen Verknüpfungen. Die Anordnung kommt aus `MapLayout` (PaplyKit) und bleibt über gemerkte
-/// Anker (`MapAnchors`) an ihrem Platz – nichts wird bei jedem Öffnen neu ausgewürfelt.
+/// Linien zeigen Verknüpfungen. Die Anordnung kommt aus `MapLayout` (PaplyKit, im Hintergrund gerechnet) und
+/// bleibt über gemerkte Anker (`MapAnchors`) an ihrem Platz – ein Kreis liegt jedes Mal genau dort.
 ///
 /// Bedienung: Tipp auf einen Kreis (oder seinen Namen) setzt `focusedTopic`, die Kamera fährt mit weicher
 /// Feder hinein; Tipp auf einen Punkt öffnet den Gedanken (`onOpenThought`); Tipp auf freie Fläche setzt
 /// `focusedTopic = nil`. Ohne Fokus passt die Karte immer ganz auf den Bildschirm – kein Ziehen, kein Zoomen.
 ///
+/// Kennungen für `focusedTopic`: Themen-ID, `noTopicID` („Ohne Thema“) oder `moreID` (Sammelkreis „Weitere
+/// Themen“ – Gedanken dazu liefert `ThoughtsModel.mapCollectedThoughts()`).
+///
 /// Platz: Oben gilt der sichere Bereich der Ansicht (Kopfzeilen per `.safeAreaPadding(.top, …)` o. ä.),
-/// unten `bottomInset` (vom Panel verdeckte Höhe) bzw. der sichere Bereich, je nachdem was größer ist. Die
-/// Ansicht zeichnet ihren Hintergrund selbst randlos.
+/// unten `bottomInset` (vom Panel verdeckte Höhe) bzw. der sichere Bereich, je nachdem was größer ist. Bleibt
+/// darüber zu wenig Platz (Panel ganz oben), behält die Kamera ihre letzte Einstellung. Die Ansicht zeichnet
+/// ihren Hintergrund selbst randlos.
 struct ThoughtMapView: View {
     /// Pseudo-Thema „Ohne Thema“ (`focusedTopic` == noTopicID → Gedanken ohne Thema)
     static let noTopicID = "_none"
+    /// Sammelkreis „Weitere Themen“ (`focusedTopic` == moreID → `ThoughtsModel.mapCollectedThoughts()`)
+    static let moreID = MapLayout.moreID
 
     /// nil = Übersicht; sonst hineingezoomt (animiert)
     @Binding var focusedTopic: String?
@@ -30,6 +36,7 @@ struct ThoughtMapView: View {
     @State private var engine = MapEngine()
     @State private var motion = MapMotion()
     @State private var hitBox = MapHitBox()
+    @State private var stageMemory = MapStageMemory()
     @State private var lastFocus: String?
     @State private var taps = 0
     @State private var settled = 0
@@ -46,8 +53,11 @@ struct ThoughtMapView: View {
     static let cameraSpring = Animation.interpolatingSpring(mass: 1, stiffness: 110, damping: 21)
 
     var body: some View {
+        let anchors = MapAnchors.shared
         let now = Date()
-        let scene = engine.scene(model: model, anchors: MapAnchors.shared.anchors, now: now)
+        // Vor dem ersten Entsperren sind die gemerkten Plätze nicht lesbar: dann nichts anlegen und nichts zeichnen
+        let request = anchors.isReady ? MapEngine.makeRequest(model: model, anchors: anchors.anchors) : nil
+        let scene = engine.scene(model: model, total: request?.total ?? 0, now: now) ?? .empty
         let _ = motion.update(scene, now: now)
         let _ = settled // nach Übergängen neu zeichnen, damit die Zeitleiste anhält
         let style = MapStyle(scheme)
@@ -56,16 +66,16 @@ struct ThoughtMapView: View {
             let size = CGSize(width: outer.size.width + insets.leading + insets.trailing,
                               height: outer.size.height + insets.top + insets.bottom)
             let stage = MapStage(size: size, top: insets.top, bottom: max(bottomInset, insets.bottom))
-            stageView(scene: scene, stage: stage, style: style, now: now)
+            stageView(scene: scene, stage: stage, style: style, now: now, ready: request != nil && engine.layout != nil)
                 .frame(width: size.width, height: size.height)
                 .offset(x: -insets.leading, y: -insets.top)
         }
         .background { style.background }
         .sensoryFeedback(.impact(weight: .light, intensity: 0.75), trigger: taps)
-        .onChange(of: scene.layout.anchors, initial: true) { _, anchors in
-            // erst mit geladenem Modell – sonst sähen alle Themen gelöscht aus
-            guard model.isLoaded else { return }
-            MapAnchors.shared.remember(anchors)
+        .onAppear { anchors.prepare() }
+        .onChange(of: request, initial: true) { _, request in
+            guard let request else { return }
+            engine.request(request, persist: model.isLoaded)
         }
         .onChange(of: focusedTopic, initial: true) { _, id in
             guard let id else { return }
@@ -97,9 +107,10 @@ struct ThoughtMapView: View {
     }
 
     @ViewBuilder
-    private func stageView(scene: MapScene, stage: MapStage, style: MapStyle, now: Date) -> some View {
+    private func stageView(scene: MapScene, stage proposed: MapStage, style: MapStyle, now: Date, ready: Bool) -> some View {
         let focus = validFocus(scene)
         let legend = showsLegend(scene)
+        let stage = stageMemory.usable(proposed, needs: Self.neededHeight(scene: scene, focus: focus))
         let target = Self.camera(scene: scene, focus: focus, stage: stage, legend: legend)
         let running = motion.isRunning(at: now)
         ZStack {
@@ -112,7 +123,7 @@ struct ThoughtMapView: View {
                           onTopic: { select($0) }, onThought: onOpenThought)
             }
             .modifier(CameraMotion(focus: focus, version: scene.version, reduceMotion: reduceMotion))
-            .mask(Self.topFade(stage))
+            .mask(Self.topFade(proposed))
 
             if legend {
                 Text(scene.total <= 2 ? "Mit jedem Gedanken wächst deine Karte."
@@ -126,7 +137,7 @@ struct ThoughtMapView: View {
                     .animation(.easeInOut(duration: 0.25), value: focus)
                     .allowsHitTesting(false)
             }
-            if scene.layout.bubbles.isEmpty, model.isLoaded {
+            if ready, scene.layout.bubbles.isEmpty, model.isLoaded {
                 // noch nichts auf der Karte: leer – oder der erste Gedanke wird gerade geordnet
                 let ordering = !model.thoughts.isEmpty
                 VStack(spacing: 6) {
@@ -170,6 +181,13 @@ struct ThoughtMapView: View {
 
     // MARK: Kamera
 
+    /// So hoch muss der sichtbare Teil mindestens sein, damit die Kamera neu rechnet: im Fokus der ganze Kreis
+    /// samt Bogen (2 × Außenradius), in der Übersicht ein brauchbarer Streifen.
+    static func neededHeight(scene: MapScene, focus: String?) -> CGFloat {
+        guard let focus, let bubble = scene.layout.bubble(focus) else { return 120 }
+        return max(120, 2 * bubble.outerRadius)
+    }
+
     /// Übersicht: ganze Karte im sichtbaren Bereich (bei wenigen Themen bis 1,8-fach).
     /// Fokus: nur so nah, dass die Punkte gut zu treffen sind (≈ 26 pt Abstand, 1,35- bis 2,2-fach) – die
     /// Nachbarn bleiben am Rand gedimmt sichtbar, man behält die Orientierung. Bogen und Kreis passen immer
@@ -186,7 +204,7 @@ struct ThoughtMapView: View {
             let spacing = own.count >= 2 ? hypot(own[0].position.x - own[1].position.x, own[0].position.y - own[1].position.y)
                 : MapLayoutConfig().maxDotSpacing
             let wanted = min(2.2, max(1.35, 26 / max(spacing, 1), overview.zoom * 1.25))
-            let zoom = max(0.2, min(fit, wanted))
+            let zoom = max(0.5, min(fit, wanted))
             return MapCamera(zoom: zoom, center: CGPoint(x: bubble.center.x, y: bubble.center.y - (bubble.outerRadius - bubble.radius) / 2))
         }
         return overview
@@ -242,6 +260,30 @@ struct ThoughtMapView: View {
             return
         }
         if focusedTopic != nil { focusedTopic = nil }
+    }
+}
+
+/// Letzte brauchbare Bühne: Verdeckt das Panel fast alles (Raststufe „groß“), rechnet die Kamera nicht mit
+/// einem winzigen Streifen (das ergäbe einen Maßstab nahe 0), sondern bleibt, wo sie war. Reine Buchführung
+/// im `body`, löst nichts aus.
+@MainActor
+final class MapStageMemory {
+    private var last: MapStage?
+
+    func usable(_ stage: MapStage, needs height: CGFloat) -> MapStage {
+        let free = stage.size.height - stage.top - stage.bottom
+        if free >= height {
+            last = stage
+            return stage
+        }
+        if var kept = last, kept.size == stage.size, kept.top == stage.top {
+            kept.bottom = min(kept.bottom, max(0, stage.size.height - stage.top - height))
+            return kept
+        }
+        // noch nichts gemerkt (oder Größe geändert): unten nur so weit verdecken, dass es reicht
+        var fallback = stage
+        fallback.bottom = max(0, stage.size.height - stage.top - height)
+        return fallback
     }
 }
 

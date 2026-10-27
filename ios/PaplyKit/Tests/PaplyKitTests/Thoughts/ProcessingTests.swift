@@ -300,6 +300,46 @@ struct ProcessingTests {
         #expect(await structurer.calls == 1)
     }
 
+    /// Der letzte Gedanke eines Themas wird endgültig gelöscht, während die KI genau dieses Thema wählt: Das Thema
+    /// kommt mit Name und Symbol von damals wieder, der neue Gedanke landet nicht still „Ohne Thema“.
+    @Test func topicPrunedDuringTheCallIsCreatedAgain() async throws {
+        let structurer = MockStructurer([Self.success(topic: .existing("t_boats"))])
+        let h = try Harness.make(structurer: structurer)
+        defer { h.cleanup() }
+        try await h.store.saveTopics([Topic(id: "t_boats", title: "Boote", icon: .flag, owner: .user)])
+        let last = StoreSupport.thought(createdAt: h.clock.now.addingTimeInterval(-600), topicId: "t_boats")
+        try await h.store.save(last)
+        let store = h.store
+        await structurer.setOnCall { _ in await store.purge(last.id) } // während des Aufrufs
+        let id = try await h.capture()
+        await h.run()
+        let thought = try #require(await h.thought(id))
+        let topics = await h.store.topics()
+        let topic = try #require(ThoughtStore.resolve(thought.topicId, in: topics))
+        #expect(thought.state == .done && thought.topicOwner == .ai)
+        #expect(topics.count == 1 && topic.title == "Boote" && topic.icon == .flag)
+        #expect(await h.store.aiResultRecord(id)?.chosenTopic == TopicLabel(name: "Boote", icon: .flag))
+    }
+
+    /// Dasselbe nach einem Neustart: Das gesicherte Ergebnis trägt Name und Symbol, das Thema fehlt inzwischen.
+    @Test func cachedResultRecreatesAVanishedTopic() async throws {
+        let h = try Harness.make()
+        defer { h.cleanup() }
+        let id = try await h.capture()
+        try await h.store.saveSourceOnce(id, ThoughtSource(text: "die boote streichen", sentences: [], model: "whisper-large-v3",
+                                                           createdAt: h.clock.now, languages: ["de"], audioSeconds: 1))
+        let cached = StructureResult(title: "Boote streichen", cleanText: "Die Boote streichen.", topic: .existing("t_gone"),
+                                     tasks: [], related: [])
+        try await h.store.saveAIResult(id, AIResultRecord(result: cached, model: "openai/gpt-oss-120b",
+                                                          chosenTopic: TopicLabel(name: "Boote", icon: .flag)))
+        try await h.store.update(id) { $0.state = .structuring }
+        await h.run("launch")
+        let thought = try #require(await h.thought(id))
+        let topic = try #require(await h.store.resolveTopic(thought.topicId))
+        #expect(topic.title == "Boote" && topic.icon == .flag && topic.owner == .ai)
+        #expect(await h.structurer.calls == 0)
+    }
+
     @Test func userFieldsSurviveReorganize() async throws {
         let structurer = MockStructurer()
         let h = try Harness.make(structurer: structurer)

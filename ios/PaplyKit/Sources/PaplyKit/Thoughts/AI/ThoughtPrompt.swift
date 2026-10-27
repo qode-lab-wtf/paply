@@ -8,7 +8,8 @@ public enum ThoughtPrompt {
     /// v1: wörtlich KONZEPT §6.4 (E1 Tag 1). v2: Titel als Schlagzeile, keine verneinten/zurückgenommenen
     /// Aufgaben, Zahlen wie gesprochen, `now` in der Nutzer-Nachricht, Beispiel für `changes` (EVAL.md).
     /// v3: eine Zeile zu Themen mit Beschreibung (`about`: Vorrang bei inhaltlicher Passung; `mentioned`: starkes
-    /// Indiz ohne Zwang). Neue Varianten beschriebener Themen leitet der Code um (`TopicMentions.describedMatch`).
+    /// Indiz ohne Zwang). Neue Themen, die eindeutig ein beschriebenes Thema meinen, leitet der Code um
+    /// (`TopicMentions.describedMatch`).
     public static let version = 3
 
     // MARK: Systemprompt v3 (§6.4, wörtlich)

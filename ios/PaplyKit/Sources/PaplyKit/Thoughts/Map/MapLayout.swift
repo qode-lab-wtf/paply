@@ -4,20 +4,26 @@ import Foundation
 // „Landkarte“ der Gedanken: deterministische Anordnung als reine Funktion (Entwurf
 // docs/prototypes/paply-ios/gedanken-richtungen.html, Richtung 2).
 //
+// Leitsatz: Die Kreise liegen jedes Mal am selben Platz – sonst verliert man die Orientierung.
+//
 // - Themen sind Kreise; der Radius wächst mit der Wurzel der Anzahl und ist gedeckelt.
-// - Jedes Thema belegt eine feste Fläche: Kreis samt Punkte-Ringen und darunter ein reserviertes Feld für
-//   die Beschriftung. Zwei Flächen halten immer mindestens `gap` Abstand – nichts überlappt.
-// - Orientierung bleibt: Ein Thema mit gemerktem Anker bleibt dort. Wächst ein Kreis, bewegt sich nur, was
-//   er berührt, und so wenig wie möglich (`MapGeometry.resolve`: Nachbarn weichen nach außen, oder – am Rand
-//   oft kürzer – der gewachsene Kreis rückt selbst ein Stück; gewählt wird der kleinere Gesamtweg). Ein
-//   neues Thema kommt an eine freie Stelle (Berührpunkte rund um die vorhandenen Themen): dorthin, wo der
-//   Rahmen der Karte im Bildschirmformat am wenigsten wächst, bei Gleichstand möglichst nahe der Mitte.
-//   Es wird nie alles neu sortiert.
+// - Ein gemerkter Mittelpunkt (Anker) ändert sich nie: Wächst ein Kreis, bewegt sich nichts.
+// - Damit das geht, hält ein neues Thema beim Anlegen so viel Platz frei, wie es je brauchen kann (Kreis am
+//   Deckel samt Punkte-Bogen und Beschriftung, `MapFootprint.reserve`). Neue Themen kommen nur in freien
+//   Platz; die Reserven überlappen nie.
+// - Reicht der Platz trotzdem nicht (alte Anker, Titelzeilen bei sehr wenigen Gedanken), wird der sichtbare
+//   Kreis begrenzt („so groß wie Platz ist“), nie ein Nachbar verschoben.
+// - Neue Themen: dorthin, wo der Rahmen der Karte im Bildschirmformat am wenigsten wächst und die Themen
+//   ausgewogen um die Mitte liegen, bei Gleichstand möglichst nahe der Mitte – so werden 2–5 Themen ein
+//   Dreieck oder Versatz statt einer Spalte.
+//   „Ohne Thema“ und der Sammelkreis (Pseudo-Themen, Kennung mit „_“) kommen an den unteren Rand, echte
+//   Themen danach nicht mehr darunter.
+// - Höchstens `maxBubbles` Kreise: Nutzer-Themen und Themen mit ≥ 2 Gedanken zuerst, dann nach Aktivität.
+//   Der Rest steckt im Sammelkreis „Weitere Themen“ (`MapLayout.moreID`), seine Anker bleiben gemerkt.
 // - Punkte liegen auf einem Bogen über dem Kreis (220°, Beschriftung frei darunter), innen die neuesten.
-//   Die Ringe laufen als Schlange (Ring 0: neuester rechts, Ring 1: neuester links …): Kommt ein Gedanke
-//   dazu, rückt jeder Punkt nur einen Platz weiter. Höchstens `maxDots` je Thema, der Rest steckt im Kreis.
+//   Höchstens `maxDots` je Thema (und nur so viele, wie auf den Bogen passen), der Rest steckt im Kreis.
 // - Linien nur für echte Verknüpfungen, höchstens `maxLinksPerThought` je Gedanke, neueste zuerst. Für die
-//   Übersicht zusätzlich gebündelt je Themenpaar (`topicLines`), damit es bei vielen Gedanken ruhig bleibt.
+//   Übersicht wenige, gebündelt je Themenpaar (`topicLines`) – nur, wo die Linie frei verläuft.
 //
 // Keine Zufälle, keine Uhrzeit, keine Abhängigkeit von der Reihenfolge der Eingabe oder von der
 // Reihenfolge eines Dictionarys. Einheiten: Kartenpunkte (bei Maßstab 1 = Bildschirmpunkte).
@@ -47,12 +53,15 @@ public struct MapLayoutInput: Sendable, Equatable {
         public var lastActivity: Date
         /// Zeilen unter dem Namen (Titel bei sehr wenigen Gedanken); reserviert Platz
         public var titleLines: Int
+        /// vom Nutzer angelegt: bekommt wie Themen mit ≥ 2 Gedanken zuerst einen eigenen Kreis
+        public var pinned: Bool
 
-        public init(id: String, count: Int, lastActivity: Date, titleLines: Int = 0) {
+        public init(id: String, count: Int, lastActivity: Date, titleLines: Int = 0, pinned: Bool = false) {
             self.id = id
             self.count = count
             self.lastActivity = lastActivity
             self.titleLines = titleLines
+            self.pinned = pinned
         }
     }
 
@@ -103,11 +112,11 @@ public struct MapLayoutConfig: Sendable, Equatable {
     public var gap: CGFloat = 16
     /// Punkte je Thema, der Rest steckt im Kreis
     public var maxDots: Int = 24
-    /// Abstand Kreisrand → erster Ring
+    /// Abstand Kreisrand → Punkte-Bogen
     public var firstRing: CGFloat = 12
     public var ringStep: CGFloat = 12
-    /// kleinster und größter Bogenabstand zweier Punkte auf einem Ring (mit 11 passen bei der Radius-Formel
-    /// immer alle 24 Punkte auf den inneren Bogen; weitere Ringe sind nur Rückfall für andere Maße)
+    /// kleinster und größter Bogenabstand zweier Punkte (mit 11 passen bei der Radius-Formel immer alle
+    /// 24 Punkte auf den Bogen)
     public var dotSpacing: CGFloat = 11
     public var maxDotSpacing: CGFloat = 22
     public var dotRadius: CGFloat = 4
@@ -122,11 +131,17 @@ public struct MapLayoutConfig: Sendable, Equatable {
     public var titleWidth: CGFloat = 196
     public var maxLinksPerThought: Int = 2
     public var maxLines: Int = 600
-    /// Übersicht: höchstens so viele Themen-Linien je Thema (die stärksten)
+    /// Übersicht: Themen-Linien nur für Paare mit mindestens so vielen Verknüpfungen …
+    public var minTopicLinks: Int = 2
+    /// … insgesamt höchstens so viele …
+    public var maxTopicLines: Int = 6
+    /// … und je Thema höchstens so viele (die stärksten)
     public var maxTopicLinesPerTopic: Int = 3
-    /// gewünschtes Seitenverhältnis (Breite : Höhe) beim Anlegen neuer Themen – hochformatig wie der sichtbare
-    /// Teil des Bildschirms (gemessen: 0,58 ergibt im Mittel den größten Maßstab für 4 … 25 Themen)
-    public var aspect: CGFloat = 0.58
+    /// höchstens so viele Kreise; darüber hinaus sammelt „Weitere Themen“
+    public var maxBubbles: Int = 24
+    /// gewünschtes Seitenverhältnis (Breite : Höhe) beim Anlegen neuer Themen – wie der sichtbare Teil des
+    /// Bildschirms über den Leisten (≈ 0,68 auf iPhones im Hochformat)
+    public var aspect: CGFloat = 0.68
     /// Richtungen rund um jedes Thema, in denen ein neues Thema anlegen darf
     public var directions: Int = 36
 
@@ -142,8 +157,9 @@ public struct MapLayout: Sendable, Equatable {
     public struct Bubble: Sendable, Equatable, Identifiable {
         public var id: String
         public var center: CGPoint
+        /// sichtbarer Radius (bei Platzmangel kleiner als die Anzahl verlangt)
         public var radius: CGFloat
-        /// äußerster Punkte-Ring samt Punkt (= `radius`, wenn es keine Punkte gibt)
+        /// Punkte-Bogen samt Punkt (= `radius`, wenn es keine Punkte gibt)
         public var outerRadius: CGFloat
         /// reserviertes Feld für Name, Anzahl und ggf. Titel (Kartenpunkte, absolut)
         public var label: CGRect
@@ -156,12 +172,13 @@ public struct MapLayout: Sendable, Equatable {
     public struct Dot: Sendable, Equatable, Identifiable {
         /// Gedanken-ID
         public var id: String
+        /// Kreis, an dem der Punkt sitzt (bei gesammelten Themen `MapLayout.moreID`)
         public var topicID: String
         public var position: CGPoint
         /// Richtung vom Kreismittelpunkt (Bogenmaß, y nach unten; −π/2 = oben)
         public var angle: CGFloat
         public var ring: Int
-        /// 0 = neuester Gedanke des Themas
+        /// 0 = neuester Gedanke des Kreises
         public var rank: Int
     }
 
@@ -170,19 +187,20 @@ public struct MapLayout: Sendable, Equatable {
         /// Gedanken-IDs (a < b)
         public var a: String
         public var b: String
+        /// Kreise der beiden Gedanken
         public var topicA: String
         public var topicB: String
         /// quadratische Kurve von `from` über `control` nach `to`
         public var from: CGPoint
         public var control: CGPoint
         public var to: CGPoint
-        /// verbindet zwei Themen (ganz fein, in der Übersicht sichtbar)
+        /// verbindet zwei Kreise
         public var crossTopic: Bool
         /// ein Ende sitzt am Kreisrand, weil der Gedanke keinen eigenen Punkt hat
         public var touchesHidden: Bool
     }
 
-    /// Übersicht: eine feine Linie je verbundenem Themenpaar (Kreisrand zu Kreisrand)
+    /// Übersicht: eine feine Linie je eng verbundenem Themenpaar (Kreisrand zu Kreisrand)
     public struct TopicLine: Sendable, Equatable, Identifiable {
         public var id: String { a + "|" + b }
         /// Themen-IDs (a < b)
@@ -197,114 +215,228 @@ public struct MapLayout: Sendable, Equatable {
 
     /// nach ID sortiert
     public var bubbles: [Bubble]
-    /// je Thema nach Rang, Themen nach ID
+    /// je Kreis nach Rang, Kreise nach ID
     public var dots: [Dot]
     public var lines: [Line]
     /// Übersicht: Themenpaare, stärkste zuerst
     public var topicLines: [TopicLine]
-    /// umschließt Kreise, Ringe, Beschriftungsfelder und Linien; `.zero` ohne Themen
+    /// umschließt Kreise, Punkte-Bögen, Beschriftungsfelder und Linien; `.zero` ohne Themen
     public var bounds: CGRect
-    /// alle Anker zum Merken: gezeichnete Themen und ruhende (Anzahl 0) mit altem Anker
+    /// alle Anker zum Merken: gezeichnete Themen, ruhende (Anzahl 0) und gesammelte mit altem Anker
     public var anchors: [String: MapAnchor]
+    /// Themen im Sammelkreis `moreID` (nach ID sortiert, leer = kein Sammelkreis)
+    public var collected: [String]
 
-    public static let empty = MapLayout(bubbles: [], dots: [], lines: [], topicLines: [], bounds: .zero, anchors: [:])
+    public static let empty = MapLayout(bubbles: [], dots: [], lines: [], topicLines: [], bounds: .zero, anchors: [:],
+                                        collected: [])
 
     public func bubble(_ id: String) -> Bubble? {
         bubbles.first { $0.id == id }
     }
 }
 
+// MARK: - Sammelkreis
+
+extension MapLayout {
+    /// Kennung des Sammelkreises „Weitere Themen“ (Themen über `maxBubbles` hinaus)
+    public static let moreID = "_more"
+
+    /// Pseudo-Themen („Ohne Thema“, Sammelkreis) beginnen mit „_“: immer ein eigener Kreis, Platz am Rand
+    static func isPseudo(_ id: String) -> Bool { id.hasPrefix("_") }
+
+    /// Welche Themen keinen eigenen Kreis bekommen, sondern im Sammelkreis stecken (leer = alle passen).
+    /// Pseudo-Themen zählen mit; wird gesammelt, belegt der Sammelkreis selbst einen Platz.
+    public static func collected(_ topics: [MapLayoutInput.Topic], config: MapLayoutConfig = MapLayoutConfig()) -> Set<String> {
+        var seen = Set<String>()
+        var real: [MapLayoutInput.Topic] = []
+        var pseudo = 0
+        for topic in topics where topic.id != moreID && seen.insert(topic.id).inserted && topic.count > 0 {
+            if isPseudo(topic.id) { pseudo += 1 } else { real.append(topic) }
+        }
+        let room = max(1, config.maxBubbles - pseudo)
+        guard real.count > room else { return [] }
+        real.sort(by: ranksBefore)
+        return Set(real.dropFirst(max(0, room - 1)).map(\.id))
+    }
+
+    /// Vorrang für einen eigenen Kreis: Nutzer-Themen und Themen mit ≥ 2 Gedanken, dann nach Aktivität
+    static func ranksBefore(_ a: MapLayoutInput.Topic, _ b: MapLayoutInput.Topic) -> Bool {
+        let ka = a.pinned || a.count >= 2, kb = b.pinned || b.count >= 2
+        if ka != kb { return ka }
+        if a.lastActivity != b.lastActivity { return a.lastActivity > b.lastActivity }
+        if a.count != b.count { return a.count > b.count }
+        return a.id < b.id
+    }
+}
+
 // MARK: - Berechnung
 
 extension MapLayout {
-    /// Gleiche Eingabe → gleiche Ausgabe. Kosten: Themen O(n²·Richtungen) nur beim Anlegen, Gedanken O(m log m).
+    /// Ein gezeichneter Kreis während der Berechnung
+    private struct Entry {
+        var topic: MapLayoutInput.Topic
+        /// neueste zuerst
+        var thoughts: [MapLayoutInput.Thought]
+        var center: CGPoint = .zero
+        /// gezeichnete Fläche (nach dem Begrenzen)
+        var shape: MapFootprint
+        let want: MapFootprint
+        let floor: MapFootprint
+        let reserve: MapFootprint
+
+        var id: String { topic.id }
+        var pseudo: Bool { MapLayout.isPseudo(topic.id) }
+
+        init(topic: MapLayoutInput.Topic, thoughts: [MapLayoutInput.Thought], config: MapLayoutConfig) {
+            self.topic = topic
+            self.thoughts = thoughts
+            let lines = max(0, topic.titleLines)
+            want = MapFootprint.sized(id: topic.id, radius: config.radius(for: topic.count), thoughts: thoughts.count,
+                                      titleLines: lines, config: config)
+            floor = MapFootprint.sized(id: topic.id, radius: config.radius(for: 1), thoughts: thoughts.count, titleLines: 0,
+                                       config: config)
+            // Titelzeilen (nur bei sehr wenigen Gedanken) zählen nicht zur Reserve: Sie weichen, wenn es eng wird
+            reserve = MapFootprint.reserve(id: topic.id, titleLines: 0, config: config)
+            shape = want
+        }
+
+        func at(_ f: MapFootprint) -> MapFootprint {
+            var g = f
+            g.center = center
+            return g
+        }
+    }
+
+    /// Gleiche Eingabe → gleiche Ausgabe. Kosten: höchstens `maxBubbles` Kreise, Platzsuche nur für neue
+    /// Themen; Gedanken O(m log m).
     public static func compute(_ input: MapLayoutInput, config: MapLayoutConfig = MapLayoutConfig()) -> MapLayout {
         // Themen: erstes Vorkommen je ID; gezeichnet werden nur Themen mit Gedanken
         var seen = Set<String>()
-        var active: [MapLayoutInput.Topic] = []
-        var dormant: [String] = []
-        for topic in input.topics where seen.insert(topic.id).inserted {
-            if topic.count > 0 { active.append(topic) } else { dormant.append(topic.id) }
+        var topics: [MapLayoutInput.Topic] = []
+        for topic in input.topics where topic.id != moreID && seen.insert(topic.id).inserted {
+            topics.append(topic)
         }
-        let activeIDs = Set(active.map(\.id))
+        let collected = Self.collected(topics, config: config)
+        var shown: [MapLayoutInput.Topic] = []
+        var resting: [String] = []
+        var more = MapLayoutInput.Topic(id: moreID, count: 0, lastActivity: .distantPast)
+        for topic in topics {
+            if topic.count <= 0 {
+                resting.append(topic.id)
+            } else if collected.contains(topic.id) {
+                more.count += topic.count
+                more.lastActivity = max(more.lastActivity, topic.lastActivity)
+                resting.append(topic.id)
+            } else {
+                shown.append(topic)
+            }
+        }
+        if more.count > 0 { shown.append(more) }
+        let shownIDs = Set(shown.map(\.id))
 
-        // Gedanken je Thema, neueste zuerst (gleiche Zeit: nach ID)
+        // Gedanken je Kreis, neueste zuerst (gleiche Zeit: nach ID)
         var byTopic: [String: [MapLayoutInput.Thought]] = [:]
         var thoughtSeen = Set<String>()
-        for thought in input.thoughts where activeIDs.contains(thought.topicID) && thoughtSeen.insert(thought.id).inserted {
+        for var thought in input.thoughts {
+            if collected.contains(thought.topicID) { thought.topicID = moreID }
+            guard shownIDs.contains(thought.topicID), thoughtSeen.insert(thought.id).inserted else { continue }
             byTopic[thought.topicID, default: []].append(thought)
         }
         for key in byTopic.keys {
             byTopic[key]?.sort { $0.createdAt != $1.createdAt ? $0.createdAt > $1.createdAt : $0.id < $1.id }
         }
 
-        // Flächen
-        active.sort { $0.id < $1.id }
-        var items: [MapFootprint] = active.map { topic in
-            let shown = min(config.maxDots, byTopic[topic.id]?.count ?? 0)
-            return MapFootprint(id: topic.id, center: .zero, radius: config.radius(for: topic.count),
-                                dots: shown, titleLines: max(0, topic.titleLines), config: config)
-        }
+        shown.sort { $0.id < $1.id }
+        var entries = shown.map { Entry(topic: $0, thoughts: byTopic[$0.id] ?? [], config: config) }
 
-        // 1. Themen mit Anker an ihren Platz, Überlappungen durch Wachstum minimal auflösen
-        var placed: [MapFootprint] = []
+        // 1. Themen mit Anker bleiben, wo sie sind. Nur wenn sich gemerkte Plätze schon in kleinster Größe
+        //    überdecken (kaputte oder sehr alte Datei), bekommt das kleinere einen neuen Platz.
+        let byWeight = entries.indices.sorted { a, b in
+            let x = entries[a].topic, y = entries[b].topic
+            return x.count != y.count ? x.count > y.count : x.id < y.id
+        }
+        var placed: [Int] = []
         var fresh: [Int] = []
-        for i in items.indices {
-            if let anchor = input.anchors[items[i].id], anchor.x.isFinite, anchor.y.isFinite {
-                items[i].center = MapGeometry.snap(anchor.point)
-                placed.append(items[i])
-            } else {
+        for i in byWeight {
+            guard let anchor = input.anchors[entries[i].id], anchor.x.isFinite, anchor.y.isFinite,
+                  abs(anchor.x) < 1e6, abs(anchor.y) < 1e6 else {
                 fresh.append(i)
+                continue
+            }
+            // genau der gespeicherte Wert (neue Plätze liegen ohnehin auf 1/100 Kartenpunkt)
+            entries[i].center = anchor.point
+            let floor = entries[i].at(entries[i].floor)
+            if placed.contains(where: { MapGeometry.overlaps(entries[$0].at(entries[$0].floor), floor, gap: config.gap) }) {
+                fresh.append(i)
+            } else {
+                placed.append(i)
             }
         }
-        MapGeometry.resolve(&placed, config: config)
 
         // 2. Neue Themen: zuletzt aktive zuerst (sie liegen dann am nächsten an der Mitte), Pseudo-Themen zuletzt
-        let lookup = Dictionary(uniqueKeysWithValues: active.map { ($0.id, $0) })
         fresh.sort { a, b in
-            let x = lookup[items[a].id]!, y = lookup[items[b].id]!
-            let px = x.id.hasPrefix("_"), py = y.id.hasPrefix("_")
-            if px != py { return !px }
-            if x.lastActivity != y.lastActivity { return x.lastActivity > y.lastActivity }
-            if x.count != y.count { return x.count > y.count }
+            let x = entries[a], y = entries[b]
+            if x.pseudo != y.pseudo { return !x.pseudo }
+            if x.topic.lastActivity != y.topic.lastActivity { return x.topic.lastActivity > y.topic.lastActivity }
+            if x.topic.count != y.topic.count { return x.topic.count > y.topic.count }
             return x.id < y.id
         }
+        var space = MapGeometry.Space(config: config)
+        for i in placed { space.obstacles.append(entries[i].at(entries[i].reserve)) }
         for i in fresh {
-            var item = items[i]
-            item.center = MapGeometry.findSpot(for: item, among: placed, config: config)
-            placed.append(item)
+            let real = placed.filter { !entries[$0].pseudo }.map { entries[$0].center.y }
+            let pseudo = placed.filter { entries[$0].pseudo }.map { entries[$0].center.y }
+            var band = MapGeometry.Band.any
+            if entries[i].pseudo {
+                // an den unteren Rand: nicht über dem tiefsten Kreis
+                if let lowest = (real + pseudo).max() { band = .atOrBelow(lowest) }
+            } else if let top = pseudo.min(), top >= (real.max() ?? -.infinity) {
+                // „Ohne Thema“ liegt unten: echte Themen nicht mehr darunter
+                band = .atOrAbove(top)
+            }
+            entries[i].center = space.findSpot(for: entries[i].reserve, band: band)
+            space.obstacles.append(entries[i].at(entries[i].reserve))
+            placed.append(i)
         }
 
-        // 3. Sicherheitsnetz: Was sich (theoretisch) nicht auflösen ließ, sucht sich einen freien Platz
-        MapGeometry.separateRemaining(&placed, config: config)
-
-        placed.sort { $0.id < $1.id }
+        // 3. Größe: so groß, wie Platz ist (neue Themen haben immer genug, s. Reserve)
+        fit(&entries, config: config)
 
         // Punkte
         var bubbles: [MapLayout.Bubble] = []
         var dots: [MapLayout.Dot] = []
         var anchors: [String: MapAnchor] = [:]
         var dotIndex: [String: Int] = [:]
-        var placedByID: [String: MapFootprint] = [:]
-        for item in placed {
-            let topic = lookup[item.id]!
-            let list = byTopic[item.id] ?? []
-            let shown = Array(list.prefix(config.maxDots))
-            for (rank, slot) in MapGeometry.dotSlots(count: shown.count, radius: item.radius, config: config).enumerated() {
-                let thought = shown[rank]
+        var shapes: [String: MapFootprint] = [:]
+        for entry in entries {
+            let shape = entry.at(entry.shape)
+            let visible = Array(entry.thoughts.prefix(shape.dots))
+            for (rank, slot) in MapGeometry.dotSlots(count: visible.count, radius: shape.radius, config: config).enumerated() {
+                let thought = visible[rank]
                 dotIndex[thought.id] = dots.count
-                dots.append(MapLayout.Dot(id: thought.id, topicID: item.id,
-                                          position: CGPoint(x: item.center.x + slot.offset.dx, y: item.center.y + slot.offset.dy),
+                dots.append(MapLayout.Dot(id: thought.id, topicID: entry.id,
+                                          position: CGPoint(x: shape.center.x + slot.offset.dx, y: shape.center.y + slot.offset.dy),
                                           angle: slot.angle, ring: slot.ring, rank: rank))
             }
-            bubbles.append(MapLayout.Bubble(id: item.id, center: item.center, radius: item.radius, outerRadius: item.outer,
-                                            label: item.labelRect, count: topic.count,
-                                            hiddenCount: max(0, topic.count - shown.count), titleLines: item.titleLines))
-            anchors[item.id] = MapAnchor(item.center)
-            placedByID[item.id] = item
+            bubbles.append(MapLayout.Bubble(id: entry.id, center: shape.center, radius: shape.radius, outerRadius: shape.outer,
+                                            label: shape.labelRect, count: entry.topic.count,
+                                            hiddenCount: max(0, entry.topic.count - visible.count), titleLines: shape.titleLines))
+            anchors[entry.id] = MapAnchor(shape.center)
+            shapes[entry.id] = shape
         }
-        for id in dormant {
-            if let anchor = input.anchors[id] { anchors[id] = anchor }
+        // Ruhende und gesammelte Themen behalten ihren Platz, solange er frei ist. Nimmt ihn ein anderes Thema
+        // ein (neu angelegt oder gewachsen), vergessen sie ihn – kommen sie zurück, bekommen sie einen neuen,
+        // und kein sichtbarer Kreis muss weichen.
+        let counts = Dictionary(topics.map { ($0.id, $0.count) }, uniquingKeysWith: { a, _ in a })
+        // feste Reihenfolge (nach ID): Auch Gleitkomma-Rundungen sind dann bei jedem Lauf gleich
+        let drawn = entries.map { shapes[$0.id]! }
+        for id in resting + [moreID] where anchors[id] == nil {
+            guard let anchor = input.anchors[id], anchor.x.isFinite, anchor.y.isFinite else { continue }
+            var floor = MapFootprint.sized(id: id, radius: config.radius(for: 1), thoughts: max(1, counts[id] ?? 1),
+                                           titleLines: 0, config: config)
+            floor.center = MapGeometry.snap(anchor.point)
+            guard !drawn.contains(where: { MapGeometry.overlaps($0, floor, gap: config.gap) }) else { continue }
+            anchors[id] = anchor
         }
 
         // Linien
@@ -313,69 +445,153 @@ extension MapLayout {
             for thought in list { created[thought.id] = (topic, thought.createdAt) }
         }
         let lines = MapGeometry.lines(input.links, created: created, dots: dots, dotIndex: dotIndex,
-                                      footprints: placedByID, config: config)
+                                      footprints: shapes, config: config)
+        let topicLines = MapGeometry.topicLines(input.links, created: created, footprints: shapes, config: config)
 
         // Rahmen
         var bounds = CGRect.null
-        for item in placed {
-            bounds = bounds.union(item.circleRect).union(item.labelRect)
+        for shape in drawn {
+            bounds = bounds.union(shape.circleRect).union(shape.labelRect)
         }
-        let topicLines = MapGeometry.topicLines(input.links, created: created, footprints: placedByID, config: config)
         for line in topicLines {
-            let apex = CGPoint(x: 0.25 * line.from.x + 0.5 * line.control.x + 0.25 * line.to.x,
-                               y: 0.25 * line.from.y + 0.5 * line.control.y + 0.25 * line.to.y)
-            bounds = bounds.union(CGRect(x: apex.x - 1, y: apex.y - 1, width: 2, height: 2))
+            bounds = bounds.union(apexRect(line.from, line.control, line.to))
         }
         for line in lines {
-            // Scheitel der Kurve (t = ½)
-            let apex = CGPoint(x: 0.25 * line.from.x + 0.5 * line.control.x + 0.25 * line.to.x,
-                               y: 0.25 * line.from.y + 0.5 * line.control.y + 0.25 * line.to.y)
-            bounds = bounds.union(CGRect(x: apex.x - 1, y: apex.y - 1, width: 2, height: 2))
+            bounds = bounds.union(apexRect(line.from, line.control, line.to))
         }
         return MapLayout(bubbles: bubbles, dots: dots, lines: lines, topicLines: topicLines,
-                         bounds: bounds.isNull ? .zero : bounds, anchors: anchors)
+                         bounds: bounds.isNull ? .zero : bounds, anchors: anchors, collected: collected.sorted())
+    }
+
+    /// Scheitel einer quadratischen Kurve (t = ½) als kleines Feld
+    private static func apexRect(_ from: CGPoint, _ control: CGPoint, _ to: CGPoint) -> CGRect {
+        let apex = CGPoint(x: 0.25 * from.x + 0.5 * control.x + 0.25 * to.x, y: 0.25 * from.y + 0.5 * control.y + 0.25 * to.y)
+        return CGRect(x: apex.x - 1, y: apex.y - 1, width: 2, height: 2)
+    }
+
+    /// Sichtbare Größe: jeder Kreis so groß, wie seine Anzahl verlangt – wenn der Platz reicht. Sonst erst
+    /// weniger Titelzeilen, dann ein kleinerer Radius (nie kleiner als ein Kreis mit einem Gedanken).
+    /// Reihenfolge: mehr Gedanken zuerst; wer noch nicht dran war, zählt mit seiner kleinsten Größe.
+    private static func fit(_ entries: inout [Entry], config: MapLayoutConfig) {
+        let order = entries.indices.sorted { a, b in
+            let x = entries[a].topic, y = entries[b].topic
+            return x.count != y.count ? x.count > y.count : x.id < y.id
+        }
+        var done = [Bool](repeating: false, count: entries.count)
+        for i in order {
+            let others = entries.indices.filter { $0 != i }.map { j in entries[j].at(done[j] ? entries[j].shape : entries[j].floor) }
+            let center = entries[i].center
+            func fits(_ f: MapFootprint) -> Bool {
+                var probe = f
+                probe.center = center
+                // nur, wer in Reichweite ist
+                return !others.contains { MapGeometry.overlaps($0, probe, gap: config.gap) }
+            }
+            let want = entries[i].want
+            var best = want
+            if !fits(want) {
+                var found = false
+                if want.titleLines > 0 {
+                    for lines in stride(from: want.titleLines - 1, through: 0, by: -1) {
+                        let f = MapFootprint.sized(id: want.id, radius: want.radius, thoughts: entries[i].thoughts.count,
+                                                   titleLines: lines, config: config)
+                        if fits(f) {
+                            best = f
+                            found = true
+                            break
+                        }
+                    }
+                }
+                if !found {
+                    var lo = entries[i].floor.radius, hi = want.radius
+                    for _ in 0..<14 {
+                        let mid = (lo + hi) / 2
+                        let f = MapFootprint.sized(id: want.id, radius: mid, thoughts: entries[i].thoughts.count, titleLines: 0,
+                                                   config: config)
+                        if fits(f) { lo = mid } else { hi = mid }
+                    }
+                    // auf 1/100 abrunden: gleiche Eingabe, gleiche Zahl
+                    let radius = (lo * 100).rounded(.down) / 100
+                    best = radius <= entries[i].floor.radius ? entries[i].floor
+                        : MapFootprint.sized(id: want.id, radius: radius, thoughts: entries[i].thoughts.count, titleLines: 0,
+                                             config: config)
+                }
+            }
+            entries[i].shape = best
+            done[i] = true
+        }
     }
 }
 
 // MARK: - Fläche eines Themas
 
-/// Kreis samt Punkte-Ringen (Kreis mit Radius `outer`) und Beschriftungsfeld darunter.
+/// Kreis samt Punkte-Bogen (Kreis mit Radius `outer`) und Beschriftungsfeld darunter.
 struct MapFootprint: Sendable, Equatable {
     var id: String
     var center: CGPoint
     var radius: CGFloat
     var outer: CGFloat
+    /// Punkte auf dem Bogen
+    var dots: Int
     var titleLines: Int
     /// Beschriftungsfeld relativ zum Mittelpunkt
-    var label: CGRect
+    private(set) var label: CGRect
     /// Radius eines Kreises um den Mittelpunkt, der alles umschließt
-    var bound: CGFloat
-    /// Gewicht beim Ausweichen (größere Flächen bewegen sich weniger)
-    var mass: CGFloat
+    private(set) var bound: CGFloat
     /// Beschriftungsfeld relativ, als Zahlen (schnell in der heißen Schleife)
-    let lx0: CGFloat, ly0: CGFloat, lx1: CGFloat, ly1: CGFloat
+    private(set) var lx0: CGFloat, ly0: CGFloat, lx1: CGFloat, ly1: CGFloat
 
     init(id: String, center: CGPoint, radius: CGFloat, dots: Int, titleLines: Int, config: MapLayoutConfig) {
+        let rings = MapGeometry.ringCount(dots: dots, radius: radius, config: config)
+        let outer = rings == 0 ? radius : radius + config.firstRing + CGFloat(rings - 1) * config.ringStep + config.dotRadius
+        let width = titleLines > 0 ? max(config.titleWidth, 2 * radius + 16) : max(config.labelWidth, 2 * radius + 16)
+        let height = config.labelHeight + (titleLines > 0 ? CGFloat(titleLines) * config.titleLineHeight + 4 : 0)
+        let label = CGRect(x: -width / 2, y: radius + config.labelGap, width: width, height: height)
+        self.init(id: id, center: center, radius: radius, outer: outer, dots: dots, titleLines: titleLines, label: label)
+    }
+
+    init(id: String, center: CGPoint, radius: CGFloat, outer: CGFloat, dots: Int, titleLines: Int, label: CGRect) {
         self.id = id
         self.center = center
         self.radius = radius
+        self.outer = outer
+        self.dots = dots
         self.titleLines = titleLines
-        let rings = MapGeometry.ringCount(dots: dots, radius: radius, config: config)
-        outer = rings == 0 ? radius : radius + config.firstRing + CGFloat(rings - 1) * config.ringStep + config.dotRadius
-        let width = titleLines > 0 ? max(config.titleWidth, 2 * radius + 16) : max(config.labelWidth, 2 * radius + 16)
-        let height = config.labelHeight + (titleLines > 0 ? CGFloat(titleLines) * config.titleLineHeight + 4 : 0)
-        label = CGRect(x: -width / 2, y: radius + config.labelGap, width: width, height: height)
-        lx0 = -width / 2
-        lx1 = width / 2
-        ly0 = radius + config.labelGap
-        ly1 = radius + config.labelGap + height
-        let corner = max(hypot(label.minX, label.maxY), hypot(label.maxX, label.maxY))
+        self.label = label
+        lx0 = label.minX
+        lx1 = label.maxX
+        ly0 = label.minY
+        ly1 = label.maxY
+        let corner = max(hypot(label.minX, label.maxY), hypot(label.maxX, label.maxY),
+                         hypot(label.minX, label.minY), hypot(label.maxX, label.minY))
         bound = max(outer, corner)
-        mass = outer * outer
+    }
+
+    /// Kreis mit Radius `radius`; Punkte: so viele, wie auf den Bogen passen (höchstens `maxDots`)
+    static func sized(id: String, radius: CGFloat, thoughts: Int, titleLines: Int, config: MapLayoutConfig) -> MapFootprint {
+        let dots = min(thoughts, config.maxDots, MapGeometry.ringCapacity(0, radius: radius, config: config))
+        return MapFootprint(id: id, center: .zero, radius: radius, dots: max(0, dots), titleLines: titleLines, config: config)
+    }
+
+    /// Platz, den ein Thema beim Anlegen frei hält: so viel, wie es je brauchen kann – Kreis am Deckel samt
+    /// Punkte-Bogen, darunter ein Beschriftungsfeld, das jede Kreisgröße abdeckt (es rückt mit dem Radius).
+    /// Jede sichtbare Größe (`sized`, Radius ≤ Deckel, gleiche oder weniger Titelzeilen) liegt darin. Die Karte
+    /// reserviert ohne Titelzeilen (es gibt sie nur bei sehr wenigen Gedanken; wird es eng, entfallen sie).
+    static func reserve(id: String, titleLines: Int, config: MapLayoutConfig) -> MapFootprint {
+        let big = MapFootprint(id: id, center: .zero, radius: config.maxRadius, dots: config.maxDots, titleLines: titleLines,
+                               config: config)
+        let top = config.radius(for: 1) + config.labelGap
+        let label = CGRect(x: big.label.minX, y: top, width: big.label.width, height: big.label.maxY - top)
+        return MapFootprint(id: id, center: .zero, radius: config.maxRadius, outer: big.outer, dots: config.maxDots,
+                            titleLines: titleLines, label: label)
     }
 
     var labelRect: CGRect { label.offsetBy(dx: center.x, dy: center.y) }
     var circleRect: CGRect { CGRect(x: center.x - outer, y: center.y - outer, width: 2 * outer, height: 2 * outer) }
+    /// umschließendes Feld (Kreis samt Bogen und Beschriftung), relativ
+    var extent: (x0: CGFloat, y0: CGFloat, x1: CGFloat, y1: CGFloat) {
+        (min(-outer, lx0), min(-outer, ly0), max(outer, lx1), max(outer, ly1))
+    }
 }
 
 // MARK: - Geometrie
@@ -390,7 +606,7 @@ enum MapGeometry {
 
     /// kleiner als das: gilt als frei (Rundung der Anker)
     static let tolerance: CGFloat = 0.01
-    /// so viel zusätzlich beim Auseinanderschieben und Anlegen, damit Runden nichts wieder überlappen lässt
+    /// so viel zusätzlich beim Anlegen, damit Runden nichts überlappen lässt
     static let slack: CGFloat = 0.05
 
     /// Mittelpunkte liegen immer auf 1/100 Kartenpunkt: Was geprüft wird, ist genau das, was gespeichert
@@ -463,217 +679,255 @@ enum MapGeometry {
         return Push(dx: 0, dy: (by0 + by1) >= (ay0 + ay1) ? 1 : -1, depth: oy)
     }
 
-    // MARK: Ausweichen
-
-    static func hasOverlap(_ items: [MapFootprint], gap: CGFloat) -> Bool {
-        for i in items.indices {
-            for j in items.indices where j > i && overlaps(items[i], items[j], gap: gap) { return true }
-        }
-        return false
-    }
-
-    /// Überlappungen (z. B. weil ein Kreis gewachsen ist) mit möglichst wenig Bewegung auflösen. Zwei Wege,
-    /// genommen wird der mit der kleineren Summe der quadrierten Wege – lieber wenige kleine Schritte als ein
-    /// großer Sprung:
-    /// (a) Schubwelle: Die größte beteiligte Fläche bleibt stehen, nur berührte Nachbarn weichen nach außen,
-    ///     und nur, wen sie dabei berühren, weicht weiter. Wer einmal geschoben hat, bewegt sich nicht mehr.
-    /// (b) Umzug: Die größte beteiligte Fläche rückt selbst an die nächste freie Stelle (typisch am Rand).
-    /// Wer nichts berührt, bewegt sich in beiden Wegen nicht.
-    static func resolve(_ items: inout [MapFootprint], config: MapLayoutConfig) {
-        guard items.count > 1, hasOverlap(items, gap: config.gap) else { return }
-        let original = items.map(\.center)
-        func cost(_ list: [MapFootprint]) -> CGFloat {
-            var sum: CGFloat = 0
-            for i in list.indices {
-                let dx = list[i].center.x - original[i].x, dy = list[i].center.y - original[i].y
-                sum += dx * dx + dy * dy
-            }
-            return sum
-        }
-        var wave = items
-        pushWave(&wave, config: config)
-        var hop = items
-        relocate(&hop, config: config)
-        items = cost(hop) < cost(wave) ? hop : wave
-    }
-
-    private static func byMass(_ items: [MapFootprint], _ indices: [Int]) -> [Int] {
-        indices.sorted { a, b in items[a].mass != items[b].mass ? items[a].mass > items[b].mass : items[a].id < items[b].id }
-    }
-
-    private static func pushWave(_ items: inout [MapFootprint], config: MapLayoutConfig) {
-        let n = items.count
-        var involved = [Bool](repeating: false, count: n)
-        for i in 0..<n {
-            for j in (i + 1)..<n where overlaps(items[i], items[j], gap: config.gap) {
-                involved[i] = true
-                involved[j] = true
-            }
-        }
-        var queue = byMass(items, (0..<n).filter { involved[$0] })
-        var settled = [Bool](repeating: false, count: n)
-        var head = 0
-        while head < queue.count {
-            let p = queue[head]
-            head += 1
-            guard !settled[p] else { continue }
-            settled[p] = true
-            for q in 0..<n where !settled[q] {
-                guard let push = penetration(items[p], items[q], gap: config.gap), push.depth > tolerance else { continue }
-                let before = items[q].center
-                let d = push.depth + slack
-                items[q].center = snap(CGPoint(x: before.x + push.dx * d, y: before.y + push.dy * d))
-                // gegen eine schon feste Fläche gedrückt: nächste freie Stelle zwischen den festen
-                let fixed = (0..<n).filter { settled[$0] }.map { items[$0] }
-                if fixed.contains(where: { overlaps($0, items[q], gap: config.gap) }) {
-                    items[q].center = freeSpot(for: items[q], among: fixed, config: config, near: before)
-                }
-                queue.append(q)
-            }
-        }
-    }
-
-    private static func relocate(_ items: inout [MapFootprint], config: MapLayoutConfig) {
-        for i in byMass(items, Array(items.indices)) {
-            let others = items.indices.filter { $0 != i }.map { items[$0] }
-            guard others.contains(where: { overlaps($0, items[i], gap: config.gap) }) else { continue }
-            items[i].center = freeSpot(for: items[i], among: others, config: config, near: items[i].center)
-        }
-    }
-
-    /// Sicherheitsnetz: Bleibt etwas überlappend, sucht sich die kleinere Fläche einen freien Platz in der
-    /// Nähe. Danach überlappt garantiert nichts.
-    static func separateRemaining(_ items: inout [MapFootprint], config: MapLayoutConfig) {
-        guard items.count > 1 else { return }
-        for _ in 0..<items.count {
-            var victim: Int?
-            outer: for i in 0..<(items.count - 1) {
-                for j in (i + 1)..<items.count where overlaps(items[i], items[j], gap: config.gap) {
-                    let a = items[i], b = items[j]
-                    victim = (a.mass, a.id) < (b.mass, b.id) ? i : j
-                    break outer
-                }
-            }
-            guard let index = victim else { return }
-            let others = items.indices.filter { $0 != index }.map { items[$0] }
-            items[index].center = freeSpot(for: items[index], among: others, config: config, near: items[index].center)
-        }
-    }
-
     // MARK: Freier Platz
 
-    /// Neues Thema: Es kommt dorthin, wo der Rahmen der Karte – gemessen im Seitenverhältnis des Bildschirms –
-    /// am wenigsten wächst (so füllen sich Lücken zuerst und die Karte bleibt bildschirmförmig); bei Gleichstand
-    /// entscheidet die Nähe zur Mitte (elliptischer Abstand, hochformatig).
-    static func findSpot(for item: MapFootprint, among placed: [MapFootprint], config: MapLayoutConfig) -> CGPoint {
-        guard !placed.isEmpty else { return .zero }
-        return freeSpot(for: item, among: placed, config: config, near: nil)
-    }
+    /// Erlaubte Höhe des Mittelpunkts eines neuen Themas (y nach unten)
+    enum Band: Equatable {
+        case any
+        /// am unteren Rand: nicht über `y`
+        case atOrBelow(CGFloat)
+        /// nicht unter `y`
+        case atOrAbove(CGFloat)
 
-    /// Freier Platz mit den kleinsten Kosten. Kandidaten: der Wunschpunkt selbst und die Berührpunkte rund um
-    /// jede Fläche in `directions` Richtungen. `near` = nil: neues Thema (Rahmen, dann Mitte), sonst: nahe `near`.
-    static func freeSpot(for item: MapFootprint, among placed: [MapFootprint], config: MapLayoutConfig, near: CGPoint?) -> CGPoint {
-        var box = CGRect.null
-        for p in placed { box = box.union(p.circleRect).union(p.labelRect) }
-        guard !box.isNull else { return near.map(snap) ?? .zero }
-        let target = snap(near ?? CGPoint(x: box.midX, y: box.midY))
-        let aspect = near == nil ? max(0.2, config.aspect) : 1
-        func cost(_ c: CGPoint) -> CGFloat {
-            let dx = (c.x - target.x) / aspect, dy = c.y - target.y
-            return dx * dx + dy * dy
-        }
-        // Größe des Rahmens im Bildschirmformat (halbe Punkte, damit Rundungsrauschen nicht entscheidet)
-        func size(_ r: CGRect) -> CGFloat { (max(r.width / aspect, r.height) * 2).rounded() / 2 }
-        let ix0 = min(-item.outer, item.lx0), ix1 = max(item.outer, item.lx1)
-        let iy0 = min(-item.outer, item.ly0), iy1 = max(item.outer, item.ly1)
-        let bx0 = box.minX, bx1 = box.maxX, by0 = box.minY, by1 = box.maxY
-        let base = near == nil ? size(box) : 0
-        func rawExtent(_ x: CGFloat, _ y: CGFloat) -> CGFloat {
-            let w = max(bx1, x + ix1) - min(bx0, x + ix0), h = max(by1, y + iy1) - min(by0, y + iy0)
-            return max(w / aspect, h)
-        }
-        func extent(_ c: CGPoint) -> CGFloat {
-            guard near == nil else { return 0 }
-            return (rawExtent(c.x, c.y) * 2).rounded() / 2
-        }
-        func isFree(_ c: CGPoint) -> Bool {
-            var probe = item
-            probe.center = c
-            for other in placed where overlaps(probe, other, gap: config.gap) { return false }
-            return true
-        }
-
-        var best: CGPoint?
-        var bestExtent = CGFloat.infinity
-        var bestCost = CGFloat.infinity
-        func better(_ e: CGFloat, _ v: CGFloat) -> Bool { e != bestExtent ? e < bestExtent : v < bestCost }
-        if isFree(target) {
-            best = target
-            bestExtent = extent(target)
-            bestCost = cost(target)
-        }
-        let k = max(8, config.directions)
-        // nahe Flächen zuerst: Ein guter Platz fällt früh, danach lässt sich mehr überspringen
-        let order = placed.indices.sorted { a, b in
-            let ca = cost(placed[a].center), cb = cost(placed[b].center)
-            return ca != cb ? ca < cb : a < b
-        }
-        for index in order {
-            let anchor = placed[index]
-            // Überspringen lässt sich nur, wenn der beste Platz den Rahmen nicht vergrößert (kleiner geht nicht):
-            // dann zählt allein die Nähe, und Kandidaten um diese Fläche liegen nie näher als ihr Rand.
-            let pruning = bestExtent <= base
-            let reach = anchor.bound + item.bound + config.gap + 1
-            let ex = (anchor.center.x - target.x) / aspect, ey = anchor.center.y - target.y
-            let lower = max(0, (ex * ex + ey * ey).squareRoot() - reach / aspect)
-            if pruning, lower * lower >= bestCost { continue }
-            // Kreise allein brauchen schon so viel Abstand – der Berührpunkt liegt nie näher
-            let tMin = anchor.outer + item.outer + config.gap
-            for step in 0..<k {
-                let angle = 2 * CGFloat.pi * CGFloat(step) / CGFloat(k)
-                let ux = cos(angle), uy = sin(angle)
-                if near == nil, bestExtent < .infinity {
-                    // Rahmen entlang des Strahls ist konvex: Wächst er ab tMin schon, ist das die Untergrenze
-                    let x0 = anchor.center.x + ux * tMin, y0 = anchor.center.y + uy * tMin
-                    let e0 = rawExtent(x0, y0)
-                    if rawExtent(x0 + ux, y0 + uy) >= e0, (e0 * 2).rounded() / 2 > bestExtent { continue }
-                }
-                if bestExtent <= base {
-                    // günstigster denkbarer Punkt auf dem Strahl ab tMin (Kosten sind entlang des Strahls quadratisch)
-                    let px = (anchor.center.x - target.x) / aspect, py = anchor.center.y - target.y
-                    let vx = ux / aspect, vy = uy
-                    let vertex = -(px * vx + py * vy) / (vx * vx + vy * vy)
-                    let tBest = max(tMin, vertex)
-                    let bx = px + vx * tBest, by = py + vy * tBest
-                    if bx * bx + by * by >= bestCost { continue }
-                }
-                let t = contact(item, around: anchor, ux: ux, uy: uy, from: tMin, gap: config.gap)
-                let c = snap(CGPoint(x: anchor.center.x + ux * t, y: anchor.center.y + uy * t))
-                let e = extent(c), value = cost(c)
-                guard better(e, value), isFree(c) else { continue }
-                best = c
-                bestExtent = e
-                bestCost = value
+        func allows(_ y: CGFloat) -> Bool {
+            switch self {
+            case .any: true
+            case .atOrBelow(let limit): y >= limit - 0.5
+            case .atOrAbove(let limit): y <= limit + 0.5
             }
         }
-        if let best { return best }
-        // Rückfall (kommt praktisch nicht vor): rechts neben alles
-        return snap(CGPoint(x: box.maxX + item.bound + config.gap + 2 * slack, y: target.y))
     }
 
-    /// Kleinster Abstand entlang (ux, uy), ab dem `item` die Fläche `anchor` nicht mehr berührt.
-    private static func contact(_ item: MapFootprint, around anchor: MapFootprint, ux: CGFloat, uy: CGFloat,
-                                from tMin: CGFloat, gap: CGFloat) -> CGFloat {
+    /// Platzsuche für neue Themen. Hindernisse sind die Reserven der vorhandenen Themen; die Berührabstände je
+    /// Form und Richtung werden einmal berechnet (fast alle Reserven haben dieselbe Form).
+    struct Space {
+        let config: MapLayoutConfig
+        var obstacles: [MapFootprint] = []
+        private var contacts: [ContactKey: CGFloat] = [:]
+
+        init(config: MapLayoutConfig) {
+            self.config = config
+        }
+
+        private struct Shape: Hashable {
+            var outer: CGFloat, lx0: CGFloat, ly0: CGFloat, lx1: CGFloat, ly1: CGFloat
+            init(_ f: MapFootprint) {
+                outer = f.outer
+                lx0 = f.lx0
+                ly0 = f.ly0
+                lx1 = f.lx1
+                ly1 = f.ly1
+            }
+        }
+
+        private struct ContactKey: Hashable {
+            var anchor: Shape
+            var item: Shape
+            var step: Int
+        }
+
+        /// Neues Thema: dorthin, wo der Rahmen der Karte – gemessen im Seitenverhältnis des Bildschirms – am
+        /// wenigsten wächst (so füllen sich Lücken zuerst und die Karte bleibt bildschirmförmig) und die Themen
+        /// ausgewogen um die Mitte liegen; bei Gleichstand entscheidet die Nähe zur Mitte (elliptischer Abstand).
+        /// `band` grenzt die Höhe ein; passt dort nichts, gilt sie nicht.
+        mutating func findSpot(for item: MapFootprint, band: Band = .any) -> CGPoint {
+            guard !obstacles.isEmpty else { return .zero }
+            if let spot = search(item, band: band) { return spot }
+            if band != .any, let spot = search(item, band: .any) { return spot }
+            // Rückfall (kommt praktisch nicht vor): rechts neben alles
+            var box = CGRect.null
+            for p in obstacles { box = box.union(p.circleRect).union(p.labelRect) }
+            return snap(CGPoint(x: box.maxX + item.bound + config.gap + 2 * slack, y: box.midY))
+        }
+
+        private mutating func search(_ item: MapFootprint, band: Band) -> CGPoint? {
+            var bx0 = CGFloat.infinity, by0 = CGFloat.infinity, bx1 = -CGFloat.infinity, by1 = -CGFloat.infinity
+            // Mittelpunkte: Summe und Rahmen (für die Unwucht)
+            var sx: CGFloat = 0, sy: CGFloat = 0
+            var cx0 = CGFloat.infinity, cy0 = CGFloat.infinity, cx1 = -CGFloat.infinity, cy1 = -CGFloat.infinity
+            for p in obstacles {
+                let e = p.extent
+                bx0 = min(bx0, p.center.x + e.x0)
+                by0 = min(by0, p.center.y + e.y0)
+                bx1 = max(bx1, p.center.x + e.x1)
+                by1 = max(by1, p.center.y + e.y1)
+                sx += p.center.x
+                sy += p.center.y
+                cx0 = min(cx0, p.center.x)
+                cy0 = min(cy0, p.center.y)
+                cx1 = max(cx1, p.center.x)
+                cy1 = max(cy1, p.center.y)
+            }
+            let n = CGFloat(obstacles.count + 1)
+            // Ausgewogenheit zählt nur bei wenigen Themen; in größeren Karten füllen neue zuerst Lücken nahe der Mitte
+            let weight = obstacles.count < Space.fewTopics ? Space.balance : 0
+            let target = snap(CGPoint(x: (bx0 + bx1) / 2, y: (by0 + by1) / 2))
+            let aspect = max(0.2, config.aspect)
+            let ie = item.extent
+            // Wert eines Platzes: Größe des Rahmens im Bildschirmformat plus Unwucht (Abstand des Schwerpunkts der
+            // Mittelpunkte von der Mitte ihres Rahmens) – so wird aus wenigen Themen ein Dreieck oder Versatz statt
+            // einer Spalte mit einem Ausreißer. Auf halbe Punkte gerundet, damit Rundungsrauschen nicht entscheidet;
+            // bei Gleichstand gewinnt die Nähe zur Mitte.
+            func score(_ c: CGPoint) -> CGFloat {
+                let x0 = min(bx0, c.x + ie.x0), x1 = max(bx1, c.x + ie.x1), y0 = min(by0, c.y + ie.y0), y1 = max(by1, c.y + ie.y1)
+                let size = max((x1 - x0) / aspect, y1 - y0)
+                let mx = (min(cx0, c.x) + max(cx1, c.x)) / 2, my = (min(cy0, c.y) + max(cy1, c.y)) / 2
+                let ux = ((sx + c.x) / n - mx) / aspect, uy = (sy + c.y) / n - my
+                return ((size + weight * (ux * ux + uy * uy).squareRoot()) * 2).rounded() / 2
+            }
+            func cost(_ c: CGPoint) -> CGFloat {
+                let dx = (c.x - target.x) / aspect, dy = c.y - target.y
+                return dx * dx + dy * dy
+            }
+            // Freiprüfung: erst Kreis an Kreis (billig, verwirft fast alles Belegte), dann die ganze Fläche nur für
+            // Nachbarn in Reichweite
+            let count = obstacles.count
+            let ox = obstacles.map(\.center.x), oy = obstacles.map(\.center.y)
+            let near = obstacles.map { $0.outer + item.outer + config.gap - tolerance }
+            let reach = obstacles.map { $0.bound + item.bound + config.gap }
+            /// Kreis an Kreis frei? (verwirft Punkte mitten in anderen Themen, bevor sie bewertet werden)
+            func circlesFree(_ c: CGPoint) -> Bool {
+                for i in 0..<count {
+                    let dx = c.x - ox[i], dy = c.y - oy[i]
+                    if dx * dx + dy * dy < near[i] * near[i] { return false }
+                }
+                return true
+            }
+            func isFree(_ c: CGPoint) -> Bool {
+                guard circlesFree(c) else { return false }
+                var probe = item
+                probe.center = c
+                for i in 0..<count {
+                    let dx = c.x - ox[i], dy = c.y - oy[i]
+                    if dx * dx + dy * dy < reach[i] * reach[i], overlaps(probe, obstacles[i], gap: config.gap) { return false }
+                }
+                return true
+            }
+
+            // Kandidaten: die Mitte und die Berührpunkte rund um jede Fläche; erst bewerten, dann der Reihe nach
+            // prüfen, ob dort frei ist (das Teure nur für die besten). Ist ein Berührpunkt belegt, rückt er auf
+            // seinem Strahl bis zur ersten freien Stelle vor und reiht sich mit neuem Wert wieder ein.
+            struct Candidate {
+                var score: CGFloat
+                var cost: CGFloat
+                var point: CGPoint
+                /// Strahl (Fläche, Richtung, Abstand), auf dem der Punkt liegt; nil = Mitte oder Zweifach-Berührung
+                var ray: (anchor: Int, ux: CGFloat, uy: CGFloat, t: CGFloat)?
+
+                func before(_ other: Candidate) -> Bool {
+                    if score != other.score { return score < other.score }
+                    if cost != other.cost { return cost < other.cost }
+                    return (point.x, point.y) < (other.point.x, other.point.y)
+                }
+            }
+            var candidates: [Candidate] = []
+            let k = max(8, config.directions)
+            candidates.reserveCapacity(obstacles.count * k + 1)
+            if band.allows(target.y) { candidates.append(Candidate(score: score(target), cost: cost(target), point: target)) }
+            let itemShape = Shape(item)
+            for (index, anchor) in obstacles.enumerated() {
+                let tMin = anchor.outer + item.outer + config.gap
+                let anchorShape = Shape(anchor)
+                for step in 0..<k {
+                    let angle = 2 * CGFloat.pi * CGFloat(step) / CGFloat(k)
+                    let ux = cos(angle), uy = sin(angle)
+                    let key = ContactKey(anchor: anchorShape, item: itemShape, step: step)
+                    let t: CGFloat
+                    if let known = contacts[key] {
+                        t = known
+                    } else {
+                        t = MapGeometry.contact(item, around: anchor, ux: ux, uy: uy, from: tMin, gap: config.gap)
+                        contacts[key] = t
+                    }
+                    let c = snap(CGPoint(x: anchor.center.x + ux * t, y: anchor.center.y + uy * t))
+                    guard band.allows(c.y), circlesFree(c) else { continue }
+                    candidates.append(Candidate(score: score(c), cost: cost(c), point: c, ray: (index, ux, uy, t)))
+                }
+            }
+            // Punkte, die zwei Nachbarn zugleich berühren (Kreis an Kreis): ergeben genaue Dreiecke und Versätze
+            for i in obstacles.indices {
+                let a = obstacles[i]
+                let ra = a.outer + item.outer + config.gap + slack
+                for j in obstacles.indices where j > i {
+                    let b = obstacles[j]
+                    let rb = b.outer + item.outer + config.gap + slack
+                    let dx = b.center.x - a.center.x, dy = b.center.y - a.center.y
+                    let d = (dx * dx + dy * dy).squareRoot()
+                    guard d > 1e-6, d < ra + rb, d > abs(ra - rb) else { continue }
+                    let along = (ra * ra - rb * rb + d * d) / (2 * d)
+                    let h = max(0, ra * ra - along * along).squareRoot()
+                    let mx = a.center.x + along * dx / d, my = a.center.y + along * dy / d
+                    for sign in [CGFloat(1), -1] {
+                        let c = snap(CGPoint(x: mx - sign * h * dy / d, y: my + sign * h * dx / d))
+                        guard band.allows(c.y), circlesFree(c) else { continue }
+                        candidates.append(Candidate(score: score(c), cost: cost(c), point: c))
+                    }
+                }
+            }
+            candidates.sort { $0.before($1) }
+
+            /// erste freie Stelle auf dem Strahl ab `t` (nil = nach einigen Hindernissen aufgegeben)
+            func march(_ ray: (anchor: Int, ux: CGFloat, uy: CGFloat, t: CGFloat)) -> CGPoint? {
+                let origin = obstacles[ray.anchor].center
+                var t = ray.t
+                var probe = item
+                for _ in 0..<4 {
+                    probe.center = CGPoint(x: origin.x + ray.ux * t, y: origin.y + ray.uy * t)
+                    guard let blocker = obstacles.first(where: { overlaps(probe, $0, gap: config.gap) }) else {
+                        return snap(probe.center)
+                    }
+                    var lo = t, hi = t + 2 * (blocker.bound + item.bound + config.gap) + 1
+                    for _ in 0..<16 {
+                        let mid = (lo + hi) / 2
+                        probe.center = CGPoint(x: origin.x + ray.ux * mid, y: origin.y + ray.uy * mid)
+                        if overlaps(probe, blocker, gap: config.gap) { lo = mid } else { hi = mid }
+                    }
+                    t = hi + slack
+                }
+                return nil
+            }
+
+            var index = 0
+            var marches = 0
+            while index < candidates.count {
+                let candidate = candidates[index]
+                if isFree(candidate.point) { return candidate.point }
+                index += 1
+                guard let ray = candidate.ray, marches < Space.maxMarches, let moved = march(ray), band.allows(moved.y) else { continue }
+                marches += 1
+                let next = Candidate(score: score(moved), cost: cost(moved), point: moved)
+                // einsortieren (hinter den gerade geprüften)
+                var at = index
+                while at < candidates.count, candidates[at].before(next) { at += 1 }
+                candidates.insert(next, at: at)
+            }
+            return nil
+        }
+
+        /// höchstens so viele Strahlen je Suche bis zur ersten freien Stelle verfolgen
+        static let maxMarches = 48
+
+        /// Gewicht der Unwucht gegenüber der Rahmengröße (nur solange weniger als `fewTopics` Themen liegen)
+        static let balance: CGFloat = 0.5
+        static let fewTopics = 6
+    }
+
+    /// Kleinster Abstand entlang (ux, uy), ab dem `item` die Fläche `anchor` nicht mehr berührt. Hängt nur von
+    /// den Formen und der Richtung ab, nicht vom Ort.
+    static func contact(_ item: MapFootprint, around anchor: MapFootprint, ux: CGFloat, uy: CGFloat,
+                        from tMin: CGFloat, gap: CGFloat) -> CGFloat {
+        var a = anchor
+        a.center = .zero
         var probe = item
         // häufigster Fall: Am Mindestabstand der Kreise stört auch kein Beschriftungsfeld
-        probe.center = CGPoint(x: anchor.center.x + ux * tMin, y: anchor.center.y + uy * tMin)
-        if !overlaps(anchor, probe, gap: gap) { return tMin + slack }
+        probe.center = CGPoint(x: ux * tMin, y: uy * tMin)
+        if !overlaps(a, probe, gap: gap) { return tMin + slack }
         var lo = max(0, tMin - 0.05) // hier überlappen die Kreise sicher
-        var hi = max(lo + 0.1, anchor.bound + item.bound + gap + 1)
-        for _ in 0..<14 {
+        var hi = max(lo + 0.1, a.bound + item.bound + gap + 1)
+        for _ in 0..<16 {
             let mid = (lo + hi) / 2
-            probe.center = CGPoint(x: anchor.center.x + ux * mid, y: anchor.center.y + uy * mid)
-            if overlaps(anchor, probe, gap: gap) { lo = mid } else { hi = mid }
+            probe.center = CGPoint(x: ux * mid, y: uy * mid)
+            if overlaps(a, probe, gap: gap) { lo = mid } else { hi = mid }
         }
         return hi + slack
     }
@@ -800,15 +1054,18 @@ enum MapGeometry {
         return result
     }
 
-    /// Übersicht: Verknüpfungen zwischen Themen gebündelt – je Paar eine Linie, je Thema höchstens die
-    /// `maxTopicLinesPerTopic` stärksten (mehr Verknüpfungen, dann neuere, dann ID). Kreisrand zu Kreisrand.
+    /// Übersicht: Verknüpfungen zwischen echten Themen gebündelt – je Paar eine Linie, nur Paare mit mindestens
+    /// `minTopicLinks` Verknüpfungen, insgesamt höchstens `maxTopicLines` und je Thema `maxTopicLinesPerTopic`
+    /// (mehr Verknüpfungen, dann neuere, dann ID). Kreisrand zu Kreisrand; eine Linie, die einen dritten Kreis
+    /// oder dessen Namen kreuzen würde, entfällt.
     static func topicLines(_ links: [MapLayoutInput.Link], created: [String: (topic: String, date: Date)],
                            footprints: [String: MapFootprint], config: MapLayoutConfig) -> [MapLayout.TopicLine] {
         struct Pair { var a: String; var b: String; var count: Int; var newest: Date }
         var pairs: [String: Pair] = [:]
         var seen = Set<String>()
         for link in links where link.from != link.to {
-            guard let x = created[link.from], let y = created[link.to], x.topic != y.topic else { continue }
+            guard let x = created[link.from], let y = created[link.to], x.topic != y.topic,
+                  !MapLayout.isPseudo(x.topic), !MapLayout.isPseudo(y.topic) else { continue }
             let thoughts = link.from < link.to ? link.from + "|" + link.to : link.to + "|" + link.from
             guard seen.insert(thoughts).inserted else { continue }
             let (a, b) = x.topic < y.topic ? (x.topic, y.topic) : (y.topic, x.topic)
@@ -821,26 +1078,76 @@ enum MapGeometry {
                 pairs[a + "|" + b] = Pair(a: a, b: b, count: 1, newest: newest)
             }
         }
-        let ranked = pairs.values.sorted { p, q in
+        let ranked = pairs.values.filter { $0.count >= config.minTopicLinks }.sorted { p, q in
             if p.count != q.count { return p.count > q.count }
             if p.newest != q.newest { return p.newest > q.newest }
             return (p.a, p.b) < (q.a, q.b)
         }
+        let all = footprints.values.sorted { $0.id < $1.id }
         var perTopic: [String: Int] = [:]
         var result: [MapLayout.TopicLine] = []
         for pair in ranked {
+            guard result.count < config.maxTopicLines else { break }
             guard (perTopic[pair.a] ?? 0) < config.maxTopicLinesPerTopic, (perTopic[pair.b] ?? 0) < config.maxTopicLinesPerTopic,
                   let fa = footprints[pair.a], let fb = footprints[pair.b] else { continue }
-            perTopic[pair.a, default: 0] += 1
-            perTopic[pair.b, default: 0] += 1
             let from = edge(fa, toward: fb.center), to = edge(fb, toward: fa.center)
             let dx = to.x - from.x, dy = to.y - from.y
             let bend: CGFloat = 0.12
-            result.append(MapLayout.TopicLine(a: pair.a, b: pair.b, count: pair.count, from: from,
-                                              control: CGPoint(x: (from.x + to.x) / 2 - dy * bend, y: (from.y + to.y) / 2 + dx * bend),
-                                              to: to))
+            let control = CGPoint(x: (from.x + to.x) / 2 - dy * bend, y: (from.y + to.y) / 2 + dx * bend)
+            guard !crossesThird(from: from, control: control, to: to, except: [pair.a, pair.b], all: all, config: config) else { continue }
+            perTopic[pair.a, default: 0] += 1
+            perTopic[pair.b, default: 0] += 1
+            result.append(MapLayout.TopicLine(a: pair.a, b: pair.b, count: pair.count, from: from, control: control, to: to))
         }
         return result
+    }
+
+    /// Läuft die Kurve durch einen anderen Kreis (mit etwas Luft) oder über dessen Namen?
+    static func crossesThird(from: CGPoint, control: CGPoint, to: CGPoint, except: Set<String>, all: [MapFootprint],
+                             config: MapLayoutConfig) -> Bool {
+        // Kurve als Streckenzug (12 Teile reichen bei der flachen Biegung)
+        var points: [CGPoint] = []
+        for i in 0...12 {
+            let t = CGFloat(i) / 12, u = 1 - t
+            points.append(CGPoint(x: u * u * from.x + 2 * u * t * control.x + t * t * to.x,
+                                  y: u * u * from.y + 2 * u * t * control.y + t * t * to.y))
+        }
+        let margin: CGFloat = 6
+        for other in all where !except.contains(other.id) {
+            let r = other.radius + margin
+            let name = CGRect(x: other.center.x + other.lx0, y: other.center.y + other.ly0,
+                              width: other.lx1 - other.lx0, height: config.labelHeight).insetBy(dx: 4, dy: 2)
+            for i in 0..<(points.count - 1) {
+                let p = points[i], q = points[i + 1]
+                if distance(other.center, p, q) < r { return true }
+                if segment(p, q, hits: name) { return true }
+            }
+        }
+        return false
+    }
+
+    /// Abstand eines Punkts zu einer Strecke
+    private static func distance(_ c: CGPoint, _ p: CGPoint, _ q: CGPoint) -> CGFloat {
+        let vx = q.x - p.x, vy = q.y - p.y
+        let len2 = vx * vx + vy * vy
+        let t = len2 > 0 ? max(0, min(1, ((c.x - p.x) * vx + (c.y - p.y) * vy) / len2)) : 0
+        return hypot(c.x - (p.x + vx * t), c.y - (p.y + vy * t))
+    }
+
+    /// Schneidet die Strecke das Feld? (Liang–Barsky)
+    private static func segment(_ p: CGPoint, _ q: CGPoint, hits r: CGRect) -> Bool {
+        var t0: CGFloat = 0, t1: CGFloat = 1
+        let dx = q.x - p.x, dy = q.y - p.y
+        for (pk, qk) in [(-dx, p.x - r.minX), (dx, r.maxX - p.x), (-dy, p.y - r.minY), (dy, r.maxY - p.y)] {
+            if pk == 0 {
+                if qk < 0 { return false }
+            } else {
+                let t = qk / pk
+                if pk < 0 { t0 = max(t0, t) } else { t1 = min(t1, t) }
+                if t0 > t1 { return false }
+            }
+        }
+        return true
     }
 
     private static func edge(_ f: MapFootprint, toward p: CGPoint) -> CGPoint {

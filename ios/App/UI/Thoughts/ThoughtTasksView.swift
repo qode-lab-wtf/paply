@@ -4,10 +4,10 @@ import SwiftUI
 // Aufgaben-Sicht (KONZEPT §3.3): schlanke Liste über alle Gedanken. Abschnitte „Offen“ und
 // „Erledigt“ (zugeklappt, letzte 30 Tage). Kein Aufgabenmanager: keine Erinnerungen, keine Prioritäten.
 // Abhaken überall gleich (TaskCheckoff): Kreis füllt sich sofort, nach 1,2 s gleitet die Aufgabe aus den
-// offenen Listen. Erneutes Tippen in der Zeit macht es rückgängig.
+// offenen Listen. Erneutes Tippen in der Zeit macht es rückgängig – auch im Detail.
 
-/// Abgehakt, aber noch nicht übernommen – geteilt von Leiste „Offen“, Karten, Panel und Aufgabenliste,
-/// damit dieselbe Aufgabe überall gleich aussieht.
+/// Abgehakt, aber noch nicht übernommen – geteilt von Leiste „Offen“, Karten, Panel, Aufgabenliste und Detail,
+/// damit dieselbe Aufgabe überall gleich aussieht und sich überall gleich verhält.
 @MainActor
 @Observable
 final class TaskCheckoff {
@@ -18,27 +18,50 @@ final class TaskCheckoff {
 
     func toggle(_ task: ThoughtTask, thoughtID: String, model: ThoughtsModel, reduceMotion: Bool) {
         let key = task.id
-        if task.done {
-            withAnimation(PaplyMotion.smooth(reduceMotion)) { model.toggleTask(thoughtID, key) }
+        let smooth = PaplyMotion.smooth(reduceMotion)
+        // immer der aktuelle Stand, nicht der einer evtl. veralteten Ansicht
+        guard let current = Self.task(key, in: thoughtID, model: model) else {
+            forget(key, animation: smooth)
             return
         }
         if let running = timers[key] {
+            // in der Wartezeit erneut getippt: rückgängig. Wurde sie inzwischen woanders erledigt, wieder
+            // öffnen – ein Tippen dreht immer den sichtbaren Zustand um.
             running.cancel()
             timers[key] = nil
-            withAnimation(PaplyMotion.smooth(reduceMotion)) { _ = pending.remove(key) }
+            withAnimation(smooth) {
+                _ = pending.remove(key)
+                if current.done { model.toggleTask(thoughtID, key) }
+            }
             return
         }
-        withAnimation(PaplyMotion.smooth(reduceMotion)) { _ = pending.insert(key) }
-        let smooth = PaplyMotion.smooth(reduceMotion)
+        if current.done {
+            withAnimation(smooth) { model.toggleTask(thoughtID, key) }
+            return
+        }
+        withAnimation(smooth) { _ = pending.insert(key) }
         timers[key] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
             guard !Task.isCancelled, let self else { return }
-            withAnimation(smooth) {
-                model.toggleTask(thoughtID, key)
-                self.pending.remove(key)
-            }
             self.timers[key] = nil
+            // neu lesen: nur umschalten, wenn die Aufgabe noch da und noch offen ist
+            let still = Self.task(key, in: thoughtID, model: model)
+            withAnimation(smooth) {
+                if let still, !still.done { model.toggleTask(thoughtID, key) }
+                _ = self.pending.remove(key)
+            }
         }
+    }
+
+    /// Aufgabe gibt es nicht mehr (gelöscht, Gedanke gelöscht): Wartezeit beenden, nichts schreiben
+    private func forget(_ key: String, animation: Animation?) {
+        timers.removeValue(forKey: key)?.cancel()
+        if pending.contains(key) { withAnimation(animation) { _ = pending.remove(key) } }
+    }
+
+    private static func task(_ id: String, in thoughtID: String, model: ThoughtsModel) -> ThoughtTask? {
+        guard let thought = model.thought(thoughtID), thought.deletedAt == nil else { return nil }
+        return thought.tasks.first { $0.id == id }
     }
 }
 

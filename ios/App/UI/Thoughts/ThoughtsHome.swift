@@ -2,10 +2,11 @@ import PaplyKit
 import SwiftUI
 import UIKit
 
-// Tab „Gedanken“: Die Startseite ist eine Landkarte der Themen (Entwurf „Landkarte“). Oben eine Zeile
-// Überblick und die Leiste „Offen“ mit der nächsten Aufgabe. Thema antippen → die Karte zoomt hinein,
-// das Panel mit den Karten des Themas gleitet hoch (Raststufen wie Apple Karten). Kompakter Kopf:
-// Suche als Lupe (eigene Seite), Aufnahme-Knopf in der unteren Werkzeugleiste.
+// Tab „Gedanken“: Die Startseite ist eine Landkarte der Themen (Entwurf „Landkarte“). Oben nur die Leiste
+// „Offen“ mit der nächsten Aufgabe; der Überblick („320 Gedanken · 8 Themen“) steht auf iOS 26 als
+// Untertitel unter „Gedanken“, auf iOS 18 in der unteren Leiste (wie in Notizen). Thema antippen → die Karte
+// zoomt hinein, das Panel mit den Karten des Themas gleitet hoch (Raststufen wie Apple Karten). Kompakter
+// Kopf: Suche als Lupe (eigene Seite), Aufnahme-Knopf in der unteren Werkzeugleiste.
 
 /// Die Landkarte der Themen (Map/ThoughtMapView.swift)
 typealias ThoughtMap = ThoughtMapView
@@ -67,12 +68,17 @@ struct ThoughtsHome: View {
             .navigationTitle("Gedanken")
             // Karte statt Liste: kompakter Kopf wie in Karten/Wo ist?, damit die Karte Platz hat
             .navigationBarTitleDisplayMode(.inline)
+            .modifier(SummarySubtitle(text: model.thoughts.isEmpty ? nil : ThoughtsSummary.text(model)))
             .toolbar { toolbar }
             .toolbar { bottomBar }
             .topicActions($topicAction)
             .onChange(of: model.topics.map(\.id)) { _, _ in
-                // gewähltes Thema gelöscht → zurück zur Übersicht (Zusammenführen löst `topic(_:)` auf)
-                if let id = nav.focusedTopic, !TopicPalette.isNeutral(id), model.topic(id) == nil {
+                guard let id = nav.focusedTopic, !TopicPalette.isNeutral(id) else { return }
+                if let resolved = model.topic(id)?.id {
+                    // zusammengeführt (auch automatisch): Panel, Karte und Farbe folgen dem Ziel
+                    if resolved != id { nav.focus(resolved) }
+                } else {
+                    // gewähltes Thema gelöscht → zurück zur Übersicht
                     withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) }
                 }
             }
@@ -107,12 +113,14 @@ struct ThoughtsHome: View {
             let heights = PanelHeights(small: 96 + bottom,
                                        medium: max(min(full * 0.5, full - 200), 96 + bottom + 120),
                                        large: full - 4)
-            let panelID = nav.focusedTopic
+            let panelID = resolvedFocus
             ZStack(alignment: .bottom) {
                 // Karte über die volle Höhe (ihr Hintergrund läuft unter dem Kopf durch); ihr Inhalt
-                // beginnt unter dem Kopf. Im Thema gehört der Platz der Karte und dem Panel.
+                // beginnt unter dem Kopf. Im Thema gehört der Platz der Karte und dem Panel – höchstens
+                // bis zur mittleren Stufe: In „groß“ deckt das Panel die Karte ohnehin zu, sie soll dabei
+                // nicht auf einen Streifen herauszoomen.
                 ThoughtMap(focusedTopic: mapFocus,
-                           bottomInset: panelID != nil ? heights[nav.panelDetent] : bottom,
+                           bottomInset: panelID != nil ? min(heights[nav.panelDetent], heights.medium) : bottom,
                            onOpenThought: { nav.path.append(.thought($0)) })
                     .safeAreaPadding(.top, panelID == nil ? headerHeight : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -139,20 +147,33 @@ struct ThoughtsHome: View {
         }
     }
 
+    /// Kopf über der Karte: nur was gerade zählt – ggf. die Pille für Ungeordnetes, Einrichten, „Offen“
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ThoughtsSummaryLine()
+        let pending = PendingThoughtsPill.count(model)
+        return VStack(alignment: .leading, spacing: 10) {
+            if pending > 0 {
+                PendingThoughtsPill()
+                    .transition(.scale(scale: 0.85, anchor: .leading).combined(with: .opacity))
+            }
             if SetupGuide.shared.isVisible(model: model) {
                 SetupBanner()
             }
             OpenTasksBar()
         }
+        .animation(PaplyMotion.bouncy(reduce), value: pending > 0)
+    }
+
+    /// Gewähltes Thema, aufgelöst (ein Alias zeigt sein Ziel) – Karte, Panel und Farbe nutzen dieselbe ID
+    private var resolvedFocus: String? {
+        guard let id = nav.focusedTopic else { return nil }
+        if TopicPalette.isNeutral(id) { return id }
+        return model.topic(id)?.id ?? id
     }
 
     /// Fokus der Karte: Thema bzw. „Ohne Thema“; „Noch nicht geordnet“ lässt die Karte in der Übersicht
     private var mapFocus: Binding<String?> {
         Binding(
-            get: { nav.focusedTopic == Self.pendingID ? nil : nav.focusedTopic },
+            get: { nav.focusedTopic == Self.pendingID ? nil : resolvedFocus },
             set: { new in
                 guard new != nav.focusedTopic else { return }
                 if new == nil, nav.focusedTopic == Self.pendingID { return }
@@ -204,7 +225,7 @@ struct ThoughtsHome: View {
             // iOS 18: Leiste über der Tab-Leiste mit Anzahl wie in Notizen. iOS 26 setzt den Knopf
             // neben die schwebende Tab-Leiste – dort hätte der Text keinen Platz.
             if !PaplyStyle.usesGlass {
-                Text(countText)
+                Text(bottomText)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Color.paplySecondaryText)
                     .monospacedDigit()
@@ -217,9 +238,24 @@ struct ThoughtsHome: View {
         }
     }
 
-    private var countText: String {
-        let n = nav.focusedTopic.map { model.panelThoughts($0).count } ?? model.thoughts.count
+    /// iOS 18: Überblick („320 Gedanken · 8 Themen“), im Thema die Anzahl seiner Gedanken
+    private var bottomText: String {
+        guard let id = nav.focusedTopic else { return ThoughtsSummary.text(model) }
+        let n = model.panelThoughts(id).count
         return n == 1 ? "1 Gedanke" : "\(n) Gedanken"
+    }
+}
+
+/// iOS 26: Überblick als Untertitel unter „Gedanken“ (iOS 18 zeigt ihn in der unteren Leiste)
+private struct SummarySubtitle: ViewModifier {
+    let text: String?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), PaplyStyle.usesGlass, let text {
+            content.navigationSubtitle(Text(text).monospacedDigit())
+        } else {
+            content
+        }
     }
 }
 

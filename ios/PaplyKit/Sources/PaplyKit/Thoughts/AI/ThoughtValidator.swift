@@ -195,8 +195,9 @@ public enum ThoughtValidator {
                 rejections.append("topic:duplicate")
                 return .existing(match.topicID)
             }
-            // Name, Stichwort oder Variante eines beschriebenen Themas → dieses Thema (Code statt Prompt)
-            if let match = TopicMentions.describedMatch(name, among: input.topics) {
+            // Meint der Name eindeutig ein beschriebenes Thema (Titel, oder Eigennamen daraus und ein weiterer
+            // Begriff im Transkript) → dieses Thema (Code statt Prompt). Im Zweifel bleibt es ein neues Thema.
+            if let match = TopicMentions.describedMatch(name, transcript: input.transcript, among: input.topics) {
                 rejections.append("topic:described")
                 return .existing(match.topicID)
             }

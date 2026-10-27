@@ -59,8 +59,10 @@ struct TopicPanel: View {
     let onClose: () -> Void
     let onAction: (TopicAction) -> Void
 
+    @Environment(ThoughtsModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduce
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var drag: CGFloat = 0
     @State private var scroll = ScrollPosition(edge: .top)
     @State private var scrolled = false
@@ -101,7 +103,7 @@ struct TopicPanel: View {
             }
 
             ScrollView {
-                TopicPanelBody(topicID: topicID)
+                TopicPanelBody(topicID: topicID, columns: columns)
                     .padding(.horizontal, 12)
                     .padding(.bottom, bottomInset + 28)
             }
@@ -127,7 +129,7 @@ struct TopicPanel: View {
         .frame(height: max(0, height), alignment: .top)
         .frame(maxWidth: .infinity)
         .clipShape(shape)
-        .background(PanelSurface(tint: TopicPalette.tint(for: topicID), shape: shape))
+        .background(PanelSurface(tint: TopicPalette.tint(for: resolvedID), shape: shape))
         .gesture(dragGesture, including: detent == .large ? .subviews : .all)
         .onChange(of: detent) { _, new in
             if new != .large { withAnimation(PaplyMotion.smooth(reduce)) { scroll.scrollTo(edge: .top) } }
@@ -143,6 +145,16 @@ struct TopicPanel: View {
         }
         #endif
         .sensoryFeedback(.selection, trigger: detent)
+    }
+
+    /// Mittel: eine Spalte (ruhig, ohne Silbentrennung); groß: zwei Spalten, ab xxLarge wieder eine
+    private var columns: Int {
+        detent == .large && typeSize < .xxLarge ? 2 : 1
+    }
+
+    /// Ein Alias zeigt sein Ziel – Farbe wie Karte und Kopf
+    private var resolvedID: String {
+        TopicPalette.isNeutral(topicID) ? topicID : (model.topic(topicID)?.id ?? topicID)
     }
 
     // MARK: Ziehen
@@ -223,7 +235,7 @@ struct TopicPanelHeader: View {
                 subtitle(items, open: open)
                     .font(.subheadline)
                     .foregroundStyle(Color.paplySecondaryText)
-                    .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                    .lineLimit(typeSize.isAccessibilitySize ? 3 : (typeSize >= .xxLarge ? 2 : 1))
                     .contentTransition(.numericText())
             }
             Spacer(minLength: 6)
@@ -262,7 +274,11 @@ struct TopicPanelHeader: View {
 
     private func title(_ topic: Topic?) -> String {
         if let topic { return topic.title }
-        return topicID == ThoughtsHome.pendingID ? "Noch nicht geordnet" : "Ohne Thema"
+        switch topicID {
+        case ThoughtsHome.pendingID: return "Noch nicht geordnet"
+        case ThoughtMapView.moreID: return "Weitere Themen"
+        default: return "Ohne Thema"
+        }
     }
 
     private func subtitle(_ items: [Thought], open: Int) -> Text {
@@ -292,9 +308,10 @@ struct TopicPanelHeader: View {
 /// Offene Aufgaben des Themas oben, darunter alle Gedanken als Mauerwerk, nach Zeit gegliedert.
 struct TopicPanelBody: View {
     let topicID: String
+    /// Spalten des Mauerwerks (mittel 1, groß 2)
+    var columns = 1
 
     @Environment(ThoughtsModel.self) private var model
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let items = model.panelThoughts(topicID)
@@ -308,7 +325,6 @@ struct TopicPanelBody: View {
                 case (nil, nil): a.thought.createdAt > b.thought.createdAt
                 }
             }
-        let columns = typeSize.isAccessibilitySize ? 1 : 2
         LazyVStack(alignment: .leading, spacing: 0) {
             if !open.isEmpty {
                 PanelSectionLabel(title: "Offen", count: open.count)
@@ -328,7 +344,7 @@ struct TopicPanelBody: View {
                 case .cards(let thoughts):
                     MasonryLayout(columns: columns, spacing: 10) {
                         ForEach(thoughts) { thought in
-                            ThoughtCardButton(thought: thought, zoomID: "panel:\(thought.id)")
+                            ThoughtCardButton(thought: thought, zoomID: "panel:\(thought.id)", compact: columns > 1)
                         }
                     }
                     .padding(.bottom, 10)
@@ -426,6 +442,7 @@ private struct PanelTaskGroup: View {
             }
         }
         .background(ThoughtCardSurface(cornerRadius: 18))
+        .withoutHyphenation()
         .animation(PaplyMotion.smooth(reduce), value: items.map(\.task.id))
     }
 
@@ -473,11 +490,14 @@ private struct PanelTaskGroup: View {
 
 extension ThoughtsModel {
     /// Gedanken, die das Panel zu einer Kennung zeigt (neueste zuerst): ein Thema (auch zusammengeführte
-    /// Aliasse), „Ohne Thema“ (`ThoughtsHome.noTopicID`) oder „Noch nicht geordnet“ (`ThoughtsHome.pendingID`).
+    /// Aliasse), „Ohne Thema“ (`ThoughtsHome.noTopicID`), „Weitere Themen“ (`ThoughtMapView.moreID`) oder „Noch nicht
+    /// geordnet“ (`ThoughtsHome.pendingID`).
     func panelThoughts(_ id: String) -> [Thought] {
         if id == ThoughtsHome.pendingID {
             return thoughts.filter { $0.isProcessing || $0.isWaiting }
         }
+        // Sammelkreis der Karte: dieselbe Regel wie die Karte (`MapLayout.collected`)
+        if id == ThoughtMapView.moreID { return mapCollectedThoughts() }
         if TopicPalette.isNeutral(id) {
             return thoughts.filter { topic($0.topicId) == nil }
         }

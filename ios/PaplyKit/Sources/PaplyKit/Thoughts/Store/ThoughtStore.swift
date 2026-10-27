@@ -18,12 +18,29 @@ public struct AIResultRecord: Sendable, Equatable {
     public var model: String?
     public var usage: TokenUsage?
     public var at: Date
+    /// Name und Symbol des gewählten vorhandenen Themas beim Aufruf (nur bei `.existing`). Ist das Thema beim
+    /// Übernehmen verschwunden – sein letzter Gedanke wurde inzwischen endgültig gelöscht –, wird es damit neu
+    /// angelegt, statt den Gedanken still ohne Thema zu lassen.
+    public var chosenTopic: TopicLabel?
 
-    public init(result: StructureResult, model: String? = nil, usage: TokenUsage? = nil, at: Date = Date()) {
+    public init(result: StructureResult, model: String? = nil, usage: TokenUsage? = nil, at: Date = Date(),
+                chosenTopic: TopicLabel? = nil) {
         self.result = result
         self.model = model
         self.usage = usage
         self.at = at
+        self.chosenTopic = chosenTopic
+    }
+}
+
+/// Name und Symbol eines Themas (ohne ID) – genug, um es neu anzulegen.
+public struct TopicLabel: Sendable, Equatable {
+    public var name: String
+    public var icon: TopicIcon
+
+    public init(name: String, icon: TopicIcon) {
+        self.name = name
+        self.icon = icon
     }
 }
 
@@ -294,6 +311,44 @@ public actor ThoughtStore {
         guard let current = cache[id] else { return nil }
         var next = current
         change(&next)
+        return try commitChange(id, from: current, to: next)
+    }
+
+    /// Wie `update`, dazu das Thema im selben Schritt (KI-Ergebnis übernehmen, KONZEPT §6.10): `topic` wird über
+    /// seine Alias-Kette aufgelöst. Gibt es es nicht (mehr) – neu, oder gerade mit seinem letzten Gedanken entfernt
+    /// (`pruneTopics`) –, wird es angehängt, aber nur, wenn der Gedanke es danach wirklich trägt. `change` bekommt
+    /// die ID, die gilt (nil = ohne Thema). So zeigt ein Gedanke nie auf ein Thema, das es nicht gibt.
+    @discardableResult
+    public func update(_ id: String, topic: Topic?, _ change: @Sendable (inout Thought, _ topicID: String?) -> Void) throws -> Thought? {
+        try ensureLoaded()
+        guard let current = cache[id] else { return nil }
+        var topicID: String?
+        var missing: Topic?
+        if let topic {
+            if let existing = Self.resolve(topic.id, in: topicsDoc.topics) {
+                topicID = existing.id
+            } else if topicsReadable, !topicsDoc.topics.contains(where: { $0.id == topic.id }) {
+                var fresh = topic
+                fresh.mergedInto = nil
+                missing = fresh
+                topicID = fresh.id
+            }
+        }
+        var next = current
+        change(&next, topicID)
+        if let missing, next.topicId == missing.id {
+            var doc = topicsDoc
+            doc.topics.append(missing)
+            if (try? writeTopics(doc)) == nil { // lieber ohne Thema als mit einer ID ins Leere
+                next = current
+                change(&next, nil)
+            }
+        }
+        return try commitChange(id, from: current, to: next)
+    }
+
+    private func commitChange(_ id: String, from current: Thought, to proposed: Thought) throws -> Thought? {
+        var next = proposed
         next.id = id
         if next == current { return current }
         if next.state == .empty {
@@ -780,7 +835,7 @@ public struct AIResultFile: Codable, Sendable, Equatable {
         title = result.title
         cleanText = result.cleanText
         switch result.topic {
-        case .existing(let id): topic = TopicDTO(kind: "existing", id: id)
+        case .existing(let id): topic = TopicDTO(kind: "existing", id: id, name: record.chosenTopic?.name, icon: record.chosenTopic?.icon)
         case .new(let name, let icon): topic = TopicDTO(kind: "new", name: name, icon: icon)
         case .none: topic = TopicDTO(kind: "none")
         }
@@ -802,7 +857,9 @@ public struct AIResultFile: Codable, Sendable, Equatable {
         let result = StructureResult(title: title, cleanText: cleanText, topic: decision, tasks: tasks.map(\.draft),
                                      related: related.map { RelatedDraft(thoughtID: $0.thoughtID, kind: $0.kind, reason: $0.reason) },
                                      rejections: rejections)
+        let chosen = topic.kind == "existing" ? topic.name.map { TopicLabel(name: $0, icon: topic.icon ?? .sparkles) } : nil
         return AIResultRecord(result: result, model: model,
-                              usage: usage.map { TokenUsage(prompt: $0.prompt, completion: $0.completion, total: $0.total) }, at: at)
+                              usage: usage.map { TokenUsage(prompt: $0.prompt, completion: $0.completion, total: $0.total) }, at: at,
+                              chosenTopic: chosen)
     }
 }

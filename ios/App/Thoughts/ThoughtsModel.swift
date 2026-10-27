@@ -498,7 +498,7 @@ final class ThoughtsModel {
         deleted = byID.values.filter { $0.deletedAt != nil }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        TopicPalette.register(stored) // Themenfarben (Oberfläche)
+        TopicPalette.register(stored, persistent: backend != nil) // Themenfarben (Oberfläche)
         recomputeDerived()
     }
 
@@ -506,7 +506,7 @@ final class ThoughtsModel {
         let renamed = Set(stored.filter { topicByID[$0.id]?.title != $0.title || topicByID[$0.id]?.mergedInto != $0.mergedInto }.map(\.id))
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        TopicPalette.register(stored)
+        TopicPalette.register(stored, persistent: backend != nil)
         recomputeDerived()
         guard !renamed.isEmpty else { return }
         for thought in thoughts where renamed.contains(thought.topicId ?? "") || renamed.contains(resolvedTopic(thought.topicId)?.id ?? "") {

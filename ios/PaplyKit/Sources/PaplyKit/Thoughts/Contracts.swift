@@ -259,7 +259,10 @@ public struct Topic: Codable, Sendable, Identifiable, Equatable {
     /// Die Beschreibung, falls vorhanden (getrimmt, nicht leer).
     public var describedNote: String? { Self.normalizedNote(note) }
 
-    /// Vom Nutzer angelegt oder beschrieben: wird nie automatisch zusammengeführt, umbenannt oder entfernt.
+    /// Vom Nutzer angelegt oder beschrieben: wird nie automatisch zusammengeführt oder umbenannt.
+    /// Entfernt wird es wie jedes Thema, wenn sein letzter Gedanke endgültig gelöscht ist – außer es hat eine
+    /// Beschreibung, dann bleibt es immer (`ThoughtStore.pruneTopics`, ENTSCHEIDUNGEN 2026-10-27). Ein von Hand
+    /// angelegtes, noch leeres Thema bleibt ebenfalls stehen.
     public var isUserDefined: Bool { owner == .user || describedNote != nil }
 }
 

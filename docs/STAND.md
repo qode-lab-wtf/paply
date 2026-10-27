@@ -21,6 +21,10 @@
   3 Aufgaben abhakbar, keine Mitteilungen), Gedanken per Tastatur einsetzen, „In WhatsApp öffnen“ für erkannte
   Nachrichten, „Frag deine Gedanken“, Spotlight/Siri, Teilen → Paply, Mehrsprachigkeit der Oberfläche,
   Paply-Zugang ohne eigenen Groq-Schlüssel (Server).
+- **Vorgemerkt, noch nicht bauen (Allan, 27.10.):** Eine Aufnahme mit klar getrennten Sachen in mehrere Gedanken
+  aufteilen, jeder mit eigenem Thema. Nur aufteilen, wenn die Teile eindeutig nichts miteinander zu tun haben; im
+  Zweifel bleibt es ein Gedanke. Die Teile verweisen aufeinander („Aus einer Aufnahme“). Heute wird aus einer
+  Aufnahme genau ein Gedanke; Thema und Titel richten sich nach der Hauptsache, Aufgaben werden alle erkannt.
 - Nebenwirkung 27.10.: Die Mac-Latenzmessung hat das Free-Tier-Polierkontingent (qwen) von Allans Groq-Schlüssel
   fast aufgebraucht; das Desktop-Diktat setzte bis zur Erholung Rohtext ein.
 

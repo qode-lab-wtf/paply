@@ -20,6 +20,10 @@ struct MapStyle {
     var tertiary: Color { dark ? Color.paplyText.opacity(0.4) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.42) }
     /// offene Aufgabe (Ring um den Punkt), wie das Gold der Gedanken
     var open: Color { dark ? ThoughtTint.gold : Color(uiColor: UIColor(hex: 0xC98A12)) }
+    /// „Ohne Thema“ und Sammelkreis: neutraler Ring, zarte Fläche, kleine Kreise im Sammelkreis
+    var neutralRing: Color { dark ? Color.paplyText.opacity(0.44) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.42) }
+    var neutralFill: Color { dark ? Color.white.opacity(0.04) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.04) }
+    var neutralGlyph: Color { dark ? Color.paplyText.opacity(0.42) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.36) }
 
     @ViewBuilder
     var background: some View {

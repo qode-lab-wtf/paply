@@ -1,16 +1,27 @@
 import CoreGraphics
 import Foundation
+import Observation
 import PaplyKit
 
 // Was die Karte zeichnet: Anordnung (`MapLayout`, PaplyKit) plus Anzeige-Angaben aus dem Modell.
-// `MapEngine` baut die Eingabe aus `ThoughtsModel` und rechnet nur neu, wenn sie sich ändert.
+// `MapEngine` baut die Eingabe aus `ThoughtsModel` (billig, MainActor) und rechnet die Anordnung im
+// Hintergrund; veraltete Ergebnisse werden verworfen, bis dahin bleibt die letzte Karte stehen.
 // `MapMotion` merkt sich den vorigen Stand für weiche Übergänge und neu dazugekommene Punkte.
 
 struct MapTopicInfo: Equatable {
+    enum Kind: Equatable {
+        case topic
+        /// „Ohne Thema“: hohler, gestrichelter Ring
+        case none
+        /// Sammelkreis „Weitere Themen“
+        case more
+    }
+
     var title: String
     var icon: Lucide
     var count: Int
     var open: Int
+    var kind: Kind = .topic
 }
 
 struct MapDotInfo: Equatable {
@@ -43,37 +54,65 @@ struct MapScene: Equatable {
     }
 }
 
+/// Eingabe der Anordnung, aus dem Modell gebaut
+struct MapRequest: Equatable {
+    var input: MapLayoutInput
+    /// gezeichnete Gedanken (ohne die, die gerade geordnet werden)
+    var total: Int
+}
+
 @MainActor
+@Observable
 final class MapEngine {
     /// bis hierher stehen Titel direkt unter den Kreisen
     static let fewLimit = 5
 
-    private var lastInput: MapLayoutInput?
-    private var lastLayout = MapLayout.empty
-    private var version = 0
+    /// zuletzt fertige Anordnung (nil = noch keine)
+    private(set) var layout: MapLayout?
+    /// steigt, sobald sich die Anordnung ändert
+    private(set) var version = 0
 
-    func scene(model: ThoughtsModel, anchors: [String: MapAnchor], now: Date) -> MapScene {
-        // Gedanken, die gerade geordnet werden, erscheinen erst fertig an ihrem Kreis
+    /// Eingabe, zu der `layout` gehört – mit den eigenen Ankern der Anordnung (rechnet man damit erneut,
+    /// kommt genau `layout` heraus; das muss nicht noch einmal gerechnet werden)
+    @ObservationIgnored private var settled: MapLayoutInput?
+    @ObservationIgnored private var requested: MapLayoutInput?
+    @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var generation = 0
+
+    /// Stand der zuletzt gezeigten Karte: Eine neu erzeugte Ansicht beginnt damit statt leer
+    private static var last: (layout: MapLayout, version: Int, settled: MapLayoutInput)?
+
+    init() {
+        if let last = Self.last {
+            layout = last.layout
+            version = last.version
+            settled = last.settled
+        }
+    }
+
+    // MARK: Eingabe
+
+    /// Eingabe aus dem Modell. Gedanken, die gerade geordnet werden, erscheinen erst fertig an ihrem Kreis.
+    static func makeRequest(model: ThoughtsModel, anchors: [String: MapAnchor]) -> MapRequest {
         let visible = model.thoughts.filter { !$0.isProcessing }
         var topicOf: [String: String] = [:]
         var counts: [String: Int] = [:]
-        var open: [String: Int] = [:]
         var last: [String: Date] = [:]
         var items: [MapLayoutInput.Thought] = []
         items.reserveCapacity(visible.count)
+        topicOf.reserveCapacity(visible.count)
         for thought in visible {
             let topic = model.topic(thought.topicId)?.id ?? ThoughtMapView.noTopicID
             topicOf[thought.id] = topic
             counts[topic, default: 0] += 1
-            open[topic, default: 0] += thought.openTaskCount
             last[topic] = max(last[topic] ?? .distantPast, thought.createdAt)
             items.append(MapLayoutInput.Thought(id: thought.id, topicID: topic, createdAt: thought.createdAt))
         }
-        let few = visible.count <= Self.fewLimit
+        let few = visible.count <= fewLimit
         var topics: [MapLayoutInput.Topic] = model.topics.map { topic in
             let n = counts[topic.id] ?? 0
             return MapLayoutInput.Topic(id: topic.id, count: n, lastActivity: last[topic.id] ?? topic.createdAt,
-                                        titleLines: few ? n : 0)
+                                        titleLines: few ? n : 0, pinned: topic.owner == .user)
         }
         let none = counts[ThoughtMapView.noTopicID] ?? 0
         topics.append(MapLayoutInput.Topic(id: ThoughtMapView.noTopicID, count: none,
@@ -84,30 +123,95 @@ final class MapEngine {
                 links.append(MapLayoutInput.Link(from: thought.id, to: link.target))
             }
         }
-        let input = MapLayoutInput(topics: topics, thoughts: items, links: links, anchors: anchors)
-        if input != lastInput {
-            let layout = MapLayout.compute(input)
-            if layout != lastLayout { version += 1 }
-            lastLayout = layout
-            lastInput = input
-        }
+        return MapRequest(input: MapLayoutInput(topics: topics, thoughts: items, links: links, anchors: anchors),
+                          total: visible.count)
+    }
 
-        // Anzeige (billig: nur gezeichnete Themen und Punkte)
+    // MARK: Rechnen
+
+    /// Neue Eingabe: im Hintergrund rechnen. Eine laufende, ältere Rechnung wird verworfen; bis zum Ergebnis
+    /// bleibt die letzte Karte stehen. `persist`: Anker danach merken (nur mit geladenem Modell).
+    func request(_ request: MapRequest, persist: Bool) {
+        let input = request.input
+        guard input != requested else { return }
+        requested = input
+        task?.cancel()
+        generation &+= 1
+        if input == settled { return } // nur die eigenen Anker kamen zurück: gleiche Karte
+        let ticket = generation
+        task = Task { [weak self] in
+            let layout = await Task.detached(priority: .userInitiated) { MapLayout.compute(input) }.value
+            guard let self, !Task.isCancelled, ticket == self.generation else { return }
+            self.apply(layout, for: input, persist: persist)
+        }
+    }
+
+    private func apply(_ layout: MapLayout, for input: MapLayoutInput, persist: Bool) {
+        if layout != self.layout {
+            version += 1
+            self.layout = layout
+        }
+        var settled = input
+        settled.anchors = layout.anchors
+        self.settled = settled
+        Self.last = (layout, version, settled)
+        // erst mit geladenem Modell – sonst sähen alle Themen gelöscht aus
+        if persist { MapAnchors.shared.remember(layout.anchors) }
+    }
+
+    // MARK: Anzeige
+
+    /// Szene aus der letzten Anordnung und dem aktuellen Modell (billig: nur gezeichnete Kreise und Punkte)
+    func scene(model: ThoughtsModel, total: Int, now: Date) -> MapScene? {
+        guard let layout else { return nil }
+        let collected = Set(layout.collected)
+        var open: [String: Int] = [:]
+        for thought in model.thoughts where !thought.isProcessing && thought.openTaskCount > 0 {
+            let topic = model.topic(thought.topicId)?.id ?? ThoughtMapView.noTopicID
+            let key = collected.contains(topic) ? ThoughtMapView.moreID : topic
+            open[key, default: 0] += thought.openTaskCount
+        }
         var topicInfo: [String: MapTopicInfo] = [:]
-        for bubble in lastLayout.bubbles {
-            if bubble.id == ThoughtMapView.noTopicID {
-                topicInfo[bubble.id] = MapTopicInfo(title: "Ohne Thema", icon: .circleDashed, count: bubble.count, open: open[bubble.id] ?? 0)
-            } else if let topic = model.topic(bubble.id) {
-                topicInfo[bubble.id] = MapTopicInfo(title: topic.title, icon: topic.icon.lucide, count: bubble.count, open: open[bubble.id] ?? 0)
+        for bubble in layout.bubbles {
+            switch bubble.id {
+            case ThoughtMapView.noTopicID:
+                topicInfo[bubble.id] = MapTopicInfo(title: "Ohne Thema", icon: .circleDashed, count: bubble.count,
+                                                    open: open[bubble.id] ?? 0, kind: .none)
+            case ThoughtMapView.moreID:
+                topicInfo[bubble.id] = MapTopicInfo(title: "Weitere Themen", icon: .list, count: bubble.count,
+                                                    open: open[bubble.id] ?? 0, kind: .more)
+            default:
+                if let topic = model.topic(bubble.id) {
+                    topicInfo[bubble.id] = MapTopicInfo(title: topic.title, icon: topic.icon.lucide, count: bubble.count,
+                                                        open: open[bubble.id] ?? 0)
+                }
             }
         }
         var dotInfo: [String: MapDotInfo] = [:]
-        for dot in lastLayout.dots {
+        for dot in layout.dots {
             guard let thought = model.thought(dot.id) else { continue }
             dotInfo[dot.id] = MapDotInfo(title: thought.displayTitle, date: thought.createdAt, hasOpenTask: thought.openTaskCount > 0,
                                          isRecent: now.timeIntervalSince(thought.createdAt) < 86_400)
         }
-        return MapScene(layout: lastLayout, topics: topicInfo, dots: dotInfo, total: visible.count, few: few, version: version)
+        return MapScene(layout: layout, topics: topicInfo, dots: dotInfo, total: total, few: total <= Self.fewLimit,
+                        version: version)
+    }
+}
+
+// MARK: - Sammelkreis fürs Panel
+
+extension ThoughtsModel {
+    /// Themen, die auf der Karte keinen eigenen Kreis haben, sondern im Sammelkreis „Weitere Themen“
+    /// (`ThoughtMapView.moreID`) stecken – dieselbe Regel wie die Karte (`MapLayout.collected`).
+    func mapCollectedTopicIDs() -> Set<String> {
+        MapLayout.collected(MapEngine.makeRequest(model: self, anchors: [:]).input.topics)
+    }
+
+    /// Gedanken des Sammelkreises in der Reihenfolge des Modells (für das Panel zu `ThoughtMapView.moreID`)
+    func mapCollectedThoughts() -> [Thought] {
+        let ids = mapCollectedTopicIDs()
+        guard !ids.isEmpty else { return [] }
+        return thoughts.filter { thought in topic(thought.topicId).map { ids.contains($0.id) } ?? false }
     }
 }
 

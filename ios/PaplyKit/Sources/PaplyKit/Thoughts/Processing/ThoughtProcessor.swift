@@ -418,6 +418,8 @@ public actor ThoughtProcessor {
         _ = try? await store.update(id) { $0.state = .structuring }
         eventBroadcast.yield(.processing(id))
         let settings = await environment.settings()
+        // Themen wie beim Aufruf: verschwindet das gewählte Thema bis zum Übernehmen, wird es damit neu angelegt
+        let topicsAtCall = await store.topics()
         let context = await finder.topicIndex(forText: source.text, languages: source.languages)
         // Zeitbezug = Aufnahmezeit, auch wenn erst später (offline) geordnet wird: `now` im Prompt und
         // die `when`-Angaben der Kandidaten („heute 09:40“) passen so zu „vorhin“ im Gesprochenen.
@@ -445,7 +447,8 @@ public actor ThoughtProcessor {
         }
         switch outcome {
         case let .success(result, model, usage):
-            let record = AIResultRecord(result: result, model: model, usage: usage, at: now())
+            let record = AIResultRecord(result: result, model: model, usage: usage, at: now(),
+                                        chosenTopic: Self.label(of: result.topic, topics: topicsAtCall, index: context.entries))
             try? await store.saveAIResult(id, record) // vor dem Übernehmen sichern (Mac-Plan-Cache)
             await apply(id, source: source, record: record)
         case let .wait(state, retryAt, message):
@@ -454,6 +457,13 @@ public actor ThoughtProcessor {
         case .unusable(let code):
             await applyRaw(id, source: source, code: code)
         }
+    }
+
+    /// Name und Symbol eines gewählten vorhandenen Themas beim Aufruf (Index-Eintrag ohne Symbol: ✨).
+    static func label(of decision: TopicDecision, topics: [Topic], index: [TopicIndexEntry]) -> TopicLabel? {
+        guard case .existing(let id) = decision else { return nil }
+        if let topic = ThoughtStore.resolve(id, in: topics) { return TopicLabel(name: topic.title, icon: topic.icon) }
+        return index.first { $0.topicID == id }.map { TopicLabel(name: $0.name, icon: .sparkles) }
     }
 
     private func structureWait(_ id: String, state: ThoughtState, retryAt: Date?, message: String) async {
@@ -557,8 +567,10 @@ public actor ThoughtProcessor {
         guard let current = await store.thought(id), current.deletedAt == nil else { return }
         let result = record.result
         let clock = now()
-        var topicID: String?
-        if current.topicOwner != .user { topicID = await resolveTopic(result.topic) }
+        var aiTopic: Topic?
+        if current.topicOwner != .user {
+            aiTopic = await resolveTopic(result.topic, chosen: record.chosenTopic, transcript: source.text)
+        }
         var links: [ThoughtLink] = []
         for related in result.related where related.thoughtID != id {
             guard let target = await store.thought(related.thoughtID), target.deletedAt == nil else { continue }
@@ -573,9 +585,10 @@ public actor ThoughtProcessor {
         let raw = RawText.tidy(source.text)
         let ai = Thought.AIInfo(model: record.model ?? "", promptVersion: options.promptVersion,
                                 tokens: record.usage?.total ?? 0, at: clock, rejections: result.rejections)
-        let chosenTopic = topicID
         let aiLinks = links
-        let updated = try? await store.update(id) { t in
+        // Zuweisung und Thema in einem Schritt: Wurde das Thema inzwischen mit seinem letzten Gedanken entfernt,
+        // legt der Speicher es wieder an, statt eine ID ins Leere zu setzen.
+        let updated = try? await store.update(id, topic: aiTopic) { t, chosenTopic in
             guard t.deletedAt == nil else { return }
             if t.titleOwner != .user {
                 t.title = result.title.trimmed.isEmpty ? RawText.fallbackTitle(result.cleanText ?? raw) : result.title
@@ -643,31 +656,46 @@ public actor ThoughtProcessor {
         eventBroadcast.yield(.saved(id, topicTitle: topic?.title, topicIcon: topic?.icon))
     }
 
-    /// Themenwahl der KI auflösen; neue Themen legt nur das an, was die Doppel-Schranke durchlässt.
+    /// Themenwahl der KI auflösen → das Thema, das der Gedanke bekommt (nil = ohne Thema). Neue Themen gibt es nur,
+    /// wenn die Doppel-Schranke sie durchlässt; angelegt werden sie erst beim Übernehmen, im selben Schritt wie die
+    /// Zuweisung (`ThoughtStore.update(_:topic:_:)`).
     ///
     /// Rechte eines Laufs (KONZEPT §6.10): Die KI wählt ein vorhandenes Thema, keins oder legt **ein** neues an.
     /// Vorhandene Themen (Name, Symbol, Beschreibung, Besitzer, Reihenfolge) ändert sie nie – angelegt wird nur
-    /// angehängt (`updateTopics` mit reinem Anhängen).
-    private func resolveTopic(_ decision: TopicDecision) async -> String? {
+    /// angehängt.
+    private func resolveTopic(_ decision: TopicDecision, chosen: TopicLabel?, transcript: String) async -> Topic? {
         let topics = await store.topics()
         switch decision {
         case .none:
             return nil
         case .existing(let id):
-            return ThoughtStore.resolve(id, in: topics)?.id
+            if let topic = ThoughtStore.resolve(id, in: topics) { return topic }
+            // Inzwischen mit seinem letzten Gedanken entfernt: wie ein neues Thema mit Name und Symbol von damals –
+            // es trägt jetzt wieder einen Gedanken. Kein Namens- und Mengenlimit: Das Thema gab es ja schon.
+            guard let chosen else { return nil }
+            return await newTopic(chosen.name, icon: chosen.icon, transcript: transcript, topics: topics, restoring: true)
         case let .new(name, icon):
-            let thoughts = await store.all()
-            let summaries = TopicIndex.summaries(topics: topics, thoughts: thoughts)
-            let entries = summaries.map {
-                TopicIndexEntry(topicID: $0.topic.id, name: $0.topic.title, count: $0.count, hint: [], about: $0.topic.describedNote)
-            }
-            if let match = TopicHygiene.matchExisting(name, among: entries) { return match.topicID }
-            if let match = TopicMentions.describedMatch(name, among: entries) { return match.topicID }
-            guard TopicHygiene.isValidNewName(name), summaries.filter(\.isActive).count < TopicIndex.maxActive else { return nil }
-            let topic = Topic(title: name.trimmed, icon: icon, owner: .ai, createdAt: now())
-            guard (try? await store.updateTopics({ $0.append(topic) })) != nil else { return nil }
-            return topic.id
+            return await newTopic(name, icon: icon, transcript: transcript, topics: topics, restoring: false)
         }
+    }
+
+    /// Doppel-Schranke und beschriebene Themen gegen alle Themen; sonst ein neues KI-Thema (noch nicht gespeichert).
+    private func newTopic(_ name: String, icon: TopicIcon, transcript: String, topics: [Topic], restoring: Bool) async -> Topic? {
+        let thoughts = await store.all()
+        let summaries = TopicIndex.summaries(topics: topics, thoughts: thoughts)
+        let entries = summaries.map {
+            TopicIndexEntry(topicID: $0.topic.id, name: $0.topic.title, count: $0.count, hint: [], about: $0.topic.describedNote)
+        }
+        if let match = TopicHygiene.matchExisting(name, among: entries) { return ThoughtStore.resolve(match.topicID, in: topics) }
+        if let match = TopicMentions.describedMatch(name, transcript: transcript, among: entries) {
+            return ThoughtStore.resolve(match.topicID, in: topics)
+        }
+        if restoring {
+            guard !name.trimmed.isEmpty else { return nil }
+        } else {
+            guard TopicHygiene.isValidNewName(name), summaries.filter(\.isActive).count < TopicIndex.maxActive else { return nil }
+        }
+        return Topic(title: name.trimmed, icon: icon, owner: .ai, createdAt: now())
     }
 
     private func keywords(for text: String, language: String?) async -> [String] {

@@ -352,7 +352,9 @@ Vorläufige Themen (1 Gedanke) stehen in einem eigenen Abschnitt „Neu“ und l
 Themen verschwinden mit ihren Gedanken: Wird ein Gedanke endgültig gelöscht (einzeln, „Alle löschen“, nach
 30 Tagen), entfernt der Speicher sein Thema, sobald kein Gedanke mehr daran hängt (weder aktiv noch im
 Papierkorb) – egal ob KI- oder Nutzer-Thema, samt Aliassen, abgelehnten Paaren und Vorschlägen. Ein von Hand
-angelegtes Thema, das noch nie einen Gedanken hatte, bleibt, ein beschriebenes Thema immer. Als Chip erscheint ein Thema nur mit mindestens
+angelegtes Thema, das noch nie einen Gedanken hatte, bleibt, ein beschriebenes Thema immer. Wählt ein laufender
+KI-Lauf gerade ein so entferntes Thema, legt das Übernehmen es mit Name und Symbol von damals wieder an (atomar mit
+der Zuweisung im Speicher). Als Chip erscheint ein Thema nur mit mindestens
 einem Gedanken außerhalb von „Zuletzt gelöscht“.
 
 **Zuletzt gelöscht:** Liste wie in der Übersicht. Wischen: „Wiederherstellen“ bzw. „Endgültig löschen“.
@@ -582,7 +584,9 @@ Themen existieren.
 ≤ 200 Zeichen), und ihre Wörter zählen für die Passung. Vor der KI prüft der Code (`TopicMentions`), ob ein Name
 oder Stichwort aus Name und Beschreibung im Transkript steht:
 - Verglichen wird an Wortgrenzen, ohne Groß/Klein und Akzente, mit ä = ae = a und ß = ss.
-- Einfache Beugungen zählen: Genitiv/Plural-s, -e/-n/-en/-er/-es/-ern/-ens ab 4 Zeichen Stamm.
+- Nur echte Beugungsendungen zählen, nie ein bloßer Wortanfang („Reis“ ≠ „Reisen“, „Fisch“ ≠ „Fischer“): -s ab 3
+  Zeichen Stamm, -es ab 4, -e und -en ab 5, -n nach -e/-el/-er ab 4. -er nur bei Eigennamen („Beueler“ ← „Beuel“):
+  großgeschrieben und kein gewöhnliches Wort (Wortschatz der eingebauten Wort-Embeddings de/en, samt Zusammensetzungen).
 - Es zählen nur aussagekräftige Wörter. Stoppwörter, Anreden, Rechtsformen, Rollenwörter wie „Firma“ und „Kunden“,
   reine Zahlen und Wörter unter 3 Zeichen fallen weg.
 - Stichwörter werden nicht gespeichert, sondern bei jedem Aufruf abgeleitet, damit es bei einem Feld bleibt.
@@ -793,7 +797,7 @@ beide leer sind.
 | `title` | trimmen; Anführungszeichen und Schlusspunkt weg; 1–60 Zeichen, eine Zeile; jede Ziffer kommt im Transkript vor; ≥ 1 Inhaltswort (Lemma) aus dem Transkript | Ersatztitel: erste 6 Wörter des Textes + „…“ |
 | `clean_text` | `PolishSafetyNet.rejection(…, profile: .thought)`: Länge (ohne „• “ und Zeilenumbrüche) 0,55–1,15 × Rohtext; fehlende Inhaltswörter ≤ 25 %; Zahl der Verneinungen gleich; Ziffern erhalten (`EditCheck.digitsPreserved`); neue Inhaltswörter ≤ max(2, 10 %) außerhalb von „Eigene Begriffe“; Meta-Antwort; `strictEdits` aus (Aufräumen formuliert Fehlstarts legitim um, E1 misst die Ablehnungsquote) | Text = Rohtext nach `TranscriptCleanup` + Satzanfänge groß; `textIsRaw = true`; Code in `ai.rejections` |
 | `topic.existing` | Alias im gesendeten Index → echte ID | wie `none` |
-| `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke:** gleich nach Normalisierung (klein, ohne Akzente, ohne Bindestriche/Leerzeichen), Singular/Plural-Stamm, Levenshtein ≤ 2 ab 5 Zeichen oder Präfix eines bestehenden Namens → bestehendes Thema. **Beschriebene Themen:** Ist jedes aussagekräftige Wort des neuen Namens ein Begriff aus Name oder Beschreibung eines Themas („Müller Bau“ bei „… Kunden Müller Bau …“), wird dieses Thema genommen (Code `topic:described`, im Validator und noch einmal im Prozessor gegen alle Themen). Ein gemeinsamer Ort allein („Kita Beuel“) reicht nicht. `topics_full` → `none`. | `none` |
+| `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke:** gleich nach Normalisierung (klein, ohne Akzente, ohne Bindestriche/Leerzeichen), Singular/Plural-Stamm, Levenshtein ≤ 2 ab 5 Zeichen oder Präfix eines bestehenden Namens → bestehendes Thema. **Beschriebene Themen:** Umgeleitet wird nur bei eindeutiger Gleichheit (Code `topic:described`, im Validator und noch einmal im Prozessor gegen alle Themen): Der Name ist der Titel eines beschriebenen Themas oder eine klare Variante (Groß/Klein, Umlaut, Plural/Genitiv). Oder er besteht nur aus Eigennamen aus Titel oder Beschreibung (dort großgeschrieben, kein gewöhnliches Wort; Genitiv-s zählt: „Kowalskis“, „Brandts“) bzw. aus einem dort zusammenhängend geschriebenen Namen („Müller Bau“ bei „… Kunden Müller Bau …“) – und das Transkript nennt mindestens einen weiteren Begriff desselben Themas. Gewöhnliche Wörter („Köln“, „Pflege“, „Garten“), Stammvergleiche und ein gemeinsamer Ort allein („Kita Beuel“) leiten nie um; im Zweifel bleibt es ein neues Thema. `topics_full` → `none`. | `none` |
 | Thema vom Nutzer gesetzt | Die KI-Wahl wird ignoriert | – |
 | `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). `due_hint` muss im Zitat stehen, sonst `null`. Doppelte (normalisiert) fallen weg. | Aufgabe fällt weg |
 | `related` | ≤ 3; `ref` ∈ gesendete Kandidaten; kein Selbstbezug; `reason` ≤ 60 Zeichen, nur Ziffern aus einem der beiden Texte. **Annahme:** `high` → ja; `medium` → nur bei lokalem Wert ≥ 0,75; `low` → nein. | Verbindung fällt weg |

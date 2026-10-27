@@ -12,6 +12,7 @@ struct ThoughtDetailView: View {
 
     @Environment(ThoughtsModel.self) private var model
     @Environment(ThoughtsNav.self) private var nav
+    @Environment(TaskCheckoff.self) private var checkoff
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduce
     @Environment(\.dismiss) private var dismiss
@@ -247,8 +248,9 @@ struct ThoughtDetailView: View {
             }
             .docRow(top: 4, bottom: 4, background: false)
         } else {
-            TaskLine(task: task) {
-                withAnimation(PaplyMotion.smooth(reduce)) { model.toggleTask(thought.id, task.id) }
+            // gleiches Abhaken wie Leiste „Offen“, Karten und Aufgabenliste (TaskCheckoff)
+            TaskLine(task: task, pendingDone: checkoff.pending.contains(task.id)) {
+                checkoff.toggle(task, thoughtID: thought.id, model: model, reduceMotion: reduce)
             }
             .contentShape(Rectangle())
             .onTapGesture { beginTask(task) }

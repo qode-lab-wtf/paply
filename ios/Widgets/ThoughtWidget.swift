@@ -4,7 +4,8 @@ import WidgetKit
 
 /// Sperrbildschirm-Widget „Paply-Gedanke“ für die Reihe unter der Uhr (wie die ChatGPT- und Claude-Widgets).
 /// Ein Tipp nimmt wie das Steuerelement ohne App einen Gedanken auf, der nächste beendet (`ThoughtWidgetIntent`).
-/// Rückfall per `widgetURL`: Paply öffnet und nimmt in der großen Ansicht auf.
+/// Reagiert die App darauf nicht, öffnet der Intent Paply in der großen Ansicht (`OpenURLIntent`, ab iOS 18.2).
+/// Rückfall per `widgetURL` (Tipp außerhalb des Knopfs): Paply öffnet und nimmt in der großen Ansicht auf.
 /// Zustand aus `thought-state.json` (nur recording/id/startedAt, nie Text); die App lädt das Widget bei jedem
 /// Wechsel neu (`WidgetCenter.shared.reloadTimelines(ofKind:)` in ThoughtBridge).
 struct ThoughtWidget: Widget {

@@ -62,6 +62,7 @@ struct SetThoughtRecordingIntent: SetValueIntent, AudioRecordingIntent, LiveActi
 
 /// Sperrbildschirm-Widget „Paply-Gedanke“: wie das Steuerelement – ein Tipp nimmt auf, der nächste
 /// beendet, ohne die App zu öffnen. Zählt als Knopf (`control`), damit die Einrichtung es erkennt.
+/// Reagiert die App nicht, öffnet der Tipp Paply (große Ansicht) – ein Widget-Knopf zeigt keine Fehler.
 struct ThoughtWidgetIntent: AudioRecordingIntent, LiveActivityIntent {
     static var title: LocalizedStringResource { "Paply-Gedanke" }
     static var isDiscoverable: Bool { false }
@@ -76,6 +77,15 @@ struct ThoughtWidgetIntent: AudioRecordingIntent, LiveActivityIntent {
                 await ThoughtBridge.startInForeground(trigger: .control)
             }
             return .result()
+        }
+        #else
+        // Widget-Prozess, die App hat nicht reagiert (nicht bereit oder nicht wach). Ein Fehler bliebe beim
+        // Widget-Knopf unsichtbar – es passierte einfach nichts. Deshalb Paply öffnen: Die große Ansicht nimmt auf,
+        // läuft schon eine Aufnahme, zeigt sie die. `result(opensIntent:)` mit gleichem Ergebnistyp gibt es ab
+        // iOS 18.2; unter 18.0/18.1 bleibt es beim Fehler.
+        if !result.isOK, #available(iOS 18.2, *), let url = PaplyURL.thoughtStart(source: "widget") {
+            Diag.log("thought.intent.widget.openApp")
+            return .result(opensIntent: OpenURLIntent(url))
         }
         #endif
         try result.check()
@@ -157,6 +167,12 @@ enum ThoughtIntentRunner {
         case ok
         case refused(String)
         case needsForeground(String)
+
+        /// Die App hat den Knopf übernommen.
+        var isOK: Bool {
+            if case .ok = self { return true }
+            return false
+        }
 
         /// Abgelehnt → Fehlertext (Siri/Kurzbefehl zeigt ihn); sonst nichts.
         func check() throws {

@@ -338,6 +338,11 @@ struct StoreTests {
             #expect(await store.aiResult(thought.id) == result)
             #expect(await store.aiResultRecord(thought.id)?.usage?.total == 3)
         }
+        // Name und Symbol des gewählten Themas reisen mit (Neuanlage, falls es beim Übernehmen fehlt)
+        let chosen = AIResultRecord(result: StructureResult(title: "T", cleanText: nil, topic: .existing("t_1"), tasks: [], related: []),
+                                    chosenTopic: TopicLabel(name: "Boote", icon: .flag))
+        try await store.saveAIResult(thought.id, chosen)
+        #expect(await store.aiResultRecord(thought.id)?.chosenTopic == TopicLabel(name: "Boote", icon: .flag))
         await store.discardAIResult(thought.id)
         #expect(await store.aiResult(thought.id) == nil)
     }
@@ -517,6 +522,53 @@ struct StoreTests {
         #expect(await store.pendingSuggestions().isEmpty)
         let reloaded = try ThoughtStore(root: root)
         #expect(Set(await reloaded.topics().map(\.id)) == ["t_manual", "t_books"])
+    }
+
+    /// Ein Thema verschwindet (letzter Gedanke endgültig gelöscht), während ein Lauf es zuweist: Die Zuweisung prüft
+    /// im Speicher-Akteur, dass es das Thema gibt, und legt es sonst im selben Schritt wieder an – nie eine ID ins Leere.
+    @Test func assigningATopicThatJustVanishedCreatesItAgain() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        let boats = Topic(id: "t_boats", title: "Boote", icon: .flag, owner: .ai)
+        try await store.saveTopics([boats])
+        let last = StoreSupport.thought(topicId: boats.id)
+        let fresh = StoreSupport.thought(state: .structuring, topicId: nil)
+        let mine = StoreSupport.thought(state: .structuring, topicId: nil)
+        let gone = StoreSupport.thought(state: .structuring, topicId: nil)
+        for thought in [last, fresh, mine, gone] { try await store.save(thought) }
+        await store.purge(last.id)
+        #expect(await store.topics().isEmpty) // Thema ging mit seinem letzten Gedanken
+
+        // Gedanke, der es nicht trägt (Nutzer-Thema): nichts wird angelegt
+        try await store.update(mine.id) { $0.topicOwner = .user }
+        let kept = try await store.update(mine.id, topic: boats) { t, topicID in
+            if t.topicOwner != .user { t.topicId = topicID }
+        }
+        #expect(kept?.topicId == nil)
+        #expect(await store.topics().isEmpty)
+        // gelöschter Gedanke: nichts wird angelegt
+        await store.purge(gone.id)
+        let missing = try await store.update(gone.id, topic: boats) { t, topicID in t.topicId = topicID }
+        #expect(missing == nil)
+        #expect(await store.topics().isEmpty)
+
+        let updated = try await store.update(fresh.id, topic: boats) { t, topicID in
+            t.topicId = topicID
+            t.topicOwner = .ai
+        }
+        #expect(updated?.topicId == boats.id)
+        #expect(await store.topics() == [boats])
+        #expect(await store.resolveTopic(updated?.topicId)?.title == "Boote")
+        // vorhandenes Thema (auch über einen Alias): keine Kopie
+        try await store.updateTopics { $0.append(Topic(id: "t_alias", title: "Kähne", icon: .flag, owner: .ai, mergedInto: boats.id)) }
+        let alias = try await store.update(fresh.id, topic: Topic(id: "t_alias", title: "Kähne", icon: .flag, owner: .ai)) { t, topicID in
+            t.topicId = topicID
+        }
+        #expect(alias?.topicId == boats.id)
+        #expect(await store.topics().count == 2)
+        let reloaded = try ThoughtStore(root: root)
+        #expect(Set(await reloaded.topics().map(\.id)) == [boats.id, "t_alias"])
     }
 
     @Test func purgeAllAndThirtyDayPurgeTakeTheirTopicsAlong() async throws {

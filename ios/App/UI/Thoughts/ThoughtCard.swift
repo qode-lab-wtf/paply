@@ -2,18 +2,21 @@ import PaplyKit
 import SwiftUI
 import UIKit
 
-// Gedanken-Karte der Pinnwand (Entwurf „Pinnwand“): Titel, 2–3 Zeilen Text, offene Aufgaben direkt
+// Gedanken-Karte im Themen-Panel: Titel (höchstens zwei Zeilen), 2–3 Zeilen Text, offene Aufgaben direkt
 // abhakbar (höchstens zwei, sonst „+ n“), Fuß mit Zeit und Verknüpfung. Zustände (wird geordnet, wartet,
-// Fehler, nicht geordnet) wie in der Liste. Antippen → Detail mit Zoom, lange drücken → Kontextmenü.
+// Fehler, nicht geordnet) wie in der Liste; solange nicht geordnet, kommen Titel und Vorschau aus dem
+// Rohtext (`RawTitle`: ohne „Ähm, also“). Ohne Silbentrennung, kurze letzte Wörter („1“, „…“) bleiben beim
+// Wort davor. Antippen → Detail mit Zoom, lange drücken → Kontextmenü.
 
-/// Zweispaltiges Mauerwerk: jede Karte kommt in die gerade kürzere Spalte (Lesereihenfolge bleibt).
-/// Rechnet nur bei neuer Breite oder neuen Karten, nie pro Bild.
+/// Mauerwerk (im Panel: mittel eine Spalte, groß zwei): jede Karte kommt in die gerade kürzere Spalte
+/// (Lesereihenfolge bleibt). Rechnet nur bei neuer Breite, Spaltenzahl oder neuen Karten, nie pro Bild.
 struct MasonryLayout: Layout {
     var columns: Int = 2
     var spacing: CGFloat = 10
 
     struct Cache {
         var width: CGFloat = -1
+        var columns = 0
         var frames: [CGRect] = []
         var height: CGFloat = 0
     }
@@ -38,8 +41,8 @@ struct MasonryLayout: Layout {
     }
 
     private func arrange(width: CGFloat, subviews: Subviews, cache: inout Cache) {
-        guard cache.width != width || cache.frames.count != subviews.count else { return }
         let count = max(1, columns)
+        guard cache.width != width || cache.columns != count || cache.frames.count != subviews.count else { return }
         let columnWidth = max(1, (width - spacing * CGFloat(count - 1)) / CGFloat(count))
         var heights = Array(repeating: CGFloat(0), count: count)
         var frames: [CGRect] = []
@@ -51,7 +54,7 @@ struct MasonryLayout: Layout {
             frames.append(CGRect(x: CGFloat(column) * (columnWidth + spacing), y: y, width: columnWidth, height: height))
             heights[column] = y + height
         }
-        cache = Cache(width: width, frames: frames, height: heights.max() ?? 0)
+        cache = Cache(width: width, columns: count, frames: frames, height: heights.max() ?? 0)
     }
 }
 
@@ -59,9 +62,11 @@ struct MasonryLayout: Layout {
 
 struct ThoughtCard: View {
     let thought: Thought
-    /// Anfang des Rohtexts, solange der Gedanke nicht geordnet ist
+    /// Rohtext, solange der Gedanke nicht geordnet ist
     var raw: String?
     var linkCount = 0
+    /// schmale Spalte (zwei Spalten im Panel)
+    var compact = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduce
@@ -70,65 +75,82 @@ struct ThoughtCard: View {
 
     var body: some View {
         let open = thought.tasks.filter { !$0.done }
+        let rawParts = Self.rawParts(thought, raw: raw)
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.headline)
+            Text(CardText.keepingLastWord(rawParts?.title ?? thought.displayTitle))
+                .font(compact ? .subheadline.weight(.semibold) : .callout.weight(.semibold))
                 .foregroundStyle(Color.paplyText)
-                .lineLimit(big ? nil : 3)
+                .lineLimit(big ? 5 : 2)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .shimmer(thought.isProcessing)
-            secondary
-                .padding(.top, 5)
+            secondary(rest: rawParts?.rest ?? "")
+                .padding(.top, 4)
             if !open.isEmpty, !thought.isProcessing {
                 tasks(open)
-                    .padding(.top, 11)
+                    .padding(.top, 10)
             }
             footer
-                .padding(.top, 11)
+                .padding(.top, 10)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, compact ? 14 : 16)
         .padding(.top, 13)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .withoutHyphenation()
         .background(ThoughtCardSurface())
         .animation(reduce ? .linear(duration: 0.15) : .smooth(duration: 0.25), value: thought.title)
         .animation(PaplyMotion.smooth(reduce), value: open.map(\.id))
         .animation(PaplyMotion.bouncy(reduce), value: thought.state)
     }
 
+    /// Noch nicht geordnet und ohne Titel: Titel und Vorschau aus dem Rohtext (sonst „Gedanke · 0:42“)
+    static func rawParts(_ thought: Thought, raw: String?) -> RawTitle.Parts? {
+        guard thought.state != .done, thought.title?.isEmpty ?? true, let raw else { return nil }
+        return RawTitle.split(raw)
+    }
+
     // MARK: Inhalt
 
-    /// Noch nicht geordnet: Anfang des Rohtexts, sonst „Gedanke · 0:42“ – so bleiben Wartende unterscheidbar
-    private var title: String {
-        if thought.state != .done, thought.title?.isEmpty ?? true,
-           let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
-            return String(raw.prefix(90))
-        }
-        return thought.displayTitle
+    private var previewLines: Int { big ? 6 : (compact ? 4 : 2) }
+
+    /// Schmale Spalte: Vorschau etwas kleiner, damit eine Zeile mehr als zwei Wörter trägt
+    private func previewText(_ text: String) -> some View {
+        Text(text)
+            .font(compact ? .footnote : .subheadline)
+            .foregroundStyle(Color.paplySecondaryText)
+            .lineSpacing(2)
+            .lineLimit(previewLines)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
-    private var secondary: some View {
+    private func secondary(rest: String) -> some View {
         if thought.isProcessing {
-            HStack(spacing: 6) {
-                LucideImage(.sparkles, size: 14, stroke: 2, relativeTo: .subheadline)
-                    .foregroundStyle(ThoughtTint.mint)
-                Text("Wird geordnet …")
-                    .foregroundStyle(Color.paplySecondaryText)
-                    .shimmer()
+            VStack(alignment: .leading, spacing: 7) {
+                if !rest.isEmpty { previewText(rest) }
+                HStack(spacing: 6) {
+                    LucideImage(.sparkles, size: 14, stroke: 2, relativeTo: .subheadline)
+                        .foregroundStyle(ThoughtTint.mint)
+                    Text("Wird geordnet …")
+                        .foregroundStyle(Color.paplySecondaryText)
+                        .shimmer()
+                }
+                .font(.subheadline)
             }
-            .font(.subheadline)
         } else if let note = thought.stateNote, note.action != .reorganize {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                LucideImage(note.icon, size: 14, stroke: 2, relativeTo: .subheadline)
-                    .foregroundStyle(note.tint == .paplyBeak ? Color.paplyBeak : Color.paplySecondaryText)
-                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                Text(note.text)
-                    .foregroundStyle(note.tint == .paplyBeak ? Color.paplyBeak : Color.paplySecondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 7) {
+                if !rest.isEmpty { previewText(rest) }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    LucideImage(note.icon, size: 14, stroke: 2, relativeTo: .subheadline)
+                        .foregroundStyle(note.tint == .paplyBeak ? Color.paplyBeak : Color.paplySecondaryText)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    Text(note.text)
+                        .foregroundStyle(note.tint == .paplyBeak ? Color.paplyBeak : Color.paplySecondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.subheadline)
             }
-            .font(.subheadline)
         } else {
             VStack(alignment: .leading, spacing: 7) {
                 if thought.textIsRaw {
@@ -140,12 +162,7 @@ struct ThoughtCard: View {
                         .background(Capsule().fill(Color.white.opacity(0.1)))
                 }
                 if !preview.isEmpty {
-                    Text(preview)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.paplySecondaryText)
-                        .lineSpacing(1.5)
-                        .lineLimit(big ? 6 : 3)
-                        .fixedSize(horizontal: false, vertical: true)
+                    previewText(preview)
                 }
             }
         }
@@ -166,7 +183,7 @@ struct ThoughtCard: View {
                 Text("+ \(open.count - 2) weitere")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.paplySecondaryText)
-                    .padding(.leading, 30)
+                    .padding(.leading, 29)
             }
         }
     }
@@ -190,9 +207,20 @@ struct ThoughtCard: View {
                 .accessibilityHidden(true)
             }
         }
-        .font(.footnote)
+        .font(compact ? .caption : .footnote)
         .foregroundStyle(Color.paplyTertiaryText)
         .lineLimit(1)
+    }
+}
+
+/// Satz-Hilfen der Karten
+enum CardText {
+    /// Ein kurzes letztes Wort („1“, „…“, „ab“) bleibt beim Wort davor (geschütztes Leerzeichen), damit es
+    /// nicht allein in der letzten Zeile steht.
+    static func keepingLastWord(_ text: String) -> String {
+        guard let space = text.range(of: " ", options: .backwards), space.lowerBound > text.startIndex else { return text }
+        guard text[space.upperBound...].count <= 3 else { return text }
+        return text.replacingCharacters(in: space, with: "\u{00A0}")
     }
 }
 
@@ -243,6 +271,8 @@ struct ThoughtCardButton: View {
     let thought: Thought
     /// Kennung der Zoom-Quelle (eindeutig je Stelle, z. B. „panel:<id>“)
     let zoomID: String
+    /// schmale Spalte (zwei Spalten im Panel)
+    var compact = false
 
     @Environment(ThoughtsModel.self) private var model
     @Environment(ThoughtsNav.self) private var nav
@@ -252,7 +282,8 @@ struct ThoughtCardButton: View {
 
     var body: some View {
         let linkCount = model.linked(thought.id).count
-        ThoughtCard(thought: thought, raw: thought.state == .done ? nil : model.source(thought.id)?.text, linkCount: linkCount)
+        let raw = thought.state == .done ? nil : model.source(thought.id)?.text
+        ThoughtCard(thought: thought, raw: raw, linkCount: linkCount, compact: compact)
             .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 20, style: .continuous))
             .contentShape(Rectangle())
             .onTapGesture(perform: open)
@@ -264,7 +295,7 @@ struct ThoughtCardButton: View {
                 ThoughtPreviewCard(thought: thought)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityText(linkCount: linkCount))
+            .accessibilityLabel(accessibilityText(linkCount: linkCount, raw: raw))
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(.default, open)
             .accessibilityActions {
@@ -294,8 +325,9 @@ struct ThoughtCardButton: View {
         ThoughtsUndo.register(undoManager, name: "Löschen", model: model, token: token)
     }
 
-    private func accessibilityText(linkCount: Int) -> String {
-        var parts = [thought.displayTitle, ThoughtDate.card(thought.createdAt)]
+    private func accessibilityText(linkCount: Int, raw: String?) -> String {
+        let title = ThoughtCard.rawParts(thought, raw: raw)?.title ?? thought.displayTitle
+        var parts = [title, ThoughtDate.card(thought.createdAt)]
         if thought.isProcessing {
             parts.append("Wird geordnet")
         } else if let note = thought.stateNote {

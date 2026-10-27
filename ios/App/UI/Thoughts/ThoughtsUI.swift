@@ -298,6 +298,15 @@ enum PaplyNavigationBar {
     }
 }
 
+extension View {
+    /// Umbruch nur an Wortgrenzen, ohne Silbentrennung: SwiftUI trennt deutsche Wörter in schmalen Spalten
+    /// („Taschen-lampe“, „Klau-sel“) und bietet dafür keinen Schalter. Eine Satzsprache ohne Trennregeln
+    /// („zxx“ = kein sprachlicher Inhalt) lässt nur die Umbruchstellen zwischen Wörtern übrig.
+    func withoutHyphenation() -> some View {
+        typesettingLanguage(.explicit(Locale.Language(identifier: "zxx")))
+    }
+}
+
 extension Font {
     /// Titel mit Charakter: SF Pro Rounded, folgt Dynamic Type
     static func paplyTitle(_ style: Font.TextStyle = .title2, weight: Font.Weight = .bold) -> Font {

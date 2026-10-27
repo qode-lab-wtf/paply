@@ -1,67 +1,69 @@
 import PaplyKit
 import SwiftUI
 
-// Kopf der Startseite über der Karte (Entwurf „Landkarte“): eine Zeile Überblick, ggf. das kompakte
-// Einrichten-Band und die Leiste „Offen“ mit der nächsten Aufgabe – direkt abhakbar, „Alle n“ führt zur
-// Aufgabenliste.
+// Kopf der Startseite über der Karte (Entwurf „Landkarte“): ggf. eine Pille für noch nicht geordnete
+// Gedanken, ggf. das kompakte Einrichten-Band und die Leiste „Offen“ mit der nächsten Aufgabe – direkt
+// abhakbar, „Alle n“ führt zur Aufgabenliste. Der Überblick („320 Gedanken · 8 Themen“) steht nicht mehr als
+// eigene Zeile über der Karte, sondern als Untertitel (iOS 26) bzw. in der unteren Leiste (iOS 18).
 
-/// „40 Gedanken · 8 Themen“ und – nur wenn nötig – eine Pille für noch nicht geordnete Gedanken
-struct ThoughtsSummaryLine: View {
-    @Environment(ThoughtsModel.self) private var model
-    @Environment(ThoughtsNav.self) private var nav
-    @Environment(\.accessibilityReduceMotion) private var reduce
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    var body: some View {
-        let thoughts = model.thoughts
-        let topicCount = model.topics.reduce(0) { $0 + (model.count(of: $1.id) > 0 ? 1 : 0) }
-        let processing = thoughts.reduce(0) { $0 + ($1.isProcessing ? 1 : 0) }
-        let waiting = thoughts.reduce(0) { $0 + ($1.isWaiting ? 1 : 0) }
-        let attention = thoughts.contains { $0.state == .needsAttention }
-        let layout = typeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 10))
-        layout {
-            Text(summary(thoughts.count, topicCount))
-                .font(.subheadline)
-                .foregroundStyle(Color.paplySecondaryText)
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
-            if !typeSize.isAccessibilitySize { Spacer(minLength: 6) }
-            if processing + waiting > 0 {
-                Button {
-                    withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(ThoughtsHome.pendingID) }
-                } label: {
-                    HStack(spacing: 5) {
-                        LucideImage(waiting == 0 ? .sparkles : (attention ? .triangleAlert : .hourglass), size: 13, stroke: 2.2,
-                                    relativeTo: .footnote)
-                            .foregroundStyle(attention ? Color.paplyBeak : ThoughtTint.mint)
-                        Text(pendingText(processing: processing, waiting: waiting))
-                            .shimmer(processing > 0)
-                    }
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.paplyText)
-                    .padding(.horizontal, 10)
-                    .frame(minHeight: 28)
-                    .paplyGlass(.plain, interactive: true)
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(PressScaleStyle(scale: 0.95))
-                .transition(.scale(scale: 0.8).combined(with: .opacity))
-                .accessibilityHint("Zeigt die Gedanken, die Paply noch ordnet")
-            }
-        }
-        .animation(PaplyMotion.bouncy(reduce), value: processing + waiting)
-    }
-
-    private func summary(_ thoughts: Int, _ topics: Int) -> String {
+/// „40 Gedanken · 8 Themen“
+enum ThoughtsSummary {
+    @MainActor
+    static func text(_ model: ThoughtsModel) -> String {
+        let thoughts = model.thoughts.count
+        let topics = model.topics.reduce(0) { $0 + (model.count(of: $1.id) > 0 ? 1 : 0) }
         let t = thoughts == 1 ? "1 Gedanke" : "\(thoughts) Gedanken"
         guard topics > 0 else { return t }
         return t + " · " + (topics == 1 ? "1 Thema" : "\(topics) Themen")
     }
+}
 
-    private func pendingText(processing: Int, waiting: Int) -> String {
+/// Pille für Gedanken, die Paply noch ordnet oder die warten – öffnet das Panel „Noch nicht geordnet“.
+/// Erscheint nur, wenn es solche Gedanken gibt (`count`).
+struct PendingThoughtsPill: View {
+    @Environment(ThoughtsModel.self) private var model
+    @Environment(ThoughtsNav.self) private var nav
+    @Environment(\.accessibilityReduceMotion) private var reduce
+
+    /// Anzahl der Gedanken, die noch geordnet werden oder warten
+    @MainActor
+    static func count(_ model: ThoughtsModel) -> Int {
+        model.thoughts.reduce(0) { $0 + ($1.isProcessing || $1.isWaiting ? 1 : 0) }
+    }
+
+    var body: some View {
+        let thoughts = model.thoughts
+        let processing = thoughts.reduce(0) { $0 + ($1.isProcessing ? 1 : 0) }
+        let waiting = thoughts.reduce(0) { $0 + ($1.isWaiting ? 1 : 0) }
+        let attention = thoughts.contains { $0.state == .needsAttention }
+        Button {
+            withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(ThoughtsHome.pendingID) }
+        } label: {
+            HStack(spacing: 6) {
+                LucideImage(waiting == 0 ? .sparkles : (attention ? .triangleAlert : .hourglass), size: 13, stroke: 2.2,
+                            relativeTo: .footnote)
+                    .foregroundStyle(attention ? Color.paplyBeak : ThoughtTint.mint)
+                Text(text(processing: processing, waiting: waiting))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .shimmer(processing > 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.paplyTertiaryText)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.paplyText)
+            .padding(.leading, 11)
+            .padding(.trailing, 10)
+            .frame(minHeight: 30)
+            .paplyGlass(.plain, interactive: true)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.95))
+        .accessibilityHint("Zeigt die Gedanken, die Paply noch ordnet")
+    }
+
+    private func text(processing: Int, waiting: Int) -> String {
         if waiting == 0 { return processing == 1 ? "Wird geordnet" : "\(processing) werden geordnet" }
         if processing == 0 { return waiting == 1 ? "1 wartet" : "\(waiting) warten" }
         return "\(processing + waiting) noch ungeordnet"

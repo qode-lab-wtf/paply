@@ -5,6 +5,11 @@ import SwiftUI
 // Lucide-Symbol, Punkte, Beschriftungen. Kamera, verdeckte Höhe unten und Fokus sind animierbar (SwiftUI
 // interpoliert sie Bild für Bild); Datenwechsel laufen zeitgesteuert über `MapMotion`.
 // Was gezeichnet wurde, landet in `MapHitBox` – Tipps treffen genau das Sichtbare.
+//
+// Ruhe in der Übersicht: Punkte erst ab Maßstab 1 (darunter ein feiner Bogen, wo sie im Fokus liegen), wenige
+// zarte Themen-Linien in einer Mischfarbe. „Ohne Thema“ ist ein hohler, gestrichelter Ring ohne Schein, der
+// Sammelkreis „Weitere Themen“ ein feiner Ring mit drei kleinen Kreisen. Schrift trägt einen Hof in der
+// Grundfarbe, Linien laufen darunter; im Fokus Titel nur für die drei neuesten Gedanken und offene Aufgaben.
 
 /// Bildschirmbereich der Karte: ganze Fläche, oben verdeckt (Statusleiste, Kopf), unten verdeckt (Panel).
 struct MapStage: Equatable {
@@ -88,6 +93,17 @@ struct MapFrame {
         var focused: Bool
         var info: MapTopicInfo?
         var style: MapStyle.Bubble
+        /// Titel unter dem Kreis (wenige Gedanken), höchstens so viele, wie Platz reserviert ist
+        var titleLines: Int = 0
+        /// Übersicht unter Maßstab 1: statt der Punkte ein feiner Bogen, wo sie im Fokus liegen
+        var arc: Arc?
+    }
+
+    struct Arc {
+        var radius: CGFloat
+        var from: CGFloat
+        var to: CGFloat
+        var alpha: CGFloat
     }
 
     struct Dot {
@@ -217,6 +233,17 @@ struct MapCanvas: View, @preconcurrency Animatable {
             styles[id] = s
             return s
         }
+        // Punkte gehören in den Fokus: in der Übersicht erst ab Maßstab 1, darunter nur ein feiner Bogen.
+        // Bei sehr wenigen Gedanken stehen ihre Titel unter den Kreisen – dann bleiben die Punkte.
+        let dotsShown = scene.few ? 1 : Self.dotFade(zoom)
+        var arcs: [String: (from: CGFloat, to: CGFloat)] = [:]
+        if dotsShown < 0.99 {
+            for dot in scene.layout.dots {
+                let span = arcs[dot.topicID] ?? (dot.angle, dot.angle)
+                arcs[dot.topicID] = (min(span.from, dot.angle), max(span.to, dot.angle))
+            }
+        }
+        let config = MapLayoutConfig()
         let oldBubbles = Dictionary((previous?.layout.bubbles ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var worldBubble: [String: MapLayout.Bubble] = [:]
         for bubble in scene.layout.bubbles {
@@ -236,11 +263,17 @@ struct MapCanvas: View, @preconcurrency Animatable {
             }
             worldBubble[bubble.id] = b
             let dim = focus != nil && bubble.id != focus ? focusLevel : 0
+            var arc: MapFrame.Arc?
+            if let span = arcs[bubble.id], span.to - span.from > 0.2 {
+                let hidden = bubble.id == focus ? max(0, 1 - dotsShown - focusLevel) : 1 - dotsShown
+                arc = MapFrame.Arc(radius: (b.radius + config.firstRing) * zoom, from: span.from, to: span.to,
+                                   alpha: hidden * (style.dark ? 0.22 : 0.2))
+            }
             frame.bubbles.append(MapFrame.Bubble(
                 id: b.id, center: screen(b.center), radius: b.radius * zoom,
                 labelTop: screen(CGPoint(x: b.center.x, y: b.center.y + b.radius + 8)).y,
                 alpha: alpha, scale: scale, dim: dim, focused: bubble.id == focus,
-                info: scene.topics[bubble.id], style: styleOf(bubble.id)))
+                info: scene.topics[bubble.id], style: styleOf(bubble.id), titleLines: bubble.titleLines, arc: arc))
         }
         if let previous, p < 1 {
             let current = Set(scene.layout.bubbles.map(\.id))
@@ -278,50 +311,56 @@ struct MapCanvas: View, @preconcurrency Animatable {
             let isFocus = dot.topicID == focus
             let dim = focus != nil && !isFocus ? focusLevel : 0
             let radius = isFocus ? lerp(overviewDot, focusDot, focusLevel) : overviewDot
+            let shown = isFocus ? max(dotsShown, focusLevel) : dotsShown
+            guard shown > 0.01 else { continue }
             frame.dots.append(MapFrame.Dot(
                 id: dot.id, topicID: dot.topicID, center: screen(position), radius: radius, angle: dot.angle, rank: dot.rank,
-                alpha: alpha * (1 - 0.82 * dim), appear: appearing, info: scene.dots[dot.id], color: styleOf(dot.topicID).dot,
+                alpha: alpha * shown * (1 - 0.82 * dim), appear: appearing, info: scene.dots[dot.id], color: styleOf(dot.topicID).dot,
                 focused: isFocus, spacing: spacing[dot.topicID] ?? .infinity))
         }
-        if let previous, p < 1 {
+        if let previous, p < 1, dotsShown > 0.01 || focusLevel > 0.01 {
             let current = Set(scene.layout.dots.map(\.id))
             for old in previous.layout.dots where !current.contains(old.id) {
+                let shown = old.topicID == focus ? max(dotsShown, focusLevel) : dotsShown
                 frame.dots.append(MapFrame.Dot(
                     id: old.id, topicID: old.topicID, center: screen(old.position), radius: overviewDot, angle: old.angle,
-                    rank: old.rank, alpha: 1 - p, appear: nil, info: previous.dots[old.id], color: styleOf(old.topicID).dot,
+                    rank: old.rank, alpha: (1 - p) * shown, appear: nil, info: previous.dots[old.id], color: styleOf(old.topicID).dot,
                     focused: false, spacing: .infinity))
             }
         }
 
         // Linien: Übersicht gebündelt zwischen Themen, im Fokus die Gedanken-Linien des Themas
         func addLine(_ id: String, _ from: CGPoint, _ control: CGPoint, _ to: CGPoint, topics: (String, String),
-                     width: CGFloat, alpha: CGFloat) {
+                     width: CGFloat, alpha: CGFloat, blend: Bool = false) {
             guard alpha > 0.01 else { return }
+            let a = styleOf(topics.0).line, b = styleOf(topics.1).line
+            let colors = blend ? (a.mix(with: b, by: 0.5), a.mix(with: b, by: 0.5)) : (a, b)
             frame.lines.append(MapFrame.Line(
                 id: id, from: screen(from), control: screen(control), to: screen(to),
-                colors: (styleOf(topics.0).line, styleOf(topics.1).line), width: width, alpha: alpha))
+                colors: colors, width: width, alpha: alpha))
         }
         let overview = 1 - focusLevel
         if overview > 0.01 {
             let oldPairs = Dictionary((previous?.layout.topicLines ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            func strength(_ count: Int) -> CGFloat { min(1, log2(CGFloat(count) + 1) / 3) }
-            func pairAlpha(_ count: Int) -> CGFloat { (style.dark ? 0.32 : 0.28) + 0.22 * strength(count) }
+            func strength(_ count: Int) -> CGFloat { min(1, log2(CGFloat(count)) / 3) }
+            // zart: höchstens 0,2 Deckkraft, eine Mischfarbe statt Verlauf
+            func pairAlpha(_ count: Int) -> CGFloat { (style.dark ? 0.13 : 0.12) + 0.07 * strength(count) }
             for line in scene.layout.topicLines {
-                let width = 0.8 + 0.7 * strength(line.count)
+                let width = 1 + 0.5 * strength(line.count)
                 if let old = oldPairs[line.id], move < 1 {
                     addLine(line.id, lerp(old.from, line.from, move), lerp(old.control, line.control, move), lerp(old.to, line.to, move),
-                            topics: (line.a, line.b), width: width, alpha: pairAlpha(line.count) * overview)
+                            topics: (line.a, line.b), width: width, alpha: pairAlpha(line.count) * overview, blend: true)
                 } else {
                     let fade: CGFloat = previous != nil && oldPairs[line.id] == nil ? p : 1
                     addLine(line.id, line.from, line.control, line.to, topics: (line.a, line.b), width: width,
-                            alpha: pairAlpha(line.count) * overview * fade)
+                            alpha: pairAlpha(line.count) * overview * fade, blend: true)
                 }
             }
             if let previous, p < 1 {
                 let current = Set(scene.layout.topicLines.map(\.id))
                 for old in previous.layout.topicLines where !current.contains(old.id) {
-                    addLine(old.id, old.from, old.control, old.to, topics: (old.a, old.b), width: 0.8,
-                            alpha: pairAlpha(old.count) * overview * (1 - p))
+                    addLine(old.id, old.from, old.control, old.to, topics: (old.a, old.b), width: 1,
+                            alpha: pairAlpha(old.count) * overview * (1 - p), blend: true)
                 }
             }
         }
@@ -344,6 +383,12 @@ struct MapCanvas: View, @preconcurrency Animatable {
         return frame
     }
 
+    /// Punkte in der Übersicht: erst ab Maßstab 1 (kurz davor weich eingeblendet, damit beim Zoomen nichts ploppt)
+    static func dotFade(_ zoom: CGFloat) -> CGFloat {
+        let t = min(1, max(0, (zoom - 0.95) / 0.05))
+        return t * t * (3 - 2 * t)
+    }
+
     /// leichtes Überschwingen (Einblenden)
     static func backOut(_ t: CGFloat) -> CGFloat {
         let c1: CGFloat = 1.4, c3 = c1 + 1
@@ -358,6 +403,7 @@ struct MapCanvas: View, @preconcurrency Animatable {
         ForEach(frame.bubbles, id: \.id) { bubble in
             if let info = bubble.info {
                 MapLabel(title: info.title, count: info.count, style: style)
+                    .modifier(MapHalo(color: style.ground))
                     .tag("L:" + bubble.id)
             }
         }
@@ -370,12 +416,15 @@ struct MapCanvas: View, @preconcurrency Animatable {
                         .lineLimit(1)
                         .fixedSize()
                         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                        .modifier(MapHalo(color: style.ground))
                         .tag("T:" + item.id)
                 }
             }
         }
         if frame.focusLevel > 0.01 {
-            ForEach(frame.dots.filter(\.focused), id: \.id) { dot in
+            // Titel nur für die drei neuesten und die mit offener Aufgabe – mit Hof in der Grundfarbe, damit
+            // Linien darunter die Schrift nicht kreuzen
+            ForEach(frame.dots.filter { $0.focused && ($0.rank < 3 || $0.info?.hasOpenTask == true) }, id: \.id) { dot in
                 if let info = dot.info {
                     Text(MapText.short(info.title, 24))
                         .font(.caption)
@@ -383,6 +432,7 @@ struct MapCanvas: View, @preconcurrency Animatable {
                         .lineLimit(1)
                         .fixedSize()
                         .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                        .modifier(MapHalo(color: style.ground))
                         .tag("F:" + dot.id)
                 }
             }
@@ -428,6 +478,20 @@ struct MapCanvas: View, @preconcurrency Animatable {
 
 private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 private func lerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint { CGPoint(x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t)) }
+
+/// Weicher Hof in der Grundfarbe um Schrift: Linien und Raster laufen darunter, die Schrift bleibt ruhig lesbar
+private struct MapHalo: ViewModifier {
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
+            .shadow(color: color, radius: 1)
+            .shadow(color: color, radius: 2.5)
+            .shadow(color: color.opacity(0.8), radius: 4)
+    }
+}
 
 /// Name und Anzahl unter einem Kreis
 private struct MapLabel: View {
@@ -556,6 +620,39 @@ private struct MapPainter {
         var ctx = context
         ctx.opacity = bubble.alpha * (1 - 0.7 * bubble.dim)
         let s = bubble.style
+        let kind = bubble.info?.kind ?? .topic
+
+        // feiner Bogen, wo im Fokus die Punkte liegen (Übersicht unter Maßstab 1)
+        if let arc = bubble.arc, arc.alpha > 0.01 {
+            var path = Path()
+            path.addArc(center: c, radius: arc.radius * bubble.scale, startAngle: .radians(Double(arc.from) - 0.06),
+                        endAngle: .radians(Double(arc.to) + 0.06), clockwise: false)
+            ctx.stroke(path, with: .color(s.dot.opacity(arc.alpha)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+        }
+
+        switch kind {
+        case .none:
+            // „Ohne Thema“: hohler, gestrichelter Ring – kein Schein, keine Kugel
+            let ring = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+            let dash = max(2.5, min(5, r * 0.16))
+            ctx.stroke(ring, with: .color(style.neutralRing),
+                       style: StrokeStyle(lineWidth: bubble.focused ? 1.6 : 1.3, lineCap: .round, dash: [dash, dash * 0.9]))
+            return
+        case .more:
+            // Sammelkreis: feiner Ring, darin drei kleine Kreise (viele kleine Themen)
+            let ring = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+            ctx.fill(ring, with: .color(style.neutralFill))
+            ctx.stroke(ring, with: .color(style.neutralRing), lineWidth: bubble.focused ? 1.4 : 1.1)
+            if r >= 9 {
+                for (dx, dy, k) in [(-0.2, 0.14, 0.2), (0.22, 0.1, 0.15), (0.02, -0.24, 0.12)] as [(CGFloat, CGFloat, CGFloat)] {
+                    let p = CGPoint(x: c.x + dx * r, y: c.y + dy * r), q = k * r
+                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - q, y: p.y - q, width: 2 * q, height: 2 * q)), with: .color(style.neutralGlyph))
+                }
+            }
+            return
+        case .topic:
+            break
+        }
 
         // Schein
         if r > 4 {
@@ -665,10 +762,22 @@ private struct MapPainter {
         for bubble in order {
             guard let symbol = context.resolveSymbol(id: "L:" + bubble.id) else { continue }
             let w = symbol.size.width, h = symbol.size.height
-            var rect = CGRect(x: bubble.center.x - w / 2, y: bubble.labelTop, width: w, height: h)
-            rect.origin.x = min(max(rect.minX, 8), size.width - 8 - w)
-            guard rect.minY < size.height, rect.maxY > 0 else { continue }
-            guard !placed.contains(where: { $0.insetBy(dx: -4, dy: -1).intersects(rect) }), !circleHits(rect, except: bubble.id) else { continue }
+            let r = bubble.radius * bubble.scale
+            // mittig unter dem Kreis; ist dort schon eine andere Beschriftung, ein Stück zur Seite (bleibt unter
+            // dem Kreis) oder eine Zeile tiefer
+            let offsets: [CGPoint] = [.zero, CGPoint(x: min(w * 0.3, r + 12), y: 0), CGPoint(x: -min(w * 0.3, r + 12), y: 0),
+                                      CGPoint(x: 0, y: h * 0.85)]
+            var found: CGRect?
+            for offset in offsets {
+                var rect = CGRect(x: bubble.center.x - w / 2 + offset.x, y: bubble.labelTop + offset.y, width: w, height: h)
+                rect.origin.x = min(max(rect.minX, 8), size.width - 8 - w)
+                guard rect.minY < size.height, rect.maxY > 0 else { break }
+                if !placed.contains(where: { $0.insetBy(dx: -4, dy: -1).intersects(rect) }), !circleHits(rect, except: bubble.id) {
+                    found = rect
+                    break
+                }
+            }
+            guard let rect = found else { continue }
             var ctx = context
             ctx.opacity = frame.labelAlpha * bubble.alpha * (1 - 0.7 * bubble.dim)
             ctx.draw(symbol, in: rect)
@@ -677,8 +786,8 @@ private struct MapPainter {
 
             // wenige Gedanken: Titel darunter
             guard frame.few else { continue }
-            var y = rect.maxY + 3
-            for dot in frame.dots.filter({ $0.topicID == bubble.id }).sorted(by: { $0.rank < $1.rank }) {
+            var y = rect.maxY + 1
+            for dot in frame.dots.filter({ $0.topicID == bubble.id }).sorted(by: { $0.rank < $1.rank }).prefix(bubble.titleLines) {
                 guard let title = context.resolveSymbol(id: "T:" + dot.id) else { continue }
                 let tw = title.size.width, th = title.size.height
                 var tr = CGRect(x: bubble.center.x - tw / 2, y: y, width: tw, height: th)
@@ -687,7 +796,7 @@ private struct MapPainter {
                 ctx.draw(title, in: tr)
                 placed.append(tr)
                 titles.append(MapHitBox.Title(id: dot.id, rect: tr))
-                y = tr.maxY + 1
+                y = tr.maxY - 1
             }
         }
         return (rects, titles)

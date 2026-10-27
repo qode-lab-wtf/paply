@@ -3,16 +3,14 @@ import PaplyKit
 import SwiftUI
 import UIKit
 
-// Themenfarben: zehn ruhige Töne, stabil aus der Themen-ID abgeleitet – kein Datenfeld, nichts zu
-// speichern. Jede Farbe gibt es hell und dunkel; die Schriftfarbe („ink“) hält auf ihrem Hintergrund
-// mindestens 4,5 : 1 (dunkel: auf einer Karte oben im Waldverlauf, hell: auf #F2F3EF).
+// Themenfarben: zehn ruhige Töne. Jede Farbe gibt es hell und dunkel; die Schriftfarbe („ink“) hält auf
+// ihrem Hintergrund mindestens 4,5 : 1 (dunkel: auf einer Karte oben im Waldverlauf, hell: auf #F2F3EF).
 //
-// Zuordnung: Jede ID hat über einen festen Hash (FNV-1a) ihren Wunschplatz. Damit zwei Themen nicht
-// dieselbe Farbe tragen, wählen die Themen in der Reihenfolge ihres Entstehens (älteste zuerst); ist der
-// Wunschplatz schon vergeben, nimmt ein Thema den nächsten freien. Erst ab elf Themen wiederholen sich
-// Farben. Ein Thema behält seine Farbe, solange kein älteres gelöscht wird; zusammengeführte Themen
-// bleiben als Alias im Speicher und halten ihren Platz – so ändert ein Zusammenführen keine Farbe.
-// `ThoughtsModel` meldet die Themen bei jeder Änderung (`register`); ohne Meldung gilt der Wunschplatz.
+// Zuordnung (`TopicColorRegister` in PaplyKit): Ein Thema bekommt seinen Farbplatz einmal, bei der ersten
+// Sichtung – den ersten freien in `assignmentOrder`, neue Themen in Anlagereihenfolge – und behält ihn. Es
+// wird nie umverteilt. Zusammengeführte Themen belegen keinen Platz und zeigen die Farbe ihres Ziels; gelöschte
+// geben ihren Platz frei. Ab elf Themen wiederholt sich eine Farbe, aber nie die zuletzt vergebene.
+// Das Register liegt als `topic-colors.json` neben den Gedanken-Daten (`TopicColorStore`).
 //
 // Pseudo-Themen (nil, "", IDs mit „_“ am Anfang, z. B. „Ohne Thema“) bekommen den neutralen Ton.
 
@@ -72,7 +70,12 @@ enum TopicPalette {
 
     // MARK: Zuordnung
 
-    private static let assigned = OSAllocatedUnfairLock<[String: Int]>(initialState: [:])
+    /// Vergabe-Reihenfolge: nacheinander vergebene Plätze liegen im Farbkreis weit auseinander
+    /// (Blau, Gold, Rosé, Mint, Violett, Koralle, Türkis, Orange, Indigo, Sand).
+    static let assignmentOrder = [0, 6, 3, 7, 2, 4, 8, 5, 1, 9]
+
+    /// Stand des Registers zum Lesen von überall (Karte zeichnet auch außerhalb des Hauptakteurs)
+    fileprivate static let current = OSAllocatedUnfairLock<TopicColorRegister>(initialState: TopicColorRegister())
     private static let tints: [TopicTint] = entries.indices.map { makeTint(entries[$0], slot: $0) }
     private static let neutralTint = makeTint(neutralEntry, slot: nil)
 
@@ -82,10 +85,11 @@ enum TopicPalette {
         return topicID.hasPrefix("_")
     }
 
-    /// Platz in der Palette (nil = neutral)
+    /// Platz in der Palette (nil = neutral). Aliasse zeigen die Farbe ihres Ziels. Ein Thema, das das Modell
+    /// noch nicht gemeldet hat, bekommt vorläufig seinen Wunschplatz aus der ID (wird nicht gespeichert).
     static func slot(for topicID: String?) -> Int? {
         guard !isNeutral(topicID), let topicID else { return nil }
-        if let slot = assigned.withLock({ $0[topicID] }) { return slot }
+        if let slot = current.withLock({ $0.slot(for: topicID) }), entries.indices.contains(slot) { return slot }
         return preferredSlot(topicID)
     }
 
@@ -107,23 +111,15 @@ enum TopicPalette {
         return Color(uiColor: hsl(entry, scheme == .dark ? 0.6 : 0.52))
     }
 
-    /// Themen melden (alle gespeicherten, auch zusammengeführte). Älteste wählen zuerst.
-    static func register(_ topics: [Topic]) {
-        let ordered = topics.sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
-        var result: [String: Int] = [:]
-        var taken = Set<Int>()
-        for topic in ordered {
-            if taken.count == entries.count { taken.removeAll() } // ab elf Themen: neue Runde
-            var slot = preferredSlot(topic.id)
-            while taken.contains(slot) { slot = (slot + 1) % entries.count }
-            taken.insert(slot)
-            result[topic.id] = slot
-        }
-        let final = result
-        assigned.withLock { if $0 != final { $0 = final } }
+    /// Themen melden (alle gespeicherten, auch zusammengeführte). `persistent`: Meldung des angebundenen
+    /// Modells (`ThoughtsModel.shared`). Beispieldaten im Debug haben ein eigenes Register nur im Speicher –
+    /// so stört keines das andere (siehe `TopicColorStore`).
+    @MainActor
+    static func register(_ topics: [Topic], persistent: Bool = false) {
+        TopicColorStore.shared.register(topics, persistent: persistent)
     }
 
-    /// Wunschplatz aus der ID (FNV-1a, unabhängig vom Programmstart)
+    /// Wunschplatz aus der ID (FNV-1a, unabhängig vom Programmstart) – nur vorläufig, s. `slot(for:)`
     static func preferredSlot(_ id: String) -> Int {
         var hash: UInt64 = 0xCBF2_9CE4_8422_2325
         for byte in id.utf8 {
@@ -158,6 +154,126 @@ enum TopicPalette {
         let brightness = l + s * min(l, 1 - l)
         let saturation = brightness == 0 ? 0 : 2 * (1 - l / brightness)
         return UIColor(hue: e.hue / 360, saturation: saturation, brightness: brightness, alpha: alpha)
+    }
+}
+
+// MARK: - Register auf der Platte
+
+/// Farbplätze der Themen: `topic-colors.json` neben den Gedanken-Daten (`ThoughtsEnvironment.root`, wie
+/// `map-anchors.json`) – gleicher Dateischutz, geht mit den Gedanken weg. Geschrieben wird atomar und der Reihe
+/// nach, sobald sich ein Platz ändert.
+///
+/// Sicherheit:
+/// - Vor dem ersten Entsperren wird weder gelesen noch geschrieben (`ProtectedData`); Meldungen aus dieser Zeit
+///   werden danach nachgeholt. Ist die Datei da, aber nicht lesbar, wird nie geschrieben – sonst gingen alle
+///   Plätze verloren. Erneut gelesen wird frühestens nach 5 s.
+/// - Beispieldaten (`-PaplyPreviewData`, `-PaplyMany`, `-PaplyCount`, `-PaplyEmpty`) und SwiftUI-Vorschauen nutzen
+///   ein Register nur im Speicher und nehmen nur Meldungen der Beispielmodelle an; das angebundene Modell lädt
+///   im Debug trotzdem im Hintergrund, seine Meldungen fallen dann weg. Umgekehrt ändern Beispielmodelle nie
+///   die Datei.
+@MainActor
+final class TopicColorStore {
+    static let shared = TopicColorStore(url: storageURL)
+
+    private enum Phase {
+        case notLoaded
+        case loaded
+        case blocked(since: Date)
+    }
+
+    /// nil = nur im Speicher
+    private let url: URL?
+    private var phase: Phase = .notLoaded
+    private var register = TopicColorRegister()
+    /// letzte Meldung, solange nicht geladen (wird nachgeholt)
+    private var latest: [Topic]?
+    private var waitsForUnlock = false
+    private var writes: Task<Void, Never>?
+
+    init(url: URL?) {
+        self.url = url
+        if url == nil { phase = .loaded }
+    }
+
+    private static var storageURL: URL? {
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return nil }
+        #if DEBUG
+        if ThoughtsDebug.previewData || ProcessInfo.processInfo.arguments.contains("-PaplyEmpty") { return nil }
+        #endif
+        return ThoughtsEnvironment.root.appendingPathComponent(TopicColorFile.fileName)
+    }
+
+    func register(_ topics: [Topic], persistent: Bool) {
+        // Datei-Register nimmt nur das angebundene Modell an, das Speicher-Register nur Beispielmodelle
+        guard persistent == (url != nil) else { return }
+        latest = topics
+        guard loadIfNeeded() else { return }
+        latest = nil
+        apply(topics)
+    }
+
+    private func apply(_ topics: [Topic]) {
+        let changed = register.update(topics: topics, order: TopicPalette.assignmentOrder)
+        let snapshot = register
+        TopicPalette.current.withLock { $0 = snapshot }
+        if changed { save() }
+    }
+
+    /// true = geladen (Datei gelesen, fehlt oder kaputt); false = noch nicht lesbar
+    private func loadIfNeeded() -> Bool {
+        switch phase {
+        case .loaded:
+            return true
+        case .blocked(let since) where Date().timeIntervalSince(since) < 5:
+            return false
+        default:
+            break
+        }
+        guard let url else {
+            phase = .loaded
+            return true
+        }
+        guard ProtectedData.isReadable else {
+            if !waitsForUnlock {
+                waitsForUnlock = true
+                ProtectedData.whenReadable { [weak self] _ in self?.resumeAfterUnlock() }
+            }
+            return false
+        }
+        switch TopicColorFile.load(from: url) {
+        case .register(let stored):
+            register = stored
+            phase = .loaded
+        case .missing, .damaged:
+            register = TopicColorRegister()
+            phase = .loaded
+        case .unreadable:
+            phase = .blocked(since: Date())
+            Diag.log("topic.colors.unreadable", [:])
+            return false
+        }
+        return true
+    }
+
+    private func resumeAfterUnlock() {
+        waitsForUnlock = false
+        guard let latest, loadIfNeeded() else { return }
+        self.latest = nil
+        apply(latest)
+    }
+
+    private func save() {
+        guard let url, case .loaded = phase, ProtectedData.isReadable else { return }
+        let snapshot = register
+        let previous = writes
+        writes = Task.detached(priority: .utility) {
+            await previous?.value
+            do {
+                try TopicColorFile.save(snapshot, to: url)
+            } catch {
+                Diag.log("topic.colors.write.failed", ["error": .s(String(describing: type(of: error)))])
+            }
+        }
     }
 }
 

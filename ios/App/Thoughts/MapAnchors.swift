@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import PaplyKit
 
 /// Gemerkte Plätze der Themen auf der Gedanken-Karte (`MapLayout`).
@@ -8,31 +9,46 @@ import PaplyKit
 /// Geschrieben wird gebündelt (0,5 s nach der letzten Änderung), atomar und der Reihe nach.
 ///
 /// Sicherheit:
-/// - Ist die Datei da, aber nicht lesbar (vor dem ersten Entsperren), wird nie geschrieben – sonst gingen die
-///   Plätze verloren. Erneut gelesen wird frühestens nach 5 s.
-/// - Beispieldaten (`-PaplyPreviewData`, `-PaplyMany`, `-PaplyCount`, `-PaplyEmpty`) merken nur im Speicher: Ihre Themen
-///   würden sonst beim Speichern die echten Anker verdrängen.
+/// - Gelesen wird erst, wenn die Daten lesbar sind (`ProtectedData.whenReadable`, nach dem ersten Entsperren).
+///   Bis dahin ist `isReady` false: Die Karte zeichnet nichts und legt nichts neu an – sonst bekämen alle
+///   Themen neue Plätze und sprängen nach dem Entsperren zurück.
+/// - Ist die Datei danach trotzdem nicht lesbar (Ein-/Ausgabefehler), wird nie geschrieben – sonst gingen die
+///   Plätze verloren. Die Karte zeichnet dann ohne gemerkte Plätze; erneut gelesen wird frühestens nach 5 s.
+/// - Beispieldaten (`-PaplyPreviewData`, `-PaplyMany`, `-PaplyCount`, `-PaplyEmpty`) merken nur im Speicher: Ihre
+///   Themen würden sonst beim Speichern die echten Anker verdrängen.
 /// - Die Karte meldet nur, wenn das Modell geladen ist (sonst sähen alle Themen gelöscht aus).
 @MainActor
+@Observable
 final class MapAnchors {
     static let shared = MapAnchors(url: storageURL)
 
     private enum State {
-        case notLoaded
+        /// noch nicht angefragt
+        case idle
+        /// wartet auf das erste Entsperren
+        case waiting
+        /// gelesen (oder keine bzw. kaputte Datei): darf schreiben
         case loaded
+        /// Datei da, aber nicht lesbar: nie schreiben
         case blocked(since: Date)
     }
 
-    private let url: URL?
-    private var state: State = .notLoaded
-    private var current: [String: MapAnchor] = [:]
-    private var pending: Task<Void, Never>?
-    private var writes: Task<Void, Never>?
+    /// Plätze sind gelesen (oder stehen fest) – erst dann zeichnet die Karte
+    private(set) var isReady = false
+
+    @ObservationIgnored private let url: URL?
+    @ObservationIgnored private var state: State = .idle
+    @ObservationIgnored private var current: [String: MapAnchor] = [:]
+    @ObservationIgnored private var pending: Task<Void, Never>?
+    @ObservationIgnored private var writes: Task<Void, Never>?
 
     /// nil = nur im Speicher
     init(url: URL?) {
         self.url = url
-        if url == nil { state = .loaded }
+        if url == nil {
+            state = .loaded
+            isReady = true
+        }
     }
 
     private static var storageURL: URL? {
@@ -42,29 +58,31 @@ final class MapAnchors {
         return ThoughtsEnvironment.root.appendingPathComponent(MapAnchorFile.fileName)
     }
 
-    /// Aktuelle Plätze (lädt beim ersten Zugriff)
-    var anchors: [String: MapAnchor] {
-        loadIfNeeded()
-        return current
+    /// Aktuelle Plätze (leer, solange nicht `isReady`)
+    var anchors: [String: MapAnchor] { current }
+
+    /// Laden anstoßen: sofort, wenn die Daten lesbar sind, sonst nach dem ersten Entsperren. Mehrfach
+    /// aufrufbar (aus `onAppear` der Karte); nach einem Lesefehler frühestens alle 5 s erneut.
+    func prepare() {
+        switch state {
+        case .idle:
+            state = .waiting
+            ProtectedData.whenReadable { [weak self] _ in self?.load() }
+        case .blocked(let since) where Date().timeIntervalSince(since) >= 5:
+            load()
+        default:
+            break
+        }
     }
 
     /// Neuer vollständiger Stand aus der Karte; Themen, die darin fehlen, fallen beim Speichern weg.
     func remember(_ anchors: [String: MapAnchor]) {
-        loadIfNeeded()
         guard case .loaded = state, anchors != current else { return }
         current = anchors
         scheduleSave()
     }
 
-    private func loadIfNeeded() {
-        switch state {
-        case .loaded:
-            return
-        case .blocked(let since) where Date().timeIntervalSince(since) < 5:
-            return
-        default:
-            break
-        }
+    private func load() {
         guard let url else { return }
         switch MapAnchorFile.load(from: url) {
         case .anchors(let stored):
@@ -77,6 +95,7 @@ final class MapAnchors {
             state = .blocked(since: Date())
             Diag.log("map.anchors.unreadable", [:])
         }
+        if !isReady { isReady = true }
     }
 
     private func scheduleSave() {
@@ -85,6 +104,7 @@ final class MapAnchors {
         pending = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled, let self else { return }
+            guard case .loaded = self.state else { return }
             let snapshot = self.current
             let previous = self.writes
             self.writes = Task.detached(priority: .utility) {

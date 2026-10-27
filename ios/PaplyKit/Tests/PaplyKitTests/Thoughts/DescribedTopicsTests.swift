@@ -88,19 +88,96 @@ struct DescribedTopicsTests {
         #expect(hits("Brandschutz und Kowalczyk").isEmpty)
     }
 
-    @Test func describedMatchNeedsEveryWordOfTheNewName() {
-        let entries = [
-            TopicIndexEntry(topicID: "t_aram", name: "Aram UG", count: 0, hint: [], about: Self.aramNote),
-            TopicIndexEntry(topicID: "t_club", name: "Ruderclub", count: 3, hint: [], about: Self.club.note),
-            TopicIndexEntry(topicID: "t_garden", name: "Garten", count: 5, hint: []),
-        ]
-        #expect(TopicMentions.describedMatch("Müller Bau", among: entries)?.topicID == "t_aram")
-        #expect(TopicMentions.describedMatch("Kowalski", among: entries)?.topicID == "t_aram")
-        #expect(TopicMentions.describedMatch("Kunde Kowalski", among: entries)?.topicID == "t_aram") // Rollenwort zählt nicht
-        #expect(TopicMentions.describedMatch("Germania", among: entries)?.topicID == "t_club")
-        #expect(TopicMentions.describedMatch("Kita Beuel", among: entries) == nil)   // gemeinsamer Ort allein zieht nicht
-        #expect(TopicMentions.describedMatch("Garten", among: entries) == nil)       // ohne Beschreibung: Doppel-Schranke
-        #expect(TopicMentions.describedMatch("Firma", among: entries) == nil)        // nur Stoppwörter
+    // Prüfer-Fälle: Ein Wortanfang ist keine Beugung.
+    static let cooking = Topic(id: "t_cook", title: "Kochen", icon: .coffee, owner: .user, note: "Rezepte mit Reis")
+    static let workshop = Topic(id: "t_shop", title: "Werkstatt", icon: .briefcase, owner: .user, note: "Kunde Fischer, Aufträge und Rechnungen")
+    static let grandma = Topic(id: "t_oma", title: "Oma Ilse", icon: .heart, owner: .user, note: "Meine Oma in Köln, Arzttermine, Pflege")
+    static let house = Topic(id: "t_house", title: "Haus Lindenstraße", icon: .home, owner: .user, note: "Unser Haus mit Garten, Handwerker Schulte, Nebenkosten")
+    static let brandt = Topic(id: "t_brandt", title: "Brandt Logistik", icon: .list, owner: .user,
+                              note: "Lagerverwaltung für Brandt Logistik in Troisdorf – Ansprechpartner Herr Wiechert")
+    static let kessler = Topic(id: "t_kessler", title: "Kessler Digital", icon: .briefcase, owner: .user,
+                               note: "Meine Beratungsfirma Kessler Digital UG – Kunden Brandt Logistik und Vogelsang, Buchhaltung bei Frau Okafor")
+
+    @Test func aWordStartIsNoInflection() {
+        #expect(hits(Self.cooking, "Reisen nach Lissabon und eine Reise nach Porto").isEmpty) // Reis ≠ Reisen/Reise
+        #expect(hits(Self.cooking, "Reis kochen, dann die Rezepte sortieren") == ["Kochen", "Rezepte", "Reis"])
+        #expect(hits(Self.workshop, "Fisch fürs Wochenende kaufen").isEmpty)                 // Fischer ≠ Fisch
+        #expect(hits(Self.workshop, "Fischers Auftrag ist da") == ["Fischer", "Aufträge"])  // Genitiv-s; Auftrag ← Aufträge (ä = a)
+        #expect(hits(Self.club, "die Bonner Fähre und die Beueler Fähre") == ["Beuel"])      // -er nur bei Eigennamen
+        #expect(hits(Self.grandma, "Kölner Dom besichtigen").isEmpty)                         // „Köln“ steht im Wortschatz: kein -er
+        #expect(hits(Self.brandt, "bei Brandts läuft die Inventur") == ["Brandt"])
+        #expect(hits(Self.kessler, "bei Brandts läuft die Inventur") == ["Brandt"])
+    }
+
+    @Test func properNamesAndCommonWords() {
+        for name in ["Kowalski", "Brandt", "Germania", "Beuel", "Ilse", "Aram", "Okafor"] {
+            #expect(TopicMentions.isProperName(name), "\(name)")
+        }
+        for name in ["Köln", "Pflege", "Training", "Garten", "Reis", "Fisch", "Fischer", "Müller", "Bau", "Arzttermine", "Ruderverein", "kowalski"] {
+            #expect(!TopicMentions.isProperName(name), "\(name)")
+        }
+    }
+
+    // MARK: Umleitung
+
+    private static func entry(_ topic: Topic, count: Int = 0) -> TopicIndexEntry {
+        TopicIndexEntry(topicID: topic.id, name: topic.title, count: count, hint: [], about: topic.describedNote)
+    }
+
+    private func redirect(_ name: String, _ transcript: String, among topics: [Topic]) -> String? {
+        TopicMentions.describedMatch(name, transcript: transcript, among: topics.map { Self.entry($0) })?.topicID
+    }
+
+    @Test func describedMatchNeedsProperNamesAndOneMoreTermInTheTranscript() {
+        let entries = [Self.entry(Self.aram), Self.entry(Self.club, count: 3),
+                       TopicIndexEntry(topicID: "t_garden", name: "Garten", count: 5, hint: [])]
+        func match(_ name: String, _ transcript: String) -> String? {
+            TopicMentions.describedMatch(name, transcript: transcript, among: entries)?.topicID
+        }
+        // Positiv: Eigennamen aus der Beschreibung + ein weiterer Begriff des Themas im Transkript
+        #expect(match("Kowalskis", "Kowalskis Angebot liegt vor, die Rechnung geht über Aram") == "t_aram")
+        #expect(match("Kowalski", "Kowalski ruft wegen Aram an") == "t_aram")
+        #expect(match("Kunde Kowalski", "Kowalski und Albrecht brauchen die Belege") == "t_aram") // Rollenwort zählt nicht
+        #expect(match("Müller Bau", "Müller Bau will das Angebot bis Freitag, Kowalski auch") == "t_aram") // Name aus mehreren Wörtern
+        #expect(match("Germania", "Germania-Regatta: die Junioren brauchen neue Trikots") == "t_club")
+        // Der Titel selbst (oder eine klare Variante) braucht keinen weiteren Begriff
+        #expect(match("aram ug", "") == "t_aram")
+        #expect(match("Ruderclubs", "") == "t_club")
+        // Ohne weiteren Begriff im Transkript: keine Umleitung
+        #expect(match("Kowalskis", "Kowalskis Angebot liegt vor") == nil)
+        #expect(match("Müller Bau", "Müller Bau will das Angebot bis Freitag") == nil)
+        // Einzelne gewöhnliche Wörter eines Namens leiten nie um
+        #expect(match("Müller", "Müller ruft wegen Kowalski an") == nil)
+        #expect(match("Bau", "Bau der Garage, Kowalski fragen") == nil)
+        #expect(match("Kita Beuel", "Kita Beuel: Junioren abholen") == nil) // gemeinsamer Ort allein zieht nicht
+        #expect(match("Garten", "Garten umgraben") == nil)                  // ohne Beschreibung: Doppel-Schranke
+        #expect(match("Firma", "Firma Aram") == nil)                        // nur Stoppwörter
+    }
+
+    /// Prüfer-Fälle: Einwort-Themen sind der Normalfall – ein gewöhnliches Wort aus einer Beschreibung zieht nie,
+    /// auch wenn das Transkript sonst etwas aus dem Thema nennt.
+    @Test func commonWordsAndWordStartsAreNeverRedirected() {
+        #expect(redirect("Reisen", "Reisen planen: erst Lissabon, dann Porto", among: [Self.cooking]) == nil)
+        #expect(redirect("Reisen", "Reisen planen, vorher noch Rezepte und Reis kaufen", among: [Self.cooking]) == nil)
+        #expect(redirect("Fisch", "Fisch fürs Wochenende kaufen, danach Rechnungen schreiben", among: [Self.workshop]) == nil)
+        #expect(redirect("Köln", "Städtereise nach Köln: Dom, Museum Ludwig, Hotel buchen", among: [Self.grandma]) == nil)
+        #expect(redirect("Köln", "Mit Oma nach Köln ins Museum", among: [Self.grandma]) == nil)
+        #expect(redirect("Pflege", "Pflege für die Zimmerpflanzen, Oma fragen welche Erde", among: [Self.grandma]) == nil)
+        #expect(redirect("Training", "Training im Fitnessstudio, danach in Beuel einkaufen", among: [Self.club]) == nil)
+        #expect(redirect("Garten", "Im Garten Tomaten pflanzen, Handwerker Schulte kommt Freitag", among: [Self.house]) == nil)
+        // Eigennamen derselben Themen ziehen weiterhin – mit einem weiteren Begriff
+        #expect(redirect("Ilse", "Ilse hat angerufen, die Pflege klappt", among: [Self.grandma]) == "t_oma")
+    }
+
+    @Test func properNamesOfDescribedTopicsAreRedirected() {
+        let both = [Self.kessler, Self.brandt]
+        // „Brandts“ ← „Brandt Logistik“: Genitiv eines Eigennamens + weiterer Begriff
+        #expect(redirect("Brandts", "Herr Wiechert sagt, bei Brandts läuft die Inventur", among: both) == "t_brandt")
+        #expect(redirect("Brandts", "bei Brandts läuft die Inventur", among: both) == nil)
+        // Titel schlägt Eigennamen aus einer anderen Beschreibung
+        #expect(redirect("Brandt Logistik", "Vogelsang und Brandt Logistik", among: both) == "t_brandt")
+        #expect(redirect("brandt logistik", "", among: both) == "t_brandt")
+        #expect(redirect("Okafor", "Okafor braucht die Belege für Kessler Digital", among: both) == "t_kessler")
     }
 
     // MARK: Themen-Index
@@ -140,6 +217,7 @@ struct DescribedTopicsTests {
     }
 
     /// Bewertungssatz `described.json`: Die deterministischen Treffer gegen store-a stimmen mit `expect.mentioned`.
+    /// Ein Finder für den ganzen Themen-Satz, nur Schlagwörter (Treffer hängen nicht an Embeddings).
     @Test func describedFixtureMentionsMatchTheExpectation() async throws {
         let fixture = try StoreSupport.storeA()
         let data = try Data(contentsOf: StoreSupport.fixtures.appendingPathComponent("described.json"))
@@ -151,12 +229,20 @@ struct DescribedTopicsTests {
         #expect(extra.count == 4 && extra.allSatisfy { $0.describedNote != nil && $0.owner == .user })
         let cases = try #require(object["cases"] as? [[String: Any]])
         #expect(cases.count == 8)
+        let topics = fixture.topics + extra
+        let clock = Box(Date())
+        var options = CandidateFinder.Options()
+        options.models = []
+        let finder = CandidateFinder(thoughts: fixture.thoughts, topics: topics, options: options, now: { clock.value })
         for item in cases {
-            let at = Date(timeIntervalSince1970: (item["recordedAt"] as? Double ?? 0) / 1000)
-            let finder = CandidateFinder(thoughts: fixture.thoughts, topics: fixture.topics + extra, now: { at })
-            let index = await finder.topicIndex(forText: item["transcript"] as? String ?? "", languages: ["de"])
-            let expected = ((item["expect"] as? [String: Any])?["mentioned"] as? [String]) ?? []
-            #expect(Set(index.entries.filter(\.mentioned).map(\.name)) == Set(expected), "\(item["id"] ?? "?")")
+            let transcript = item["transcript"] as? String ?? ""
+            let expected = Set(((item["expect"] as? [String: Any])?["mentioned"] as? [String]) ?? [])
+            let haystack = TopicMentions.Haystack(transcript)
+            let direct = topics.filter { !TopicMentions.matches(TopicMentions.terms($0), in: haystack).isEmpty }.map(\.title)
+            #expect(Set(direct) == expected, "\(item["id"] ?? "?")")
+            clock.value = Date(timeIntervalSince1970: (item["recordedAt"] as? Double ?? 0) / 1000)
+            let index = await finder.topicIndex(forText: transcript, languages: ["de"])
+            #expect(Set(index.entries.filter(\.mentioned).map(\.name)) == expected, "\(item["id"] ?? "?")")
             #expect(Set(index.entries.filter { $0.about != nil }.map(\.name)) == Set(extra.map(\.title)))
         }
     }
@@ -221,18 +307,28 @@ struct DescribedTopicsTests {
         var topics = AIFixture.topics
         topics.append(TopicIndexEntry(topicID: "t_aram", name: "Aram UG", count: 0, hint: [], about: Self.aramNote))
         topics.append(TopicIndexEntry(topicID: "t_club", name: "Ruderclub", count: 2, hint: [], about: Self.club.note))
+        topics.append(Self.entry(Self.grandma))
+        let transcript = AIFixture.transcript + " Müller Bau will das Angebot bis Freitag, Kowalski auch."
         let answer = AIFixture.answer(topic: AIFixture.topic("new", name: "Müller Bau", symbol: "briefcase"))
-        let result = AIFixture.validate(answer, AIFixture.input(topics: topics))
+        let result = AIFixture.validate(answer, AIFixture.input(transcript: transcript, topics: topics))
         #expect(result.topic == .existing("t_aram"))
         #expect(result.rejections.contains("topic:described"))
         // auch wenn keine neuen Themen mehr erlaubt sind
-        let full = AIFixture.validate(answer, AIFixture.input(topics: topics, topicsFull: true))
+        let full = AIFixture.validate(answer, AIFixture.input(transcript: transcript, topics: topics, topicsFull: true))
         #expect(full.topic == .existing("t_aram"))
+        // ohne weiteren Begriff des Themas im Transkript: bleibt ein neues Thema
+        let alone = AIFixture.validate(answer, AIFixture.input(transcript: AIFixture.transcript + " Müller Bau will das Angebot.", topics: topics))
+        #expect(alone.topic == .new(name: "Müller Bau", icon: .briefcase))
+        #expect(!alone.rejections.contains("topic:described"))
         // gemeinsamer Ort allein: bleibt ein neues Thema
         let kita = AIFixture.validate(AIFixture.answer(topic: AIFixture.topic("new", name: "Kita Beuel", symbol: "home")),
-                                      AIFixture.input(topics: topics))
+                                      AIFixture.input(transcript: transcript, topics: topics))
         #expect(kita.topic == .new(name: "Kita Beuel", icon: .home))
         #expect(!kita.rejections.contains("topic:described"))
+        // gewöhnliches Wort aus einer Beschreibung: bleibt ein neues Thema
+        let city = AIFixture.validate(AIFixture.answer(topic: AIFixture.topic("new", name: "Köln", symbol: "map-pin")),
+                                      AIFixture.input(transcript: AIFixture.transcript + " Danach mit Oma nach Köln.", topics: topics))
+        #expect(city.topic == .new(name: "Köln", icon: .mapPin))
     }
 
     // MARK: Hygiene
@@ -298,6 +394,8 @@ struct DescribedTopicsTests {
         // 1. neues Thema für einen Namen aus der Beschreibung → beschriebenes Thema, Themen unverändert
         await h.structurer.push(ProcessingTests.success(topic: .new(name: "Müller Bau", icon: .briefcase),
                                                         related: [RelatedDraft(thoughtID: other.id, kind: .continues, reason: "Gleicher Garten")]))
+        await h.transcriber.push(.success(text: "Müller Bau will das Angebot bis Freitag, Kowalski auch", languages: ["de"],
+                                          audioSeconds: 2, model: "whisper-large-v3"))
         let first = try await h.capture()
         await h.run()
         let ordered = try #require(await h.thought(first))

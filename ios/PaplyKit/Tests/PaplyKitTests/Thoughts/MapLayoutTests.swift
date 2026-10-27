@@ -20,13 +20,15 @@ struct MapLayoutTests {
         mutating func int(_ range: Range<Int>) -> Int { range.lowerBound + Int(next() % UInt64(range.count)) }
     }
 
+    private static func id(_ i: Int, _ prefix: String = "t") -> String { "\(prefix)\(String(format: "%02d", i))" }
+
     /// `counts[i]` Gedanken in Thema `t<i>`, Gedanke j eines Themas j Stunden alt
     private func input(_ counts: [Int], anchors: [String: MapAnchor] = [:], links: [MapLayoutInput.Link] = [],
                        titleLines: Int = 0, prefix: String = "t") -> MapLayoutInput {
         var topics: [MapLayoutInput.Topic] = []
         var thoughts: [MapLayoutInput.Thought] = []
         for (i, n) in counts.enumerated() {
-            let id = "\(prefix)\(String(format: "%02d", i))"
+            let id = Self.id(i, prefix)
             topics.append(.init(id: id, count: n, lastActivity: Self.base.addingTimeInterval(-Double(i) * 600), titleLines: titleLines))
             for j in 0..<n {
                 thoughts.append(.init(id: "\(id)-s\(String(format: "%04d", j))", topicID: id,
@@ -34,6 +36,15 @@ struct MapLayoutTests {
             }
         }
         return MapLayoutInput(topics: topics, thoughts: thoughts, links: links, anchors: anchors)
+    }
+
+    /// Thema mit `n` Gedanken anhängen (neueste Aktivität = `age` Sekunden vor `base`)
+    private func add(_ id: String, _ n: Int, to input: inout MapLayoutInput, age: TimeInterval = 0, pinned: Bool = false) {
+        input.topics.append(.init(id: id, count: n, lastActivity: Self.base.addingTimeInterval(-age), pinned: pinned))
+        for j in 0..<n {
+            input.thoughts.append(.init(id: "\(id)-s\(String(format: "%04d", j))", topicID: id,
+                                        createdAt: Self.base.addingTimeInterval(-age - Double(j) * 60)))
+        }
     }
 
     private func footprints(_ layout: MapLayout) -> [MapFootprint] {
@@ -54,7 +65,27 @@ struct MapLayoutTests {
         }
     }
 
+    /// Jeder Kreis, der vorher und nachher zu sehen ist, liegt bitgenau gleich; die Anker auch.
+    private func assertNothingMoved(_ before: MapLayout, _ after: MapLayout, sourceLocation: SourceLocation = #_sourceLocation) {
+        for bubble in before.bubbles {
+            guard let now = after.bubble(bubble.id) else { continue }
+            #expect(now.center == bubble.center, "\(bubble.id) ist gewandert: \(bubble.center) → \(now.center)",
+                    sourceLocation: sourceLocation)
+            #expect(after.anchors[bubble.id] == before.anchors[bubble.id], "Anker von \(bubble.id) geändert",
+                    sourceLocation: sourceLocation)
+        }
+    }
+
     private func center(_ layout: MapLayout, _ id: String) -> CGPoint { layout.bubble(id)!.center }
+
+    /// Dicht gepackte Anker wie aus der alten Anordnung: Raster, in dem Kreise mit 8 Gedanken knapp passen
+    private func tightAnchors(columns: Int, rows: Int) -> [String: MapAnchor] {
+        var anchors: [String: MapAnchor] = [:]
+        for i in 0..<(columns * rows) {
+            anchors[Self.id(i)] = MapAnchor(x: Double(i % columns) * 128, y: Double(i / columns) * 140)
+        }
+        return anchors
+    }
 
     // MARK: Determinismus
 
@@ -105,6 +136,19 @@ struct MapLayoutTests {
         #expect(config.radius(for: 0) == config.radius(for: 1))
     }
 
+    @Test func everyVisibleSizeFitsIntoTheReserve() {
+        // Grundlage der festen Anker: Was ein Thema je zeigt, liegt in dem Platz, den es beim Anlegen frei hält
+        for lines in [0, 2, 5] {
+            let reserve = MapFootprint.reserve(id: "r", titleLines: lines, config: config)
+            #expect(reserve.label.contains(MapFootprint.reserve(id: "r", titleLines: 0, config: config).label))
+            for count in [1, 2, 3, 5, 8, 13, 20, 36, 80, 400] {
+                let shown = MapFootprint.sized(id: "s", radius: config.radius(for: count), thoughts: count, titleLines: lines, config: config)
+                #expect(shown.outer <= reserve.outer + 0.001, "n=\(count): Bogen ragt hinaus")
+                #expect(reserve.label.contains(shown.label), "n=\(count), \(lines) Zeilen: Beschriftung ragt hinaus")
+            }
+        }
+    }
+
     // MARK: Überlappung
 
     @Test func circlesNeverOverlap() {
@@ -112,17 +156,18 @@ struct MapLayoutTests {
         for _ in 0..<6 {
             let counts = (0..<rng.int(8..<40)).map { _ in rng.int(1..<120) }
             let layout = MapLayout.compute(input(counts))
-            #expect(layout.bubbles.count == counts.count)
+            #expect(layout.bubbles.count == min(counts.count, config.maxBubbles))
             assertNoOverlap(layout)
         }
     }
 
     @Test func clusteredAnchorsAreSeparated() {
-        // alle Anker auf (fast) demselben Punkt: alles muss trotzdem frei liegen
+        // alle Anker auf (fast) demselben Punkt (kaputte Datei): alles muss trotzdem frei liegen
         var anchors: [String: MapAnchor] = [:]
-        for i in 0..<12 { anchors["t\(String(format: "%02d", i))"] = MapAnchor(x: Double(i % 2), y: 0) }
+        for i in 0..<12 { anchors[Self.id(i)] = MapAnchor(x: Double(i % 2), y: 0) }
         let layout = MapLayout.compute(input(Array(repeating: 20, count: 12), anchors: anchors))
         assertNoOverlap(layout)
+        #expect(layout.bubbles.count == 12)
     }
 
     @Test func labelFieldIsReservedBelowEachCircle() {
@@ -135,23 +180,126 @@ struct MapLayoutTests {
         assertNoOverlap(layout)
     }
 
-    // MARK: Stabilität
+    // MARK: Feste Anker
 
-    @Test func newTopicKeepsEveryoneElseInPlace() {
-        let before = MapLayout.compute(input([10, 4, 7, 2, 15]))
-        let after = MapLayout.compute(input([10, 4, 7, 2, 15, 3], anchors: before.anchors))
-        for bubble in before.bubbles {
-            #expect(center(after, bubble.id) == bubble.center, "\(bubble.id) ist gewandert")
-        }
+    @Test func anchorsStayWhenATopicGains() {
+        // Befund: 5 Themen à 8 Gedanken, ein neunter im ersten – vorher wanderten drei andere Mittelpunkte
+        let before = MapLayout.compute(input([8, 8, 8, 8, 8]))
+        let after = MapLayout.compute(input([9, 8, 8, 8, 8], anchors: before.anchors))
+        assertNothingMoved(before, after)
+        #expect(after.bubble("t00")!.radius > before.bubble("t00")!.radius) // Platz war reserviert
         assertNoOverlap(after)
-        // neu = an einer freien Stelle nahe der Mitte: berührt mindestens ein vorhandenes Thema
-        let new = footprints(after).first { $0.id == "t05" }!
-        let nearest = footprints(after).filter { $0.id != "t05" }.map { other -> CGFloat in
-            let push = MapGeometry.penetration(new, other, gap: config.gap + 40)
-            return push?.depth ?? 0
-        }.max() ?? 0
-        #expect(nearest > 0, "neues Thema liegt nicht an den anderen")
-        #expect(before.bounds.insetBy(dx: -new.bound - config.gap - 1, dy: -new.bound - config.gap - 1).contains(new.center))
+    }
+
+    @Test func anchorsStayWhenTopicsGrowAll() {
+        // jedes Thema wächst bis weit über den Deckel – nichts bewegt sich, alles wird so groß wie verlangt
+        var counts = Array(repeating: 1, count: 12)
+        var layout = MapLayout.compute(input(counts))
+        let first = layout
+        for round in 0..<40 {
+            counts[round % counts.count] += 1 + round
+            let next = MapLayout.compute(input(counts, anchors: layout.anchors))
+            assertNothingMoved(layout, next)
+            assertNoOverlap(next)
+            for bubble in next.bubbles {
+                #expect(bubble.radius == config.radius(for: bubble.count), "\(bubble.id) wurde ohne Not begrenzt")
+            }
+            layout = next
+        }
+        assertNothingMoved(first, layout)
+    }
+
+    @Test func tightOldAnchorsAreClampedNotPushed() {
+        // Anker aus der alten, dichten Anordnung: Wachstum begrenzt den Kreis, die Nachbarn bleiben
+        let anchors = tightAnchors(columns: 3, rows: 2)
+        let before = MapLayout.compute(input(Array(repeating: 8, count: 6), anchors: anchors))
+        for (id, anchor) in anchors { #expect(before.anchors[id] == anchor) }
+        assertNoOverlap(before)
+        var grown = Array(repeating: 8, count: 6)
+        grown[4] = 120 // mitten in der unteren Reihe
+        let after = MapLayout.compute(input(grown, anchors: before.anchors))
+        assertNothingMoved(before, after)
+        assertNoOverlap(after)
+        let big = after.bubble("t04")!
+        #expect(big.radius < config.radius(for: 120), "müsste begrenzt sein")
+        #expect(big.radius >= before.bubble("t04")!.radius - 0.01, "darf nicht schrumpfen, solange Platz ist")
+        // und bleibt stabil
+        #expect(MapLayout.compute(input(grown, anchors: after.anchors)) == after)
+    }
+
+    @Test func storedAnchorsAreKeptBitExact() {
+        // auch krumme Werte (nicht auf 1/100) kommen unverändert zurück
+        let anchors = ["t00": MapAnchor(x: 0.123456789, y: -3.000000001), "t01": MapAnchor(x: 400.987654321, y: 12.5)]
+        let layout = MapLayout.compute(input([5, 9], anchors: anchors))
+        #expect(layout.anchors == anchors)
+        #expect(center(layout, "t00") == anchors["t00"]!.point)
+    }
+
+    @Test func invalidAnchorsAreIgnored() {
+        let layout = MapLayout.compute(input([3, 3, 3], anchors: ["t00": MapAnchor(x: .nan, y: 0), "t01": MapAnchor(x: 10, y: 10),
+                                                                  "t02": MapAnchor(x: 1e12, y: 0)]))
+        #expect(layout.bubbles.allSatisfy { $0.center.x.isFinite && $0.center.y.isFinite && abs($0.center.x) < 10_000 })
+        #expect(center(layout, "t01") == CGPoint(x: 10, y: 10))
+        assertNoOverlap(layout)
+    }
+
+    @Test func anchorsStayWhenTopicsAppear() {
+        var counts = [6]
+        var layout = MapLayout.compute(input(counts))
+        for step in 1..<22 {
+            counts.append(1 + step % 5)
+            let next = MapLayout.compute(input(counts, anchors: layout.anchors))
+            assertNothingMoved(layout, next)
+            assertNoOverlap(next)
+            #expect(next.bubbles.count == counts.count)
+            layout = next
+        }
+    }
+
+    @Test func anchorsStayWhenTopicsDisappear() {
+        let counts = [10, 4, 7, 2, 15, 3, 9, 5]
+        let before = MapLayout.compute(input(counts))
+        // t02 ruht (alle Gedanken weg), t05 ist gelöscht
+        var next = input(counts, anchors: before.anchors)
+        next.topics = next.topics.compactMap { topic in
+            if topic.id == "t05" { return nil }
+            var t = topic
+            if t.id == "t02" { t.count = 0 }
+            return t
+        }
+        next.thoughts.removeAll { $0.topicID == "t02" || $0.topicID == "t05" }
+        let after = MapLayout.compute(next)
+        assertNothingMoved(before, after)
+        #expect(after.bubble("t02") == nil && after.bubble("t05") == nil)
+        #expect(after.anchors["t02"] == before.anchors["t02"]) // ruht: Platz bleibt gemerkt
+        #expect(after.anchors["t05"] == nil) // gelöscht: fällt weg
+        // kommt das ruhende Thema zurück und sein Platz ist frei, liegt es wieder genau dort
+        let back = MapLayout.compute(input(counts, anchors: after.anchors).removing("t05"))
+        #expect(back.bubble("t02")?.center == before.bubble("t02")?.center)
+        assertNothingMoved(before, back)
+    }
+
+    @Test func returningTopicWhosePlaceIsTakenMovesAlone() {
+        let before = MapLayout.compute(input([10, 10, 10, 10, 10, 10, 10]))
+        let mid = CGPoint(x: before.bounds.midX, y: before.bounds.midY)
+        let inner = before.bubbles.min { hypot($0.center.x - mid.x, $0.center.y - mid.y) < hypot($1.center.x - mid.x, $1.center.y - mid.y) }!
+        // das mittlere ruht …
+        var resting = input([10, 10, 10, 10, 10, 10, 10], anchors: before.anchors)
+        resting.topics = resting.topics.map { var t = $0; if t.id == inner.id { t.count = 0 }; return t }
+        resting.thoughts.removeAll { $0.topicID == inner.id }
+        // … ein neues nimmt seinen Platz ein …
+        add("neu", 10, to: &resting)
+        let during = MapLayout.compute(resting)
+        let taken = during.bubble("neu")!.center
+        #expect(hypot(taken.x - inner.center.x, taken.y - inner.center.y) < inner.outerRadius)
+        #expect(during.anchors[inner.id] == nil, "belegter Platz wird vergessen")
+        // … dann kehrt es zurück: nur es selbst bekommt einen neuen Platz
+        var again = input([10, 10, 10, 10, 10, 10, 10], anchors: during.anchors)
+        add("neu", 10, to: &again)
+        let after = MapLayout.compute(again)
+        assertNothingMoved(during, after)
+        assertNoOverlap(after)
+        #expect(after.bubble(inner.id)!.center != inner.center)
     }
 
     @Test func newTopicsFillTheGapOfADeletedOne() {
@@ -161,125 +309,185 @@ struct MapLayoutTests {
         let mid = CGPoint(x: before.bounds.midX, y: before.bounds.midY)
         let inner = before.bubbles.min { hypot($0.center.x - mid.x, $0.center.y - mid.y) < hypot($1.center.x - mid.x, $1.center.y - mid.y) }!
         anchors[inner.id] = nil
-        var next = input([10, 10, 10, 10, 10, 10, 10], anchors: anchors)
-        next.topics.removeAll { $0.id == inner.id }
-        next.thoughts.removeAll { $0.topicID == inner.id }
+        var next = input([10, 10, 10, 10, 10, 10, 10], anchors: anchors).removing(inner.id)
         // … ein neues gleich großes nimmt seinen Platz (ungefähr) ein, statt außen anzubauen
-        next.topics.append(.init(id: "neu", count: 10, lastActivity: Self.base))
-        for j in 0..<10 { next.thoughts.append(.init(id: "neu-\(j)", topicID: "neu", createdAt: Self.base.addingTimeInterval(Double(-j)))) }
+        add("neu", 10, to: &next)
         let after = MapLayout.compute(next)
         assertNoOverlap(after)
+        assertNothingMoved(before, after)
         let placed = center(after, "neu")
         #expect(hypot(placed.x - inner.center.x, placed.y - inner.center.y) < inner.outerRadius)
         #expect(after.bounds.width <= before.bounds.width + 1 && after.bounds.height <= before.bounds.height + 1)
     }
 
-    /// Wie stark ist die Fläche von `id` gewachsen (Ringe bzw. Beschriftungsfeld)?
-    private func growth(_ id: String, _ before: MapLayout, _ after: MapLayout) -> CGFloat {
-        let old = before.bubble(id)!, new = after.bubble(id)!
-        return max(new.outerRadius - old.outerRadius, new.label.maxY - new.center.y - (old.label.maxY - old.center.y),
-                   (new.label.width - old.label.width) / 2) + 1
-    }
-
-    private func moved(_ id: String, _ before: MapLayout, _ after: MapLayout) -> CGFloat {
-        let a = center(before, id), b = center(after, id)
-        return hypot(a.x - b.x, a.y - b.y)
-    }
-
-    @Test func growingCircleAtTheEdgeOnlyNudgesItsNeighbours() {
-        let counts = Array(repeating: 6, count: 20)
-        let before = MapLayout.compute(input(counts))
-        var grown = counts
-        grown[19] = 120 // zuletzt angelegt → am Rand; Kreis und Ringe wachsen deutlich
-        let after = MapLayout.compute(input(grown, anchors: before.anchors))
-        assertNoOverlap(after)
-        let g = growth("t19", before, after)
-        var unmoved = 0
-        for bubble in before.bubbles where bubble.id != "t19" {
-            let d = moved(bubble.id, before, after)
-            #expect(d <= g * 1.5, "\(bubble.id) ist \(d) gewandert (Wachstum \(g))")
-            if d == 0 { unmoved += 1 }
-        }
-        // am Rand ist es oft kürzer, wenn der gewachsene Kreis selbst ein Stück rückt
-        #expect(moved("t19", before, after) <= 2 * g)
-        #expect(unmoved >= 15, "es wurde zu viel verschoben (\(unmoved) von 20 unbewegt)")
-    }
-
-    @Test func growingCircleInTheMiddleMovesLittleInTotal() {
-        let counts = Array(repeating: 6, count: 10)
-        let before = MapLayout.compute(input(counts))
-        var grown = counts
-        grown[0] = 120 // zuerst angelegt → in der Mitte
-        let after = MapLayout.compute(input(grown, anchors: before.anchors))
-        assertNoOverlap(after)
-        let g = growth("t00", before, after)
-        var squared: CGFloat = 0
-        for bubble in before.bubbles {
-            let d = moved(bubble.id, before, after)
-            #expect(d <= g * 1.6, "\(bubble.id) ist \(d) gewandert (Wachstum \(g))")
-            squared += d * d
-        }
-        // dicht gepackt müssen die direkten Nachbarn weichen – mehr als ein voller Ring (6) um das ganze
-        // Wachstum ist es aber nie; nichts wird neu sortiert
-        #expect(squared <= 6 * g * g, "Gesamtweg² \(squared), Wachstum \(g)")
-    }
-
-    @Test func growthOneThoughtAtATimeIsCalm() {
-        // realistisch: ein Gedanke nach dem anderen im mittleren Thema
-        var counts = Array(repeating: 8, count: 12)
-        var layout = MapLayout.compute(input(counts))
-        var maxStep: CGFloat = 0
-        for _ in 0..<60 {
-            counts[0] += 1
-            let next = MapLayout.compute(input(counts, anchors: layout.anchors))
-            for bubble in layout.bubbles { maxStep = max(maxStep, moved(bubble.id, layout, next)) }
-            assertNoOverlap(next)
-            layout = next
-        }
-        // kein Thema springt je mehr als einen Ring-Abstand (+ Spielraum)
-        #expect(maxStep <= config.ringStep + config.dotRadius + 2, "größter Schritt \(maxStep)")
-    }
-
-    @Test func longSessionStaysStableAndFree() {
-        // Gedanken kommen nach und nach dazu, gelegentlich ein neues Thema – jede Runde mit den Ankern der vorigen
+    @Test func longSessionKeepsEveryAnchor() {
+        // Gedanken kommen nach und nach dazu, gelegentlich ein neues Thema, selten ruht eins – jede Runde mit
+        // den Ankern der vorigen. Wer sichtbar bleibt, bewegt sich nie.
         var rng = LCG(state: 2026)
         var counts = [1]
         var layout = MapLayout.compute(input(counts))
-        var totalMoves: CGFloat = 0
-        for step in 0..<160 {
-            if step % 9 == 0, counts.count < 18 { counts.append(1) } else { counts[rng.int(0..<counts.count)] += 1 }
-            let next = MapLayout.compute(input(counts, anchors: layout.anchors))
-            for bubble in layout.bubbles {
-                let c = center(next, bubble.id)
-                totalMoves += hypot(c.x - bubble.center.x, c.y - bubble.center.y)
+        for step in 0..<200 {
+            if step % 9 == 0, counts.count < 20 {
+                counts.append(1)
+            } else if step % 23 == 0, counts.count > 3 {
+                counts[rng.int(0..<counts.count)] = 0
+            } else {
+                let i = rng.int(0..<counts.count)
+                counts[i] += 1 + (counts[i] > 10 ? rng.int(0..<6) : 0)
             }
+            let next = MapLayout.compute(input(counts, anchors: layout.anchors))
+            assertNothingMoved(layout, next)
             assertNoOverlap(next)
             layout = next
         }
-        // Wachstum verschiebt wenig: im Mittel weniger als ein Punkt je Thema und Runde
-        #expect(totalMoves / CGFloat(160 * 10) < 1, "Gesamtverschiebung \(totalMoves)")
     }
 
-    // MARK: Anker
+    // MARK: Erstplatzierung
 
-    @Test func dormantTopicsKeepTheirAnchorDeletedOnesDrop() {
-        let first = MapLayout.compute(input([5, 5, 5]))
-        var next = input([5, 0, 5], anchors: first.anchors)
-        next.thoughts.removeAll { $0.topicID == "t01" }
-        next.topics.removeAll { $0.id == "t02" } // gelöscht
-        next.thoughts.removeAll { $0.topicID == "t02" }
-        let layout = MapLayout.compute(next)
-        #expect(layout.bubbles.map(\.id) == ["t00"])
-        #expect(layout.anchors["t01"] == first.anchors["t01"]) // ruht, Platz bleibt gemerkt
-        #expect(layout.anchors["t02"] == nil) // gelöscht → fällt weg
-        #expect(layout.anchors["t00"] == first.anchors["t00"])
+    @Test func fewTopicsAreBalancedNotAColumn() {
+        for n in 3...5 {
+            let layout = MapLayout.compute(input(Array(repeating: 3, count: n)))
+            let xs = Set(layout.bubbles.map { ($0.center.x * 10).rounded() })
+            #expect(xs.count >= 2, "\(n) Themen liegen in einer Spalte")
+            let box = layout.bounds
+            #expect(box.width >= 0.45 * box.height, "\(n) Themen: \(box.width) × \(box.height) ist zu schmal")
+        }
+        // vier gleich große: zwei Spalten (2 × 2 oder versetzt), nicht übereinander
+        let four = MapLayout.compute(input([4, 4, 4, 4]))
+        let columns = Dictionary(grouping: four.bubbles, by: { ($0.center.x / 40).rounded() })
+        #expect(columns.count == 2 && columns.values.allSatisfy { $0.count == 2 }, "\(four.bubbles.map(\.center))")
     }
 
-    @Test func invalidAnchorsAreIgnored() {
-        let layout = MapLayout.compute(input([3, 3], anchors: ["t00": MapAnchor(x: .nan, y: 0), "t01": MapAnchor(x: 10, y: 10)]))
-        #expect(layout.bubbles.allSatisfy { $0.center.x.isFinite && $0.center.y.isFinite })
-        #expect(center(layout, "t01") == CGPoint(x: 10, y: 10))
+    @Test func fiveThoughtsWithNoTopicAreBalanced() {
+        // wie auf dem Bildschirm: drei Themen mit Titeln und „Ohne Thema“ – zwei links, zwei rechts
+        var value = MapLayoutInput(topics: [], thoughts: [])
+        add("paply", 2, to: &value)
+        add("wohnung", 1, to: &value, age: 600)
+        add("urlaub", 1, to: &value, age: 1_200)
+        add("_none", 1, to: &value, age: 1_800)
+        value.topics = value.topics.map { var t = $0; t.titleLines = t.count; return t }
+        let layout = MapLayout.compute(value)
         assertNoOverlap(layout)
+        let midX = layout.bubbles.map(\.center.x).reduce(0, +) / CGFloat(layout.bubbles.count)
+        let left = layout.bubbles.filter { $0.center.x < midX - 1 }.count, right = layout.bubbles.filter { $0.center.x > midX + 1 }.count
+        #expect(left == 2 && right == 2, "\(layout.bubbles.map { ($0.id, $0.center) })")
+        #expect(layout.bubbles.allSatisfy { $0.titleLines == $0.count }, "Titel haben Platz")
+    }
+
+    @Test func pseudoTopicsSitAtTheBottomEdge() {
+        // „Ohne Thema“ kommt an den unteren Rand – nicht in die Mitte
+        var start = input([12, 8, 6, 5, 3, 2])
+        add("_none", 9, to: &start, age: 3_000)
+        let layout = MapLayout.compute(start)
+        let none = center(layout, "_none")
+        for bubble in layout.bubbles where bubble.id != "_none" {
+            #expect(bubble.center.y <= none.y + 0.5, "\(bubble.id) liegt unter „Ohne Thema“")
+        }
+        // spätere Themen auch nicht darunter
+        var later = start
+        later.anchors = layout.anchors
+        for i in 0..<6 { add("n\(i)", 2 + i, to: &later, age: Double(i)) }
+        let grown = MapLayout.compute(later)
+        assertNothingMoved(layout, grown)
+        for bubble in grown.bubbles where bubble.id != "_none" {
+            #expect(bubble.center.y <= none.y + 0.5, "\(bubble.id) liegt unter „Ohne Thema“")
+        }
+        // erster Gedanke ohne Thema: echte Themen wachsen darüber
+        var first = MapLayoutInput(topics: [], thoughts: [])
+        add("_none", 1, to: &first)
+        let one = MapLayout.compute(first)
+        first.anchors = one.anchors
+        add("a", 2, to: &first)
+        add("b", 1, to: &first, age: 10)
+        let three = MapLayout.compute(first)
+        #expect(center(three, "_none") == .zero)
+        #expect(three.bubbles.allSatisfy { $0.center.y <= 0.5 })
+    }
+
+    // MARK: Sammelkreis
+
+    /// 2 000 Gedanken: 500 einzelne vorläufige KI-Themen, 1 500 ohne Thema
+    private func crowd() -> MapLayoutInput {
+        var value = MapLayoutInput(topics: [], thoughts: [])
+        for i in 0..<500 {
+            let id = "p\(String(format: "%03d", i))"
+            let date = Self.base.addingTimeInterval(-Double(i) * 3_000)
+            value.topics.append(.init(id: id, count: 1, lastActivity: date))
+            value.thoughts.append(.init(id: "\(id)-s0", topicID: id, createdAt: date))
+        }
+        value.topics.append(.init(id: "_none", count: 1_500, lastActivity: Self.base))
+        for j in 0..<1_500 {
+            value.thoughts.append(.init(id: "n\(String(format: "%04d", j))", topicID: "_none",
+                                        createdAt: Self.base.addingTimeInterval(-Double(j) * 1_000 - 7)))
+        }
+        return value
+    }
+
+    @Test func crowdIsCappedAndCollected() {
+        let value = crowd()
+        let layout = MapLayout.compute(value)
+        #expect(layout.bubbles.count == config.maxBubbles)
+        #expect(layout.bubble("_none") != nil)
+        let more = layout.bubble(MapLayout.moreID)
+        #expect(more != nil)
+        // 22 Kreise für die neuesten einzelnen Themen, der Rest im Sammelkreis
+        #expect(layout.collected.count == 500 - (config.maxBubbles - 2))
+        #expect(more?.count == layout.collected.count)
+        #expect(layout.dots.filter { $0.topicID == MapLayout.moreID }.count == config.maxDots)
+        #expect(Set(layout.collected) == MapLayout.collected(value.topics))
+        // die neuesten haben einen eigenen Kreis
+        #expect(layout.bubble("p000") != nil && layout.bubble("p021") != nil && layout.bubble("p022") == nil)
+        // Punkte im Sammelkreis gehören zu gesammelten Themen
+        for dot in layout.dots where dot.topicID == MapLayout.moreID {
+            #expect(layout.collected.contains(String(dot.id.prefix(4))))
+        }
+        assertNoOverlap(layout)
+        // Gesammelte behalten ihren Anker, falls sie einen hatten
+        var withAnchor = value
+        withAnchor.anchors = layout.anchors
+        withAnchor.anchors["p300"] = MapAnchor(x: 5_000, y: 5_000)
+        let again = MapLayout.compute(withAnchor)
+        #expect(again.anchors["p300"] == MapAnchor(x: 5_000, y: 5_000))
+        assertNothingMoved(layout, again)
+    }
+
+    @Test func realTopicsGetACircleBeforeSingles() {
+        var value = MapLayoutInput(topics: [], thoughts: [])
+        for i in 0..<40 { add("s\(String(format: "%02d", i))", 1, to: &value, age: Double(i)) } // ganz neu, einzeln
+        add("alt-zwei", 2, to: &value, age: 900_000) // alt, aber zwei Gedanken
+        add("alt-nutzer", 1, to: &value, age: 990_000, pinned: true) // alt, vom Nutzer
+        let layout = MapLayout.compute(value)
+        #expect(layout.bubble("alt-zwei") != nil)
+        #expect(layout.bubble("alt-nutzer") != nil)
+        #expect(layout.bubbles.count == config.maxBubbles)
+        #expect(layout.bubble(MapLayout.moreID) != nil)
+        // genau so viele passen nicht: kein Sammelkreis
+        var exact = MapLayoutInput(topics: [], thoughts: [])
+        for i in 0..<config.maxBubbles { add("e\(String(format: "%02d", i))", 1, to: &exact, age: Double(i)) }
+        #expect(MapLayout.compute(exact).bubble(MapLayout.moreID) == nil)
+    }
+
+    @Test func crowdLayoutIsFast() {
+        let value = crowd()
+        #expect(value.thoughts.count == 2_000)
+        let clock = ContinuousClock()
+        var first = Duration.seconds(10)
+        var layout = MapLayout.empty
+        // Minimum aus mehreren Läufen: Lastspitzen der parallel laufenden Tests zählen nicht
+        for _ in 0..<7 {
+            first = min(first, clock.measure { layout = MapLayout.compute(value) })
+        }
+        var steady = value
+        steady.anchors = layout.anchors
+        var again = Duration.seconds(10)
+        for _ in 0..<7 {
+            again = min(again, clock.measure { _ = MapLayout.compute(steady) })
+        }
+        // Vorher ≈ 6 s (-O). Jetzt allein gemessen: erste Anordnung (24 Kreise neu anlegen) ≈ 25 ms Debug bzw.
+        // ≈ 6 ms -O, mit Ankern ≈ 4 ms bzw. ≈ 1 ms. Unter Volllast der parallelen Tests großzügige Grenzen, die nur
+        // echte Ausreißer fangen.
+        #expect(first < .milliseconds(150), "erste Anordnung \(first)")
+        #expect(again < .milliseconds(50), "mit Ankern \(again)")
     }
 
     // MARK: Grenzfälle 0, 1, 5, 300
@@ -307,6 +515,7 @@ struct MapLayoutTests {
         let layout = MapLayout.compute(input([2, 2, 1], titleLines: 2))
         #expect(layout.bubbles.count == 3 && layout.dots.count == 5)
         #expect(layout.bubbles.allSatisfy { $0.label.width >= config.titleWidth })
+        #expect(layout.bubbles.allSatisfy { $0.titleLines == 2 })
         assertNoOverlap(layout)
     }
 
@@ -407,22 +616,25 @@ struct MapLayoutTests {
         #expect(abs(hypot(start.x - bubble.center.x, start.y - bubble.center.y) - bubble.radius) < 0.01)
     }
 
-    @Test func overviewBundlesLinksPerTopicPair() {
+    @Test func overviewShowsFewStrongTopicLines() {
         var links: [MapLayoutInput.Link] = []
         for j in 0..<4 { links.append(.init(from: "t00-s000\(j)", to: "t01-s000\(j)")) } // 4 × t00–t01
         links.append(.init(from: "t01-s0000", to: "t00-s0000")) // doppelt, andersherum
-        links.append(.init(from: "t00-s0005", to: "t02-s0000")) // 1 × t00–t02
+        links.append(.init(from: "t00-s0005", to: "t02-s0000")) // nur 1 × t00–t02: keine Linie
         links.append(.init(from: "t00-s0006", to: "t00-s0007")) // im Thema: keine Themen-Linie
-        for k in 3..<7 { links.append(.init(from: "t00-s0008", to: "t0\(k)-s0000")) } // t00 mit vier weiteren
+        for k in 3..<7 { // t00 mit vier weiteren, je zweimal
+            links.append(.init(from: "t00-s0008", to: "t0\(k)-s0000"))
+            links.append(.init(from: "t00-s0009", to: "t0\(k)-s0001"))
+        }
         let layout = MapLayout.compute(input([12, 6, 3, 3, 3, 3, 3], links: links))
         let pairs = layout.topicLines
         #expect(pairs.first?.id == "t00|t01" && pairs.first?.count == 4) // stärkste zuerst
-        #expect(pairs.allSatisfy { $0.a < $0.b })
+        #expect(pairs.allSatisfy { $0.a < $0.b && $0.count >= config.minTopicLinks })
+        #expect(!pairs.contains { $0.id == "t00|t02" })
         // je Thema höchstens drei
         var perTopic: [String: Int] = [:]
         for line in pairs { perTopic[line.a, default: 0] += 1; perTopic[line.b, default: 0] += 1 }
         #expect(perTopic.values.allSatisfy { $0 <= config.maxTopicLinesPerTopic })
-        #expect(perTopic["t00"] == config.maxTopicLinesPerTopic)
         // Kreisrand zu Kreisrand
         for line in pairs {
             let a = layout.bubble(line.a)!, b = layout.bubble(line.b)!
@@ -430,6 +642,52 @@ struct MapLayoutTests {
             #expect(abs(hypot(line.to.x - b.center.x, line.to.y - b.center.y) - b.radius) < 0.01)
         }
         #expect(MapLayout.compute(input([12, 6, 3, 3, 3, 3, 3], links: links.reversed())).topicLines == pairs)
+    }
+
+    @Test func topicLinesAreCappedAndSkipPseudoTopics() {
+        // 20 Themen, jedes Paar (i, i+1) dreimal verknüpft – höchstens sechs Linien
+        var links: [MapLayoutInput.Link] = []
+        for i in 0..<19 {
+            for j in 0..<3 { links.append(.init(from: "\(Self.id(i))-s000\(j)", to: "\(Self.id(i + 1))-s000\(j)")) }
+        }
+        var value = input(Array(repeating: 4, count: 20), links: links)
+        add("_none", 4, to: &value)
+        for j in 0..<3 { value.links.append(.init(from: "t00-s000\(j)", to: "_none-s000\(j)")) }
+        let layout = MapLayout.compute(value)
+        #expect(layout.topicLines.count <= config.maxTopicLines)
+        #expect(!layout.topicLines.isEmpty)
+        #expect(!layout.topicLines.contains { $0.a.hasPrefix("_") || $0.b.hasPrefix("_") })
+    }
+
+    @Test func topicLinesNeverCrossAThirdCircle() {
+        // drei Themen in einer Reihe: A – C – B. A–B ist eng verknüpft, die Linie liefe durch C → entfällt
+        let anchors = ["a": MapAnchor(x: 0, y: 0), "c": MapAnchor(x: 180, y: 0), "b": MapAnchor(x: 360, y: 0)]
+        var value = MapLayoutInput(topics: [], thoughts: [], anchors: anchors)
+        add("a", 3, to: &value)
+        add("b", 3, to: &value)
+        add("c", 3, to: &value)
+        for j in 0..<3 { value.links.append(.init(from: "a-s000\(j)", to: "b-s000\(j)")) }
+        for j in 0..<2 { value.links.append(.init(from: "a-s000\(j)", to: "c-s000\(j)")) }
+        let layout = MapLayout.compute(value)
+        #expect(layout.topicLines.map(\.id) == ["a|c"])
+        // allgemein: keine Linie läuft durch einen anderen Kreis
+        var rng = LCG(state: 5)
+        var many = input(Array(repeating: 5, count: 14))
+        for _ in 0..<200 {
+            let a = rng.int(0..<14), b = rng.int(0..<14)
+            many.links.append(.init(from: "\(Self.id(a))-s000\(rng.int(0..<5))", to: "\(Self.id(b))-s000\(rng.int(0..<5))"))
+        }
+        let busy = MapLayout.compute(many)
+        for line in busy.topicLines {
+            for bubble in busy.bubbles where bubble.id != line.a && bubble.id != line.b {
+                for i in 0...20 {
+                    let t = CGFloat(i) / 20, u = 1 - t
+                    let p = CGPoint(x: u * u * line.from.x + 2 * u * t * line.control.x + t * t * line.to.x,
+                                    y: u * u * line.from.y + 2 * u * t * line.control.y + t * t * line.to.y)
+                    #expect(hypot(p.x - bubble.center.x, p.y - bubble.center.y) > bubble.radius, "\(line.id) kreuzt \(bubble.id)")
+                }
+            }
+        }
     }
 
     // MARK: Leistung
@@ -457,9 +715,18 @@ struct MapLayoutTests {
             again = min(again, clock.measure { _ = MapLayout.compute(steady) })
         }
         // Debug-Build unter Volllast der parallelen Tests: großzügige Grenze, die nur echte Ausreißer fängt
-        // (allein ~18 ms bzw. ~2,4 ms)
-        #expect(first < .milliseconds(250), "erste Anordnung \(first)")
+        #expect(first < .milliseconds(150), "erste Anordnung \(first)")
         #expect(again < .milliseconds(100), "mit Ankern \(again)")
         assertNoOverlap(layout)
+    }
+}
+
+private extension MapLayoutInput {
+    /// ohne dieses Thema und seine Gedanken
+    func removing(_ id: String) -> MapLayoutInput {
+        var copy = self
+        copy.topics.removeAll { $0.id == id }
+        copy.thoughts.removeAll { $0.topicID == id }
+        return copy
     }
 }
