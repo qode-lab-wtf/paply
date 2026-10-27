@@ -8,6 +8,7 @@
 # Optionen / Umgebungsvariablen:
 #   --device <udid|name>   bzw. DEVICE_ID   Gerät (Standard: erstes verbundene iPhone)
 #   --prefix <bundle-id>   bzw. PAPLY_BUNDLE_PREFIX   z. B. de.allan.paply, falls com.paply.ios vergeben ist
+#                          (ändert nur die Bundle-IDs; die App Group bleibt group.com.paply.ios)
 #   --release              Release statt Debug. Für Phase 0 NICHT empfohlen: pull-logs.sh braucht
 #                          einen Debug-Build (get-task-allow), sonst lassen sich die Logs nicht holen.
 #   --launch               App nach dem Installieren starten
@@ -30,7 +31,7 @@ while [[ $# -gt 0 ]]; do
     --prefix) PREFIX="$2"; shift 2 ;;
     --release) CONFIG="Release"; shift ;;
     --launch) LAUNCH=1; shift ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "Unbekannte Option: $1" >&2; exit 2 ;;
   esac
 done
@@ -114,4 +115,4 @@ if [[ "$LAUNCH" == 1 ]]; then
   xcrun devicectl device process launch --device "$UDID" --terminate-existing "$BUNDLE_ID"
 fi
 
-echo "Fertig. Logs holen: scripts/pull-logs.sh --device $UDID${PREFIX:+ --prefix $PREFIX}"
+echo "Fertig. Logs holen: scripts/pull-logs.sh --device $UDID"

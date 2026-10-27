@@ -17,9 +17,13 @@ riskanten Annahmen gemessen werden – siehe [docs/phase0/TESTPLAN.md](docs/phas
 | `Config/Base.xcconfig` | Bundle-Präfix, App Group, Team, Signierstil |
 | `project.yml` | XcodeGen-Spezifikation; `Paply.xcodeproj` ist daraus erzeugt und liegt im Repo |
 
-Bundle-IDs: App = `com.paply.ios`, Tastatur `….keyboard`, Widgets `….widgets`, App Group `group.com.paply.ios`,
-URL-Schema `paply-ios://` (Tastatur → App).
+Bundle-IDs: App = `com.paply.ios`, Tastatur `….keyboard`, Widgets `….widgets`, URL-Schema `paply-ios://` (Tastatur → App).
 Das Präfix ist überschreibbar (falls `com.paply.ios` bei Apple schon vergeben ist).
+
+**App Group:** fest `group.com.paply.ios`. Sie steht wörtlich in allen drei `.entitlements`, weil Xcodes
+automatisches Signieren eine Variable dort nicht als App Group erkennt. `PAPLY_APP_GROUP` in
+`Config/Base.xcconfig` muss zum festen Wert passen (der Code liest ihn aus der Info.plist). Ein anderes
+Bundle-Präfix ändert die App Group nicht.
 
 ## Bauen und installieren (MacBook)
 
@@ -49,7 +53,7 @@ Paply, dann Paply antippen → „Vollen Zugriff erlauben“. In der App den Gro
 ## Diagnose holen
 
 ```sh
-scripts/pull-logs.sh                # bzw. --prefix de.allan.paply --device "Allans iPhone"
+scripts/pull-logs.sh                # bzw. --device "Allans iPhone"
 ```
 
 Holt `Diagnostics/*.jsonl` aus dem App-Group-Container, schreibt `~/paply-logs/<Zeit>/merged.jsonl`

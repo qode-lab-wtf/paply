@@ -37,6 +37,7 @@
 		66B4701F9B7EA891C26662E8 /* HistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BE46E3028D0B3168693C030 /* HistoryDetailView.swift */; };
 		6D18A5AA761BAE8D000F7FC5 /* LevelChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8DD5888A85A20E1837B253 /* LevelChannel.swift */; };
 		73F6A2250996E80DB3A9F397 /* Diag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92833402C9166B969077C2CF /* Diag.swift */; };
+		777640EB21A4E2B5173CE968 /* SharedIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B704C21600A2C8A60134108 /* SharedIO.swift */; };
 		7B37B8ECD3F1B254A9D3A773 /* DeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D610BE924E785550DF1AF3E /* DeviceMonitor.swift */; };
 		7F87D8E2133BA9AE7E9E0703 /* PaplyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65299AE05C8D760F700DB5B /* PaplyWidgets.swift */; };
 		8552BE15871C56E91C8D13C0 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB83141FC8D0BC2E178B374 /* AppSettings.swift */; };
@@ -119,6 +120,7 @@
 		4E88615BBB6B88DF532C8589 /* PaplyWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaplyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		538BDAD38D348D4AD4EF3685 /* MonoClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonoClock.swift; sourceTree = "<group>"; };
 		5A8DD5888A85A20E1837B253 /* LevelChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelChannel.swift; sourceTree = "<group>"; };
+		5B704C21600A2C8A60134108 /* SharedIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIO.swift; sourceTree = "<group>"; };
 		5E40DEAE75E2BFC3F11D6050 /* ToggleDictationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleDictationIntent.swift; sourceTree = "<group>"; };
 		65D1A73142E02BB36F10F427 /* Brand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brand.swift; sourceTree = "<group>"; };
 		724B91F7AB66ADC38A2BE72A /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
@@ -274,6 +276,7 @@
 				1D610BE924E785550DF1AF3E /* DeviceMonitor.swift */,
 				FCC91B1771B577E04CF8A270 /* NetworkMonitor.swift */,
 				A563AF278F4644CA4DF97F2D /* SessionController.swift */,
+				5B704C21600A2C8A60134108 /* SharedIO.swift */,
 				18D6DAEB9943A5E72D3DEF82 /* ShortcutBridge.swift */,
 			);
 			path = Session;
@@ -499,6 +502,7 @@
 				AD2DAA1B994680623FAC14FA /* RootView.swift in Sources */,
 				FC662E55064F57778D1A3232 /* SessionController.swift in Sources */,
 				EBE9D771357E1B9144BBC537 /* SettingsView.swift in Sources */,
+				777640EB21A4E2B5173CE968 /* SharedIO.swift in Sources */,
 				FB9A404548916B334E2340BB /* SharedModels.swift in Sources */,
 				1D94CDB3A4190567D5C4638C /* SharedSettings.swift in Sources */,
 				EAFF3703FA3D0BBD40CCB20F /* SharedStore.swift in Sources */,

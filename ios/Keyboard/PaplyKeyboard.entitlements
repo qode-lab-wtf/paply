@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>$(PAPLY_APP_GROUP)</string>
+		<string>group.com.paply.ios</string>
 	</array>
 </dict>
 </plist>

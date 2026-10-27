@@ -17,8 +17,11 @@ struct PaplyApp: App {
             if phase != .active, case .running = SessionController.shared.flash {
                 SessionController.shared.flash = nil
             }
-            // Sprachen aus Tastaturen + Gerätesprachen nur im Vordergrund ableiten und merken
-            if phase == .active { AppSettings.shared.refreshDetectedSpokenLanguages() }
+            if phase == .active {
+                SessionController.shared.lastActivatedAt = Date()
+                // Sprachen aus Tastaturen + Gerätesprachen nur im Vordergrund ableiten und merken
+                AppSettings.shared.refreshDetectedSpokenLanguages()
+            }
         }
     }
 }

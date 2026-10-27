@@ -98,6 +98,9 @@ final class AppSettings {
     private(set) var detectedSpokenLanguages: [String]
 
     private(set) var hasAPIKey: Bool
+    /// Letzte 4 Zeichen zum Anzeigen – damit Views nicht bei jedem Zeichnen den Schlüsselbund lesen
+    private(set) var apiKeySuffix: String?
+    @ObservationIgnored private var cachedAPIKey: String?
 
     private init() {
         var loaded = PaplySettings()
@@ -119,10 +122,21 @@ final class AppSettings {
         }
         spokenLanguagesAuto = UserDefaults.standard.object(forKey: Key.spokenAuto) as? Bool ?? true
         detectedSpokenLanguages = UserDefaults.standard.stringArray(forKey: Key.spokenDetected) ?? []
-        hasAPIKey = Keychain.readAPIKey() != nil
+        let key = Keychain.readAPIKey()
+        cachedAPIKey = key
+        hasAPIKey = key != nil
+        apiKeySuffix = key.map { String($0.suffix(4)) }
     }
 
-    var apiKey: String? { Keychain.readAPIKey() }
+    /// Aus dem Speicher; nur wenn noch nichts da ist (z. B. vor dem ersten Entsperren), erneut lesen.
+    var apiKey: String? {
+        if cachedAPIKey == nil, let key = Keychain.readAPIKey() {
+            cachedAPIKey = key
+            hasAPIKey = true
+            apiKeySuffix = String(key.suffix(4))
+        }
+        return cachedAPIKey
+    }
 
     /// Einstellungen, mit denen ein Diktat startet (Sprachen je nach Modus eingesetzt).
     var effectivePaply: PaplySettings {
@@ -174,7 +188,9 @@ final class AppSettings {
         } else {
             Keychain.saveAPIKey(trimmed)
         }
-        hasAPIKey = Keychain.readAPIKey() != nil
+        cachedAPIKey = Keychain.readAPIKey()
+        hasAPIKey = cachedAPIKey != nil
+        apiKeySuffix = cachedAPIKey.map { String($0.suffix(4)) }
         Diag.log("settings.apiKey", ["present": .b(hasAPIKey), "len": .i(trimmed.count)])
     }
 

@@ -16,7 +16,7 @@ enum AppOpener {
     typealias Completion = @MainActor @Sendable (_ variant: String, _ success: Bool) -> Void
 
     /// C-Signatur von -[UIApplication openURL:options:completionHandler:]
-    private typealias OpenURLWithOptions = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, (@convention(block) (Bool) -> Void)?) -> Void
+    private typealias OpenURLWithOptions = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, (@convention(block) @Sendable (Bool) -> Void)?) -> Void
 
     static func open(_ url: URL, from controller: UIInputViewController, completion: @escaping Completion) {
         let started = MonoClock.now()
@@ -27,7 +27,8 @@ enum AppOpener {
             guard let context = controller.extensionContext else {
                 return legacy(url, responder: controller, started: started, completion: completion)
             }
-            context.open(url) { success in
+            // Rückruf kommt auf einer fremden Queue: @Sendable, dann zurück auf den Main-Actor
+            context.open(url) { @Sendable success in
                 Task { @MainActor in
                     Diag.log("kb.open.variant", ["variant": .s("extensionContext"), "ok": .b(success), "ms": .ms(MonoClock.msSince(started))])
                     if success { completion("extensionContext", true) } else { legacy(url, responder: controller, started: started, completion: completion) }
@@ -45,7 +46,8 @@ enum AppOpener {
             return next(false)
         }
         let function = unsafeBitCast(method_getImplementation(method), to: OpenURLWithOptions.self)
-        let handler: @convention(block) (Bool) -> Void = { success in
+        // Rückruf kommt auf einer fremden Queue: nicht MainActor-isoliert, erst danach hinüber
+        let handler: @convention(block) @Sendable (Bool) -> Void = { success in
             Task { @MainActor in
                 Diag.log("kb.open.variant", ["variant": .s("responder"), "ok": .b(success), "ms": .ms(MonoClock.msSince(started))])
                 next(success)

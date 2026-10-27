@@ -87,8 +87,15 @@ final class HistoryStore {
             .map(\.raw)
     }
 
+    /// Kodieren und Schreiben auf einer eigenen Queue (seriell, letzter Stand gewinnt).
+    private static let saveQueue = DispatchQueue(label: "paply.history-save", qos: .utility)
+
     private func save() {
-        guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        let snapshot = entries
+        let url = fileURL
+        Self.saveQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
     }
 }

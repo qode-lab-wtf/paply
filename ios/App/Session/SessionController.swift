@@ -61,6 +61,9 @@ final class SessionController {
     @ObservationIgnored private var resumeTask: Task<Void, Never>?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var bootstrapped = false
+    @ObservationIgnored private var startTask: Task<Bool, Never>?
+    /// Wann die App zuletzt aktiv wurde (für den Aufblitz-Bildschirm nach Start per URL)
+    @ObservationIgnored var lastActivatedAt: Date?
 
     private init() {}
 
@@ -72,8 +75,10 @@ final class SessionController {
         // Alter Stand aus einem früheren Prozess gilt nicht mehr.
         shared = SessionState()
         publish()
-        SharedStore.pruneResults()
-        Self.removeStalePending()
+        SharedIO.async {
+            SharedStore.pruneResults()
+            Self.removeStalePending()
+        }
         // Live Activity aus einem abgestürzten Vorgänger nicht stehen lassen
         ShortcutBridge.endLeftoverActivities()
         _ = NetworkMonitor.shared
@@ -91,6 +96,16 @@ final class SessionController {
     @discardableResult
     func startSession(trigger: String) async -> Bool {
         if (status == .ready || status == .recording), audio.isRunning { return true }
+        // Läuft schon ein Start (z. B. Knopf und URL gleichzeitig), auf ihn warten
+        if let startTask { return await startTask.value }
+        let task = Task { await performStart(trigger: trigger) }
+        startTask = task
+        let ok = await task.value
+        startTask = nil
+        return ok
+    }
+
+    private func performStart(trigger: String) async -> Bool {
         if dictation != nil { cancelDictation(reason: "engine-dead") }
         let begin = MonoClock.now()
 
@@ -105,12 +120,8 @@ final class SessionController {
             return failStart(trigger: trigger, stage: "permission", code: 0, text: "Mikrofon nicht erlaubt – in den iOS-Einstellungen freigeben")
         }
 
-        do {
-            try audio.configureSession()
-            try audio.activateSession()
-            try audio.startEngine()
-        } catch {
-            audio.stopEngine()
+        // Sitzung und Engine auf der Audio-Queue starten – der Main-Thread bleibt frei
+        if case .failure(let error) = await audio.start() {
             return failStart(trigger: trigger, stage: error.stage, code: error.code, text: "Mikro ließ sich nicht starten (\(error.fourCC.isEmpty ? String(error.code) : error.fourCC))", fourCC: error.fourCC)
         }
 
@@ -146,8 +157,7 @@ final class SessionController {
     func stopSession(reason: String) {
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
-        audio.stopEngine()
-        audio.deactivateSession()
+        audio.stop()
         let duration = startedAt.map { Date().timeIntervalSince($0) } ?? 0
         status = .off
         startedAt = nil
@@ -238,7 +248,7 @@ final class SessionController {
         current.speechDetected = true
         if shared.dictation?.id == id { shared.dictation?.speechDetected = true }
         publish()
-        DarwinBus.shared.post(.speech)
+        SharedIO.async { DarwinBus.shared.post(.speech) }
         // Vorwärmen erst bei echter Sprache (bloßes Durchschalten erzeugt keine Anfrage).
         // PaplyKit schickt dafür nur ein HEAD ohne Schlüssel. Höchstens alle 60 s: Eine
         // ungenutzte HTTP/2-Verbindung bleibt erfahrungsgemäß etwa eine Minute offen –
@@ -257,7 +267,7 @@ final class SessionController {
             if let result = SharedStore.readResult(id: id) {
                 // Ergebnis liegt schon da (Notification verpasst?) – nochmal melden
                 Diag.log("dictation.finish.repost", ["id": .s(String(result.dictationID.prefix(8)))])
-                DarwinBus.shared.post(.result)
+                SharedIO.async { DarwinBus.shared.post(.result) }
             } else {
                 Diag.log("dictation.finish.unknown", ["id": .s(String(id.prefix(8)))])
             }
@@ -362,7 +372,8 @@ final class SessionController {
         case .keyboard where entry.deliverAsPending:
             // Tastatur war schon weg: nicht einsetzen, beim nächsten 🌐 einmal anbieten
             if !outcome.text.isEmpty {
-                SharedStore.write(PendingText(id: entry.id, text: outcome.text, createdAt: Date()), .pendingText)
+                let pending = PendingText(id: entry.id, text: outcome.text, createdAt: Date())
+                SharedIO.async { SharedStore.write(pending, .pendingText) }
             }
             Diag.log("dictation.deferred", ["id": .s(entry.shortID), "textLen": .i(outcome.text.count)])
         case .keyboard:
@@ -377,9 +388,11 @@ final class SessionController {
                 finishReceivedNs: finishReceivedNs,
                 writtenNs: MonoClock.now()
             )
-            SharedStore.pruneResults() // nicht abgeholte Texte nicht liegen lassen
-            SharedStore.writeResult(result)
-            DarwinBus.shared.post(.result)
+            SharedIO.async {
+                SharedStore.pruneResults() // nicht abgeholte Texte nicht liegen lassen
+                SharedStore.writeResult(result)
+                DarwinBus.shared.post(.result)
+            }
         case .shortcut:
             ShortcutBridge.deliver(outcome, id: entry.id)
         }
@@ -449,11 +462,14 @@ final class SessionController {
         guard let entry = retained.removeValue(forKey: id) else {
             Diag.log("dictation.retry.unknown", ["id": .s(String(id.prefix(8)))])
             // Tastatur nicht warten lassen
-            SharedStore.writeResult(DictationResult(
+            let result = DictationResult(
                 dictationID: id, text: "", errorMessage: "Dieses Diktat ist nicht mehr da – bitte neu sprechen.",
                 timings: ResultTimings(), retryable: false, finishReceivedNs: now, writtenNs: now
-            ))
-            DarwinBus.shared.post(.result)
+            )
+            SharedIO.async {
+                SharedStore.writeResult(result)
+                DarwinBus.shared.post(.result)
+            }
             return
         }
         entry.expiry?.cancel()
@@ -520,13 +536,16 @@ final class SessionController {
             finishDictation(id: id, asPending: true)
         } else if let entry = inFlight[id] {
             entry.deliverAsPending = true
-        } else if let result = SharedStore.readResult(id: id) {
-            // Ergebnis kam schon, wurde aber nicht mehr abgeholt
-            SharedStore.removeResult(id: id)
-            if !result.text.isEmpty {
-                SharedStore.write(PendingText(id: id, text: result.text, createdAt: Date()), .pendingText)
+        } else {
+            // Ergebnis kam evtl. schon, wurde aber nicht mehr abgeholt
+            SharedIO.async {
+                guard let result = SharedStore.readResult(id: id) else { return }
+                SharedStore.removeResult(id: id)
+                if !result.text.isEmpty {
+                    SharedStore.write(PendingText(id: id, text: result.text, createdAt: Date()), .pendingText)
+                }
+                Diag.log("dictation.deferred", ["id": .s(String(id.prefix(8))), "textLen": .i(result.text.count), "late": .b(true)])
             }
-            Diag.log("dictation.deferred", ["id": .s(String(id.prefix(8))), "textLen": .i(result.text.count), "late": .b(true)])
         }
     }
 
@@ -535,7 +554,7 @@ final class SessionController {
         markKeyboardContact(now)
         shared.pongNs = now
         publish(signal: false)
-        DarwinBus.shared.post(.pong)
+        SharedIO.async { DarwinBus.shared.post(.pong) }
     }
 
     private func markKeyboardContact(_ ns: UInt64) {
@@ -577,8 +596,10 @@ final class SessionController {
             case .needsForeground(let text), .failed(let text):
                 ack = ShortcutAck(seq: command.seq, outcome: .failed, detail: text, ackNs: MonoClock.now())
             }
-            SharedStore.write(ack, .shortcutAck)
-            DarwinBus.shared.post(.shortcutAck)
+            SharedIO.async {
+                SharedStore.write(ack, .shortcutAck)
+                DarwinBus.shared.post(.shortcutAck)
+            }
         }
     }
 
@@ -600,9 +621,14 @@ final class SessionController {
         }
         Diag.log("url.open", fields)
 
+        // Kam die App gerade erst nach vorne (aus der Tastatur einer anderen App), den
+        // Aufblitz-Bildschirm zeigen. War sie schon offen (Tastatur in Paply selbst, z. B.
+        // Testseite), still im Hintergrund starten – sonst deckte er die Oberfläche zu.
+        let cameForward = UIApplication.shared.applicationState != .active
+            || lastActivatedAt.map { Date().timeIntervalSince($0) < 2 } ?? true
         switch (url.host ?? "", url.path) {
         case ("session", "/start"):
-            flash = .starting
+            if cameForward { flash = .starting }
             Task {
                 let ok = await startSession(trigger: "url-\(source)")
                 guard ok else {
@@ -626,7 +652,7 @@ final class SessionController {
                 } else if source == "shortcut" {
                     dictating = await ShortcutBridge.toggle(trigger: "url") == .started
                 }
-                flash = .running(dictating: dictating)
+                flash = cameForward ? .running(dictating: dictating) : nil
             }
         case ("session", "/stop"):
             stopSession(reason: "url")
@@ -647,8 +673,11 @@ final class SessionController {
         shared.updatedNs = MonoClock.now()
         shared.hasAPIKey = AppSettings.shared.hasAPIKey
         shared.detail = detail
-        SharedStore.write(shared, .session)
-        if signal { DarwinBus.shared.post(.state) }
+        let snapshot = shared
+        SharedIO.async {
+            SharedStore.write(snapshot, .session)
+            if signal { DarwinBus.shared.post(.state) }
+        }
     }
 
     /// Nach Änderung des Schlüssels o. Ä. den Zustand neu veröffentlichen.
@@ -666,13 +695,16 @@ final class SessionController {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 ticks += 1
-                Self.removeStalePending()
+                SharedIO.async { Self.removeStalePending() }
                 if let until = holdUntil, Date() >= until, dictation == nil, processingCount == 0, status != .off {
                     stopSession(reason: "hold-expired")
                     return
                 }
-                if status == .ready || status == .recording, !audio.isRunning {
-                    Diag.log("engine.notRunning", ["status": .s(status.rawValue), "app": .s(Self.appState)])
+                if status == .ready || status == .recording {
+                    await audio.refresh()
+                    if !audio.isRunning {
+                        Diag.log("engine.notRunning", ["status": .s(status.rawValue), "app": .s(Self.appState)])
+                    }
                 }
                 if ticks % 10 == 0 { monitor.logMetrics(reason: "periodic") }
             }
@@ -736,6 +768,7 @@ final class SessionController {
                 detail = "Unterbrochen"
                 publish()
             }
+            Task { await audio.refresh() }
         } else {
             let shouldResume = AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume)
             Diag.log("audio.interruption.ended", [
@@ -749,31 +782,31 @@ final class SessionController {
     /// Fehlercode wird protokolliert; nach drei Versuchen bleibt der Zustand „unterbrochen“.
     func attemptResume(trigger: String, attempt: Int) {
         resumeTask?.cancel()
-        let begin = MonoClock.now()
-        do {
-            try audio.activateSession()
-            if !audio.isRunning { try audio.restartEngine() }
-            status = dictation == nil ? .ready : .recording
-            detail = nil
-            lastActivityAt = Date()
-            publish()
-            Diag.log("audio.resume.ok", ["trigger": .s(trigger), "attempt": .i(attempt), "app": .s(Self.appState), "ms": .ms(MonoClock.msSince(begin))])
-        } catch {
-            Diag.log("audio.resume.failed", [
-                "trigger": .s(trigger), "attempt": .i(attempt), "stage": .s(error.stage),
-                "code": .i(error.code), "fourCC": .s(error.fourCC), "app": .s(Self.appState),
-            ])
-            let delays: [Double] = [2, 10, 30]
-            if attempt <= delays.count {
-                resumeTask = Task {
+        resumeTask = Task {
+            let begin = MonoClock.now()
+            let outcome = await audio.resume() // auf der Audio-Queue
+            guard status == .interrupted else { return } // inzwischen anders gelöst (z. B. neu gestartet)
+            switch outcome {
+            case .success:
+                status = dictation == nil ? .ready : .recording
+                detail = nil
+                lastActivityAt = Date()
+                publish()
+                Diag.log("audio.resume.ok", ["trigger": .s(trigger), "attempt": .i(attempt), "app": .s(Self.appState), "ms": .ms(MonoClock.msSince(begin))])
+            case .failure(let error):
+                Diag.log("audio.resume.failed", [
+                    "trigger": .s(trigger), "attempt": .i(attempt), "stage": .s(error.stage),
+                    "code": .i(error.code), "fourCC": .s(error.fourCC), "app": .s(Self.appState),
+                ])
+                let delays: [Double] = [2, 10, 30]
+                if attempt <= delays.count {
                     try? await Task.sleep(for: .seconds(delays[attempt - 1]))
                     guard !Task.isCancelled, status == .interrupted else { return }
                     attemptResume(trigger: trigger, attempt: attempt + 1)
+                } else {
+                    detail = "Mikro aus – Paply einmal öffnen"
+                    publish()
                 }
-            } else {
-                status = .interrupted
-                detail = "Mikro aus – Paply einmal öffnen"
-                publish()
             }
         }
     }
@@ -792,42 +825,44 @@ final class SessionController {
         var fields: DiagFields = ["reason": .s(name), "status": .s(status.rawValue), "app": .s(Self.appState)]
         fields.merge(audio.routeFields) { a, _ in a }
         Diag.log("audio.route", fields)
-        if status != .off { audio.preferBuiltInMic() }
+        if status != .off { Task { await audio.preferBuiltInMic() } }
     }
 
     private func handleMediaServicesReset() {
         Diag.log("audio.mediaServicesReset", ["status": .s(status.rawValue), "app": .s(Self.appState)])
         guard status != .off else { return }
         cancelDictation(reason: "media-reset")
-        audio.rebuild()
-        do {
-            try audio.configureSession()
-            try audio.activateSession()
-            try audio.startEngine()
-            status = .ready
-            detail = nil
-            Diag.log("audio.mediaServicesReset.recovered")
-        } catch {
-            status = .interrupted
-            detail = "Mikro aus – Paply einmal öffnen"
-            Diag.log("audio.mediaServicesReset.failed", ["stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC)])
+        Task {
+            switch await audio.rebuildAndStart() {
+            case .success:
+                status = .ready
+                detail = nil
+                Diag.log("audio.mediaServicesReset.recovered")
+            case .failure(let error):
+                status = .interrupted
+                detail = "Mikro aus – Paply einmal öffnen"
+                Diag.log("audio.mediaServicesReset.failed", ["stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC)])
+            }
+            publish()
         }
-        publish()
     }
 
     private func handleEngineConfigurationChange() {
-        var fields: DiagFields = ["status": .s(status.rawValue), "engine": .b(audio.isRunning), "app": .s(Self.appState)]
-        fields.merge(audio.routeFields) { a, _ in a }
-        Diag.log("audio.engineConfigChange", fields)
-        guard status == .ready || status == .recording, !audio.isRunning else { return }
-        do {
-            try audio.restartEngine()
-            Diag.log("audio.engineRestart.ok")
-        } catch {
-            Diag.log("audio.engineRestart.failed", ["stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC)])
-            status = .interrupted
-            detail = "Mikro aus – Paply einmal öffnen"
-            publish()
+        Task {
+            await audio.refresh()
+            var fields: DiagFields = ["status": .s(status.rawValue), "engine": .b(audio.isRunning), "app": .s(Self.appState)]
+            fields.merge(audio.routeFields) { a, _ in a }
+            Diag.log("audio.engineConfigChange", fields)
+            guard status == .ready || status == .recording, !audio.isRunning else { return }
+            switch await audio.restartEngine() {
+            case .success:
+                Diag.log("audio.engineRestart.ok")
+            case .failure(let error):
+                Diag.log("audio.engineRestart.failed", ["stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC)])
+                status = .interrupted
+                detail = "Mikro aus – Paply einmal öffnen"
+                publish()
+            }
         }
     }
 
@@ -856,7 +891,7 @@ final class SessionController {
         })
     }
 
-    private static func removeStalePending() {
+    nonisolated private static func removeStalePending() {
         if let pending = SharedStore.read(PendingText.self, .pendingText), !pending.isFresh {
             SharedStore.remove(.pendingText)
         }

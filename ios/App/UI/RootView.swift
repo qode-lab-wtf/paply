@@ -63,56 +63,66 @@ struct RootView: View {
     }
 }
 
+/// Startseite als ScrollView statt List: In einer List werden Zeilen mit mehreren
+/// Knöpfen (bzw. die Sitzungskarte mit ihrem Knopf) als Ganzes antippbar oder schlucken
+/// Berührungen in Teilen der Zeile. Hier hat jede Fläche genau ein klares Tippziel.
 private struct HomeView: View {
     let showToast: (String) -> Void
-    private let session = SessionController.shared
     private let history = HistoryStore.shared
     private let settings = AppSettings.shared
 
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
                 SessionCard()
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
                 if !settings.hasAPIKey {
                     NavigationLink(value: Route.settings) {
-                        Label("Groq-Schlüssel eintragen", systemImage: "key.fill")
-                            .foregroundStyle(Color.paplyBeak)
+                        HStack {
+                            Label("Groq-Schlüssel eintragen", systemImage: "key.fill")
+                                .foregroundStyle(Color.paplyBeak)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(Color.paplyText.opacity(0.35))
+                        }
+                        .padding(16)
+                        .contentShape(Rectangle())
+                        .paplyCard(cornerRadius: 16)
                     }
-                    .listRowBackground(Color.white.opacity(0.07))
+                    .buttonStyle(.plain)
                 }
-            }
 
-            Section {
+                Text("Verlauf")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(Color.paplyText)
+                    .padding(.top, 14)
+                    .padding(.leading, 4)
+
                 if history.entries.isEmpty {
                     Text("Noch keine Diktate. Tippe in einem Textfeld auf 🌐 und wähle Paply – oder probier es auf der Testseite.")
                         .font(.subheadline)
                         .foregroundStyle(Color.paplyText.opacity(0.6))
-                        .listRowBackground(Color.white.opacity(0.05))
-                }
-                ForEach(history.entries) { entry in
-                    HistoryRow(entry: entry) {
-                        copy(entry)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .paplyCard(cornerRadius: 16)
+                } else {
+                    ForEach(history.entries) { entry in
+                        HistoryRow(entry: entry) { copy(entry) }
+                            .contextMenu {
+                                Button("Kopieren", systemImage: "doc.on.doc") { copy(entry) }
+                                Button("Löschen", systemImage: "trash", role: .destructive) {
+                                    history.delete([entry.id])
+                                }
+                            }
                     }
-                    .listRowBackground(Color.white.opacity(0.05))
-                }
-                .onDelete { offsets in
-                    history.delete(Set(offsets.map { history.entries[$0].id }))
-                }
-            } header: {
-                Text("Verlauf")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(Color.paplyText)
-                    .textCase(nil)
-                    .padding(.leading, -16)
-            } footer: {
-                if !history.entries.isEmpty {
-                    Text("Antippen kopiert den Text. ⓘ zeigt Rohtext, Polieren und Zeiten.")
+                    Text("Antippen kopiert den Text. ⓘ zeigt Rohtext, Polieren und Zeiten. Lange drücken: löschen.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.paplyText.opacity(0.45))
+                        .padding(.horizontal, 4)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 32)
         }
-        .paplyList()
+        .background(PaplyBackground())
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { PaplyWordmark() }
             ToolbarItem(placement: .topBarTrailing) {
@@ -134,19 +144,20 @@ private struct HomeView: View {
     }
 }
 
+/// Karte: links (Text + Zeile darunter) kopiert, rechts eigener ⓘ-Knopf über die volle Höhe.
 private struct HistoryRow: View {
     let entry: HistoryEntry
     let onCopy: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(spacing: 0) {
             Button(action: onCopy) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(displayText)
                         .font(.body)
                         .foregroundStyle(entry.errorMessage != nil && entry.text.isEmpty ? Color.paplyDanger : Color.paplyText)
                         .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
                     HStack(spacing: 6) {
                         Image(systemName: entry.source == .keyboard ? "keyboard" : "hand.tap")
                         Text(Format.dayTime.string(from: entry.date))
@@ -162,18 +173,28 @@ private struct HistoryRow: View {
                     .font(.caption)
                     .foregroundStyle(Color.paplyText.opacity(0.45))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12)
+                .padding(.leading, 15)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             NavigationLink(value: Route.entry(entry.id)) {
                 Image(systemName: "info.circle")
+                    .font(.body)
                     .foregroundStyle(Color.paplyText.opacity(0.5))
+                    .frame(width: 48)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Details")
         }
-        .padding(.vertical, 4)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.05))
+        )
     }
 
     private var displayText: String {

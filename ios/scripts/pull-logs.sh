@@ -4,19 +4,20 @@
 # Diktat-Texte stehen nicht im Protokoll (nur Längen und Zeiten).
 # Braucht einen Debug-Build (get-task-allow) – so baut scripts/device-build.sh standardmäßig.
 #
-#   scripts/pull-logs.sh [--device <udid|name>] [--prefix com.paply.ios] [--out <ordner>]
+#   scripts/pull-logs.sh [--device <udid|name>] [--group group.com.paply.ios] [--out <ordner>]
+# Die App Group ist fest (siehe Config/Base.xcconfig), auch bei anderem Bundle-Präfix.
 set -euo pipefail
 
 DEVICE="${DEVICE_ID:-}"
-PREFIX="${PAPLY_BUNDLE_PREFIX:-com.paply.ios}"
+GROUP="${PAPLY_APP_GROUP:-group.com.paply.ios}"
 OUT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --device) DEVICE="$2"; shift 2 ;;
-    --prefix) PREFIX="$2"; shift 2 ;;
+    --group) GROUP="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
     *) echo "Unbekannte Option: $1" >&2; exit 2 ;;
   esac
 done
@@ -39,7 +40,6 @@ PY
 rm -f "$JSON"
 [[ -n "$UDID" ]] || { echo "Kein passendes iPhone gefunden${DEVICE:+ („$DEVICE“)}." >&2; exit 1; }
 
-GROUP="group.$PREFIX"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${OUT:-$HOME/paply-logs/$STAMP}"
 mkdir -p "$OUT/raw"

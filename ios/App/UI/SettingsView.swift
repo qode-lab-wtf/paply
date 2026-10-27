@@ -37,7 +37,11 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .onSubmit { saveDraft() }
                     HStack {
-                        PasteButton(payloadType: String.self) { strings in
+                        // onPaste kommt nach dem asynchronen Laden auf einer fremden Queue an.
+                        // Ohne @Sendable gälte die Closure als MainActor-isoliert und Swift 6
+                        // bricht zur Laufzeit ab (dispatch_assert_queue). Deshalb erst hier
+                        // ausdrücklich zurück auf den Main-Actor.
+                        PasteButton(payloadType: String.self) { @Sendable strings in
                             guard let first = strings.first else { return }
                             Task { @MainActor in
                                 keyDraft = first
@@ -176,8 +180,7 @@ struct SettingsView: View {
     }
 
     private var maskedKey: String {
-        guard let key = settings.apiKey else { return "–" }
-        return "••••" + key.suffix(4)
+        settings.apiKeySuffix.map { "••••" + $0 } ?? "–"
     }
 
     private var vocabularySummary: String {
