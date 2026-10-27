@@ -101,6 +101,8 @@ enum ThoughtBridge {
         SharedIO.async {
             SharedStore.write(state, .thoughtState)
             DarwinBus.shared.post(.thoughtState)
+            // Sperrbildschirm-Widget erst nach dem Schreiben neu laden – es liest die Datei
+            Task { @MainActor in WidgetCenter.shared.reloadTimelines(ofKind: WidgetKinds.thought) }
         }
         ControlCenter.shared.reloadControls(ofKind: ControlKinds.thought)
     }

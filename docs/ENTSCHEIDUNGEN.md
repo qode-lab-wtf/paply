@@ -118,3 +118,17 @@ Allans iPhone bestätigt hat.
   Allan nicht; Hauptersatz ist der Sperrbildschirm- bzw. Kontrollzentrum-Knopf.
 - **Text aus der Schnelltaste:** Direkt ins Feld darf nur die gerade offene Tastatur einsetzen; ist Paply
   offen, wird eingesetzt, sonst Verlauf, Zwischenablage und Angebot beim nächsten 🌐.
+
+## 2026-10-27 — Paply iOS: nur Transkripte, Themen gehen mit, Widget unter der Uhr (von Allan bestätigt)
+
+Nach Allans Gerätetest.
+
+- **Kein Ton behalten:** „Ich will nichts mit Audiospuren, ich will einfach nur Transkripte haben … verbraucht
+  zu viel Platz.“ Die Aufnahme lebt nur, bis der Rohtext dauerhaft gespeichert ist, dann wird sie gelöscht.
+  Ohne Rohtext (offline, ohne Schlüssel, Fehler) bleibt sie für den Neuversuch. Keine AAC-Umwandlung, kein
+  Player; „Original“ zeigt nur den Rohtext. Vorhandene Aufnahmen mit Rohtext räumt die App beim Start weg.
+- **Themen gehen mit ihren Gedanken:** Endgültig gelöschte Gedanken nehmen ihr Thema mit, sobald kein Gedanke
+  (auch nicht im Papierkorb) mehr daran hängt – auch Nutzer-Themen. Ein von Hand angelegtes, noch leeres Thema
+  bleibt. Themen, deren Gedanken alle im Papierkorb liegen, erscheinen nicht als Chip.
+- **Widget „Paply-Gedanke“ unter der Uhr** (wie ChatGPT/Claude): Tippen nimmt wie das Steuerelement auf,
+  nochmal tippen beendet; Einrichtungshilfe laienfest.

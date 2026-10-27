@@ -93,6 +93,7 @@ struct CaptureFlowTests {
         await h.run()
         #expect(await h.thought(id)?.state == .done)
         #expect(await h.structurer.calls == 1)
+        #expect(await h.store.audioURL(id) == nil) // verschriftlicht: Ton weg
     }
 
     @Test func captureWithoutAudioLeavesNoEntry() async throws {

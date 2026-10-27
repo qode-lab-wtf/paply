@@ -56,6 +56,12 @@ enum PaplyURL {
     static func sessionStart(dictationID: String, sentNs: UInt64) -> URL? {
         URL(string: "\(scheme)://session/start?src=kb&id=\(dictationID)&t=\(sentNs)")
     }
+
+    /// Gedanke in der App aufnehmen (große Ansicht; läuft schon einer, wird er gezeigt). Rückfall des
+    /// Sperrbildschirm-Widgets, falls es nicht selbst aufnehmen kann.
+    static func thoughtStart(source: String) -> URL? {
+        URL(string: "\(scheme)://thought/new?src=\(source)")
+    }
 }
 
 /// In welchem Prozess läuft der Code gerade?

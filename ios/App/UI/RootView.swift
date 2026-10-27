@@ -77,7 +77,8 @@ struct RootView: View {
         #endif
     }
 
-    /// Deep Links (§2): `thought/current?id=…` (Live Activity), `thought/<id>`, `thoughts/tasks`.
+    /// Deep Links (§2): `thought/current?id=…` (Live Activity), `thought/new` (Rückfall des Sperrbildschirm-
+    /// Widgets: Aufnahme in der App), `thought/<id>`, `thoughts/tasks`.
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
         guard url.scheme == PaplyURL.scheme else { return }
@@ -85,7 +86,11 @@ struct RootView: View {
         switch url.host {
         case "thought":
             let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "id" }?.value
-            if path == "current" || path.isEmpty {
+            if path == "new" {
+                // große Ansicht; ohne laufende Aufnahme startet sie eine, sonst zeigt sie die laufende
+                nav.tab = .thoughts
+                if flow.driver.active == nil || !flow.showBig { flow.openBig(source: CaptureFlow.fabSource) }
+            } else if path == "current" || path.isEmpty {
                 if flow.driver.active != nil {
                     nav.tab = .thoughts
                     if !flow.showBig { flow.openBig(source: CaptureFlow.barSource) }

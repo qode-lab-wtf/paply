@@ -131,7 +131,7 @@ struct ProcessingTests {
                  model: "openai/gpt-oss-120b", usage: TokenUsage(prompt: tokens - 500, completion: 500, total: tokens))
     }
 
-    @Test func capturedThoughtIsTranscribedStructuredAndCompacted() async throws {
+    @Test func capturedThoughtIsTranscribedStructuredAndKeepsNoSound() async throws {
         let h = try Harness.make()
         defer { h.cleanup() }
         let events = h.processor.events
@@ -145,8 +145,10 @@ struct ProcessingTests {
         #expect(thought.tasks.first?.dueHint == "morgen")
         #expect(thought.ai?.tokens == 3_000 && thought.ai?.model == "openai/gpt-oss-120b")
         #expect(!thought.keywords.isEmpty)
-        #expect(thought.audio?.file == "audio.m4a")
-        #expect(thought.audio?.deleteAfter == h.clock.now.addingTimeInterval(AudioCompactor.audioRetention))
+        // nur Transkripte: Ton weg, sobald der Rohtext liegt
+        #expect(thought.audio == nil)
+        #expect(!FileManager.default.fileExists(atPath: h.store.wavURL(id).path))
+        #expect(!FileManager.default.fileExists(atPath: h.store.m4aURL(id).path))
         let topic = try #require(await h.store.resolveTopic(thought.topicId))
         #expect(topic.title == "Garten" && topic.owner == .ai)
         let source = try #require(await h.store.source(id))
@@ -179,11 +181,16 @@ struct ProcessingTests {
         #expect(await h.transcriber.calls == 0)
         await h.run() // weiter offline: nichts passiert
         #expect(await h.transcriber.calls == 0)
+        // ohne Rohtext bleibt der Ton für den Neuversuch – auch beim Aufräumen
+        await h.store.housekeeping(now: h.clock.now.addingTimeInterval(40 * 86_400))
+        #expect(await h.store.audioURL(id) != nil)
+        #expect(await h.thought(id)?.audio?.file == "audio.wav")
         h.flags.online = true
         await h.run("network")
         thought = try #require(await h.thought(id))
         #expect(thought.state == .done)
         #expect(await h.transcriber.calls == 1)
+        #expect(thought.audio == nil && !FileManager.default.fileExists(atPath: h.store.wavURL(id).path))
     }
 
     @Test func missingKeyWaitsUntilKeyIsEntered() async throws {
@@ -341,6 +348,7 @@ struct ProcessingTests {
         #expect(await h.thought(id)?.state == .done)
         #expect(await h.transcriber.calls == 0)
         #expect(await h.store.source(id)?.text == "die tomaten gießen")
+        #expect(await h.thought(id)?.audio == nil) // auch über die Live-Pipeline: nur der Text bleibt
     }
 
     @Test func failedLiveTranscriptFallsBackToFile() async throws {
@@ -387,12 +395,15 @@ struct ProcessingTests {
         let thought = try #require(await h.thought(id))
         #expect(thought.state == .needsAttention)
         #expect(thought.status.message == "Ton gesichert · nicht verschriftlicht")
+        #expect(await h.store.audioURL(id) != nil) // nicht verschriftlicht: Ton bleibt
         await h.run()
         #expect(await h.transcriber.calls == 5) // keine weiteren Versuche
         await h.processor.reorganize(id) // „Erneut versuchen“
         await h.processor.waitUntilIdle()
         #expect(await h.thought(id)?.state == .done)
         #expect(await h.transcriber.calls == 6)
+        #expect(await h.thought(id)?.audio == nil)
+        #expect(await h.store.audioURL(id) == nil)
     }
 
     @Test func networkErrorsBackOffWithoutGivingUpEarly() async throws {
@@ -548,6 +559,7 @@ struct ProcessingTests {
         #expect(await h.structurer.calls == 0)
         let thought = try #require(await h.thought(id))
         #expect(thought.deletedAt != nil && thought.state == .transcribed)
+        #expect(thought.audio == nil) // im Papierkorb, aber verschriftlicht: Ton trotzdem weg
         try await h.store.restore(id)
         await h.run()
         #expect(await h.structurer.calls == 1)

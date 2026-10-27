@@ -5,7 +5,8 @@ import PaplyKit
 #endif
 
 // Gedanken-Knopf (KONZEPT §3.6, §5): Sperrbildschirm/Kontrollzentrum/Aktionstaste (Control),
-// Siri und Kurzbefehle. Liegt in App und Widget-Erweiterung (das Control braucht die Typen).
+// Sperrbildschirm-Widget (Reihe unter der Uhr), Siri und Kurzbefehle. Liegt in App und
+// Widget-Erweiterung (Control und Widget brauchen die Typen).
 // `LiveActivityIntent` lässt `perform()` im App-Prozess laufen; landet es doch in der Erweiterung,
 // leitet die Erweiterung per Darwin an die App weiter. Antworten ohne Dialog (sonst spricht Siri
 // in die Aufnahme).
@@ -46,6 +47,29 @@ struct SetThoughtRecordingIntent: SetValueIntent, AudioRecordingIntent, LiveActi
 
     func perform() async throws -> some IntentResult {
         let result = await ThoughtIntentRunner.toggle(trigger: "control", intent: "control")
+        #if PAPLY_APP
+        if case .needsForeground = result {
+            try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
+                await ThoughtBridge.startInForeground(trigger: .control)
+            }
+            return .result()
+        }
+        #endif
+        try result.check()
+        return .result()
+    }
+}
+
+/// Sperrbildschirm-Widget „Paply-Gedanke“: wie das Steuerelement – ein Tipp nimmt auf, der nächste
+/// beendet, ohne die App zu öffnen. Zählt als Knopf (`control`), damit die Einrichtung es erkennt.
+struct ThoughtWidgetIntent: AudioRecordingIntent, LiveActivityIntent {
+    static var title: LocalizedStringResource { "Paply-Gedanke" }
+    static var isDiscoverable: Bool { false }
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        let result = await ThoughtIntentRunner.toggle(trigger: "control", intent: "widget")
         #if PAPLY_APP
         if case .needsForeground = result {
             try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
@@ -105,6 +129,7 @@ struct DiscardThoughtIntent: LiveActivityIntent {
 // Nur im App-Prozess: als Ausweg (Fall B gescheitert) die App kurz nach vorne holen.
 extension ToggleThoughtIntent: ForegroundContinuableIntent {}
 extension SetThoughtRecordingIntent: ForegroundContinuableIntent {}
+extension ThoughtWidgetIntent: ForegroundContinuableIntent {}
 #endif
 
 enum ThoughtIntentError: Error, CustomLocalizedStringResourceConvertible {

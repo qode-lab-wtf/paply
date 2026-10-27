@@ -152,7 +152,7 @@ struct ThoughtsHome: View {
         }
         let selectedID: String? = if case .topic(let id) = nav.filter { id } else { nil }
         let active = model.topics
-            .filter { model.isActive($0) || $0.id == selectedID }
+            .filter { model.showsAsChip($0) || $0.id == selectedID }
             .sorted { (order[$0.id] ?? .max, $0.title) < (order[$1.id] ?? .max, $1.title) }
         let open = model.openTasks(topicID: nil).count
         let recentlyDone = model.doneTasks(days: 7).count
@@ -328,7 +328,7 @@ struct ThoughtsSearchView: View {
 
     /// Leer: Themen als schnelle Wege
     private var topicShortcuts: some View {
-        let topics = model.topics.filter { model.isActive($0) }
+        let topics = model.topics.filter { model.showsAsChip($0) }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         return List {
             if !topics.isEmpty {

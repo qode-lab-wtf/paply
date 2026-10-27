@@ -159,6 +159,12 @@ enum ControlKinds {
     static let thought = "thought-toggle"
 }
 
+/// Arten der Widgets (für WidgetCenter.reloadTimelines aus der App)
+enum WidgetKinds {
+    /// Sperrbildschirm-Widget „Paply-Gedanke“ (Reihe unter der Uhr)
+    static let thought = "thought-widget"
+}
+
 /// `thought-state.json` – nur ob gerade ein Gedanke aufnimmt (für Control und Widget). Kein Text.
 struct ThoughtStateFile: Codable, Sendable, Equatable {
     var recording: Bool

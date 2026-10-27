@@ -70,6 +70,14 @@ enum FileSafety {
         ok = true
     }
 
+    /// Verzeichniseinträge (z. B. nach `rename`) dauerhaft machen, bevor etwas anderes gelöscht wird.
+    static func syncDirectory(_ url: URL) {
+        let fd = open(url.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return }
+        _ = fsync(fd)
+        close(fd)
+    }
+
     static func exists(_ url: URL) -> Bool {
         FileManager.default.fileExists(atPath: url.path)
     }

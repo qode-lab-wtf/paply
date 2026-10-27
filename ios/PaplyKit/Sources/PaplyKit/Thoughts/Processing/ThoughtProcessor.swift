@@ -7,7 +7,8 @@ import Foundation
 ///
 /// - Seriell: immer nur ein Gedanke, zuerst frische, dann wartende (älteste zuerst).
 /// - Neustart-fest: Der Zustand steht in `thought.json`; `transcribing`/`structuring` werden einfach
-///   fortgesetzt. Whisper wird je Gedanke genau einmal erfolgreich gerufen: Liegt `source.json`, nie wieder.
+///   fortgesetzt. Whisper wird je Gedanke genau einmal erfolgreich gerufen: Liegt `source.json`, nie wieder –
+///   und der Ton wird gelöscht (der Speicher behält nur den Rohtext).
 ///   Ein validiertes KI-Ergebnis liegt vor dem Übernehmen als `ai-result.json` (kein Neukauf nach Absturz).
 /// - Diktat hat Vorrang: kein Groq-Aufruf, solange `isDictationBusy` true ist.
 /// - Nutzerfelder (`owner == .user`) überschreibt die KI nie; gelöschte Gedanken werden nicht übernommen.
@@ -253,7 +254,7 @@ public actor ThoughtProcessor {
             await markEmpty(id)
             return
         }
-        await store.compactAudioIfNeeded(id)
+        await store.releaseAudio(id) // Ton nur bis zum Rohtext (auch nach einem Absturz dazwischen)
         await structure(id, source: source)
     }
 
@@ -572,7 +573,6 @@ public actor ThoughtProcessor {
         let raw = RawText.tidy(source.text)
         let ai = Thought.AIInfo(model: record.model ?? "", promptVersion: options.promptVersion,
                                 tokens: record.usage?.total ?? 0, at: clock, rejections: result.rejections)
-        let deleteAfter = clock.addingTimeInterval(AudioCompactor.audioRetention)
         let chosenTopic = topicID
         let aiLinks = links
         let updated = try? await store.update(id) { t in
@@ -601,7 +601,6 @@ public actor ThoughtProcessor {
             t.ai = ai
             t.state = .done
             t.status = Thought.Status()
-            if t.audio != nil { t.audio?.deleteAfter = deleteAfter }
         }
         guard let updated, updated.state == .done else { return }
         await store.discardParts(id)
@@ -617,7 +616,6 @@ public actor ThoughtProcessor {
         let raw = RawText.tidy(source.text)
         let keywords = await keywords(for: raw, language: source.languages.first)
         let ai = Thought.AIInfo(model: "", promptVersion: options.promptVersion, tokens: 0, at: clock, rejections: [code])
-        let deleteAfter = clock.addingTimeInterval(AudioCompactor.audioRetention)
         let updated = try? await store.update(id) { t in
             guard t.deletedAt == nil else { return }
             if t.textOwner != .user {
@@ -637,7 +635,6 @@ public actor ThoughtProcessor {
             t.ai = ai
             t.state = .done
             t.status = Thought.Status()
-            if t.audio != nil { t.audio?.deleteAfter = deleteAfter }
         }
         guard let updated, updated.state == .done else { return }
         await store.discardParts(id)

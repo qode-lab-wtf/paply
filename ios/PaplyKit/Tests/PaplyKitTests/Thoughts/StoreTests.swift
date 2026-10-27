@@ -231,27 +231,38 @@ struct StoreTests {
         #expect(try String(contentsOf: root.appendingPathComponent(damaged), encoding: .utf8) == "nicht json")
     }
 
-    @Test func damagedThoughtIsRebuiltFromSourceAndSound() async throws {
+    @Test func damagedThoughtIsRebuiltFromSourceOrSound() async throws {
         let root = StoreSupport.temporaryRoot()
         defer { StoreSupport.remove(root) }
-        let id: String
+        let transcribed: String, soundOnly: String
         do {
             let store = try ThoughtStore(root: root)
-            let (thought, writer) = try await store.beginCapture(trigger: .control, at: Date())
-            id = thought.id
-            writer.append(StoreSupport.tone(seconds: 1))
-            try await store.finishCapture(id, durationMs: writer.close())
-            try await store.saveSourceOnce(id, ThoughtSource(text: "hallo welt", sentences: [], model: "whisper-large-v3",
-                                                             createdAt: Date(), languages: ["de"], audioSeconds: 1))
+            func capture() async throws -> String {
+                let (thought, writer) = try await store.beginCapture(trigger: .control, at: Date())
+                writer.append(StoreSupport.tone(seconds: 1))
+                try await store.finishCapture(thought.id, durationMs: writer.close())
+                return thought.id
+            }
+            transcribed = try await capture()
+            soundOnly = try await capture() // nie verschriftlicht
+            try await store.saveSourceOnce(transcribed, ThoughtSource(text: "hallo welt", sentences: [], model: "whisper-large-v3",
+                                                                      createdAt: Date(), languages: ["de"], audioSeconds: 1))
         }
-        try Data("{\"id\":".utf8).write(to: root.appendingPathComponent("thoughts/\(id)/thought.json"))
+        for id in [transcribed, soundOnly] {
+            try Data("{\"id\":".utf8).write(to: root.appendingPathComponent("thoughts/\(id)/thought.json"))
+        }
         let store = try ThoughtStore(root: root)
-        let rebuilt = try #require(await store.thought(id))
-        #expect(rebuilt.state == .transcribed)
-        #expect(rebuilt.audio?.file == "audio.wav")
-        #expect(rebuilt.durationMs == 1_000)
-        #expect(try await store.recover().contains(id))
-        let files = try FileManager.default.contentsOfDirectory(atPath: store.directory(id).path)
+        let fromSource = try #require(await store.thought(transcribed))
+        #expect(fromSource.state == .transcribed)
+        #expect(fromSource.audio == nil) // Ton ging schon mit dem Rohtext
+        #expect(fromSource.durationMs == 1_000)
+        let fromSound = try #require(await store.thought(soundOnly))
+        #expect(fromSound.state == .captured)
+        #expect(fromSound.audio?.file == "audio.wav")
+        #expect(fromSound.durationMs == 1_000)
+        let recovered = try await store.recover()
+        #expect(recovered.contains(transcribed) && recovered.contains(soundOnly))
+        let files = try FileManager.default.contentsOfDirectory(atPath: store.directory(transcribed).path)
         #expect(files.contains { $0.hasPrefix("damaged-") })
     }
 
@@ -357,55 +368,177 @@ struct StoreTests {
 
     // MARK: Aufbewahrung
 
-    @Test func trashAndAudioRetention() async throws {
+    @Test func trashIsPurgedAfterThirtyDays() async throws {
         let root = StoreSupport.temporaryRoot()
         defer { StoreSupport.remove(root) }
         let clock = TestClock()
         let store = try ThoughtStore(root: root, now: clock.function)
-        func captured(_ seconds: Double) async throws -> String {
-            let (thought, writer) = try await store.beginCapture(trigger: .control, at: clock.now)
-            writer.append(StoreSupport.tone(seconds: seconds))
-            try await store.finishCapture(thought.id, durationMs: writer.close())
-            return thought.id
-        }
-        let done = try await captured(0.5)
-        let unprocessed = try await captured(0.5)
-        let trashed = try await captured(0.5)
-        try await store.saveSourceOnce(done, ThoughtSource(text: "x", sentences: [], model: "w", createdAt: clock.now, languages: [], audioSeconds: 0.5))
-        let deleteAfter = clock.now.addingTimeInterval(AudioCompactor.audioRetention)
-        try await store.update(done) { $0.state = .done; $0.audio?.deleteAfter = deleteAfter }
-        try await store.update(unprocessed) { $0.audio?.deleteAfter = deleteAfter } // nie verschriftlicht
-        try await store.delete(trashed)
+        let kept = StoreSupport.thought(), trashed = StoreSupport.thought()
+        try await store.save(kept)
+        try await store.save(trashed)
+        try await store.delete(trashed.id)
+        #expect(ThoughtStore.trashRetention == 30 * 86_400)
 
         await store.housekeeping(now: clock.now.addingTimeInterval(29 * 86_400))
-        #expect(await store.audioURL(done) != nil)
-        #expect(await store.thought(trashed) != nil)
+        #expect(await store.thought(trashed.id) != nil)
 
         await store.housekeeping(now: clock.now.addingTimeInterval(31 * 86_400))
-        #expect(await store.audioURL(done) == nil)
-        #expect(await store.thought(done)?.audio == nil)
-        #expect(await store.audioURL(unprocessed) != nil) // nicht verarbeiteter Ton bleibt immer
-        #expect(await store.thought(trashed) == nil) // „Zuletzt gelöscht“ nach 30 Tagen weg
+        #expect(await store.thought(trashed.id) == nil) // „Zuletzt gelöscht“ nach 30 Tagen weg
+        #expect(!FileManager.default.fileExists(atPath: store.directory(trashed.id).path))
+        #expect(await store.thought(kept.id) != nil)
     }
 
-    @Test func compactionReplacesWAVWithM4A() async throws {
+    // MARK: Nur Transkripte – Ton nur bis zum Rohtext
+
+    @Test func soundIsDeletedAsSoonAsTheSourceIsSaved() async throws {
         let root = StoreSupport.temporaryRoot()
         defer { StoreSupport.remove(root) }
         let store = try ThoughtStore(root: root)
         let (thought, writer) = try await store.beginCapture(trigger: .control, at: Date())
-        writer.append(StoreSupport.tone(seconds: 10))
+        writer.append(StoreSupport.tone(seconds: 1))
         try await store.finishCapture(thought.id, durationMs: writer.close())
-        let wavSize = FileSafety.fileSize(store.wavURL(thought.id)) ?? 0
-        #expect(await store.compactAudioIfNeeded(thought.id) == false) // ohne Rohtext nie
-        try await store.saveSourceOnce(thought.id, ThoughtSource(text: "x", sentences: [], model: "w", createdAt: Date(), languages: [], audioSeconds: 10))
-        #expect(await store.compactAudioIfNeeded(thought.id))
-        let url = try #require(await store.audioURL(thought.id))
-        #expect(url.lastPathComponent == "audio.m4a")
+        let wav = store.wavURL(thought.id)
+        #expect(await store.releaseAudio(thought.id) == false) // ohne Rohtext nie
+        #expect(FileManager.default.fileExists(atPath: wav.path))
+
+        try await store.saveSourceOnce(thought.id, ThoughtSource(text: "hallo", sentences: [], model: "whisper-large-v3",
+                                                                 createdAt: Date(), languages: ["de"], audioSeconds: 1))
+        #expect(!FileManager.default.fileExists(atPath: wav.path))
+        #expect(await store.thought(thought.id)?.audio == nil)
+        #expect(await store.audioURL(thought.id) == nil)
+        #expect(await store.thought(thought.id)?.durationMs == 1_000) // Dauer bleibt als Angabe
+        // auf der Platte: nur Text
+        let files = try FileManager.default.contentsOfDirectory(atPath: store.directory(thought.id).path).sorted()
+        #expect(files == ["source.json", "thought.json"])
+        let reloaded = try ThoughtStore(root: root)
+        #expect(await reloaded.source(thought.id)?.text == "hallo")
+        #expect(await reloaded.thought(thought.id)?.audio == nil)
+    }
+
+    @Test func runningCaptureKeepsItsSoundUntilFinished() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        let (thought, writer) = try await store.beginCapture(trigger: .control, at: Date())
+        writer.append(StoreSupport.tone(seconds: 0.5))
+        try await store.saveSourceOnce(thought.id, ThoughtSource(text: "live", sentences: [], model: "whisper-large-v3",
+                                                                 createdAt: Date(), languages: ["de"], audioSeconds: 0.5))
+        #expect(FileManager.default.fileExists(atPath: store.wavURL(thought.id).path)) // Aufnahme läuft noch
+        #expect(await store.releaseAudio(thought.id) == false)
+        try await store.finishCapture(thought.id, durationMs: writer.close())
+        await store.housekeeping(now: Date())
+        #expect(await store.thought(thought.id)?.audio == nil)
         #expect(!FileManager.default.fileExists(atPath: store.wavURL(thought.id).path))
-        let file = try AVAudioFile(forReading: url)
-        #expect(abs(Double(file.length) / file.processingFormat.sampleRate - 10) < 0.2)
-        #expect(Double(FileSafety.fileSize(url) ?? .max) < Double(wavSize) * 0.3) // 32 kbit/s statt 256
-        #expect(FileSafety.readSamplesCount(url) > 150_000)
+    }
+
+    /// Bestandsdaten: Ton aller Gedanken mit Rohtext weg (früher 30 Tage als m4a, abgebrochene Umwandlung,
+    /// Papierkorb, Absturz zwischen Löschen und `thought.json`). Ohne Rohtext bleibt die WAV.
+    @Test func housekeepingFreesExistingThoughtsFromSound() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let clock = TestClock()
+        let encoder = ThoughtJSON.encoder()
+        func legacy(_ state: ThoughtState, audio: String, files: [String], source: Bool, deletedAt: Date? = nil) throws -> String {
+            var thought = StoreSupport.thought(createdAt: clock.now, state: state)
+            thought.audio = Thought.AudioInfo(file: audio)
+            thought.deletedAt = deletedAt
+            var json = try JSONSerialization.jsonObject(with: encoder.encode(thought)) as! [String: Any]
+            json["audio"] = ["file": audio, "deleteAfter": ThoughtJSON.milliseconds(clock.now) + 30 * 86_400_000] // altes Format
+            let dir = root.appendingPathComponent("thoughts/\(thought.id)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: json).write(to: dir.appendingPathComponent("thought.json"))
+            for name in files { try Data(count: 1_000).write(to: dir.appendingPathComponent(name)) }
+            if source {
+                let raw = ThoughtSource(text: "alt", sentences: [], model: "whisper-large-v3", createdAt: clock.now, languages: ["de"], audioSeconds: 1)
+                try encoder.encode(raw).write(to: dir.appendingPathComponent("source.json"))
+            }
+            return thought.id
+        }
+        let compacted = try legacy(.done, audio: "audio.m4a", files: ["audio.m4a"], source: true)
+        let halfway = try legacy(.done, audio: "audio.m4a", files: ["audio.wav", "audio.m4a"], source: true)
+        let trashed = try legacy(.transcribed, audio: "audio.wav", files: ["audio.wav"], source: true, deletedAt: clock.now)
+        let crashed = try legacy(.done, audio: "audio.wav", files: [], source: true)
+        let waiting = try legacy(.waitingNetwork, audio: "audio.wav", files: ["audio.wav"], source: false)
+
+        let store = try ThoughtStore(root: root, now: clock.function)
+        await store.housekeeping(now: clock.now)
+        for id in [compacted, halfway, trashed, crashed] {
+            #expect(await store.thought(id)?.audio == nil)
+            #expect(!FileManager.default.fileExists(atPath: store.wavURL(id).path))
+            #expect(!FileManager.default.fileExists(atPath: store.m4aURL(id).path))
+            #expect(await store.source(id)?.text == "alt") // Text bleibt
+        }
+        #expect(await store.thought(trashed)?.deletedAt != nil) // bleibt im Papierkorb
+        #expect(await store.thought(waiting)?.audio?.file == "audio.wav") // nicht verschriftlicht: Ton bleibt
+        #expect(FileManager.default.fileExists(atPath: store.wavURL(waiting).path))
+        // einmal: ein zweiter Lauf ändert nichts mehr
+        let revs = await store.all().map(\.rev).sorted()
+        await store.housekeeping(now: clock.now)
+        #expect(await store.all().map(\.rev).sorted() == revs)
+        // dauerhaft
+        let reloaded = try ThoughtStore(root: root)
+        #expect(await reloaded.thought(compacted)?.audio == nil)
+    }
+
+    // MARK: Themen verschwinden mit ihren Gedanken
+
+    @Test func purgingTheLastThoughtRemovesItsTopic() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        try await store.saveTopics([
+            Topic(id: "t_garden", title: "Garten", icon: .leaf, owner: .ai),
+            Topic(id: "t_beds", title: "Beete", icon: .leaf, owner: .ai, mergedInto: "t_garden"), // Alias
+            Topic(id: "t_flat", title: "Wohnung", icon: .home, owner: .user),
+            Topic(id: "t_manual", title: "Von Hand", icon: .pencil, owner: .user), // nie ein Gedanke
+            Topic(id: "t_books", title: "Lesen", icon: .book, owner: .ai),
+        ])
+        try await store.setDeclinedMerges([["t_books", "t_garden"], ["t_books", "t_flat"]])
+        try await store.setPendingSuggestions([TopicSuggestion(a: "t_garden", b: "t_books", name: nil, reason: "a"),
+                                               TopicSuggestion(a: "t_flat", b: "t_books", name: nil, reason: "b")])
+        let garden = StoreSupport.thought(topicId: "t_beds") // hängt über den Alias am Garten
+        let flat = StoreSupport.thought(topicId: "t_flat")
+        let flatTrashed = StoreSupport.thought(topicId: "t_flat")
+        let book = StoreSupport.thought(topicId: "t_books")
+        for thought in [garden, flat, flatTrashed, book] { try await store.save(thought) }
+        try await store.delete(flatTrashed.id)
+
+        await store.purge(garden.id)
+        #expect(Set(await store.topics().map(\.id)) == ["t_flat", "t_manual", "t_books"]) // samt Alias
+        #expect(await store.topicsInfo().declinedMerges == [["t_books", "t_flat"]])
+        #expect(await store.pendingSuggestions().map(\.a) == ["t_flat"])
+
+        await store.purge(flat.id)
+        #expect(await store.topics().contains { $0.id == "t_flat" }) // ein Gedanke liegt noch im Papierkorb
+
+        await store.purge([flatTrashed.id])
+        #expect(Set(await store.topics().map(\.id)) == ["t_manual", "t_books"]) // auch Nutzer-Themen
+        #expect(await store.topicsInfo().declinedMerges.isEmpty)
+        #expect(await store.pendingSuggestions().isEmpty)
+        let reloaded = try ThoughtStore(root: root)
+        #expect(Set(await reloaded.topics().map(\.id)) == ["t_manual", "t_books"])
+    }
+
+    @Test func purgeAllAndThirtyDayPurgeTakeTheirTopicsAlong() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let clock = TestClock()
+        let store = try ThoughtStore(root: root, now: clock.function)
+        try await store.saveTopics([Topic(id: "t_a", title: "Umzug", icon: .home, owner: .ai),
+                                    Topic(id: "t_b", title: "Laufen", icon: .heart, owner: .user),
+                                    Topic(id: "t_c", title: "Porto", icon: .plane, owner: .ai),
+                                    Topic(id: "t_manual", title: "Von Hand", icon: .pencil, owner: .user)])
+        let thoughts = [StoreSupport.thought(topicId: "t_a"), StoreSupport.thought(topicId: "t_a"),
+                        StoreSupport.thought(topicId: "t_b"), StoreSupport.thought(topicId: "t_c")]
+        for thought in thoughts {
+            try await store.save(thought)
+            try await store.delete(thought.id)
+        }
+        await store.purge(thoughts.prefix(2).map(\.id)) // „Alle löschen“ (Teil)
+        #expect(Set(await store.topics().map(\.id)) == ["t_b", "t_c", "t_manual"])
+        await store.housekeeping(now: clock.now.addingTimeInterval(31 * 86_400)) // Rest nach 30 Tagen
+        #expect(await store.all().isEmpty)
+        #expect(await store.topics().map(\.id) == ["t_manual"])
     }
 
     // MARK: Übernahme des S1-Rückfalls (H3)
@@ -485,11 +618,5 @@ extension StoreSupport {
             try encoder.encode(thought).write(to: dir.appendingPathComponent("thought.json"))
             previous = thought.id
         }
-    }
-}
-
-extension FileSafety {
-    static func readSamplesCount(_ url: URL) -> Int {
-        FileTranscriber.readSamples(url)?.count ?? 0
     }
 }

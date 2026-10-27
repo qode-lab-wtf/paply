@@ -13,7 +13,7 @@
 import CoreGraphics
 
 enum Lucide: CaseIterable, Sendable {
-    case sparkles, lightbulb, house, codeXml, mapPin, sun, moon, heart, coffee, briefcaseBusiness, calendarDays, messageCircle, bookOpen, music, camera, leaf, flag, circleQuestionMark, pencil, plane, wallet, users, list, zap, listChecks, circleDashed, tag, wifiOff, keyRound, hourglass, triangleAlert, quote, cornerDownRight, link, circle, lock, toggleRight, circleDot, audioLines, loader, merge, circlePlus, volumeOff, micOff, globe, bookA, mic, keyboard, hammer, send, messageSquare, check, shieldCheck
+    case sparkles, lightbulb, house, codeXml, mapPin, sun, moon, heart, coffee, briefcaseBusiness, calendarDays, messageCircle, bookOpen, music, camera, leaf, flag, circleQuestionMark, pencil, plane, wallet, users, list, zap, listChecks, circleDashed, tag, wifiOff, keyRound, hourglass, triangleAlert, quote, cornerDownRight, link, circle, lock, toggleRight, circleDot, clock, audioLines, loader, merge, circlePlus, volumeOff, micOff, globe, bookA, mic, keyboard, hammer, send, messageSquare, check, shieldCheck
 
     /// Lucide-Name (zum Abgleich mit lucide.dev)
     var name: String {
@@ -56,6 +56,7 @@ enum Lucide: CaseIterable, Sendable {
         case .lock: "lock"
         case .toggleRight: "toggle-right"
         case .circleDot: "circle-dot"
+        case .clock: "clock"
         case .audioLines: "audio-lines"
         case .loader: "loader-circle"
         case .merge: "merge"
@@ -115,6 +116,7 @@ enum Lucide: CaseIterable, Sendable {
         case .lock: [.rect(3, 11, 18, 11, 2, 2), .path("M7 11V7a5 5 0 0 1 10 0v4")]
         case .toggleRight: [.circle(15, 12, 3), .rect(2, 5, 20, 14, 7, 7)]
         case .circleDot: [.circle(12, 12, 10), .circle(12, 12, 1)]
+        case .clock: [.path("M12 6v6l4 2"), .circle(12, 12, 10)]
         case .audioLines: [.path("M2 10v3"), .path("M6 6v11"), .path("M10 3v18"), .path("M14 8v7"), .path("M18 5v13"), .path("M22 10v3")]
         case .loader: [.path("M21 12a9 9 0 1 1-6.219-8.56")]
         case .merge: [.path("m8 6 4-4 4 4"), .path("M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22"), .path("m20 22-5-5")]

@@ -167,9 +167,16 @@ struct ThoughtButtonGuideView: View {
                     .padding(.horizontal, 4)
 
                 GuideCard(title: "Sperrbildschirm", symbol: "lock.fill", glyph: .lock, steps: [
-                    "Sperrbildschirm lange drücken → Anpassen → Sperrbildschirm.",
-                    "Bei der Taschenlampe auf „–“ tippen, dann „+“.",
-                    "„Paply-Gedanke“ wählen.",
+                    "iPhone mit Face ID entsperren, aber nicht hochwischen.",
+                    "Auf eine freie Stelle lange drücken, bis das Bild kleiner wird → „Anpassen“ → „Sperrbildschirm“.",
+                    "Unten bei der Taschenlampe „–“ tippen, dann „+“ → „Paply“ → „Paply-Gedanke“.",
+                    "Oben rechts „Fertig“.",
+                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+
+                GuideCard(title: "Oder unter der Uhr", symbol: "clock", glyph: .clock, steps: [
+                    "Wie oben bis „Sperrbildschirm“.",
+                    "Die Widget-Reihe unter der Uhr antippen → „Paply“ → „Paply-Gedanke“ antippen.",
+                    "Liste schließen, oben rechts „Fertig“. Ein Tipp aufs Widget nimmt auf, nochmal tippen beendet.",
                 ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
 
                 GuideCard(title: "Kontrollzentrum", symbol: "switch.2", glyph: .toggleRight, steps: [
@@ -190,12 +197,6 @@ struct ThoughtButtonGuideView: View {
                     "„Hey Siri, Gedanke mit Paply“.",
                     "Beenden: nochmal sagen oder „Fertig“ tippen.",
                 ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
-
-                Text("Diktat in die Zwischenablage gibt es weiter als Steuerelement „Paply-Diktat“.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.paplyTertiaryText)
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
 
                 if !SetupGuide.shared.buttonConfirmed {
                     Button {

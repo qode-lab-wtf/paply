@@ -11,6 +11,7 @@ struct PaplyWidgetsBundle: WidgetBundle {
         // Gedanken über den Knopf (zwei klare Wege). DictationControl bleibt im Code.
         ThoughtLiveActivity()
         ThoughtControl()
+        ThoughtWidget()
     }
 }
 

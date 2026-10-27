@@ -35,7 +35,7 @@ Ort ab, mit seinen Aufgaben und Verbindungen, ohne dass du etwas sortieren musst
 1. **Erfassen ist heilig.** Ein Druck nimmt auf, und nichts geht verloren. Der Ton liegt auf der Platte,
    bevor irgendetwas ins Netz geht. Offline, Limit oder Absturz verzögern das Ordnen, verlieren aber nie den Gedanken.
 2. **Die KI ordnet, sie dichtet nicht.** Titel, Aufgaben und Verbindungen sind am Wortlaut belegt und werden
-   lokal geprüft. Das Original (Ton und Rohtext) ist immer einen Tipp entfernt.
+   lokal geprüft. Das Original (Rohtext) ist immer einen Tipp entfernt; Ton behält Paply nur bis zur Umschrift.
 3. **Ruhig statt gesprächig.** Keine Rückfragen beim Aufnehmen, keine Zähler-Orgie, keine Benachrichtigungen.
    Zustände erscheinen nur, wenn sie ein Handeln brauchen.
 4. **Du hast das letzte Wort.** Was du änderst (Titel, Text, Thema, Aufgabe), fasst die KI nie wieder an.
@@ -179,9 +179,7 @@ VERWANDT
 ↳ …
 
 ORIGINAL ▸   (zugeklappt)
-  ▶︎ ━━━━━━━○──── 0:34 / 1:12
   Rohtext (auswählbar)
-  Ton wird am 26. Nov. entfernt.
 ```
 
 | Element | Verhalten |
@@ -190,7 +188,7 @@ ORIGINAL ▸   (zugeklappt)
 | Titel / Text | Tippen startet die Bearbeitung an Ort und Stelle (Titel `TextField`, Text `TextEditor`), oben „Fertig“. Gespeichert wird beim Verlassen. Danach `owner = user`. |
 | Aufgabe | Kreis tippen = erledigt / wieder offen. Wischen = löschen. Tippen auf den Text = bearbeiten (wird `owner = user`). „+ Aufgabe“ = eigene Aufgabe. Der Zeitpunkt („morgen“, „bis Freitag“) steht als Wortlaut rechts. |
 | Verwandt | Zeile tippen = zum anderen Gedanken. Wischen = „Verbindung lösen“. Art als kleines Etikett: „Fortsetzung“, „Gleiches Anliegen“, „Ändert“. Darunter der kurze Grund. Über `⋯` → „Verknüpfen …“ (Suchauswahl) kann man selbst verbinden. |
-| Original | Wiedergabe mit Play/Pause und Schieber (AVAudioPlayer, Ausgabe über die aktuelle Route). Der Rohtext ist auswählbar. Nach 30 Tagen: „Ton nach 30 Tagen entfernt.“ |
+| Original | Nur der Rohtext, auswählbar (kein Player: Paply behält keinen Ton, Entscheidung 27.10.2026). Ohne Rohtext (noch nicht verschriftlicht) fehlt der Abschnitt. |
 | `⤴︎` Teilen | `ShareLink` mit reinem Text: Titel, Leerzeile, Text, Leerzeile, „Aufgaben:“ mit ☐/☑. Darüber geht es auch zu Erinnerungen, Mail und Nachrichten. |
 | `⋯` | Kopieren · Thema ändern · Verknüpfen … · Erneut ordnen · Löschen |
 | Erneut ordnen | Bewusster neuer KI-Aufruf. Vom Nutzer geänderte Felder bleiben, erledigte und eigene Aufgaben bleiben. |
@@ -302,6 +300,12 @@ keinen Ring.
     mit `ToggleThoughtIntent` (Aussehen bleibt, nur ohne An-Zustand).
 - Das gleiche Steuerelement funktioniert auf dem **Sperrbildschirm** (statt Taschenlampe/Kamera), im
   **Kontrollzentrum** und auf der **Aktionstaste** (ab iPhone 15 Pro, „Steuerelement“).
+- **Widget unter der Uhr** (`ThoughtWidget`, Art `thought-widget`, „Paply-Gedanke“): `.accessoryCircular`
+  (p-Kopf im Kreis) und `.accessoryRectangular` (p-Kopf + „Gedanke“ + „Tippen und sprechen“). Tippen =
+  `Button(intent: ThoughtWidgetIntent())` – gleicher Ablauf wie das Steuerelement (Auslöser `control`),
+  nochmal tippen beendet. Während der Aufnahme gefülltes Zeichen (`paply.mark.fill`) und Zeit; die App lädt
+  das Widget bei jedem Wechsel neu (`WidgetCenter.reloadTimelines(ofKind:)`). Rückfall `widgetURL`
+  `paply-ios://thought/new` öffnet die große Aufnahme-Ansicht.
 - **Siri / App Shortcut:** `ToggleThoughtIntent` mit den Sätzen „\(.applicationName) Gedanke“, „Gedanke mit
   \(.applicationName)“, „Neuer Gedanke in \(.applicationName)“; Kurztitel „Gedanke“, Symbol `text.bubble`.
   Der Intent antwortet **ohne Dialog**, sonst spricht Siri in die Aufnahme.
@@ -342,6 +346,11 @@ Rückfrage „Thema löschen? 7 Gedanken bleiben, nur ohne Thema.“ Im Bearbeit
 „Zusammengeführt · Widerrufen“ (5 s, zusätzlich Schütteln = Widerrufen).
 Vorläufige Themen (1 Gedanke) stehen in einem eigenen Abschnitt „Neu“ und lassen sich hier umbenennen,
 übernehmen („Behalten“ macht sie aktiv) oder auflösen.
+Themen verschwinden mit ihren Gedanken: Wird ein Gedanke endgültig gelöscht (einzeln, „Alle löschen“, nach
+30 Tagen), entfernt der Speicher sein Thema, sobald kein Gedanke mehr daran hängt (weder aktiv noch im
+Papierkorb) – egal ob KI- oder Nutzer-Thema, samt Aliassen, abgelehnten Paaren und Vorschlägen. Ein von Hand
+angelegtes Thema, das noch nie einen Gedanken hatte, bleibt. Als Chip erscheint ein Thema nur mit mindestens
+einem Gedanken außerhalb von „Zuletzt gelöscht“.
 
 **Zuletzt gelöscht:** Liste wie in der Übersicht. Wischen: „Wiederherstellen“ bzw. „Endgültig löschen“.
 Fußzeile: „Gelöschte Gedanken werden nach 30 Tagen endgültig entfernt.“ Oben rechts: „Alle löschen“ (mit Rückfrage).
@@ -355,23 +364,25 @@ Die heutige Form bleibt schlank. Änderungen:
 | Groq-Schlüssel | unverändert | Fußzeile ergänzt: „… Gilt für Diktat und Gedanken.“ |
 | „Diktat“ (Sprachen, Eigene Begriffe) | Kopf „Diktat“ | Kopf „Erkennung“, Fußzeile „Gilt für Diktat und Gedanken.“ |
 | Mikro bereit halten | unverändert | Fußzeile ergänzt: „Läuft das Mikro, nimmt der Gedanken-Knopf sofort auf.“ |
-| Schnelltasten | Zeile „Schnelltasten“ (Rückseite, Kontrollzentrum, Aktionstaste fürs Diktat) | **Abschnitt „Gedanken“** mit Zeile „Gedanken-Knopf“ (Symbol `paply.mark`, Mint-Gold) → `ThoughtButtonGuideView`; Fußzeile „Ton bleibt 30 Tage, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.“ |
+| Schnelltasten | Zeile „Schnelltasten“ (Rückseite, Kontrollzentrum, Aktionstaste fürs Diktat) | **Abschnitt „Gedanken“** mit Zeile „Gedanken-Knopf“ (Symbol `paply.mark`, Mint-Gold) → `ThoughtButtonGuideView`; Fußzeile „Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.“ |
 | Tastatur einrichten | unverändert (nur wenn nötig) | unverändert |
 | Entwicklerbereich | Diktat, Sitzung, Tastatur, Werkzeuge | + Abschnitt „Gedanken“ (siehe unten) |
 
 `ThoughtButtonGuideView` ersetzt `ShortcutsGuideView` und nutzt die bestehenden `GuideCard`s:
-1. **Sperrbildschirm**: „Sperrbildschirm lange drücken → Anpassen → Sperrbildschirm.“ · „Bei der Taschenlampe auf
-   ‚–‘ tippen, dann ‚+‘.“ · „‚Paply-Gedanke‘ wählen.“
+1. **Sperrbildschirm**: „iPhone mit Face ID entsperren, aber nicht hochwischen.“ · „Auf eine freie Stelle lange
+   drücken, bis das Bild kleiner wird → ‚Anpassen‘ → ‚Sperrbildschirm‘.“ · „Unten bei der Taschenlampe ‚–‘
+   tippen, dann ‚+‘ → ‚Paply‘ → ‚Paply-Gedanke‘.“ · „Oben rechts ‚Fertig‘.“
+   **Oder unter der Uhr**: „Wie oben bis ‚Sperrbildschirm‘.“ · „Die Widget-Reihe unter der Uhr antippen →
+   ‚Paply‘ → ‚Paply-Gedanke‘ antippen.“ · „Liste schließen, oben rechts ‚Fertig‘. …“
 2. **Kontrollzentrum**: „Kontrollzentrum öffnen → oben links ‚+‘ → ‚Steuerelement hinzufügen‘ → ‚Paply-Gedanke‘.“
 3. **Aktionstaste** (nur wenn `DeviceInfo.hasActionButton`): „Einstellungen → Aktionstaste → Steuerelement →
    ‚Paply-Gedanke‘.“
 4. **Siri**: „‚Hey Siri, Gedanke mit Paply‘. Beenden: nochmal sagen oder ‚Fertig‘ tippen.“
-Fußnote: „Diktat in die Zwischenablage gibt es weiter als Steuerelement ‚Paply-Diktat‘.“
 
 **Entwicklerbereich → Gedanken:** Modell (Picker 120b / 20b), Tagesbudget (Stepper 20 000–150 000 Tokens),
 „Verbrauch 24 h: 23 400 Tokens · 12 Audio-Min.“, „Warteschlange“ (IDs, Zustand, Versuche, nie Text),
 „Themenpflege jetzt prüfen“, „Vorläufige Themen zeigen“.
-Keine weiteren Optionen für Nutzer. Ton-Aufbewahrung, Modell und Budget sind für sie fest.
+Keine weiteren Optionen für Nutzer. Modell und Budget sind für sie fest; Ton behält Paply nur bis zur Umschrift.
 
 ---
 
@@ -469,11 +480,13 @@ stateDiagram-v2
    (`chunkedUpload = false`, `polish = false`) → `append(alles)` → `finish()`. Teile von höchstens 10 Min.
    übernimmt PaplyKit. Das Ergebnis schreibt Paply **einmal** nach `source.json` und ruft Whisper für diesen
    Gedanken nie wieder auf.
-5. **Danach:** WAV → `audio.m4a` (AAC 32 kbit/s mono, ≈ 240 KB/Min.). Die WAV wird gelöscht. Klappt die
-   Umwandlung nicht, bleibt die WAV.
-6. **Aufbewahrung:** Ton 30 Tage nach `done`, danach automatisch gelöscht (nur wenn `source.json` existiert).
-   **Nicht verarbeiteter Ton wird nie automatisch gelöscht** (Mac-Regel). Gelöschte Gedanken samt Ton werden
-   30 Tage nach `deletedAt` endgültig entfernt.
+5. **Danach – nur Transkripte (Entscheidung 27.10.2026):** Sobald `source.json` dauerhaft liegt (fsync, von der
+   Platte gelesen), löscht der Speicher `audio.wav` (und Altbestand `audio.m4a`) und setzt `audio = nil` –
+   in dieser Reihenfolge, damit ein Absturz nie Ton und Text zugleich verliert. Keine AAC-Umwandlung, kein Player.
+6. **Aufbewahrung:** **Ton ohne Rohtext wird nie automatisch gelöscht** (offline, ohne Schlüssel, Fehler,
+   Papierkorb vor der Umschrift: die WAV bleibt für den Neuversuch). `housekeeping` befreit beim Start alle
+   Gedanken mit Rohtext von Ton (auch Altbestand und Papierkorb). Gelöschte Gedanken werden 30 Tage nach
+   `deletedAt` endgültig entfernt.
 
 ### 5.4 Sicherheitsgrenze 10 Minuten
 
@@ -794,7 +807,7 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
 ### 6.9 Verwandte verbinden
 
 **Entscheidung: verknüpfen, nie automatisch zusammenführen.**
-1. **Quellen bleiben unversehrt.** Jeder Gedanke hat eigenen Ton, eigenen Rohtext und eigene Zeit. Ein
+1. **Quellen bleiben unversehrt.** Jeder Gedanke hat eigenen Rohtext und eigene Zeit. Ein
    Zusammenführen würde das „Original“ mehrdeutig machen.
 2. **Fehler sind billig.** Eine falsche Verbindung ist harmlos und mit einem Wisch gelöst. Ein falsches
    Zusammenführen zerstört Inhalt.
@@ -875,7 +888,7 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
   thoughts/<id>/thought.json
   thoughts/<id>/source.json      einmal geschrieben, danach unveränderlich
   thoughts/<id>/ai-result.json   validiertes KI-Ergebnis (Cache)
-  thoughts/<id>/audio.wav | audio.m4a
+  thoughts/<id>/audio.wav        nur bis source.json liegt (danach gelöscht)
 <App Group>/Library/Application Support/Paply/thought-state.json   nur {recording, id, startedAt} für Control/Widget
 ```
 
@@ -913,7 +926,7 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
   "languages": ["de"],
   "keywords": ["sperrbildschirm", "knopf", "taschenlampe"],
   "ai": {"model": "openai/gpt-oss-120b", "promptVersion": 1, "tokens": 3412, "at": 1793085251000, "rejections": []},
-  "audio": {"file": "audio.m4a", "deleteAfter": 1795677251000},
+  "audio": null,                                   // {"file": "audio.wav"} nur, bis source.json liegt
   "status": {"message": null, "attempts": 0, "retryAt": null},
   "rev": 3,
   "updatedAt": 1793085251000,
@@ -970,8 +983,9 @@ Ton synchronisiert nie.
   Themennamen.
 - Sperrbildschirm: Die Live Activity zeigt nur Zeit, Zustand und Themennamen, nie Titel oder Text.
 - Der Schlüssel bleibt im Schlüsselbund (`AfterFirstUnlockThisDeviceOnly`, bisher schon so).
-- Löschen: „Zuletzt gelöscht“ 30 Tage, danach entfernt. „Endgültig löschen“ entfernt sofort Ton, Text, Cache
-  und Embedding.
+- Ton nur bis zur Umschrift: Aufnahmen werden gelöscht, sobald der Rohtext gespeichert ist.
+- Löschen: „Zuletzt gelöscht“ 30 Tage, danach entfernt. „Endgültig löschen“ entfernt sofort Text, Cache,
+  Embedding und ggf. noch nicht verschriftlichten Ton; Themen ohne Gedanken fallen mit weg.
 
 ---
 
@@ -1083,9 +1097,9 @@ Siehe 10.2. Vorab nur **S1** (Abschnitt 9.4).
 | **Koordinator** | `ios/project.yml` + `Paply.xcodeproj` (neu erzeugen), `PaplyKit/Sources/PaplyKit/Thoughts/Contracts.swift`, Integration, `docs/ENTSCHEIDUNGEN.md` | Verträge zuerst (9.2), Zusammenbau, Opus-Review anstoßen |
 | **H0 Eval-Daten** | `ios/PaplyKit/Tests/Fixtures/Thoughts/*` (kein Code) | `store-a.json`, `eval.jsonl`, `coldstart.jsonl`, `README.md`. Kennt den Prompt nicht. |
 | **H1 KI-Kern** | `PaplyKit/…/Thoughts/AI/` (`ThoughtPrompt`, `ThoughtSchema`, `ThoughtStructurer`, `ThoughtValidator`, `TopicHygiene`), `PaplyKit/…/Thoughts/Budget/TokenLedger.swift`, `Groq/GroqClient.swift` (nur **hinzufügen**: `chatStructured`), `Text/PolishSafetyNet.swift` (nur **hinzufügen**: `Profile`, Standard unverändert), `paply-bench/ThoughtsEval.swift` + Unterbefehl, `Tests/PaplyKitTests/Thoughts/AI*` | Prompt v1, Validator, Ledger, Prüfstand E1–E5 innerhalb des Budgets |
-| **H2 Speicher, lokale Intelligenz, Warteschlange** | `PaplyKit/…/Thoughts/Model/` (außer `Contracts.swift`), `Thoughts/Store/` (`ThoughtStore`, `WAVWriter`, `AudioCompactor`), `Thoughts/Local/` (`Keywords`, `EmbeddingIndex`, `CandidateFinder`, `TopicIndex`, `Search`), `Thoughts/Processing/` (`ThoughtProcessor`, `FileTranscriber`, `PartSplitter`), `paply-bench` Unterbefehl `candidates` (E0), `ios/App/Thoughts/ThoughtsModel.swift`, `ios/App/Thoughts/ThoughtsEnvironment.swift`, BGTask in `PaplyApp.swift` + `Info.plist`, Tests `Thoughts/Store*`, `Local*`, `Processing*` | Speicher, E0, Verarbeitung, Oberflächen-Fassade samt `ThoughtsModel.preview` |
+| **H2 Speicher, lokale Intelligenz, Warteschlange** | `PaplyKit/…/Thoughts/Model/` (außer `Contracts.swift`), `Thoughts/Store/` (`ThoughtStore`, `WAVWriter`), `Thoughts/Local/` (`Keywords`, `EmbeddingIndex`, `CandidateFinder`, `TopicIndex`, `Search`), `Thoughts/Processing/` (`ThoughtProcessor`, `FileTranscriber`, `PartSplitter`), `paply-bench` Unterbefehl `candidates` (E0), `ios/App/Thoughts/ThoughtsModel.swift`, `ios/App/Thoughts/ThoughtsEnvironment.swift`, BGTask in `PaplyApp.swift` + `Info.plist`, Tests `Thoughts/Store*`, `Local*`, `Processing*` | Speicher, E0, Verarbeitung, Oberflächen-Fassade samt `ThoughtsModel.preview` |
 | **H3 Aufnahme, Auslöser, Live Activity** | `ios/App/Session/ThoughtCapture.swift`, `ios/App/Session/ThoughtBridge.swift`, `SessionController.swift` (nur die 4 Haken aus 9.2), `ios/Shared/Intents/ThoughtIntents.swift`, `ios/Shared/UI/ThoughtActivity.swift`, `ios/Shared/Core/SharedModels.swift` + `DarwinBus.swift` (nur hinzufügen), `ios/Widgets/ThoughtLiveActivity.swift`, `ios/Widgets/ThoughtControl.swift`, `ios/Widgets/PaplyWidgets.swift` (Bundle), Symbol-Assets `paply.mark(.fill)`, `ios/App/Intents/PaplyShortcuts.swift` | zuerst Spike S1, dann Aufnahme, Intents, Live Activity, Control |
-| **H4 App-Oberfläche** | `ios/App/UI/RootView.swift` (TabView), `ios/App/UI/Thoughts/*` (Übersicht, Zeile, Chips, Themen-Kopf, Detail, Original/Player, Aufgaben, Themenwahl, Themen bearbeiten, Zuletzt gelöscht, Aufnahme-Ansicht, Aufnahme-Leiste, Orb „Echo“, leerer Zustand, `paplyGlass`), `ios/App/UI/DictationTab.swift` (heutige `HomeView` verschoben), `ios/App/UI/SettingsView.swift` (3.9), `ThoughtButtonGuideView` | alle Bildschirme gegen `ThoughtsModel.preview`, iOS 18 + 26 |
+| **H4 App-Oberfläche** | `ios/App/UI/RootView.swift` (TabView), `ios/App/UI/Thoughts/*` (Übersicht, Zeile, Chips, Themen-Kopf, Detail, Original, Aufgaben, Themenwahl, Themen bearbeiten, Zuletzt gelöscht, Aufnahme-Ansicht, Aufnahme-Leiste, Orb „Echo“, leerer Zustand, `paplyGlass`), `ios/App/UI/DictationTab.swift` (heutige `HomeView` verschoben), `ios/App/UI/SettingsView.swift` (3.9), `ThoughtButtonGuideView` | alle Bildschirme gegen `ThoughtsModel.preview`, iOS 18 + 26 |
 
 Neue Dateien legen nur die Helfer an. `project.yml` und das Neu-Erzeugen des Projekts übernimmt der Koordinator,
 damit es keine Konflikte in `project.pbxproj` gibt.
@@ -1186,7 +1200,7 @@ public actor ThoughtStore {
     public func saveTopics(_ topics: [Topic]) throws
     public func audioURL(_ id: String) -> URL?
     public func recover() throws -> [String]                         // reparierte IDs
-    public func housekeeping(now: Date)                              // Ton 30 d, Zuletzt gelöscht 30 d
+    public func housekeeping(now: Date)                              // Zuletzt gelöscht 30 d, Ton mit Rohtext weg
     public nonisolated var changes: AsyncStream<String> { get }      // geänderte Gedanken-ID
 }
 public final class WAVWriter: Sendable {                            // eigene serielle Queue

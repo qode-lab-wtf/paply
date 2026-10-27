@@ -25,8 +25,9 @@ Freunde schicken. Vorher einmal die Testinformationen ausfüllen:
 > Paply ist Sprache für dein iPhone – auf zwei Wegen.
 > **Diktat:** In jeder App die Weltkugel (🌐) tippen, sprechen, auf die Fläche tippen – der Text steht aufgeräumt
 > im Feld. Paply erkennt deine Sprache selbst, auch gemischt Deutsch/Englisch.
-> **Gedanken:** Paply-Knopf auf dem Sperrbildschirm oder im Kontrollzentrum drücken, reden, „Fertig“. Paply legt
-> den Gedanken mit Titel, Thema und Aufgaben in der App ab.
+> **Gedanken:** Paply-Knopf auf dem Sperrbildschirm, als Widget unter der Uhr oder im Kontrollzentrum drücken,
+> reden, „Fertig“. Paply legt den Gedanken mit Titel, Thema und Aufgaben in der App ab – als Text, die Aufnahme
+> wird nach der Umschrift gelöscht.
 > Zum Start brauchst du einen kostenlosen Groq-Schlüssel – die App führt dich in vier Schritten durch die Einrichtung.
 
 ### Was soll getestet werden?
@@ -48,7 +49,8 @@ Allans Kontakt-Adresse (in App Store Connect eintragen).
 > Setup: open Paply → paste the key (Settings › Groq key). Keyboard: Settings › General › Keyboard › Keyboards ›
 > Add › Paply, then enable Full Access (needed to share the recording state with the app via App Group; no data is
 > collected by us). Dictation: in any text field tap the globe key until Paply appears, speak, tap the green area.
-> Thoughts: add the „Gedanke“ control to Control Center or the Lock Screen, press, speak, press again.
+> Thoughts: add the „Gedanke“ control to Control Center or the Lock Screen (or the „Paply-Gedanke“ Lock Screen
+> widget below the clock), press, speak, press again. Recordings are deleted once transcribed; only text is kept.
 > Background audio: while the user keeps Paply ready, the app holds the microphone so the keyboard can start
 > dictation instantly (keyboards cannot access the microphone). Nothing is recorded or sent while idle; iOS shows
 > the microphone indicator.
@@ -59,9 +61,9 @@ ihn nach der Freigabe. Nicht den Alltagsschlüssel nehmen. Nie ins Repository.
 ### Datenschutz-Text (für eine Datenschutz-URL, falls App Store Connect sie verlangt)
 
 > **Paply – Datenschutz**
-> Paply speichert Diktat-Verlauf, Gedanken und Aufnahmen nur auf deinem iPhone. Zur Spracherkennung und zum
-> Aufräumen des Textes sendet Paply die Aufnahme bzw. den erkannten Text an Groq (groq.com), mit deinem eigenen
-> Groq-Schlüssel; dafür gelten die Bedingungen von Groq. Der Entwickler von Paply erhält keine Daten. Im
+> Paply speichert Diktat-Verlauf und Gedanken nur auf deinem iPhone, als Text. Aufnahmen werden nach der
+> Umschrift sofort gelöscht. Zur Spracherkennung und zum Aufräumen des Textes sendet Paply die Aufnahme bzw.
+> den erkannten Text an Groq (groq.com), mit deinem eigenen Groq-Schlüssel; dafür gelten die Bedingungen von Groq. Der Entwickler von Paply erhält keine Daten. Im
 > Bereitschaftsmodus hält Paply das Mikrofon nur offen, damit das Diktat sofort startet – dabei wird nichts
 > gespeichert oder gesendet. Es gibt kein Tracking und keine Werbung. Kontakt: Aram UG (haftungsbeschränkt).
 

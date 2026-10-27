@@ -147,7 +147,7 @@ struct SettingsView: View {
             } header: {
                 Text("Gedanken")
             } footer: {
-                Text("Ton bleibt 30 Tage, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.")
+                Text("Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.")
             }
             .paplyRows()
             .id("thoughts")

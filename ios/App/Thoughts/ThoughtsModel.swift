@@ -112,6 +112,12 @@ final class ThoughtsModel {
         topic.owner == .user || count(of: topic.id) >= 2
     }
 
+    /// Als Chip (und Schnellweg in der Suche) nur mit mindestens einem Gedanken außerhalb von „Zuletzt
+    /// gelöscht“ – auch Nutzer-Themen; liegen alle im Papierkorb, führte der Chip ins Leere.
+    func showsAsChip(_ topic: Topic) -> Bool {
+        isActive(topic) && count(of: topic.id) > 0
+    }
+
     func count(of topicID: String) -> Int {
         track()
         return counts[topicID] ?? 0
@@ -154,15 +160,6 @@ final class ThoughtsModel {
             }
         }
         return nil
-    }
-
-    func audioURL(_ id: String) -> URL? {
-        guard let store = backend?.store, let file = byID[id]?.audio?.file else { return nil }
-        let fm = FileManager.default
-        let primary = store.directory(id).appendingPathComponent(file)
-        if fm.fileExists(atPath: primary.path) { return primary }
-        let other = file == "audio.wav" ? store.m4aURL(id) : store.wavURL(id)
-        return fm.fileExists(atPath: other.path) ? other : nil
     }
 
     func linked(_ id: String) -> [(thought: Thought, link: ThoughtLink, incoming: Bool)] {
@@ -322,7 +319,8 @@ final class ThoughtsModel {
         write(id) { _ in await processor.kick(reason: "restore") } // nach dem Schreiben
     }
 
-    /// Endgültig: Ton, Text, Cache und Embedding (§7.6)
+    /// Endgültig: Text, Cache, Embedding und ggf. noch nicht verschriftlichter Ton (§7.6). Themen, die danach
+    /// keinen Gedanken mehr tragen, entfernt der Speicher mit (kommt über `store.changes` herein).
     func purge(_ id: String) {
         apply(nil, id: id)
         write(id) { await $0.purge(id) }
@@ -648,7 +646,6 @@ private enum ThoughtsPreviewData {
                 topicOwner: .ai,
                 languages: ["de"],
                 ai: Thought.AIInfo(model: "openai/gpt-oss-120b", promptVersion: 1, tokens: 3_000 + i * 11, at: created),
-                audio: Thought.AudioInfo(file: "audio.m4a", deleteAfter: created.addingTimeInterval(30 * 86_400)),
                 updatedAt: created
             )
             if i % 4 == 0 {
@@ -675,7 +672,7 @@ private enum ThoughtsPreviewData {
                 thought.tasks = []
                 thought.links = []
                 thought.ai = nil
-                thought.audio = Thought.AudioInfo(file: "audio.wav")
+                thought.audio = Thought.AudioInfo(file: "audio.wav") // Ton nur, bis der Rohtext liegt
                 thought.status = Thought.Status(message: statusMessage(states[stateIndex]),
                                                 attempts: states[stateIndex] == .needsAttention ? 5 : 1)
             } else if i == firstState + states.count {

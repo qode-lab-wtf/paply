@@ -112,7 +112,7 @@ struct SetupCard: View {
                 LucideImage(.shieldCheck, size: 16, stroke: 1.9, relativeTo: .footnote)
                     .foregroundStyle(ThoughtTint.mint)
                     .padding(.top, 1)
-                Text("Dein Ton geht zur Erkennung und Ordnung an Groq, mit deinem Schlüssel. Paply speichert Gedanken und Verlauf nur auf diesem iPhone. Im Bereitschaftsmodus wird nichts gespeichert oder gesendet.")
+                Text("Dein Ton geht zur Erkennung an Groq, mit deinem Schlüssel – Paply behält davon nur den Text. Gedanken und Verlauf liegen nur auf diesem iPhone. Im Bereitschaftsmodus wird nichts gespeichert oder gesendet.")
                     .font(.footnote)
                     .foregroundStyle(Color.paplySecondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -208,7 +208,7 @@ struct SetupCard: View {
         case .keyboard:
             "Vollzugriff braucht die Tastatur nur, um mit der App zu sprechen. Danach Paply in der Tastaturliste direkt hinter deine Haupttastatur ziehen."
         case .button:
-            "Auf den Sperrbildschirm statt der Taschenlampe – ein Druck, und du sprichst."
+            "Auf den Sperrbildschirm statt der Taschenlampe oder unter die Uhr – ein Tipp, und du sprichst."
         }
     }
 

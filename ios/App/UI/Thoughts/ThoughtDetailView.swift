@@ -74,7 +74,7 @@ struct ThoughtDetailView: View {
                 header(thought)
                 tasksSection(thought)
                 relatedSection(thought)
-                ThoughtOriginalSection(thought: thought, source: model.source(thought.id), audioURL: model.audioURL(thought.id))
+                ThoughtOriginalSection(source: model.source(thought.id))
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)

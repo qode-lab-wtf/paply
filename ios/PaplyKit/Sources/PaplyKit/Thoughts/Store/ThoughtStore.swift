@@ -30,12 +30,14 @@ public struct AIResultRecord: Sendable, Equatable {
 /// JSON-Dateien je Gedanke (KONZEPT §7).
 ///
 /// Ablage unter `root` (§7.2): `topics.json` (+ `topics.prev.json`), `thoughts/<id>/thought.json`,
-/// `source.json` (einmal), `ai-result.json` (Cache), `ai-parts.json` (Teile-Modus), `audio.wav | audio.m4a`.
+/// `source.json` (einmal), `ai-result.json` (Cache), `ai-parts.json` (Teile-Modus), `audio.wav` (nur bis zum Rohtext).
 /// Alle Gedanken liegen als Index im RAM; geschrieben wird atomar (tmp + fsync + rename).
 /// Beschädigte Dateien werden nie still ersetzt, sondern als `damaged-<ms>.json` daneben gesichert.
 public actor ThoughtStore {
     /// Wird in `changes` gemeldet, wenn sich die Themen geändert haben.
     public static let topicsChangeID = "topics"
+    /// „Zuletzt gelöscht“ bleibt so lange, dann endgültig entfernt
+    public static let trashRetention: TimeInterval = 30 * 24 * 3600
 
     public nonisolated let root: URL
     private let clock: @Sendable () -> Date
@@ -76,7 +78,8 @@ public actor ThoughtStore {
     nonisolated func aiResultURL(_ id: String) -> URL { directory(id).appendingPathComponent("ai-result.json") }
     nonisolated func aiPartsURL(_ id: String) -> URL { directory(id).appendingPathComponent("ai-parts.json") }
     public nonisolated func wavURL(_ id: String) -> URL { directory(id).appendingPathComponent("audio.wav") }
-    public nonisolated func m4aURL(_ id: String) -> URL { directory(id).appendingPathComponent("audio.m4a") }
+    /// nur Altbestand (früher AAC nach dem Rohtext); wird beim Aufräumen gelöscht
+    nonisolated func m4aURL(_ id: String) -> URL { directory(id).appendingPathComponent("audio.m4a") }
     nonisolated var topicsURL: URL { root.appendingPathComponent("topics.json") }
     nonisolated var topicsPrevURL: URL { root.appendingPathComponent("topics.prev.json") }
     nonisolated var suggestionsURL: URL { root.appendingPathComponent("topic-suggestions.json") }
@@ -327,14 +330,56 @@ public actor ThoughtStore {
         guard try update(id, { $0.deletedAt = nil }) != nil else { throw ThoughtStoreError.notFound }
     }
 
-    /// Endgültig entfernen: Ton, Text, Cache (§7.6).
+    /// Endgültig entfernen: Ton, Text, Cache (§7.6). Themen, die danach keinen Gedanken mehr tragen (weder
+    /// aktiv noch im Papierkorb), fallen mit weg – egal ob von der KI oder vom Nutzer angelegt.
     public func purge(_ id: String) {
-        guard Self.isValidID(id) else { return }
+        purge([id])
+    }
+
+    /// Mehrere auf einmal („Alle löschen“, 30-Tage-Frist): Themen werden einmal am Ende aufgeräumt.
+    public func purge(_ ids: [String]) {
+        try? ensureLoaded()
+        var topicIDs: Set<String> = []
+        for id in ids {
+            if let topicID = removeThought(id) { topicIDs.insert(topicID) }
+        }
+        pruneTopics(topicIDs)
+    }
+
+    /// Ordner und Index-Eintrag weg; gibt das (aufgelöste) Thema des Gedankens zurück.
+    private func removeThought(_ id: String) -> String? {
+        guard Self.isValidID(id) else { return nil }
         try? FileManager.default.removeItem(at: directory(id))
-        let existed = cache.removeValue(forKey: id) != nil
+        let removed = cache.removeValue(forKey: id)
         sourceCache[id] = nil
         activeCaptures.remove(id)
-        if existed { changeBroadcast.yield(id) }
+        guard let removed else { return nil }
+        changeBroadcast.yield(id)
+        return Self.resolve(removed.topicId, in: topicsDoc.topics)?.id
+    }
+
+    /// Nur Themen gerade endgültig gelöschter Gedanken kommen in Frage: Trägt sie kein Gedanke mehr, gehen sie
+    /// samt Aliassen, abgelehnten Paaren und Vorschlägen. Ein von Hand angelegtes, noch leeres Thema bleibt so
+    /// stehen. Nur bei vollständig gelesener Ablage (sonst könnte ein ungelesener Gedanke das Thema tragen).
+    private func pruneTopics(_ candidates: Set<String>) {
+        guard !candidates.isEmpty, loaded, topicsReadable else { return }
+        let topics = topicsDoc.topics
+        var carried: Set<String> = []
+        for thought in cache.values {
+            if let topic = Self.resolve(thought.topicId, in: topics) { carried.insert(topic.id) }
+        }
+        let empty = candidates.subtracting(carried)
+        guard !empty.isEmpty else { return }
+        let removed = Set(topics.filter { topic in
+            empty.contains(topic.id) || Self.resolve(topic.id, in: topics).map { empty.contains($0.id) } == true
+        }.map(\.id))
+        var doc = topicsDoc
+        doc.topics.removeAll { removed.contains($0.id) }
+        doc.declinedMerges.removeAll { pair in pair.contains { removed.contains($0) } }
+        guard (try? writeTopics(doc)) != nil else { return }
+        let suggestions = pendingSuggestions()
+        let kept = suggestions.filter { !removed.contains($0.a) && !removed.contains($0.b) }
+        if kept.count != suggestions.count { try? setPendingSuggestions(kept) }
     }
 
     public func saveSourceOnce(_ id: String, _ source: ThoughtSource) throws {
@@ -348,6 +393,25 @@ public actor ThoughtStore {
         if !FileSafety.exists(dir) { try FileSafety.createDirectory(dir) }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(source), to: sourceURL(id))
         sourceCache[id] = source
+        releaseAudio(id) // Ton nur bis zum Rohtext
+    }
+
+    // MARK: Ton nur bis zum Rohtext
+
+    /// Liegt der Rohtext dauerhaft (`source.json` von der Platte lesbar), kommt der Ton weg: erst die Dateien,
+    /// dann `audio = nil`. Ein Absturz dazwischen verliert nie Ton UND Text – der Text liegt schon, und
+    /// `housekeeping` räumt den Rest nach. Ohne Rohtext (offline, ohne Schlüssel, Fehler, im Papierkorb vor der
+    /// Umschrift) bleibt die WAV für den Neuversuch; laufende Aufnahmen bleiben unberührt. true = Ton entfernt.
+    @discardableResult
+    public func releaseAudio(_ id: String) -> Bool {
+        guard Self.isValidID(id), let thought = cache[id], thought.audio != nil, thought.state != .recording,
+              !activeCaptures.contains(id), let source = readSource(id) else { return false }
+        sourceCache[id] = source
+        FileSafety.syncDirectory(directory(id)) // `source.json` samt Verzeichniseintrag auf der Platte
+        for url in [wavURL(id), m4aURL(id)] where FileSafety.exists(url) {
+            guard (try? FileManager.default.removeItem(at: url)) != nil else { return false }
+        }
+        return (try? update(id) { $0.audio = nil }) != nil
     }
 
     // MARK: Aufnahme (H3)
@@ -578,42 +642,18 @@ public actor ThoughtStore {
         return repaired
     }
 
-    /// Ton 30 Tage nach `done` (nur mit `source.json`), „Zuletzt gelöscht“ nach 30 Tagen endgültig.
+    /// „Zuletzt gelöscht“ nach 30 Tagen endgültig (samt leer gewordener Themen). Danach Ton aller Gedanken mit
+    /// Rohtext entfernen – auch Altbestand (früher 30 Tage behalten, als m4a) und im Papierkorb.
     public func housekeeping(now: Date) {
         guard (try? ensureLoaded()) != nil else { return }
-        for thought in Array(cache.values) {
-            if let deletedAt = thought.deletedAt {
-                if now.timeIntervalSince(deletedAt) >= AudioCompactor.trashRetention { purge(thought.id) }
-                continue
-            }
-            guard thought.state == .done, let audio = thought.audio, let after = audio.deleteAfter, now >= after,
-                  hasSource(thought.id) else { continue }
-            try? FileManager.default.removeItem(at: wavURL(thought.id))
-            try? FileManager.default.removeItem(at: m4aURL(thought.id))
-            _ = try? update(thought.id) { $0.audio = nil }
+        let expired = cache.values.filter { thought in
+            thought.deletedAt.map { now.timeIntervalSince($0) >= Self.trashRetention } ?? false
         }
-        // Reste einer abgebrochenen Umwandlung: WAV bleibt, falls m4a fehlt
-        for thought in cache.values where thought.audio?.file == "audio.m4a" && FileSafety.exists(wavURL(thought.id)) {
-            if FileSafety.exists(m4aURL(thought.id)) { try? FileManager.default.removeItem(at: wavURL(thought.id)) }
+        if !expired.isEmpty { purge(expired.map(\.id)) }
+        for thought in Array(cache.values) where thought.audio != nil {
+            releaseAudio(thought.id)
         }
         removeStaleTempFiles(olderThan: 3600)
-    }
-
-    /// WAV → m4a, sobald der Rohtext dauerhaft liegt. Die Umwandlung läuft außerhalb des Akteurs.
-    @discardableResult
-    public func compactAudioIfNeeded(_ id: String) async -> Bool {
-        guard let thought = cache[id], thought.audio?.file == "audio.wav", thought.state != .recording,
-              hasSource(id), FileSafety.exists(wavURL(id)) else { return false }
-        let wav = wavURL(id), m4a = m4aURL(id)
-        let ok = await Task.detached(priority: .utility) { (try? AudioCompactor.compact(wav: wav, to: m4a)) != nil }.value
-        guard ok else { return false }
-        guard cache[id] != nil else {
-            try? FileManager.default.removeItem(at: m4a)
-            return false
-        }
-        guard (try? update(id, { $0.audio?.file = "audio.m4a" })) != nil else { return false }
-        try? FileManager.default.removeItem(at: wav)
-        return true
     }
 
     private func removeStaleTempFiles(olderThan seconds: TimeInterval) {

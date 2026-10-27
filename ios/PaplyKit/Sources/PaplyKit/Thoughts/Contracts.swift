@@ -94,14 +94,13 @@ public struct Thought: Codable, Sendable, Identifiable, Equatable {
         }
     }
 
+    /// Ton nur bis zum Rohtext: Liegt `source.json`, löscht der Speicher die Datei und setzt `audio = nil`.
     public struct AudioInfo: Codable, Sendable, Equatable {
-        /// "audio.wav" oder "audio.m4a" im Ordner des Gedankens
+        /// "audio.wav" im Ordner des Gedankens (Altbestand: "audio.m4a")
         public var file: String
-        public var deleteAfter: Date?
 
-        public init(file: String, deleteAfter: Date? = nil) {
+        public init(file: String) {
             self.file = file
-            self.deleteAfter = deleteAfter
         }
     }
 

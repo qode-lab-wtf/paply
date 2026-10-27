@@ -380,7 +380,7 @@ struct RecentlyDeletedView: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Ton, Text und Aufgaben werden sofort entfernt. Das lässt sich nicht widerrufen.")
+            Text("Text und Aufgaben werden sofort entfernt – Themen, die dann leer sind, ebenso. Das lässt sich nicht widerrufen.")
         }
         .confirmationDialog("Endgültig löschen?", isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }), titleVisibility: .visible) {
             Button("Endgültig löschen", role: .destructive) {
@@ -390,7 +390,7 @@ struct RecentlyDeletedView: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Ton, Text und Aufgaben werden sofort entfernt.")
+            Text("Text und Aufgaben werden sofort entfernt.")
         }
         .sensoryFeedback(.success, trigger: restorePulse)
     }
