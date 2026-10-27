@@ -158,6 +158,17 @@ struct SettingsView: View {
                     SessionController.shared.refreshShared()
                 }
             } else {
+                Link(destination: Self.groqKeysURL) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(symbol: "key.fill", tint: .paplyBeakDeep)
+                        Text("Kostenlosen Schlüssel holen").foregroundStyle(Color.paplyText)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.paplyGreenBright)
+                    }
+                }
+                KeySteps()
                 SecureField("gsk_…", text: $keyDraft)
                     .textContentType(.password)
                     .autocorrectionDisabled()
@@ -186,10 +197,12 @@ struct SettingsView: View {
         } header: {
             Text("Groq-Schlüssel")
         } footer: {
-            Text("Kostenlos auf console.groq.com unter „API Keys“. Am Mac kopieren und hier einsetzen. Der Schlüssel bleibt nur auf diesem iPhone.")
+            Text("Der Schlüssel bleibt nur auf diesem iPhone. Tipp: Am Mac kopieren, am iPhone „Einsetzen“ – die Zwischenablage wandert mit.")
         }
         .paplyRows()
     }
+
+    static let groqKeysURL = URL(string: "https://console.groq.com/keys")!
 
     @ViewBuilder
     private var keyStatusRow: some View {
@@ -580,7 +593,9 @@ struct DeveloperView: View {
 
             Section {
                 Toggle("App automatisch öffnen", isOn: $settings.autoOpenApp)
+                #if DEBUG
                 Toggle("Host-App protokollieren", isOn: $settings.logHostBundleID)
+                #endif
             } header: {
                 Text("Tastatur")
             } footer: {
@@ -751,5 +766,33 @@ struct StorageCheckView: View {
             Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(ok ? Color.paplyGreenBright : Color.paplyDanger)
         }
+    }
+}
+
+/// Drei kurze Schritte zum Groq-Schlüssel.
+private struct KeySteps: View {
+    private let steps = [
+        "Bei Groq kostenlos anmelden",
+        "„Create API Key“ tippen und kopieren",
+        "Hier „Einsetzen“",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                HStack(spacing: 10) {
+                    Text("\(index + 1)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.paplyForest)
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(Color.paplyGreenBright))
+                    Text(step)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.paplyText.opacity(0.85))
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }

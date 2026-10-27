@@ -115,16 +115,19 @@ final class HeightLab {
     private static func describe(_ mode: UITextInputMode?) -> (id: String, lang: String) {
         guard let mode else { return ("–", "–") }
         var id = "?"
+        #if DEBUG // nicht öffentlich – im Release nicht einkompiliert
         if mode.responds(to: NSSelectorFromString("identifier")), let value = mode.value(forKey: "identifier") as? String {
             id = value
         }
+        #endif
         return (id, mode.primaryLanguage ?? "–")
     }
 
     private static func classify(_ info: (id: String, lang: String)) -> Kind {
         if !AppGroup.keyboardBundleID.isEmpty, info.id.contains(AppGroup.keyboardBundleID) { return .paply }
         if info.lang == "emoji" || info.id.hasPrefix("emoji") { return .emoji }
-        if info.id == "?" || info.id == "–" { return .unknown }
+        if info.lang == "mul" { return .paply } // PrimaryLanguage der Paply-Tastatur
+        if info.id == "?" || info.id == "–" { return info.lang == "–" ? .unknown : .apple }
         // Apple: „de_DE@sw=QWERTZ-German;hw=…“, Drittanbieter: Bundle-ID
         let head = info.id.split(separator: "@").first.map(String.init) ?? info.id
         return head.contains(".") ? .other : .apple

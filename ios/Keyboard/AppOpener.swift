@@ -85,9 +85,11 @@ enum AppOpener {
 /// EXPERIMENTELL (Schalter in der App, Standard aus): liest die Bundle-ID der Host-App über
 /// private Felder und protokolliert sie NUR. Kein Rücksprung – private Wege verstoßen gegen
 /// Guideline 2.5.1 und sind ab iOS 26.4 gesperrt.
+/// Im Release-Build NICHT einkompiliert (private Felder; App-Store-Prüfung).
 @MainActor
 enum HostProbe {
     static func log(from controller: UIInputViewController) {
+        #if DEBUG
         guard SharedSettings.logHostBundleID else { return }
         var fields: DiagFields = ["parentClass": .s(controller.parent.map { String(describing: type(of: $0)) } ?? "–")]
         let objects: [(String, AnyObject?)] = [("self", controller), ("parent", controller.parent)]
@@ -97,12 +99,15 @@ enum HostProbe {
             }
         }
         Diag.log("kb.host.experimental", fields)
+        #endif
     }
 
+    #if DEBUG
     private static func ivarString(_ object: AnyObject?, _ name: String) -> String? {
         guard let object, let ivar = class_getInstanceVariable(type(of: object), name),
               let encoding = ivar_getTypeEncoding(ivar), String(cString: encoding).hasPrefix("@")
         else { return nil }
         return object_getIvar(object, ivar) as? String
     }
+    #endif
 }

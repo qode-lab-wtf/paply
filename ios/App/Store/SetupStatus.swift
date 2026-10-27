@@ -20,19 +20,29 @@ final class SetupStatus {
 
     /// Beim Erscheinen und wenn die App nach vorne kommt.
     func refresh() {
+        keyboardEnabled = Self.paplyKeyboardActive()
+        Task.detached(priority: .utility) {
+            let seen = Self.fullAccessEvidence()
+            await MainActor.run { SetupStatus.shared.fullAccessSeen = seen }
+        }
+    }
+
+    /// Ist Paply unter den aktiven Tastaturen?
+    /// Release: öffentlich über die Sprache „mul“ (PrimaryLanguage der Paply-Tastatur).
+    /// Debug: zusätzlich die genaue, aber nicht öffentliche Kennung – im Release nicht einkompiliert.
+    private static func paplyKeyboardActive() -> Bool {
+        let modes = UITextInputMode.activeInputModes
+        #if DEBUG
         let bundleID = AppGroup.keyboardBundleID
-        // Die Kennung einer Tastatur ist nicht öffentlich; nur lesen, wenn vorhanden.
-        let enabled = UITextInputMode.activeInputModes.contains { mode in
+        let byIdentifier = modes.contains { mode in
             guard mode.responds(to: NSSelectorFromString("identifier")),
                   let id = mode.value(forKey: "identifier") as? String
             else { return false }
             return !bundleID.isEmpty && id.contains(bundleID)
         }
-        keyboardEnabled = enabled
-        Task.detached(priority: .utility) {
-            let seen = Self.fullAccessEvidence()
-            await MainActor.run { SetupStatus.shared.fullAccessSeen = seen }
-        }
+        if byIdentifier { return true }
+        #endif
+        return modes.contains { $0.primaryLanguage == "mul" }
     }
 
     /// Ohne Vollzugriff kann die Tastatur nicht in die App Group schreiben – liegt dort ihre

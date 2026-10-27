@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04C52E2A0009D6E3B3696A92 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CCFBB04BF5C37F6DFA7B1232 /* PrivacyInfo.xcprivacy */; };
 		04F28D0E89A4D13D50D099A1 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C515A2729ED0FEE867CF6F78 /* AppGroup.swift */; };
 		057318D155E15AEDBE3A2431 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E9958ECB23C7D6BF2C446C /* HistoryStore.swift */; };
 		0619B17CB8816D1FE973EF89 /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
@@ -34,6 +35,7 @@
 		608CFFCBF9353BBE6529C154 /* TestPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE1D11D68ADDDD157331B2CA /* TestPageView.swift */; };
 		6174B199C3F3196F84BDF321 /* BrandUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19FCC308D8722798CEFC568C /* BrandUI.swift */; };
 		6423AD7DA78AF45266C07FF2 /* DarwinBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */; };
+		658AC4E2B70E0CE22FE94CFB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = ADE7373272907F6C8688A30F /* PrivacyInfo.xcprivacy */; };
 		6686AE606A448E5F2213C0CE /* MonoClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538BDAD38D348D4AD4EF3685 /* MonoClock.swift */; };
 		66B4701F9B7EA891C26662E8 /* HistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BE46E3028D0B3168693C030 /* HistoryDetailView.swift */; };
 		6D18A5AA761BAE8D000F7FC5 /* LevelChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8DD5888A85A20E1837B253 /* LevelChannel.swift */; };
@@ -63,6 +65,7 @@
 		D21CE450797BE51A51215A7B /* SetupStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864247B0438E9F0053907608 /* SetupStatus.swift */; };
 		D59CF9A3ECE26857236C3FFF /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C515A2729ED0FEE867CF6F78 /* AppGroup.swift */; };
 		DE3C580D59FB1BFAB5C2FB21 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72FC59997AB6553C2A82B21 /* DiagnosticsView.swift */; };
+		E2399F55B5D65C0041E93E86 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 23709469B172827CE2960592 /* PrivacyInfo.xcprivacy */; };
 		E30A582F111A4CE3B521FE13 /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
 		E91C198889867B5C8874F07E /* PaplyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8968A98A0CB6C512AD78D995 /* PaplyApp.swift */; };
 		EAFF3703FA3D0BBD40CCB20F /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1D44366C159314D195BA1D /* SharedStore.swift */; };
@@ -118,6 +121,7 @@
 		19FCC308D8722798CEFC568C /* BrandUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandUI.swift; sourceTree = "<group>"; };
 		1B113CB6A3B13E5535479869 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		1D610BE924E785550DF1AF3E /* DeviceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceMonitor.swift; sourceTree = "<group>"; };
+		23709469B172827CE2960592 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2DC9B028B15A423DEA60FEB0 /* PaplyKeyboard.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaplyKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMetrics.swift; sourceTree = "<group>"; };
 		46CFE296D653DF4B9E936A9B /* SharedSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSettings.swift; sourceTree = "<group>"; };
@@ -142,9 +146,11 @@
 		A8A62F106602024098A8B782 /* Paply.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Paply.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ABDCAEB5A101BA9CEC6F796E /* PaplyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaplyKit; path = PaplyKit; sourceTree = SOURCE_ROOT; };
 		AC1D44366C159314D195BA1D /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
+		ADE7373272907F6C8688A30F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B65299AE05C8D760F700DB5B /* PaplyWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaplyWidgets.swift; sourceTree = "<group>"; };
 		BE1D11D68ADDDD157331B2CA /* TestPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestPageView.swift; sourceTree = "<group>"; };
 		C515A2729ED0FEE867CF6F78 /* AppGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
+		CCFBB04BF5C37F6DFA7B1232 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		CD39327CA0E2F3231965BD9F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CEB31306E107ADC2F9ADA22C /* FlashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlashView.swift; sourceTree = "<group>"; };
 		D288431EC7536305454A395A /* Paply.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Paply.entitlements; sourceTree = "<group>"; };
@@ -179,6 +185,7 @@
 				81AF1F373569A7AD0BA6F5D1 /* Info.plist */,
 				E34004E2220C07BBE1757CE1 /* PaplyWidgets.entitlements */,
 				B65299AE05C8D760F700DB5B /* PaplyWidgets.swift */,
+				ADE7373272907F6C8688A30F /* PrivacyInfo.xcprivacy */,
 			);
 			path = Widgets;
 			sourceTree = "<group>";
@@ -226,6 +233,7 @@
 				724B91F7AB66ADC38A2BE72A /* KeyboardViewController.swift */,
 				0EBE24EF15D9A33A275AA563 /* PanelView.swift */,
 				D336163DDE0A7FB5963B874B /* PaplyKeyboard.entitlements */,
+				23709469B172827CE2960592 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Keyboard;
 			sourceTree = "<group>";
@@ -311,6 +319,7 @@
 				0B4BAFB96CDE746F75A9369A /* Info.plist */,
 				D288431EC7536305454A395A /* Paply.entitlements */,
 				8968A98A0CB6C512AD78D995 /* PaplyApp.swift */,
+				CCFBB04BF5C37F6DFA7B1232 /* PrivacyInfo.xcprivacy */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -349,6 +358,7 @@
 			buildConfigurationList = 412E0C95D1FF23BEF51DD187 /* Build configuration list for PBXNativeTarget "PaplyWidgets" */;
 			buildPhases = (
 				7560B9EE796A6677E3E283D4 /* Sources */,
+				D979F55ECE73B75D1191AEBC /* Resources */,
 			);
 			buildRules = (
 			);
@@ -366,6 +376,7 @@
 			buildConfigurationList = D8A6A8FAC26299850B88470A /* Build configuration list for PBXNativeTarget "PaplyKeyboard" */;
 			buildPhases = (
 				F5465431E738ACF287B60516 /* Sources */,
+				C68B9C985E82CEA7C7D7A298 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -454,6 +465,23 @@
 			buildActionMask = 2147483647;
 			files = (
 				FB94787CCF8338731479839D /* Assets.xcassets in Resources */,
+				04C52E2A0009D6E3B3696A92 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C68B9C985E82CEA7C7D7A298 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2399F55B5D65C0041E93E86 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D979F55ECE73B75D1191AEBC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				658AC4E2B70E0CE22FE94CFB /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

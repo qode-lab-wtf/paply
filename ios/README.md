@@ -50,6 +50,14 @@ höchstens 10 neue App-IDs pro Woche – App, Tastatur und Widgets sind 3).
 Danach auf dem iPhone: Einstellungen → Allgemein → Tastatur → Tastaturen → „Tastatur hinzufügen“ →
 Paply, dann Paply antippen → „Vollen Zugriff erlauben“. In der App den Groq-Schlüssel eintragen.
 
+## TestFlight (Vorbereitung)
+
+- Version `MARKETING_VERSION` (0.1.0) und Build-Nummer `PAPLY_BUILD` stehen in `Config/Base.xcconfig` und gelten
+  für App und Erweiterungen gemeinsam. Für jeden Upload `PAPLY_BUILD` erhöhen (oder `xcodebuild … PAPLY_BUILD=7`).
+- App-Symbol: ein 1024er Bild ohne Transparenz (Single Size), Xcode erzeugt die übrigen Größen.
+- `ITSAppUsesNonExemptEncryption = NO` (nur HTTPS). Je ein `PrivacyInfo.xcprivacy` in App, Tastatur, Widgets.
+- Nicht öffentliche Zugriffe (Tastatur-Kennung, Host-App) sind nur im Debug-Build einkompiliert.
+
 ## Diagnose holen
 
 ```sh
