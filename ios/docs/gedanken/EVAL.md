@@ -395,10 +395,40 @@ angehören, auf dieses umzuleiten, wäre in p4 dreimal falsch gewesen (e26 → A
 In `prompt4.json` hat n03 diese Muster; e06 verzichtet auf die due-Regel „Donnerstag“ (die Keller-Frist prüft schon
 „`due_hint` korrekt“, und die zulässige Besichtigungs-Aufgabe darf „am Donnerstag um neun“ tragen).
 
-### Nachlauf p4b (vorbereitet, wartet auf Freigabe)
+### Nachlauf p4b (Plan, so gelaufen)
 
 - 6 Fälle: n03, n05, e26, n02, n04, e06 (in dieser Reihenfolge), Prompt v5, nur `openai/gpt-oss-120b` `low`.
 - Eigener Ledger `prompt4b`, hartes Budget 22 000 Tokens, `--tight 1`, Abbruch beim ersten 429.
 - Erwartet nach p4 ≈ 3 000–3 350 je Aufruf, zusammen ≈ 19 000; etwa 3 Minuten (2 Aufrufe pro Minute).
 - Befehl: `/tmp/paply-thoughts-eval/run-p4b.sh` (Ausgabe `p4b.log`, `p4b-p5-r1-120b-low-results.json`, `…-review.md`).
+
+### Ergebnis p4b (27.10. abends, 120b `low`, Prompt v5)
+
+6 Aufrufe, **19 157 Tokens** (Median 3 279), kein 429. Dateien: `/tmp/paply-thoughts-eval/p4b-run.out`,
+`p4b-p5-r1-120b-low-review.md`.
+
+| Fall | p4 (v4) | p4b (v5) |
+| --- | --- | --- |
+| e26 | neues Thema „Milas Schwimmkurs“ | **Familie** ✓; Aufgabe „Wecker stellen“ (due „morgen um acht“); „Anmeldung für Januarkurs“ verworfen (`task:quote`: das Zitat glättet das Stottern „für den für den“), „Schwimmsachen durchsehen“ fehlt weiter |
+| n04 | Thema „Patenkind“ | Thema **„Noah“** ✓ (die Person), „Laufrad kaufen“ |
+| n02 | Familie, 2 Aufgaben | gleich ✓, „Einkaufsliste von Jana schicken lassen“ |
+| n05 | Thema „Reisepass“, Zeit doppelt | Thema „Reisepass“ bleibt (so akzeptiert); Text „Reisepass verlängern“, due „bis Ende November“ ✓ |
+| n03 | „20 Fluxo Lizenzen kaufen“ | **„Fluxo Lizenzen kaufen“** ✗ – wieder die Handlung des Kunden |
+| e06 | `task:quote` | `task:quote` (unverändert, bekannt) |
+
+Kennzahlen p4b: Thema `existing` 4/4, `none` 1/2 (n05), Präzision 5/6 (n03 verboten), Recall 5/8, `due_hint` 5/5,
+Form der gespeicherten Aufgaben 6/6 (roh 7/8).
+
+**Entscheidung des Bauleiters → Prompt v6:** Der Termin-Satz fliegt ganz raus. Er machte in beiden Läufen die
+Handlung des Kunden zur Aufgabe des Sprechers; unter v3 ergab der echte Fall („Kunde kommt morgen um 10“) keine
+Aufgabe, und keine Aufgabe ist besser als eine irreführende. v6 = v5 ohne diesen Satz; Themen-Satz (v5) und
+Kern-Satz (v4) bleiben, der Code (`TaskText`) bleibt. Systemprompt 7 221 Bytes (v3 6 723, v5 7 461).
+
+**v6 gilt ohne eigene Messung:** Es ist nur eine Streichung zurück auf das v3-Verhalten bei Terminen; alles Übrige ist
+in p4b mit v5 gemessen. In `prompt4.json` ist die Soll-Aufgabe von n03 jetzt **zulässig** statt Pflicht („keine Aufgabe
+oder eine zum Anteil des Sprechers“); das `mustNotAdd`-Muster gegen „… kaufen“/„vorbeikommen“ bleibt.
+
+Offen (bewusst nicht angegangen): Der Prüfer verwirft Zitate, die das Modell glättet (Stottern „für den für den“,
+aufgelöste Selbstkorrektur in e06) – `task:quote` in e06 und e26; in p4 fiel n06 („Bescheid sagen beim Fitnessstudio
+Hantelhaus“ ohne das „nicht verlängern“ des Zitats) an der Verneinungsprüfung.
 

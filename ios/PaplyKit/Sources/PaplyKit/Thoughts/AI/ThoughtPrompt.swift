@@ -15,9 +15,11 @@ public enum ThoughtPrompt {
     /// Zeitausdruck und Füllwörter am Rand regelt danach der Code (`TaskText`).
     /// v5 („v4.1“, nach dem Lauf p4): dieselben zwei Sätze schärfer – ein Termin nennt den Anteil des Sprechers, nie die
     /// Handlung des anderen; was ein gelistetes Thema abdeckt, gehört dorthin, erst sonst ein neuer Bereich.
-    public static let version = 5
+    /// v6 (Entscheidung Bauleiter nach p4b): v5 ohne den Termin-Satz. Er erzeugte zweimal die Handlung des Kunden als
+    /// Aufgabe („Fluxo Lizenzen kaufen“); keine Aufgabe ist besser als eine irreführende (wie unter v3).
+    public static let version = 6
 
-    // MARK: Systemprompt v5 (§6.4, wörtlich)
+    // MARK: Systemprompt v6 (§6.4, wörtlich)
 
     static let intro = """
     You organise one spoken thought for the user's private notes app. The user pressed a button and spoke freely, often on the move. You get the speech-to-text transcript, the local time, the user's existing topics and possibly a few earlier thoughts that a local search found similar. Reply only with JSON that matches the schema.
@@ -63,7 +65,6 @@ public enum ThoughtPrompt {
     TASKS
     Only actions the speaker explicitly intends to do or explicitly wants to be reminded of, such as "ich muss …", "ich will morgen …", "nicht vergessen …", "erinner mich …", "I need to …", "remind me to …", "to do: …".
     Not tasks: ideas, wishes and possibilities ("man könnte", "wäre schön", "vielleicht"), open questions, things other people will do, things already done, intentions not to do something ("ich kaufe keinen neuen Laptop", "no meetings on Friday"), and requests the speaker takes back or calls a joke or a test.
-    A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task with due_hint; its text names the speaker's part ("Termin mit Frau Roth", "Frau Roth empfangen"), never what the other person does.
     - text: a short to-do in the language of its quote, made only of the speaker's words from quote, e.g. "Milch kaufen", "Anna wegen Freitag anrufen", "call the bank". Keep it to the core, about 2 to 6 words: leave out particles ("noch", "mal", "eben", "just"), self-references ("ich", "mein", "my") and the time expression, which belongs in due_hint. Never translate or mix languages. Keep names, numbers and any negation that belongs to the action. At most 80 characters.
     - quote: the words from the transcript that state the task, copied exactly as one passage without omissions, at most one sentence.
     - due_hint: the time expression exactly as spoken in quote ("bis Freitag", "morgen früh", "next week"), otherwise null. Do not calculate dates.

@@ -132,3 +132,15 @@ Nach Allans Gerätetest.
   bleibt. Themen, deren Gedanken alle im Papierkorb liegen, erscheinen nicht als Chip.
 - **Widget „Paply-Gedanke“ unter der Uhr** (wie ChatGPT/Claude): Tippen nimmt wie das Steuerelement auf,
   nochmal tippen beendet; Einrichtungshilfe laienfest.
+
+## 2026-10-27 — Paply iOS: Landkarte als Startseite, Aufgaben-Reiter, Themenbilder (von Allan gewählt, auf `feat/ios-v1`)
+
+- **Landkarte als Startseite:** Der Reiter „Gedanken“ öffnet eine Landkarte der Themen – feste Plätze, gemerkte
+  Anker, Fokus-Zoom, Linien nur für echte Verknüpfungen; ein Themen-Panel zeigt offene Aufgaben und die Gedanken des
+  Themas.
+- **Aufgaben als eigener Reiter:** Die Leiste lautet Gedanken | Aufgaben | Diktat. Alle Aufgaben aus allen Gedanken
+  stehen auf einer Seite (Überfällig · Heute · Demnächst · Irgendwann · Erledigt). Das ersetzt den Chip „Aufgaben“
+  und die Regel „Aufgaben sind kein Tab“ (`ios/docs/gedanken/KONZEPT.md` §2, §3.3); Paply bleibt kein
+  Aufgabenmanager.
+- **Themenbilder:** Ein Thema kann statt des Symbols ein eigenes Bild tragen (quadratisch, höchstens 512 px, JPEG
+  ohne Metadaten). Die Bilder bleiben auf dem Gerät und gehen nie an die KI oder ins Netz.

@@ -140,8 +140,8 @@ private func ledger(_ clock: Clock, limits: TokenLedger.Limits = .init(), url: U
 }
 
 @Suite struct AIPromptTests {
-    @Test func systemPromptIsVersion5WithAllSections() {
-        #expect(ThoughtPrompt.version == 5)
+    @Test func systemPromptIsVersion6WithAllSections() {
+        #expect(ThoughtPrompt.version == 6)
         for header in ["GROUND RULES", "TITLE", "CLEAN_TEXT", "TOPIC", "TASKS", "RELATED"] {
             #expect(ThoughtPrompt.system.contains("\n\(header)\n"), "\(header)")
         }
@@ -169,31 +169,30 @@ private func ledger(_ clock: Clock, limits: TokenLedger.Limits = .init(), url: U
         #expect(ThoughtPrompt.partSystem(part: 2, of: 3).contains("now is the local weekday"))
     }
 
-    /// v4 (Befunde vom iPhone): genau drei neue Sätze – Aufgabentext auf den Kern, fester Termin des Sprechers,
-    /// einmalige Besorgung ist kein Thema. v5 („v4.1“, nach Lauf p4): Termin- und Themen-Satz umformuliert, nicht
-    /// ergänzt. Großschreibung u. Ä. macht der Code (`TaskText`), nicht der Prompt.
-    @Test func version4And5Rules() throws {
+    /// v4 (Befunde vom iPhone): Aufgabentext auf den Kern, einmalige Besorgung ist kein Thema. v5: Themen-Satz
+    /// umformuliert. v6 (Entscheidung nach p4b): kein Termin-Satz mehr – er machte die Handlung des Kunden zur Aufgabe.
+    /// Großschreibung u. Ä. macht der Code (`TaskText`), nicht der Prompt.
+    @Test func version6Rules() throws {
         let system = ThoughtPrompt.system
         let core = "Keep it to the core, about 2 to 6 words: leave out particles (\"noch\", \"mal\", \"eben\", \"just\"), self-references (\"ich\", \"mein\", \"my\") and the time expression, which belongs in due_hint."
-        let appointment = "A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task with due_hint; its text names the speaker's part (\"Termin mit Frau Roth\", \"Frau Roth empfangen\"), never what the other person does."
         let area = "A one-off errand, purchase or appointment is not a topic, and whatever a listed topic covers belongs there (a child's dentist appointment → the family topic); only if none fits, name the ongoing area (person, project, place, area of life), e.g. \"Tilda\", not \"Tilda Schrank\"; \"Einkäufe\", not \"Baumarkt Einkauf\"."
-        for sentence in [core, appointment, area] {
+        for sentence in [core, area] {
             #expect(system.components(separatedBy: sentence).count == 2, "genau einmal: \(sentence.prefix(40))")
         }
-        // Reihenfolge: Termin nach „Not tasks“, Kern-Satz in der text-Regel, Thema-Satz in „2. new“
         let tasks = try #require(system.range(of: "\nTASKS\n"))
-        #expect(system.range(of: appointment)!.lowerBound > system.range(of: "Not tasks:")!.lowerBound)
         #expect(system.range(of: core)!.lowerBound > system.range(of: "- text: a short to-do")!.lowerBound)
         #expect(system.range(of: area)!.lowerBound > system.range(of: "2. new – only if")!.lowerBound
             && system.range(of: area)!.lowerBound < tasks.lowerBound)
-        // v5 ersetzt die v4-Sätze, statt sie zu ergänzen
+        // v6: kein Termin-Satz; v5 ersetzte die v4-Fassung des Themen-Satzes
+        #expect(!system.contains("A fixed appointment") && !system.contains("speaker's part"))
         #expect(!system.contains("name the ongoing area instead"))
-        #expect(system.components(separatedBy: "A fixed appointment").count == 2)
+        // Zwischen „Not tasks“ und der text-Regel steht wieder nichts (wie v3)
+        #expect(system.contains("calls a joke or a test.\n- text: a short to-do"))
         // Nicht-Aufgaben bleiben: Ideen, Möglichkeiten, Handlungen anderer
         #expect(system.contains("things other people will do"))
         // Die Teile-Anfrage hat die Aufgaben-Regeln, aber nicht die Themen-Regel
         let part = ThoughtPrompt.partSystem(part: 2, of: 3)
-        #expect(part.contains(core) && part.contains(appointment) && !part.contains(area))
+        #expect(part.contains(core) && !part.contains(area))
     }
 
     @Test func nowLabelHasWeekdayDateAndTime() {

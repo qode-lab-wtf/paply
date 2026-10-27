@@ -247,15 +247,14 @@
         "audioSeconds": 9,
         "words": 21,
         "categories": [
-          "tasks",
           "appointment"
         ],
         "extra": [
           "prompt4"
         ],
-        "rationale": "Muster Befund 4: fester Termin, den der Sprecher wahrnehmen muss (Kunde kommt um 10 Uhr ins Büro). Eine Erinnerung mit due „morgen um 10 Uhr“ ist richtig; der Kauf selbst ist Handlung des Kunden.",
+        "rationale": "Muster Befund 4: Kunde kommt um 10 Uhr ins Büro. Ab Prompt v6 (ohne Termin-Satz) ist keine Aufgabe richtig; eine Aufgabe zum Anteil des Sprechers („Herrn Brandl empfangen“, due „morgen um 10 Uhr“) ist zulässig. Die Handlung des Kunden als Aufgabe („… kaufen“) ist falsch.",
         "sets": [],
-        "hard": "Grenzfall Termin: Handlung des Kunden, aber der Sprecher muss da sein"
+        "hard": "Grenzfall Termin: Handlung des Kunden, der Sprecher muss da sein; nie die Handlung des Kunden als Aufgabe"
       },
       "recordedAt": 1793113800000,
       "recordedAtLocal": "2026-10-27T16:10:00+01:00",
@@ -270,7 +269,7 @@
         "tasks": [
           {
             "key": "a",
-            "required": true,
+            "required": false,
             "texts": [
               "Herrn Brandl wegen der Lizenzen empfangen",
               "Termin mit Herrn Brandl"
@@ -292,7 +291,8 @@
               "morgen",
               "um 10 Uhr",
               "morgen 10 Uhr"
-            ]
+            ],
+            "note": "Prompt v6: keine Aufgabe oder eine zum Anteil des Sprechers – zulässig, nicht verlangt."
           }
         ],
         "notTasks": [],

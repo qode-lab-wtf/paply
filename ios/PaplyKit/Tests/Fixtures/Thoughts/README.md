@@ -394,7 +394,7 @@ Lindenhof, Patenkind Noah, Fitnessstudio Hantelhaus); keine echten Personendaten
 | --- | --- | --- |
 | n01 | Füllwörter und Ich-Bezug („bei meiner Firma … noch … einmal“) | Aufgabe im Kern, Thema Fluxo (auch Finanzen) |
 | n02 | einmalige Besorgung, Zeitausdruck in zwei Stücken, zwei Aufgaben | due „morgen (…) vormittags“, nicht doppelt im Text; Thema none (auch Familie oder ein Bereich wie „Einkäufe“), nie „Sonnenkorn …“ |
-| n03 | fester Termin des Sprechers (Kunde kommt um 10 Uhr ins Büro) | Erinnerung mit dem Anteil des Sprechers („Herrn Brandl empfangen“), due „morgen um 10 Uhr“; Thema Fluxo. Ein Aufgabentext mit der Handlung des Kunden („… kaufen“, „vorbeikommen“) ist falsch (`mustNotAdd` für `tasks`) |
+| n03 | Termin beim Sprecher (Kunde kommt um 10 Uhr ins Büro) | ab Prompt v6 keine Aufgabe; eine zum Anteil des Sprechers („Herrn Brandl empfangen“, due „morgen um 10 Uhr“) ist zulässig. Ein Aufgabentext mit der Handlung des Kunden („… kaufen“, „vorbeikommen“) ist falsch (`mustNotAdd` für `tasks`); Thema Fluxo |
 | n04 | Person + Sache (Laufrad für das Patenkind) | Thema Familie, „Noah“ oder none, nie „Laufrad“/„Geburtstag“ |
 | n05 | Zeitausdruck am Ende, Possessiv | „Reisepass verlängern lassen“, due „bis Ende November“; kein Thema „Reisepass“ |
 | n06 | Verneinung bleibt | Aufgabe mit „nicht verlängern“; Thema Fitness |

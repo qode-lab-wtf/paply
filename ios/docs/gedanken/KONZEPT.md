@@ -11,7 +11,7 @@ steht eine Empfehlung und der Test, der es klärt.
 | --- | --- |
 | Startbildschirm | Tab „Gedanken“. Zweiter Tab „Diktat“ (Mikro-Status, Einrichtung, Verlauf). Einstellungen als Blatt hinter dem Zahnrad. |
 | Themen-Navigation | Chips unter dem Titel („Alle“, „Aufgaben“, Themen). Keine Ordner, keine Notizbücher. |
-| Aufgaben | Eigene Ansicht als Chip „Aufgaben“ im Gedanken-Tab, kein eigener Tab, kein Aufgabenmanager. |
+| Aufgaben | Eigener Reiter „Aufgaben“ (Gedanken | Aufgaben | Diktat), Entscheidung vom 27.10. (`docs/ENTSCHEIDUNGEN.md`); kein Aufgabenmanager. |
 | Verwandte | Verknüpfen, nie automatisch zusammenführen. |
 | Themen entstehen | Die KI darf ein neues Thema nur vorschlagen. Als Chip erscheint es erst, wenn ein zweiter Gedanke dazukommt („vorläufiges Thema“). Obergrenze 24 aktive Themen. |
 | KI-Modell | `openai/gpt-oss-120b`, `reasoning_effort: low`, striktes JSON-Schema, **ein** Aufruf je Gedanke. Ausweich `openai/gpt-oss-20b`. **Nie** `qwen` (das gehört dem Diktat-Polieren). |
@@ -73,9 +73,9 @@ TabView
   ein Sicherheitsnetz („Text wiederfinden“) und wird selten geöffnet.
 - **Einstellungen sind kein Tab.** Sie sind eine abgeschlossene Nebenaufgabe (HIG: Blatt für eine in sich
   geschlossene Aufgabe). Das Zahnrad kennen die Nutzer schon aus Phase 0.
-- **Aufgaben sind kein Tab.** Sie sind eine Sicht auf den Gedanken-Inhalt und kein eigenes Fachgebiet. Paply
-  wird bewusst kein Aufgabenmanager (Mac-Entscheidung „kein Aufgabenmanagement“). Ein Chip neben den Themen
-  hält sie einen Tipp entfernt, ohne eine dritte Welt aufzumachen.
+- **Aufgaben sind ein eigener Reiter** (überholt: „Aufgaben sind kein Tab“). Seit der Entscheidung vom 27.10.
+  (`docs/ENTSCHEIDUNGEN.md`, „Landkarte, Aufgaben-Reiter, Themenbilder“) lautet die Leiste Gedanken | Aufgaben | Diktat;
+  Paply bleibt trotzdem kein Aufgabenmanager.
 - **Themen sind Chips, keine Ordner.** Mail (iOS 18) und Fotos nutzen Kapsel-Filter oben. Ordner zwängen zum
   Sortieren, Chips filtern nur. Ein Gedanke liegt nie „falsch“, er ist immer unter „Alle“ zu finden.
 
@@ -196,6 +196,9 @@ ORIGINAL ▸   (zugeklappt)
 | „nicht geordnet“ | Der Text ist der bereinigte Rohtext. Kleines Etikett „Original-Wortlaut“, Knopf „Erneut ordnen“. |
 
 ### 3.3 Aufgaben-Sicht (Chip „Aufgaben“)
+
+> Überholt durch die Entscheidung vom 27.10. (`docs/ENTSCHEIDUNGEN.md`): Die Aufgaben haben einen eigenen Reiter
+> „Aufgaben“ (Gedanken | Aufgaben | Diktat, `App/UI/Thoughts/TasksTab.swift`); die Gliederung steht dort und in `TaskAgenda`.
 
 **Entscheidung:** eigene, aber schlanke Liste über alle Gedanken. Aufgaben stehen zusätzlich im jeweiligen
 Gedanken. Gesammelt sieht man sie nur hier. Ohne Sammelsicht wären erkannte Aufgaben wertlos, weil sie in
@@ -618,7 +621,7 @@ bewertete Grundlage (EVAL.md, Prompt v3: 6 von 7, die Umleitung griff dort nie).
 
 Nicht mit: Rohtexte anderer Gedanken, Aufgaben, Ton, Datum der Aufnahme (Zeitangaben löst Paply lokal auf).
 
-### 6.4 Systemprompt (exakt, Version 5)
+### 6.4 Systemprompt (exakt, Version 6)
 
 `ThoughtPrompt.system`, Anweisungssprache Englisch. Die Ausgabe ist in der gesprochenen Sprache. Den Grund für
 Englisch nennt `PolishPrompt.swift`: Es bevorzugt keine Diktatsprache.
@@ -644,7 +647,8 @@ Version 4 (Befunde von Allans iPhone, gleiche Leitplanke): genau drei neue Sätz
   Ich-Bezug („ich“, „mein“, „my“) und ohne Zeitausdruck, der gehört in `due_hint`. Weglassen und die Reihenfolge ändern
   bleiben mit der Prüfung „nur Wörter des Zitats + höchstens 1 weiteres“ (§6.7) vereinbar.
 - TASKS: Ein fester Termin, den der Sprecher selbst wahrnehmen muss (Treffen, Besuch bei jemandem oder von jemandem),
-  ist eine Aufgabe mit `due_hint`. Ideen, Möglichkeiten und Handlungen anderer bleiben keine Aufgaben.
+  ist eine Aufgabe mit `due_hint`. Ideen, Möglichkeiten und Handlungen anderer bleiben keine Aufgaben. *(In v6 wieder
+  gestrichen.)*
 - TOPIC, `new`: Eine einmalige Besorgung, ein Kauf oder Termin ist kein Thema; ein neues Thema benennt den laufenden
   Bereich (Person, Projekt, Ort, Lebensbereich), nicht die einzelne Sache.
 - Was der Code sicher kann, macht der Code (`TaskText`, §6.7): erster Buchstabe groß, Zeitausdruck nicht doppelt,
@@ -653,12 +657,18 @@ Version 4 (Befunde von Allans iPhone, gleiche Leitplanke): genau drei neue Sätz
 Version 5 („v4.1“, nach dem Lauf p4, EVAL.md): die zwei Sätze aus v4 umformuliert, keiner angehängt. Systemprompt
 7 230 → 7 461 Bytes (+231 ≈ +77 Tokens; gegenüber v3 +738 ≈ +246), Kurzprompt der Folgeteile +117 Bytes.
 - Termin: Der Aufgabentext nennt den Anteil des Sprechers („Termin mit …“, „… empfangen“), nie die Handlung der anderen
-  Person (p4 n03: „20 Fluxo Lizenzen kaufen“ war die Handlung des Kunden).
+  Person (p4 n03: „20 Fluxo Lizenzen kaufen“ war die Handlung des Kunden). *(Half nicht, in v6 gestrichen.)*
 - Thema: Was ein gelistetes Thema abdeckt, gehört dorthin (Termin eines Kindes → Familien-Thema); nur wenn keins passt,
   wird der laufende Bereich neu benannt (p4 e26: „Milas Schwimmkurs“ statt Familie, n05: „Reisepass“).
 - Geprüft und verworfen: eine Code-Umleitung eines neuen Themas auf das Thema der Kandidaten oder auf das erste Thema
   des Index. In p4 hätte sie e26 auf Auto/Fitness, n05 auf Freunde und e18 auf Auto gelegt – nicht sicher.
 - Code: Der Zeitausdruck fällt jetzt auch in der Mitte des Aufgabentexts weg (§6.7).
+
+Version 6 (Entscheidung des Bauleiters nach dem Nachlauf p4b): v5 **ohne den Termin-Satz**. Er hatte in p4 und p4b
+beide Male die Handlung des Kunden zur Aufgabe des Sprechers gemacht („Fluxo Lizenzen kaufen“); unter v3 ergab derselbe
+Fall keine Aufgabe, und keine Aufgabe ist besser als eine irreführende. Themen-Satz (v5) und Kern-Satz (v4) bleiben.
+Systemprompt 7 461 → 7 221 Bytes (gegenüber v3 +498 ≈ +166 Tokens), Kurzprompt der Folgeteile gegenüber v3 +184 Bytes.
+v6 gilt ohne eigene Messung, weil es nur eine Streichung zurück auf das v3-Verhalten ist (EVAL.md).
 
 `ThoughtPrompt.version` wird mit jedem Ergebnis gespeichert (`ai.promptVersion`).
 
@@ -696,7 +706,6 @@ If several matters are mentioned, decide by the main matter (most of the content
 TASKS
 Only actions the speaker explicitly intends to do or explicitly wants to be reminded of, such as "ich muss …", "ich will morgen …", "nicht vergessen …", "erinner mich …", "I need to …", "remind me to …", "to do: …".
 Not tasks: ideas, wishes and possibilities ("man könnte", "wäre schön", "vielleicht"), open questions, things other people will do, things already done, intentions not to do something ("ich kaufe keinen neuen Laptop", "no meetings on Friday"), and requests the speaker takes back or calls a joke or a test.
-A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task with due_hint; its text names the speaker's part ("Termin mit Frau Roth", "Frau Roth empfangen"), never what the other person does.
 - text: a short to-do in the language of its quote, made only of the speaker's words from quote, e.g. "Milch kaufen", "Anna wegen Freitag anrufen", "call the bank". Keep it to the core, about 2 to 6 words: leave out particles ("noch", "mal", "eben", "just"), self-references ("ich", "mein", "my") and the time expression, which belongs in due_hint. Never translate or mix languages. Keep names, numbers and any negation that belongs to the action. At most 80 characters.
 - quote: the words from the transcript that state the task, copied exactly as one passage without omissions, at most one sentence.
 - due_hint: the time expression exactly as spoken in quote ("bis Freitag", "morgen früh", "next week"), otherwise null. Do not calculate dates.
