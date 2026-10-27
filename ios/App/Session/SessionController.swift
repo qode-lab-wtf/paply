@@ -64,6 +64,8 @@ final class SessionController {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var bootstrapped = false
     @ObservationIgnored private var startTask: Task<Bool, Never>?
+    /// Letzter gescheiterter Sitzungsstart (für das Gedanken-Protokoll `thought.start`, Spike S1)
+    @ObservationIgnored private(set) var lastStartFailure: (stage: String, code: Int, fourCC: String)?
     @ObservationIgnored private var pauseTask: Task<Void, Never>?
     @ObservationIgnored private var lastHousekeepingTick = Date()
     /// Wann die App zuletzt aktiv wurde (für den Aufblitz-Bildschirm nach Start per URL)
@@ -153,6 +155,7 @@ final class SessionController {
     }
 
     private func failStart(trigger: String, stage: String, code: Int, text: String, fourCC: String = "") -> Bool {
+        lastStartFailure = (stage, code, fourCC)
         Diag.log("session.start.failed", [
             "trigger": .s(trigger), "stage": .s(stage), "code": .i(code), "fourCC": .s(fourCC), "app": .s(Self.appState),
         ])

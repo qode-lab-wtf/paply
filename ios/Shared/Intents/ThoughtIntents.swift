@@ -140,8 +140,15 @@ enum ThoughtIntentRunner {
             return .needsForeground(reason)
         }
         #else
+        // Widget-Prozess: weiterleiten und kurz prüfen, ob die App reagiert (Aufnahme-Zustand wechselt)
+        let before = SharedStore.read(ThoughtStateFile.self, .thoughtState)?.recording ?? false
         forward(.toggle, trigger: trigger, id: nil)
-        return .ok
+        for _ in 0..<20 {
+            try? await Task.sleep(for: .milliseconds(100))
+            if (SharedStore.read(ThoughtStateFile.self, .thoughtState)?.recording ?? false) != before { return .ok }
+        }
+        Diag.log("thought.intent.forward.timeout")
+        return .refused("Paply ist gerade nicht bereit. Öffne Paply einmal, dann klappt der Knopf.")
         #endif
     }
 

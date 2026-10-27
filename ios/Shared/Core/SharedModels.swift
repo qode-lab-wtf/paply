@@ -154,6 +154,11 @@ struct ShortcutAck: Codable, Sendable {
     var ackNs: UInt64
 }
 
+/// Arten der Steuerelemente (für ControlCenter.reloadControls aus der App)
+enum ControlKinds {
+    static let thought = "thought-toggle"
+}
+
 /// `thought-state.json` – nur ob gerade ein Gedanke aufnimmt (für Control und Widget). Kein Text.
 struct ThoughtStateFile: Codable, Sendable, Equatable {
     var recording: Bool

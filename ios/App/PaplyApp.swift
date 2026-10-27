@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             "base": .opt(AppGroup.baseURL?.path),
         ])
         SessionController.shared.bootstrap()
+        ThoughtBridge.bootstrap()
         return true
     }
 }

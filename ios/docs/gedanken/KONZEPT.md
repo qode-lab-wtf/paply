@@ -469,11 +469,13 @@ stateDiagram-v2
    **Nicht verarbeiteter Ton wird nie automatisch gelöscht** (Mac-Regel). Gelöschte Gedanken samt Ton werden
    30 Tage nach `deletedAt` endgültig entfernt.
 
-### 5.4 Sicherheitsgrenze 30 Minuten
+### 5.4 Sicherheitsgrenze 10 Minuten
 
 Es gibt **kein Auto-Stopp bei Sprechpausen**. Allein gegen eine vergessene Aufnahme in der Tasche gilt eine
-harte Grenze von **30 Min.** wie am Mac (`capture.js`). Bei 25 Min. zeigt die Live Activity „Noch 5 Min.“, bei
-30 Min. folgt `finish(.limit)` → „Gesichert · 30 Min. erreicht“. Das ist der einzige Stopp ohne Druck (siehe Risiken R13).
+harte Grenze von **10 Min.** (Entscheidung Allan, 27.10.; kürzer als am Mac). Alles bis dahin wird gespeichert und
+geordnet. Bei 9 Min. zeigt die Live Activity „Noch 1 Min.“, bei 10 Min. folgt `finish(.limit)` → kurz „Nach 10 Min.
+gespeichert“. Das ist der einzige Stopp ohne Druck (siehe Risiken R13). Die Live-Pipeline reicht damit über die
+ganze Aufnahme (ihre 10-Min.-Grenze aus 5.3 greift nicht mehr vorher).
 
 ---
 

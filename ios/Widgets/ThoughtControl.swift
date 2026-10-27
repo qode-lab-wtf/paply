@@ -6,7 +6,7 @@ import WidgetKit
 /// Zustand aus `thought-state.json` (nur recording/id/startedAt). Die App lädt das Control bei
 /// jedem Wechsel neu (`ControlCenter.shared.reloadControls(ofKind:)`).
 struct ThoughtControl: ControlWidget {
-    static let kind = "thought-toggle"
+    static let kind = ControlKinds.thought
 
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind, provider: ThoughtControlValueProvider()) { isOn in
