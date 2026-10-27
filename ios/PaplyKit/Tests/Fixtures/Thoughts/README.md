@@ -14,6 +14,7 @@ Kindern Mila (7) und Ben (3) und hat einen Bruder Felix. Keine echten Personenda
 | `store-a.json` | bestehende Ablage: 14 Themen, 40 Gedanken über 6 Wochen (15.09.–27.10.2026) |
 | `eval.jsonl` | 36 Fälle, je Zeile ein JSON-Objekt, jeder Fall einzeln gegen die unveränderte `store-a` |
 | `coldstart.jsonl` | 12 Gedanken in Reihenfolge ab leerer Ablage, je Zeile ein Schritt |
+| `described.json` | Themen mit Beschreibung: 4 beschriebene Nutzer-Themen (zusätzlich zu store-a) und 8 Fälle (§10) |
 
 ---
 
@@ -365,3 +366,19 @@ Ein kleines Python-Skript hat geprüft (lief mit `python3 -I`, liegt bewusst nic
 - `coldstart`: 12 Schritte in Reihenfolge, `expectAfter` stimmt mit einer Simulation der bevorzugten Antworten
   überein. Endbild 4 aktive, 2 vorläufige, 2 ohne Thema.
 - Kein Name oder Begriff aus Allans echten Daten.
+
+## 10. `described.json` (Themen mit Beschreibung, Prompt v3)
+
+`{ topics: [4 Themen wie topics.json, owner "user", mit note], cases: [8 Fälle im Format von eval.jsonl] }`. Jeder Fall
+läuft gegen store-a **plus** diese 4 Themen (keine Gedanken daran). Die Themen sind Firma „Kessler Digital“, Kunde „Brandt
+Logistik“, Verein „Ruderclub“ und Person „Oma Ilse“. Alle Namen sind erfunden und kollidieren nicht mit store-a.
+
+- `expect.topic`: wie oben. Bewertet wird nur das Thema; `tasks`, `notTasks` und `related` sind leer.
+- `expect.mentioned`: Namen der Themen, die der Code (`TopicMentions`) als Treffer markieren muss. Das prüfen
+  `swift test` (`DescribedTopicsTests.describedFixtureMentionsMatchTheExpectation`) und `paply-bench thoughts-eval
+  plan --set described`.
+- Merkmale: Name direkt (d01, d08), gebeugt (d02 „Brandts“), ohne Namen mit eindeutigem Inhalt (d03, d04, d07) und
+  nur beiläufig erwähnt (d05 Beuel im Umzug, d06 Firma neben Fluxo). d02 hat zwei Treffer, d08 lockt ein neues Thema.
+- `mustNotAdd`: kein neues Thema mit einem Namen aus den Beschreibungen.
+- Erzeugt mit einem kleinen Python-Skript (`python3 -I`, nicht im Repo), IDs = `t_` + md5 des Namens.
+

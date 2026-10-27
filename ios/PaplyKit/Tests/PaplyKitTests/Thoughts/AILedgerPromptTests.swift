@@ -140,8 +140,8 @@ private func ledger(_ clock: Clock, limits: TokenLedger.Limits = .init(), url: U
 }
 
 @Suite struct AIPromptTests {
-    @Test func systemPromptIsVersion2WithAllSections() {
-        #expect(ThoughtPrompt.version == 2)
+    @Test func systemPromptIsVersion3WithAllSections() {
+        #expect(ThoughtPrompt.version == 3)
         for header in ["GROUND RULES", "TITLE", "CLEAN_TEXT", "TOPIC", "TASKS", "RELATED"] {
             #expect(ThoughtPrompt.system.contains("\n\(header)\n"), "\(header)")
         }
@@ -246,7 +246,7 @@ private func ledger(_ clock: Clock, limits: TokenLedger.Limits = .init(), url: U
         #expect(built.estimate <= ThoughtPrompt.maxRequestTokens)
         #expect(built.trimmed.first == "excerpts")
         #expect(Set(built.aliases.candidates.keys).count == (built.trimmed.contains("candidates>3") ? 3 : 8))
-        for code in built.trimmed { #expect(["excerpts", "candidates>3", "hints", "topics>16"].contains(code)) }
+        for code in built.trimmed { #expect(["excerpts", "candidates>3", "hints", "about", "topics>16"].contains(code)) }
     }
 
     @Test func tooLargeNeedsParts() {

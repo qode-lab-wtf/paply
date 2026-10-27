@@ -6,15 +6,23 @@ import SwiftUI
 //   -PaplyPreviewData        ThoughtsModel.preview (60 Gedanken, 8 Themen, alle Zustände) + gespielte Aufnahme
 //   -PaplyEmpty              leeres Modell (leerer Zustand)
 //   -PaplyMany               2 000 Gedanken (Scrollen, Abschnitte)
-//   -PaplyScreen <name>      overview · topic · tasks · detail · detail-raw · detail-waiting · capture ·
-//                            bar · bar-saved · search · settings · dictation · deleted · topics · guide · picker
+//   -PaplyCount <n>          n fertige Gedanken in wenigen Themen (1, 5, 300 … – Fälle der Karte)
+//   -PaplyScreen <name>      overview · topic · topic-small · topic-large · loose · pending · tasks · detail ·
+//                            detail-zoom · detail-raw · detail-waiting · capture · bar · bar-saved · search ·
+//                            settings · dictation · deleted · topics · guide · picker ·
+//                            map (Karte allein, MapDebugScreen; dazu -PaplyMapFocus, -PaplyLight)
 //   -PaplyClassic            iOS-18-Look (ohne Glas, Leiste als Kapsel) auf iOS 26
 //   -PaplyExpandOriginal     „Original“ im Detail aufgeklappt
 //   -PaplyHoldDone           große Ansicht bleibt nach „Fertig“ offen (Häkchen prüfen)
 //   -PaplyRefuse             gespielte Aufnahme wird abgelehnt (Fehlerzustand)
 enum ThoughtsDebug {
     private static var args: [String] { ProcessInfo.processInfo.arguments }
-    static var previewData: Bool { args.contains("-PaplyPreviewData") || args.contains("-PaplyMany") }
+    static var previewData: Bool { args.contains("-PaplyPreviewData") || args.contains("-PaplyMany") || count != nil }
+
+    static var count: Int? {
+        guard let i = args.firstIndex(of: "-PaplyCount"), i + 1 < args.count else { return nil }
+        return Int(args[i + 1])
+    }
 
     static var screen: String? {
         guard let i = args.firstIndex(of: "-PaplyScreen"), i + 1 < args.count else { return nil }
@@ -25,6 +33,7 @@ enum ThoughtsDebug {
     static func model() -> ThoughtsModel? {
         if args.contains("-PaplyEmpty") { return ThoughtsModel() }
         if args.contains("-PaplyMany") { return many() }
+        if let count { return sample(count) }
         if args.contains("-PaplyPreviewData") { return ThoughtsModel.preview }
         return nil
     }
@@ -53,6 +62,31 @@ enum ThoughtsDebug {
         return ThoughtsModel(thoughts: thoughts, topics: base.topics, suggestions: base.suggestions)
     }
 
+    /// n fertige Gedanken in wenigen Themen: einige Themen mit mehreren, eins mit einem, ein Gedanke ohne Thema
+    @MainActor
+    private static func sample(_ count: Int) -> ThoughtsModel {
+        let base = ThoughtsModel.preview
+        let samples = base.thoughts.filter { $0.state == .done && !$0.textIsRaw && $0.topicId != nil }
+        let topics = base.topics.filter { base.isActive($0) }
+        let pattern = [0, 0, 1, 2, -1, 0, 1, 3, 0, 2, 4, 5, 1, 6, 0, 3, 7]
+        var thoughts: [Thought] = []
+        let now = Date()
+        for i in 0..<max(0, count) {
+            var t = samples[i % samples.count]
+            t.id = ThoughtIDs.thought()
+            let slot = pattern[i % pattern.count]
+            t.topicId = slot < 0 ? nil : topics[slot % topics.count].id
+            t.createdAt = now.addingTimeInterval(-Double(i) * (count > 40 ? 26_000 : 9_000) - 600)
+            t.tasks = t.tasks.map { var k = $0; k.id = ThoughtIDs.task(); return k }
+            t.links = []
+            if i > 0, i % 5 == 0, let previous = thoughts.last {
+                t.links = [ThoughtLink(target: previous.id, kind: .sameMatter, reason: "Gleiches Anliegen", origin: .ai, createdAt: t.createdAt)]
+            }
+            thoughts.append(t)
+        }
+        return ThoughtsModel(thoughts: thoughts, topics: base.topics)
+    }
+
     /// Stellt den gewünschten Bildschirm her (einmal beim Start)
     @MainActor
     static func apply(nav: ThoughtsNav, flow: CaptureFlow, model: ThoughtsModel) async {
@@ -61,15 +95,28 @@ enum ThoughtsDebug {
         let rich = model.thoughts.first { $0.state == .done && !$0.tasks.isEmpty && !$0.links.isEmpty && !$0.textIsRaw }
             ?? model.thoughts.first { $0.state == .done }
         switch screen {
-        case "topic":
+        case "topic", "topic-small", "topic-large":
             // aktives Thema mit offenen Aufgaben
-            let topic = model.topics.filter { model.isActive($0) }
+            let topic = model.topics.filter { model.isActive($0) && model.count(of: $0.id) > 0 }
                 .max { model.openTasks(topicID: $0.id).count < model.openTasks(topicID: $1.id).count }
-            if let id = topic?.id ?? rich?.topicId { nav.filter = .topic(id) }
+            if let id = topic?.id ?? rich?.topicId { nav.focus(id) }
+            if screen == "topic-small" { nav.panelDetent = .small }
+            if screen == "topic-large" { nav.panelDetent = .large }
+        case "loose":
+            nav.focus(ThoughtsHome.noTopicID)
+        case "pending":
+            nav.focus(ThoughtsHome.pendingID)
         case "tasks":
-            nav.filter = .tasks
+            nav.path = [.tasks]
         case "detail":
             if let rich { nav.path = [.thought(rich.id)] }
+        case "detail-zoom":
+            // wie aus dem Panel geöffnet (Zoom aus der Karte)
+            if let rich, let topic = rich.topicId {
+                nav.focus(topic)
+                try? await Task.sleep(for: .milliseconds(900))
+                nav.path = [.thought(rich.id, zoom: "panel:\(rich.id)")]
+            }
         case "detail-raw":
             if let raw = model.thoughts.first(where: { $0.textIsRaw }) { nav.path = [.thought(raw.id)] }
         case "detail-waiting":
@@ -106,6 +153,8 @@ enum ThoughtsDebug {
             nav.path = [.buttonGuide]
         case "picker":
             if let rich { nav.topicPicker = SheetID(id: rich.id) }
+        case "map":
+            MapDebugScreen.present(model: model)
         default:
             break
         }

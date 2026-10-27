@@ -340,7 +340,10 @@ Weitere Meldungen (Live Activity bzw. Intent-Fehler):
 
 **Themen** (aus `⋯`): Die Liste zeigt Symbol, Name und Anzahl, sortiert nach Name. Oben, falls vorhanden, höchstens
 2 **Vorschlagskarten**: „Vorschlag: ‚Wohnung‘ und ‚Umzug‘ zusammenführen?“, darunter der Grund in einer Zeile,
-dazu [Zusammenführen] [Nein]. Zeile tippen: Blatt mit Name und Symbolraster. Wischen: „Löschen“ mit
+dazu [Zusammenführen] [Nein]. Zeile tippen: Blatt mit Name, „Worum geht's?“ (optionale Beschreibung, ≤ 200 Zeichen,
+Platzhalter „Namen, Firmen, Personen – damit Paply Gedanken richtig zuordnet“) und Symbolraster; dasselbe Blatt
+beim Anlegen. Eine vorhandene Beschreibung steht einzeilig unter dem Namen. Wer ein Thema beschreibt, behält es
+(owner = user, wie „Behalten“). Wischen: „Löschen“ mit
 Rückfrage „Thema löschen? 7 Gedanken bleiben, nur ohne Thema.“ Im Bearbeiten-Modus Mehrfachauswahl →
 „Zusammenführen“ → Namen wählen (Vorauswahl: Thema mit mehr Gedanken). Danach Hinweis
 „Zusammengeführt · Widerrufen“ (5 s, zusätzlich Schütteln = Widerrufen).
@@ -349,7 +352,7 @@ Vorläufige Themen (1 Gedanke) stehen in einem eigenen Abschnitt „Neu“ und l
 Themen verschwinden mit ihren Gedanken: Wird ein Gedanke endgültig gelöscht (einzeln, „Alle löschen“, nach
 30 Tagen), entfernt der Speicher sein Thema, sobald kein Gedanke mehr daran hängt (weder aktiv noch im
 Papierkorb) – egal ob KI- oder Nutzer-Thema, samt Aliassen, abgelehnten Paaren und Vorschlägen. Ein von Hand
-angelegtes Thema, das noch nie einen Gedanken hatte, bleibt. Als Chip erscheint ein Thema nur mit mindestens
+angelegtes Thema, das noch nie einen Gedanken hatte, bleibt, ein beschriebenes Thema immer. Als Chip erscheint ein Thema nur mit mindestens
 einem Gedanken außerhalb von „Zuletzt gelöscht“.
 
 **Zuletzt gelöscht:** Liste wie in der Übersicht. Wischen: „Wiederherstellen“ bzw. „Endgültig löschen“.
@@ -575,6 +578,19 @@ Gedanken-Embedding und Themen-Schwerpunkt). Dazu vorläufige Themen der letzten 
 `{id, name, n, hint}`. `hint` = die 3 häufigsten Schlagwörter des Themas. `topics_full: true`, sobald 24 aktive
 Themen existieren.
 
+**Themen mit Beschreibung** (`Topic.note`, „Worum geht's?“): Sie schicken `about` mit (die Beschreibung, einzeilig,
+≤ 200 Zeichen), und ihre Wörter zählen für die Passung. Vor der KI prüft der Code (`TopicMentions`), ob ein Name
+oder Stichwort aus Name und Beschreibung im Transkript steht:
+- Verglichen wird an Wortgrenzen, ohne Groß/Klein und Akzente, mit ä = ae = a und ß = ss.
+- Einfache Beugungen zählen: Genitiv/Plural-s, -e/-n/-en/-er/-es/-ern/-ens ab 4 Zeichen Stamm.
+- Es zählen nur aussagekräftige Wörter. Stoppwörter, Anreden, Rechtsformen, Rollenwörter wie „Firma“ und „Kunden“,
+  reine Zahlen und Wörter unter 3 Zeichen fallen weg.
+- Stichwörter werden nicht gespeichert, sondern bei jedem Aufruf abgeleitet, damit es bei einem Feld bleibt.
+
+Ein Treffer heißt `"mentioned": true`. Treffer-Themen (≤ 8) stehen vorn im Index, auch wenn sie vorläufig sind,
+außerhalb des 60-Tage-Fensters liegen oder über die Obergrenzen gingen. Sie überstehen jede Kürzung (§6.4
+`build`). Der Index bleibt bei ≤ 32 Einträgen.
+
 **Kandidaten (Vorauswahl lokal, ohne Netz):**
 1. Wortschatz: Lemmata (NLTagger `.lemma`) von Substantiven, Eigennamen und Verben, ohne Stoppwörter,
    gewichtet mit TF-IDF über alle Gedanken. Dazu BM25 gegen jeden Gedanken.
@@ -593,7 +609,7 @@ Themen existieren.
 
 Nicht mit: Rohtexte anderer Gedanken, Aufgaben, Ton, Datum der Aufnahme (Zeitangaben löst Paply lokal auf).
 
-### 6.4 Systemprompt (exakt, Version 2)
+### 6.4 Systemprompt (exakt, Version 3)
 
 `ThoughtPrompt.system`, Anweisungssprache Englisch. Die Ausgabe ist in der gesprochenen Sprache. Den Grund für
 Englisch nennt `PolishPrompt.swift`: Es bevorzugt keine Diktatsprache.
@@ -605,6 +621,12 @@ Version 2 (nach E1 Tag 1, EVAL.md, vom Koordinator freigegeben):
 - `now` (Wochentag, Datum, Uhrzeit) steht in der Nutzer-Nachricht.
 - Ein Beispiel zeigt `changes`.
 - Eine Fortsetzung übernimmt meist das Thema des fortgesetzten Gedankens.
+
+Version 3 („Themen mit Beschreibung“, Leitplanke Allan: Prompt schlank, Code entscheidet, was er sicher kann):
+- Genau eine neue Zeile in TOPIC (2 Sätze, +287 Bytes ≈ +95 Tokens nach Schätzung Bytes/3): `about` hat Vorrang,
+  wenn der Hauptinhalt passt, auch ohne Namen; `mentioned` ist ein starkes Indiz, kein Zwang.
+- Alles andere macht der Code: Treffer-Erkennung (`TopicMentions`), Treffer-Themen sicher im Index und in jeder
+  Kürzungsstufe (§6.2, §6.3), Umleitung neuer Varianten auf das beschriebene Thema (§6.7).
 
 `ThoughtPrompt.version` wird mit jedem Ergebnis gespeichert (`ai.promptVersion`).
 
@@ -632,6 +654,7 @@ The complete thought, cleaned up for reading – not a summary.
 
 TOPIC
 A topic is an ongoing area of the user's life or work that they will come back to: a project, plan, person, place or activity (for example "Umzug", "Paply", "Lissabon-Reise", "Garten"). A topic is not a keyword, a mood, a format or a category such as ideas or to-dos. Sea, a quiet holiday flat and travelling by train all belong to ONE trip, not to three topics.
+about is the user's own description of a topic; if the main matter fits it, choose that topic, even when none of its names is spoken. mentioned: true means a name from that topic occurs in the transcript – a strong hint, but a name mentioned only in passing does not decide the topic.
 Decide in this order:
 1. existing – the main matter of the thought belongs to a listed topic, even if the fit is broad. Choose the topic under which the user would look for this thought. n is the number of thoughts in that topic; if two fit equally, take the one with the higher n.
 2. new – only if no listed topic fits AND the main matter is a concrete ongoing project, plan, person, place or activity that will probably come up again. new_name: 1 to 3 words, at most 24 characters, a noun or name in ui_language, no date. Never a generic name such as Ideen, Gedanken, Notizen, Sonstiges, Allgemein, Aufgaben, Wichtig, Privat, Arbeit, Ideas, Notes, Misc, Todo. Never a variant of a listed topic (other wording, singular/plural, other language) – choose that topic instead. If topics_full is true, new is not allowed.
@@ -672,7 +695,8 @@ A shared broad topic or a shared word is not enough. A thought that refers back 
   "topics": [
     {"id": "t1", "name": "Paply", "n": 14, "hint": "Tastatur, Groq, Sperrbildschirm"},
     {"id": "t2", "name": "Umzug", "n": 9, "hint": "Wohnung, Makler, Kreuzberg"},
-    {"id": "t3", "name": "Garten", "n": 1, "hint": "Tomaten, Beet"}
+    {"id": "t3", "name": "Garten", "n": 1, "hint": "Tomaten, Beet"},
+    {"id": "t4", "name": "Aram UG", "n": 0, "hint": "", "about": "Meine Firma Aram UG – Kunden Müller Bau und Kowalski"}
   ],
   "candidates": [
     {"ref": "c1", "title": "Wohnung Oranienstraße besichtigen", "topic": "t2", "when": "vor 2 Tagen",
@@ -683,6 +707,9 @@ A shared broad topic or a shared word is not enough. A thought that refers back 
 ```
 
 `custom_terms`: aus „Eigene Begriffe“, höchstens 200 Zeichen (`PolishPrompt.vocabularyPrompt`).
+`about` (ab v3) nur bei beschriebenen Themen, `"mentioned": true` nur bei Treffer (§6.3). Ohne Beschreibungen ist die
+Nachricht dieselbe wie in v2. Kürzen (§6.2): Auszüge → Kandidaten über 3 → `hint` → `about` der Themen ohne Treffer
+→ Themen über 16 (Treffer-Themen bleiben) → Teile-Modus.
 `now`: Wochentag in ui_language, Datum und Uhrzeit lokal (`ThoughtPrompt.nowLabel`), ab Prompt v2. Folgeteile im
 Teile-Modus bekommen es ebenfalls.
 
@@ -766,7 +793,7 @@ beide leer sind.
 | `title` | trimmen; Anführungszeichen und Schlusspunkt weg; 1–60 Zeichen, eine Zeile; jede Ziffer kommt im Transkript vor; ≥ 1 Inhaltswort (Lemma) aus dem Transkript | Ersatztitel: erste 6 Wörter des Textes + „…“ |
 | `clean_text` | `PolishSafetyNet.rejection(…, profile: .thought)`: Länge (ohne „• “ und Zeilenumbrüche) 0,55–1,15 × Rohtext; fehlende Inhaltswörter ≤ 25 %; Zahl der Verneinungen gleich; Ziffern erhalten (`EditCheck.digitsPreserved`); neue Inhaltswörter ≤ max(2, 10 %) außerhalb von „Eigene Begriffe“; Meta-Antwort; `strictEdits` aus (Aufräumen formuliert Fehlstarts legitim um, E1 misst die Ablehnungsquote) | Text = Rohtext nach `TranscriptCleanup` + Satzanfänge groß; `textIsRaw = true`; Code in `ai.rejections` |
 | `topic.existing` | Alias im gesendeten Index → echte ID | wie `none` |
-| `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke:** gleich nach Normalisierung (klein, ohne Akzente, ohne Bindestriche/Leerzeichen), Singular/Plural-Stamm, Levenshtein ≤ 2 ab 5 Zeichen oder Präfix eines bestehenden Namens → bestehendes Thema. `topics_full` → `none`. | `none` |
+| `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke:** gleich nach Normalisierung (klein, ohne Akzente, ohne Bindestriche/Leerzeichen), Singular/Plural-Stamm, Levenshtein ≤ 2 ab 5 Zeichen oder Präfix eines bestehenden Namens → bestehendes Thema. **Beschriebene Themen:** Ist jedes aussagekräftige Wort des neuen Namens ein Begriff aus Name oder Beschreibung eines Themas („Müller Bau“ bei „… Kunden Müller Bau …“), wird dieses Thema genommen (Code `topic:described`, im Validator und noch einmal im Prozessor gegen alle Themen). Ein gemeinsamer Ort allein („Kita Beuel“) reicht nicht. `topics_full` → `none`. | `none` |
 | Thema vom Nutzer gesetzt | Die KI-Wahl wird ignoriert | – |
 | `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). `due_hint` muss im Zitat stehen, sonst `null`. Doppelte (normalisiert) fallen weg. | Aufgabe fällt weg |
 | `related` | ≤ 3; `ref` ∈ gesendete Kandidaten; kein Selbstbezug; `reason` ≤ 60 Zeichen, nur Ziffern aus einem der beiden Texte. **Annahme:** `high` → ja; `medium` → nur bei lokalem Wert ≥ 0,75; `low` → nein. | Verbindung fällt weg |
@@ -831,9 +858,16 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
 2. **Obergrenze 24 aktive Themen.** Danach darf die KI kein neues Thema mehr anlegen (`topics_full`) und
    wählt ein bestehendes oder keins.
 3. **Lokale Doppel-Schranke** (6.7) gegen „Wohnung“/„Wohnungen“/„Wohnungssuche“.
-4. **Stabile Namen:** Die KI benennt nie um. Umbenennen, Symbol ändern, Zusammenführen und Löschen kann nur der
-   Nutzer. Beim Zusammenführen behält das Ziel seine ID, die Quelle bekommt `mergedInto` (Alias). Gedanken
+4. **Stabile Namen:** Die KI benennt nie um. Umbenennen, Symbol ändern, Beschreiben, Zusammenführen und Löschen kann
+   nur der Nutzer. Beim Zusammenführen behält das Ziel seine ID, die Quelle bekommt `mergedInto` (Alias). Gedanken
    werden im Hintergrund umgeschrieben, Rückgängig 5 s.
+   **Rechte eines KI-Laufs (im Code durchgesetzt):**
+   - Ein Lauf ordnet genau seinen Gedanken: vorhandenes Thema, ein neues oder keins, dazu Aufgaben und
+     Verbindungen. Verbindungen werden nur im neuen Gedanken gespeichert.
+   - Felder mit `owner == user` bleiben (§6.7).
+   - Andere Gedanken und vorhandene Themen (Name, Symbol, Beschreibung, Besitzer, Reihenfolge) ändert er nie. Ein
+     neues Thema wird nur angehängt (`ThoughtProcessor.resolveTopic` → `updateTopics { $0.append }`).
+   - Tests: `DescribedTopicsTests.aRunOnlyOrdersItsOwnThoughtAndOnlyAppendsTopics`.
 5. **Seltene KI-Vorschläge:** höchstens 1× je 7 Tage, beim Öffnen der App, nur ab 8 aktiven Themen.
    - Lokal Paare suchen: Namensnähe, Kosinus der Themen-Schwerpunkte ≥ 0,7 (gleiche Sprache) oder
      Jaccard der Schlagwörter ≥ 0,4.
@@ -842,6 +876,12 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
    - Schema `{pairs: [{a, b, merge: boolean, name: string|null, reason: string}]}`.
    - Gezeigt werden höchstens 2 Vorschläge als Karten in „Themen“. Nichts wird automatisch angewandt.
      Abgelehnte Paare kommen nie wieder (`declinedMerges`).
+   - Die Pflege schreibt nur Vorschläge, nie Themen oder Gedanken (Test
+     `DescribedTopicsTests.hygieneOnlySuggestsAndNeverTouchesTopicsOrThoughts`).
+   - Für Nutzer-Themen (`owner == user` oder beschrieben) gilt:
+     - Zwei Nutzer-Themen sind nie ein Paar.
+     - Steckt eins in einem Paar, ist es das Ziel. Es behält ID, Namen und Beschreibung, ein vorgeschlagener Name
+       entfällt.
 6. **Ruhende Themen** (90 Tage ohne Gedanken) wandern in den Chips nach hinten (Sortierung nach Aktivität). Im
    Index bleiben sie, solange Platz ist.
 
@@ -943,10 +983,13 @@ sobald etwas wartet). Läuft die Sitzung, ist die App ohnehin wach. Nach dem Sto
 `topics.json`
 ```json
 {"schemaVersion": 1, "rev": 12,
- "topics": [{"id": "t_8a1d…", "title": "Paply", "icon": "code", "owner": "ai", "createdAt": 1792000000000, "mergedInto": null}],
+ "topics": [{"id": "t_8a1d…", "title": "Paply", "icon": "code", "owner": "ai", "createdAt": 1792000000000, "mergedInto": null},
+            {"id": "t_51c0…", "title": "Aram UG", "icon": "briefcase", "owner": "user", "createdAt": 1792500000000, "mergedInto": null,
+             "note": "Meine Firma Aram UG – Kunden Müller Bau und Kowalski, Steuerberaterin Frau Albrecht"}],
  "declinedMerges": [["t_aa…", "t_bb…"]], "lastHygieneAt": 1793000000000}
 ```
-Ob ein Thema „aktiv“ ist, wird abgeleitet: ≥ 2 Gedanken oder `owner == "user"`.
+Ob ein Thema „aktiv“ ist, wird abgeleitet: ≥ 2 Gedanken oder `owner == "user"`. `note` (optional, ≤ 200 Zeichen)
+fehlt, wenn es keine Beschreibung gibt. Ältere Dateien ohne `note` lesen sich unverändert.
 
 ### 7.4 Nähe zum Mac-Modell
 

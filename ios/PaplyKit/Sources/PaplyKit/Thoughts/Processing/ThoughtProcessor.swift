@@ -644,6 +644,10 @@ public actor ThoughtProcessor {
     }
 
     /// Themenwahl der KI auflösen; neue Themen legt nur das an, was die Doppel-Schranke durchlässt.
+    ///
+    /// Rechte eines Laufs (KONZEPT §6.10): Die KI wählt ein vorhandenes Thema, keins oder legt **ein** neues an.
+    /// Vorhandene Themen (Name, Symbol, Beschreibung, Besitzer, Reihenfolge) ändert sie nie – angelegt wird nur
+    /// angehängt (`updateTopics` mit reinem Anhängen).
     private func resolveTopic(_ decision: TopicDecision) async -> String? {
         let topics = await store.topics()
         switch decision {
@@ -652,14 +656,16 @@ public actor ThoughtProcessor {
         case .existing(let id):
             return ThoughtStore.resolve(id, in: topics)?.id
         case let .new(name, icon):
-            let live = topics.filter { $0.mergedInto == nil }
             let thoughts = await store.all()
             let summaries = TopicIndex.summaries(topics: topics, thoughts: thoughts)
-            let entries = summaries.map { TopicIndexEntry(topicID: $0.topic.id, name: $0.topic.title, count: $0.count, hint: []) }
+            let entries = summaries.map {
+                TopicIndexEntry(topicID: $0.topic.id, name: $0.topic.title, count: $0.count, hint: [], about: $0.topic.describedNote)
+            }
             if let match = TopicHygiene.matchExisting(name, among: entries) { return match.topicID }
+            if let match = TopicMentions.describedMatch(name, among: entries) { return match.topicID }
             guard TopicHygiene.isValidNewName(name), summaries.filter(\.isActive).count < TopicIndex.maxActive else { return nil }
             let topic = Topic(title: name.trimmed, icon: icon, owner: .ai, createdAt: now())
-            guard (try? await store.saveTopics(live + topics.filter { $0.mergedInto != nil } + [topic])) != nil else { return nil }
+            guard (try? await store.updateTopics({ $0.append(topic) })) != nil else { return nil }
             return topic.id
         }
     }

@@ -67,7 +67,7 @@ struct TopicsEditView: View {
                 } header: {
                     header("Neu")
                 } footer: {
-                    Text("Vorläufige Themen mit einem Gedanken. Als Chip erscheinen sie, sobald ein zweiter dazukommt – oder wenn du sie behältst. Umbenennen allein behält sie nicht.")
+                    Text("Vorläufige Themen mit einem Gedanken. Als Chip erscheinen sie, sobald ein zweiter dazukommt – oder wenn du sie behältst oder beschreibst. Umbenennen allein behält sie nicht.")
                 }
             }
         }
@@ -101,9 +101,10 @@ struct TopicsEditView: View {
         }
         .sheet(item: $editing) { topic in
             NavigationStack {
-                TopicEditor(mode: .edit(topic)) { title, icon in
+                TopicEditor(mode: .edit(topic)) { title, icon, note in
                     if title != topic.title { model.renameTopic(topic.id, title: title) }
                     if icon != topic.icon { model.setTopicIcon(topic.id, icon) }
+                    if note != topic.describedNote { model.setTopicNote(topic.id, note) }
                 }
             }
             .presentationDetents([.medium, .large])
@@ -141,11 +142,20 @@ struct TopicsEditView: View {
 
     private func topicRow(_ topic: Topic, provisional: Bool = false) -> some View {
         let count = model.count(of: topic.id)
+        let note = topic.describedNote
         return HStack(spacing: 12) {
             TopicBadge(icon: topic.icon, size: 32)
-            Text(topic.title)
-                .foregroundStyle(Color.paplyText)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(topic.title)
+                    .foregroundStyle(Color.paplyText)
+                    .lineLimit(2)
+                if let note {
+                    Text(note)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.paplySecondaryText)
+                        .lineLimit(1)
+                }
+            }
             Spacer(minLength: 8)
             if provisional, !editMode.isEditing {
                 // Nur „Behalten“ macht ein vorläufiges Thema aktiv (Umbenennen/Symbol nicht, §3.8)
@@ -182,7 +192,7 @@ struct TopicsEditView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(topic.title), \(count == 1 ? "1 Gedanke" : "\(count) Gedanken")")
+        .accessibilityLabel("\(topic.title), \(count == 1 ? "1 Gedanke" : "\(count) Gedanken")" + (note.map { ", \($0)" } ?? ""))
         .accessibilityAction(named: "Bearbeiten") { editing = topic }
     }
 

@@ -3,6 +3,7 @@ import Foundation
 /// Seltene Themen-Vorschläge (KONZEPT §6.10 Punkt 5): höchstens 1× je 7 Tage, nur ab 8 aktiven Themen,
 /// lokal Paare suchen, dann **ein** Aufruf an `gpt-oss-20b` (low). Gezeigt werden höchstens 2 Vorschläge;
 /// nichts wird automatisch angewandt. Prompt, Paarsuche und Prüfung liegen in `TopicHygiene` (H1).
+/// Rechte: schreibt nur `topic-suggestions.json` und `lastHygieneAt` – nie Themen oder Gedanken.
 public enum TopicHygieneRunner {
     public static let model = "openai/gpt-oss-20b"
 
@@ -39,8 +40,9 @@ public enum TopicHygieneRunner {
             let keywords = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(5).map(\.key)
             return TopicHygiene.Profile(topicID: summary.topic.id, name: summary.topic.title, count: summary.count,
                                         keywords: keywords, exampleTitles: members.compactMap(\.title).prefix(3).map { $0 },
-                                        language: members.first?.languages.first)
+                                        language: members.first?.languages.first, isUserDefined: summary.topic.isUserDefined)
         }
+        let protected = Set(profiles.filter(\.isUserDefined).map(\.topicID))
         let declined = Set(info.declinedMerges.map { $0.sorted() })
         let pairs = TopicHygiene.candidatePairs(profiles, declined: declined).map { (a: $0.a, b: $0.b) }
         guard !pairs.isEmpty else {
@@ -68,7 +70,7 @@ public enum TopicHygieneRunner {
         case .success(let reply):
             await ledger.settle(reservation, actual: reply.usage?.total ?? estimate)
             guard reply.finishReason == "stop", let content = reply.content else { return .skipped("invalid") }
-            let suggestions = TopicHygiene.validateSuggestions(content, asked: pairs)
+            let suggestions = TopicHygiene.validateSuggestions(content, asked: pairs, protected: protected)
             try? await store.setPendingSuggestions(suggestions)
             try? await store.setLastHygieneAt(now)
             return .suggestions(suggestions)

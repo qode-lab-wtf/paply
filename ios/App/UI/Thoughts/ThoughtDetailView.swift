@@ -486,6 +486,9 @@ struct ThoughtDetailView: View {
 struct TopicPill: View {
     let topic: Topic?
 
+    /// Themenfarbe (wie Karte und Panel)
+    private var tint: TopicTint { TopicPalette.tint(for: topic?.id) }
+
     var body: some View {
         HStack(spacing: 6) {
             if let topic {
@@ -501,11 +504,11 @@ struct TopicPill: View {
                 .opacity(0.7)
         }
         .font(.subheadline.weight(.semibold))
-        .foregroundStyle(topic == nil ? Color.paplySecondaryText : ThoughtTint.mint)
+        .foregroundStyle(topic == nil ? Color.paplySecondaryText : tint.ink)
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(Capsule().fill(topic == nil ? Color.white.opacity(0.08) : ThoughtTint.mint.opacity(0.14)))
-        .overlay(Capsule().strokeBorder(topic == nil ? Color.white.opacity(0.1) : ThoughtTint.mint.opacity(0.22), lineWidth: 0.5))
+        .background(Capsule().fill(topic == nil ? Color.white.opacity(0.08) : tint.badge))
+        .overlay(Capsule().strokeBorder(topic == nil ? Color.white.opacity(0.1) : tint.stroke, lineWidth: 0.5))
         .contentShape(Capsule())
     }
 }

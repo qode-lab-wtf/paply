@@ -389,6 +389,33 @@ enum ThoughtDate {
             ? dayMonth.string(from: date) : dayMonthYear.string(from: date)
     }
 
+    /// Karte: heute „08:14“, „Gestern“, Wochentag kurz „Mo.“, sonst „14. Sept.“ (anderes Jahr „14.09.25“)
+    static func card(_ date: Date, now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        if date >= today { return Format.time.string(from: date) }
+        if date >= today.addingTimeInterval(-86_400) { return "Gestern" }
+        if date >= today.addingTimeInterval(-6 * 86_400) { return weekdayShort.string(from: date) }
+        return calendar.component(.year, from: date) == calendar.component(.year, from: now)
+            ? dayMonthShort.string(from: date) : dayMonthYear.string(from: date)
+    }
+
+    /// „Mo.“
+    static let weekdayShort: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = locale
+        f.dateFormat = "EE"
+        return f
+    }()
+
+    /// „14. Sept.“
+    static let dayMonthShort: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = locale
+        f.dateFormat = "d. MMM"
+        return f
+    }()
+
     /// „1:12 Min.“ bzw. „42 Sek.“
     static func duration(ms: Int) -> String {
         let seconds = max(0, Int((Double(ms) / 1000).rounded()))
@@ -487,17 +514,27 @@ enum ThoughtSections {
 enum RootTab: Hashable { case thoughts, dictation }
 
 enum ThoughtsRoute: Hashable {
-    case thought(String, task: String? = nil)
+    /// `zoom`: Kennung der Karte, aus der das Detail heraus-zoomt (nil = normal schieben)
+    case thought(String, task: String? = nil, zoom: String? = nil)
+    case tasks
     case search
     case topics
     case deleted
     case buttonGuide
 }
 
+/// Was die Startseite zeigt: Übersicht der Karte oder ein Thema (Karte hineingezoomt, Panel offen).
+/// `.tasks` wird nicht mehr gesetzt – die Aufgabenliste ist die Seite `ThoughtsRoute.tasks`.
 enum ThoughtsFilter: Hashable {
     case all
     case tasks
     case topic(String)
+}
+
+/// Raststufen des Themen-Panels (wie Apple Karten)
+enum PanelDetent: Int, Comparable, CaseIterable {
+    case small, medium, large
+    static func < (a: PanelDetent, b: PanelDetent) -> Bool { a.rawValue < b.rawValue }
 }
 
 /// Für `.sheet(item:)` mit einer Kennung
@@ -518,7 +555,16 @@ struct ThoughtsToast: Identifiable, Equatable {
 final class ThoughtsNav {
     var tab: RootTab = .thoughts
     var path: [ThoughtsRoute] = []
-    var filter: ThoughtsFilter = .all
+    var filter: ThoughtsFilter = .all {
+        didSet {
+            // Ein Thema aus der Übersicht öffnet das Panel in mittlerer Höhe
+            if case .topic = filter, filter != oldValue, oldValue == .all || panelDetent == .small {
+                panelDetent = .medium
+            }
+        }
+    }
+    /// Höhe des Themen-Panels
+    var panelDetent: PanelDetent = .medium
     var searchText = ""
     var showSettings = false
     /// Themenwahl für diesen Gedanken
@@ -529,6 +575,16 @@ final class ThoughtsNav {
     func open(_ id: String, task: String? = nil) {
         tab = .thoughts
         path = [.thought(id, task: task)]
+    }
+
+    /// Thema im Panel zeigen (Karte zoomt hinein)
+    func focus(_ topicID: String?) {
+        filter = topicID.map { .topic($0) } ?? .all
+    }
+
+    var focusedTopic: String? {
+        if case .topic(let id) = filter { return id }
+        return nil
     }
 
     func show(_ toast: ThoughtsToast, reduceMotion: Bool = false) {

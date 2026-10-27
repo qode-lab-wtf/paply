@@ -2,9 +2,11 @@ import Foundation
 
 /// Kompakter Themen-Index (KONZEPT §6.3, §6.10): alle aktiven Themen (≤ 24) nach lokaler Passung,
 /// dazu vorläufige Themen der letzten 60 Tage (≤ 8). `hint` = die 3 wichtigsten Schlagwörter.
+/// Beschriebene Themen mit Namens-Treffer (`TopicMentions`) stehen immer vorn, höchstens `maxMentioned`.
 public enum TopicIndex {
     public static let maxActive = 24
     public static let maxProvisional = 8
+    public static let maxMentioned = 8
     public static let provisionalWindow: TimeInterval = 60 * 24 * 3600
     /// Ruhende Themen (90 Tage ohne Gedanken) wandern in den Chips nach hinten.
     public static let dormantAfter: TimeInterval = 90 * 24 * 3600
@@ -37,7 +39,7 @@ public enum TopicIndex {
     }
 
     /// Passung eines Themas zur Anfrage: Kosinus zum Schwerpunkt (falls vergleichbar) und
-    /// TF-IDF-Kosinus der Schlagwörter (Mitglieder + Themenname).
+    /// TF-IDF-Kosinus der Schlagwörter (Mitglieder + Themenname + Beschreibung).
     struct Fit {
         var score: Double
         var hint: [String]
@@ -60,6 +62,10 @@ public enum TopicIndex {
         let nameTerms = TextAnalysis.letterRuns(summary.topic.title).map(Keywords.fold).filter { $0.count >= 3 }
         var hintTerms = terms
         for term in nameTerms { terms[term, default: 0] += 2 }
+        // Beschreibung des Nutzers: zählt für die Passung, ist aber kein Hinweis (sie geht als `about` mit).
+        if let note = summary.topic.describedNote {
+            for term in Keywords.terms(note, language: nil) { terms[term, default: 0] += 1 }
+        }
         let keyword = tfidfCosine(queryTerms, terms, index: index)
         var score = keyword
         if let query = queryVector, let sum, vectorCount > 0 {

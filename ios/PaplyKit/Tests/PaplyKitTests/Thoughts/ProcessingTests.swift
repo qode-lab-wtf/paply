@@ -692,9 +692,11 @@ struct ProcessingTests {
         defer { StoreSupport.remove(root) }
         let store = try ThoughtStore(root: root)
         let names = ["Wohnung", "Wohnungen", "Garten", "Fitness", "Lesen", "Urlaub", "Auto", "Familie"]
-        let topics = names.map { Topic(title: $0, icon: .list, owner: .user) }
+        // Das Paar sind KI-Themen (je 2 Gedanken = aktiv); zwei Nutzer-Themen wären nie ein Paar.
+        let topics = names.enumerated().map { Topic(title: $0.element, icon: .list, owner: $0.offset < 2 ? .ai : .user) }
         try await store.saveTopics(topics)
         let (a, b) = (topics[0].id, topics[1].id)
+        for topic in [a, a, b, b] { try await store.save(StoreSupport.thought(title: "Wohnung", text: "Wohnung", topicId: topic)) }
         let content = "{\"pairs\":[{\"a\":\"\(a)\",\"b\":\"\(b)\",\"merge\":true,\"name\":\"Wohnung\",\"reason\":\"gleiches Vorhaben\"}]}"
         let server = MockServer { _, _ in
             .json(200, ["choices": [["index": 0, "finish_reason": "stop", "message": ["role": "assistant", "content": content]]],

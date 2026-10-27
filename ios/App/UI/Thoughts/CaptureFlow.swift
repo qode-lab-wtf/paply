@@ -107,7 +107,8 @@ final class CaptureFlow {
         }
     }
 
-    /// „Fertig“ in der großen Ansicht: Häkchen, 0,6 s „Wird geordnet …“, dann zurück in die neue Zeile.
+    /// „Fertig“ in der großen Ansicht: Häkchen, 0,6 s „Wird geordnet …“, dann zurück in die Leiste, die
+    /// zeigt, wie der Gedanke geordnet wird (die Startseite ist eine Karte, keine Liste mehr).
     func finishFromBig() {
         guard let active = driver.active, finishing == nil else { return }
         finishing = active.id
@@ -117,7 +118,7 @@ final class CaptureFlow {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-PaplyHoldDone") { return }
             #endif
-            zoomSource = active.id
+            zoomSource = CaptureFlow.barSource
             showBig = false
             try? await Task.sleep(for: .seconds(0.5))
             finishing = nil

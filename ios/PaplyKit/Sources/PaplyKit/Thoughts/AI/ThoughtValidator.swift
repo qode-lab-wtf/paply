@@ -191,17 +191,18 @@ public enum ThoughtValidator {
                 rejections.append("topic:name")
                 return .none
             }
-            if input.topicsFull {
-                if let match = TopicHygiene.matchExisting(name, among: input.topics) {
-                    rejections.append("topic:duplicate")
-                    return .existing(match.topicID)
-                }
-                rejections.append("topic:full")
-                return .none
-            }
             if let match = TopicHygiene.matchExisting(name, among: input.topics) {
                 rejections.append("topic:duplicate")
                 return .existing(match.topicID)
+            }
+            // Name, Stichwort oder Variante eines beschriebenen Themas → dieses Thema (Code statt Prompt)
+            if let match = TopicMentions.describedMatch(name, among: input.topics) {
+                rejections.append("topic:described")
+                return .existing(match.topicID)
+            }
+            if input.topicsFull {
+                rejections.append("topic:full")
+                return .none
             }
             guard TopicHygiene.isValidNewName(name) else {
                 rejections.append("topic:name")

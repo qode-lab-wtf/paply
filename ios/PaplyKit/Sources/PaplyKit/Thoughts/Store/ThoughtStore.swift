@@ -360,7 +360,8 @@ public actor ThoughtStore {
 
     /// Nur Themen gerade endgültig gelöschter Gedanken kommen in Frage: Trägt sie kein Gedanke mehr, gehen sie
     /// samt Aliassen, abgelehnten Paaren und Vorschlägen. Ein von Hand angelegtes, noch leeres Thema bleibt so
-    /// stehen. Nur bei vollständig gelesener Ablage (sonst könnte ein ungelesener Gedanke das Thema tragen).
+    /// stehen, ein beschriebenes Thema (`note`) immer. Nur bei vollständig gelesener Ablage (sonst könnte ein
+    /// ungelesener Gedanke das Thema tragen).
     private func pruneTopics(_ candidates: Set<String>) {
         guard !candidates.isEmpty, loaded, topicsReadable else { return }
         let topics = topicsDoc.topics
@@ -368,7 +369,8 @@ public actor ThoughtStore {
         for thought in cache.values {
             if let topic = Self.resolve(thought.topicId, in: topics) { carried.insert(topic.id) }
         }
-        let empty = candidates.subtracting(carried)
+        let described = Set(topics.filter { $0.describedNote != nil }.map(\.id))
+        let empty = candidates.subtracting(carried).subtracting(described)
         guard !empty.isEmpty else { return }
         let removed = Set(topics.filter { topic in
             empty.contains(topic.id) || Self.resolve(topic.id, in: topics).map { empty.contains($0.id) } == true

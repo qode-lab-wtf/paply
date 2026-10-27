@@ -3,12 +3,120 @@ import SwiftUI
 
 // Aufgaben-Sicht (KONZEPT §3.3): schlanke Liste über alle Gedanken. Abschnitte „Offen“ und
 // „Erledigt“ (zugeklappt, letzte 30 Tage). Kein Aufgabenmanager: keine Erinnerungen, keine Prioritäten.
+// Abhaken überall gleich (TaskCheckoff): Kreis füllt sich sofort, nach 1,2 s gleitet die Aufgabe aus den
+// offenen Listen. Erneutes Tippen in der Zeit macht es rückgängig.
+
+/// Abgehakt, aber noch nicht übernommen – geteilt von Leiste „Offen“, Karten, Panel und Aufgabenliste,
+/// damit dieselbe Aufgabe überall gleich aussieht.
+@MainActor
+@Observable
+final class TaskCheckoff {
+    private(set) var pending: Set<String> = []
+    @ObservationIgnored private var timers: [String: Task<Void, Never>] = [:]
+
+    func isShownDone(_ task: ThoughtTask) -> Bool { task.done || pending.contains(task.id) }
+
+    func toggle(_ task: ThoughtTask, thoughtID: String, model: ThoughtsModel, reduceMotion: Bool) {
+        let key = task.id
+        if task.done {
+            withAnimation(PaplyMotion.smooth(reduceMotion)) { model.toggleTask(thoughtID, key) }
+            return
+        }
+        if let running = timers[key] {
+            running.cancel()
+            timers[key] = nil
+            withAnimation(PaplyMotion.smooth(reduceMotion)) { _ = pending.remove(key) }
+            return
+        }
+        withAnimation(PaplyMotion.smooth(reduceMotion)) { _ = pending.insert(key) }
+        let smooth = PaplyMotion.smooth(reduceMotion)
+        timers[key] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(smooth) {
+                model.toggleTask(thoughtID, key)
+                self.pending.remove(key)
+            }
+            self.timers[key] = nil
+        }
+    }
+}
+
+/// Runder Haken wie im Entwurf: Ring, beim Abhaken grün gefüllt mit Haken (Bouncy)
+struct TaskCheckCircle: View {
+    let done: Bool
+    var size: CGFloat = 22
+
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
+
+    var body: some View {
+        let s = size * min(scale, 1.6)
+        ZStack {
+            Circle()
+                .strokeBorder(done ? Color.clear : Color.paplyText.opacity(0.42), lineWidth: 1.6)
+                .background(Circle().fill(done ? Color.paplyGreenBright : Color.clear))
+            LucideImage(.check, size: s * 0.62, stroke: 3.4, scales: false)
+                .foregroundStyle(Color.paplyForest)
+                .scaleEffect(done ? 1 : 0.2)
+                .opacity(done ? 1 : 0)
+        }
+        .frame(width: s, height: s)
+        .animation(PaplyMotion.bouncy(reduce), value: done)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Haken als Knopf mit großer Trefferfläche (44 pt), Haptik wie in der Liste
+struct TaskCheckButton: View {
+    let task: ThoughtTask
+    let thoughtID: String
+    var size: CGFloat = 22
+
+    @Environment(ThoughtsModel.self) private var model
+    @Environment(TaskCheckoff.self) private var checkoff
+    @Environment(\.accessibilityReduceMotion) private var reduce
+
+    var body: some View {
+        let done = checkoff.isShownDone(task)
+        Button {
+            checkoff.toggle(task, thoughtID: thoughtID, model: model, reduceMotion: reduce)
+        } label: {
+            TaskCheckCircle(done: done, size: size)
+                .padding(11)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.86))
+        .padding(-11)
+        .sensoryFeedback(trigger: done) { _, new in new ? .impact(weight: .light) : .selection }
+        .accessibilityLabel(done ? "Erledigt: \(task.text)" : "Abhaken: \(task.text)")
+        .accessibilityHint(done ? "Tippen öffnet die Aufgabe wieder" : "")
+    }
+}
+
+/// Eigene Seite „Aufgaben“ (aus „Alle n“ der Leiste „Offen“ und dem Link `thoughts/tasks`)
+struct TasksPage: View {
+    var body: some View {
+        List {
+            TaskSections()
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(14)
+        .contentMargins(.top, 4, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+        .background(PaplyBackground())
+        .navigationTitle("Aufgaben")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
 
 /// Eine Aufgabe: Kreis · Text · darunter klein Thema + Gedanke · rechts Zeitpunkt im Wortlaut
 struct TaskLine: View {
     let task: ThoughtTask
     /// Themen-Symbol + Titel des Gedankens (nur in der Sammelsicht)
     var subtitle: (icon: TopicIcon?, text: String)?
+    /// Farbe des Themen-Symbols (Themenfarbe)
+    var subtitleTint: Color = ThoughtTint.mint
     /// sichtbar erledigt, aber noch nicht übernommen (1,2 s in der Aufgaben-Sicht)
     var pendingDone = false
     let onToggle: () -> Void
@@ -43,7 +151,7 @@ struct TaskLine: View {
                     HStack(spacing: 4) {
                         if let icon = subtitle.icon {
                             TopicGlyph(key: icon.rawValue, size: 12, stroke: 1.9, relativeTo: .caption)
-                                .foregroundStyle(ThoughtTint.mint.opacity(0.85))
+                                .foregroundStyle(subtitleTint)
                         }
                         Text(subtitle.text)
                             .lineLimit(1)
@@ -71,10 +179,9 @@ struct TaskLine: View {
 struct TaskSections: View {
     @Environment(ThoughtsModel.self) private var model
     @Environment(ThoughtsNav.self) private var nav
+    @Environment(TaskCheckoff.self) private var checkoff
     @Environment(\.accessibilityReduceMotion) private var reduce
     @State private var showDone = false
-    /// abgehakt, aber noch nicht übernommen (rückgängig durch Tippen innerhalb von 1,2 s)
-    @State private var pending: [String: Task<Void, Never>] = [:]
     @State private var editing: (thoughtID: String, task: ThoughtTask)?
     @State private var editDraft = ""
 
@@ -83,7 +190,7 @@ struct TaskSections: View {
         let done = model.doneTasks(days: 30)
         let topics = Dictionary(model.topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
-        if open.isEmpty && pending.isEmpty {
+        if open.isEmpty {
             Section {
                 ContentUnavailableView {
                     Label {
@@ -173,8 +280,9 @@ struct TaskSections: View {
 
     private func row(_ item: (task: ThoughtTask, thought: Thought), topic: Topic?) -> some View {
         TaskLine(task: item.task, subtitle: (topic?.icon, item.thought.displayTitle),
-                 pendingDone: pending[item.task.id] != nil) {
-            toggle(item)
+                 subtitleTint: TopicPalette.tint(for: topic?.id).ink,
+                 pendingDone: checkoff.pending.contains(item.task.id)) {
+            checkoff.toggle(item.task, thoughtID: item.thought.id, model: model, reduceMotion: reduce)
         }
         .contentShape(Rectangle())
         .onTapGesture { nav.path.append(.thought(item.thought.id, task: item.task.id)) }
@@ -204,32 +312,6 @@ struct TaskSections: View {
                 withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(item.thought.id, item.task.id) }
             } label: {
                 Label("Löschen", systemImage: "trash")
-            }
-        }
-    }
-
-    /// Kreis tippen: Füllung + Durchstreichen sofort, nach 1,2 s gleitet die Zeile zu „Erledigt“.
-    /// Erneutes Tippen innerhalb der 1,2 s macht es rückgängig. Erledigte öffnen sofort wieder.
-    private func toggle(_ item: (task: ThoughtTask, thought: Thought)) {
-        let key = item.task.id
-        if item.task.done {
-            withAnimation(PaplyMotion.smooth(reduce)) { model.toggleTask(item.thought.id, key) }
-            return
-        }
-        if let running = pending[key] {
-            running.cancel()
-            pending[key] = nil
-            return
-        }
-        let thoughtID = item.thought.id
-        let store = model
-        let smooth = PaplyMotion.smooth(reduce)
-        pending[key] = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.2))
-            guard !Task.isCancelled else { return }
-            withAnimation(smooth) {
-                store.toggleTask(thoughtID, key)
-                pending[key] = nil
             }
         }
     }

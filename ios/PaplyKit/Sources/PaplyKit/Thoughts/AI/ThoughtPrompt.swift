@@ -7,9 +7,11 @@ import Foundation
 public enum ThoughtPrompt {
     /// v1: wörtlich KONZEPT §6.4 (E1 Tag 1). v2: Titel als Schlagzeile, keine verneinten/zurückgenommenen
     /// Aufgaben, Zahlen wie gesprochen, `now` in der Nutzer-Nachricht, Beispiel für `changes` (EVAL.md).
-    public static let version = 2
+    /// v3: eine Zeile zu Themen mit Beschreibung (`about`: Vorrang bei inhaltlicher Passung; `mentioned`: starkes
+    /// Indiz ohne Zwang). Neue Varianten beschriebener Themen leitet der Code um (`TopicMentions.describedMatch`).
+    public static let version = 3
 
-    // MARK: Systemprompt v2 (§6.4, wörtlich)
+    // MARK: Systemprompt v3 (§6.4, wörtlich)
 
     static let intro = """
     You organise one spoken thought for the user's private notes app. The user pressed a button and spoke freely, often on the move. You get the speech-to-text transcript, the local time, the user's existing topics and possibly a few earlier thoughts that a local search found similar. Reply only with JSON that matches the schema.
@@ -43,6 +45,7 @@ public enum ThoughtPrompt {
     static let topicRules = """
     TOPIC
     A topic is an ongoing area of the user's life or work that they will come back to: a project, plan, person, place or activity (for example "Umzug", "Paply", "Lissabon-Reise", "Garten"). A topic is not a keyword, a mood, a format or a category such as ideas or to-dos. Sea, a quiet holiday flat and travelling by train all belong to ONE trip, not to three topics.
+    about is the user's own description of a topic; if the main matter fits it, choose that topic, even when none of its names is spoken. mentioned: true means a name from that topic occurs in the transcript – a strong hint, but a name mentioned only in passing does not decide the topic.
     Decide in this order:
     1. existing – the main matter of the thought belongs to a listed topic, even if the fit is broad. Choose the topic under which the user would look for this thought. n is the number of thoughts in that topic; if two fit equally, take the one with the higher n.
     2. new – only if no listed topic fits AND the main matter is a concrete ongoing project, plan, person, place or activity that will probably come up again. new_name: 1 to 3 words, at most 24 characters, a noun or name in ui_language, no date. Never a generic name such as Ideen, Gedanken, Notizen, Sonstiges, Allgemein, Aufgaben, Wichtig, Privat, Arbeit, Ideas, Notes, Misc, Todo. Never a variant of a listed topic (other wording, singular/plural, other language) – choose that topic instead. If topics_full is true, new is not allowed.
@@ -92,11 +95,14 @@ public enum ThoughtPrompt {
         public init() {}
     }
 
+    /// `about` und `mentioned` fehlen bei Themen ohne Beschreibung bzw. ohne Treffer (spart Tokens).
     struct TopicLine: Encodable {
         var id: String
         var name: String
         var n: Int
         var hint: String
+        var about: String?
+        var mentioned: Bool?
     }
 
     struct CandidateLine: Encodable {
@@ -143,6 +149,32 @@ public enum ThoughtPrompt {
     static let maxTopics = 32          // ≤ 24 aktive + ≤ 8 vorläufige
     static let maxCandidates = 8       // ≤ 6 aus der Suche + ≤ 2 letzte
     static let excerptLength = 160
+    /// Beschreibung eines Themas (`about`), einzeilig
+    static let aboutLength = Topic.maxNoteLength
+
+    static func aboutLine(_ about: String?) -> String? {
+        guard let note = Topic.normalizedNote(about) else { return nil }
+        let line = note.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }.joined(separator: "; ")
+        return String(line.prefix(aboutLength))
+    }
+
+    /// Höchstens `limit` Einträge in der gegebenen Reihenfolge; Treffer-Themen (`mentioned`) bleiben immer.
+    static func keepingMentioned<T>(_ items: [T], limit: Int, mentioned: (T) -> Bool) -> [T] {
+        guard items.count > limit else { return items }
+        var mentionedRoom = min(limit, items.filter(mentioned).count)
+        var otherRoom = limit - mentionedRoom
+        return items.filter { item in
+            if mentioned(item) {
+                guard mentionedRoom > 0 else { return false }
+                mentionedRoom -= 1
+            } else {
+                guard otherRoom > 0 else { return false }
+                otherRoom -= 1
+            }
+            return true
+        }
+    }
 
     /// Schätzung wie Mac `groq.js`: UTF-8-Bytes / 3.
     static func tokens(bytes: Int) -> Int { (bytes + 2) / 3 }
@@ -183,7 +215,8 @@ public enum ThoughtPrompt {
     }
 
     /// Baut die Nachrichten. Ist die Anfrage zu groß, wird in dieser Reihenfolge gekürzt:
-    /// Auszüge der Kandidaten → Kandidaten über 3 → Themen-Hinweise → Themen über 16 → Teile-Modus.
+    /// Auszüge der Kandidaten → Kandidaten über 3 → Themen-Hinweise → Beschreibungen ohne Treffer →
+    /// Themen über 16 (Treffer-Themen bleiben) → Teile-Modus.
     /// `now`: Zeitpunkt des Gedankens (lokal); der Strukturierer übergibt seine Uhr.
     public static func build(_ input: StructureInput, now: Date = Date(), timeZone: TimeZone = .current) throws(BuildError) -> Built {
         let maxTokens = maxCompletionTokens(transcript: input.transcript)
@@ -201,10 +234,11 @@ public enum ThoughtPrompt {
 
         var aliases = Aliases()
         var topics: [TopicLine] = []
-        for (index, entry) in input.topics.prefix(maxTopics).enumerated() {
+        for (index, entry) in keepingMentioned(input.topics, limit: maxTopics, mentioned: \.mentioned).enumerated() {
             let alias = "t\(index + 1)"
             aliases.topics[alias] = entry
-            topics.append(TopicLine(id: alias, name: entry.name, n: entry.count, hint: entry.hint.prefix(3).joined(separator: ", ")))
+            topics.append(TopicLine(id: alias, name: entry.name, n: entry.count, hint: entry.hint.prefix(3).joined(separator: ", "),
+                                    about: aboutLine(entry.about), mentioned: entry.mentioned ? true : nil))
         }
         let topicAlias = Dictionary(aliases.topics.map { ($0.value.topicID, $0.key) }, uniquingKeysWith: { a, _ in a })
         var candidates: [CandidateLine] = []
@@ -239,9 +273,16 @@ public enum ThoughtPrompt {
                 for i in m.topics.indices { m.topics[i].hint = "" }
                 return true
             }),
+            // Beschreibungen der Themen ohne Treffer; Treffer-Themen behalten ihre
+            ("about", { m in
+                guard m.topics.contains(where: { $0.about != nil && $0.mentioned != true }) else { return false }
+                for i in m.topics.indices where m.topics[i].mentioned != true { m.topics[i].about = nil }
+                return true
+            }),
+            // Treffer-Themen bleiben, auch wenn sie hinten stehen
             ("topics>16", { m in
                 guard m.topics.count > 16 else { return false }
-                m.topics.removeLast(m.topics.count - 16)
+                m.topics = keepingMentioned(m.topics, limit: 16) { $0.mentioned == true }
                 return true
             }),
         ]

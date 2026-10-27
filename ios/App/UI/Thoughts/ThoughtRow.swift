@@ -134,7 +134,7 @@ struct ThoughtRow: View {
                         TopicGlyph(key: topic.icon.rawValue, size: 13, stroke: 1.9, relativeTo: .caption)
                         Text(topic.title)
                     }
-                    .foregroundStyle(ThoughtTint.mint.opacity(0.9))
+                    .foregroundStyle(TopicPalette.tint(for: topic.id).ink)
                         .lineLimit(1)
                         .transition(.asymmetric(insertion: .offset(x: -8).combined(with: .opacity), removal: .opacity))
                 }
@@ -245,29 +245,42 @@ struct ThoughtRowActions: ViewModifier {
                 .tint(ThoughtTint.swipe)
             }
             .contextMenu {
-                ShareLink(item: ThoughtShare.text(thought)) {
-                    Label("Teilen", systemImage: "square.and.arrow.up")
-                }
-                Button(action: onCopy) {
-                    Label("Kopieren", systemImage: "doc.on.doc")
-                }
-                Button(action: onTopic) {
-                    Label("Thema ändern", systemImage: "tag")
-                }
-                if thought.canReorganize {
-                    Button(action: onReorganize) {
-                        Label(thought.state == .needsAttention ? "Erneut versuchen" : "Erneut ordnen", systemImage: "arrow.clockwise")
-                    }
-                }
-                Divider()
-                Button(role: .destructive, action: onDelete) {
-                    Label("Löschen", systemImage: "trash")
-                }
+                ThoughtMenuItems(thought: thought, onDelete: onDelete, onTopic: onTopic, onCopy: onCopy, onReorganize: onReorganize)
             } preview: {
                 ThoughtPreviewCard(thought: thought)
             }
             .accessibilityAction(named: "Thema ändern", onTopic)
             .accessibilityAction(named: "Löschen", onDelete)
+    }
+}
+
+/// Einträge des Kontextmenüs (Zeile und Karte): Teilen · Kopieren · Thema ändern · Erneut ordnen · Löschen
+struct ThoughtMenuItems: View {
+    let thought: Thought
+    let onDelete: () -> Void
+    let onTopic: () -> Void
+    let onCopy: () -> Void
+    let onReorganize: () -> Void
+
+    var body: some View {
+        ShareLink(item: ThoughtShare.text(thought)) {
+            Label("Teilen", systemImage: "square.and.arrow.up")
+        }
+        Button(action: onCopy) {
+            Label("Kopieren", systemImage: "doc.on.doc")
+        }
+        Button(action: onTopic) {
+            Label("Thema ändern", systemImage: "tag")
+        }
+        if thought.canReorganize {
+            Button(action: onReorganize) {
+                Label(thought.state == .needsAttention ? "Erneut versuchen" : "Erneut ordnen", systemImage: "arrow.clockwise")
+            }
+        }
+        Divider()
+        Button(role: .destructive, action: onDelete) {
+            Label("Löschen", systemImage: "trash")
+        }
     }
 }
 

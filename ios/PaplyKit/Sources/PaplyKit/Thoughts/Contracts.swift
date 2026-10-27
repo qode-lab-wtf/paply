@@ -233,15 +233,34 @@ public struct Topic: Codable, Sendable, Identifiable, Equatable {
     public var owner: Owner
     public var createdAt: Date
     public var mergedInto: String?
+    /// „Worum geht's?“ – kurze Beschreibung des Nutzers (Namen, Firmen, Personen), höchstens
+    /// `maxNoteLength` Zeichen. nil = keine. Fehlt in älteren `topics.json` und wird dann nicht geschrieben.
+    public var note: String?
 
-    public init(id: String = ThoughtIDs.topic(), title: String, icon: TopicIcon, owner: Owner, createdAt: Date = Date(), mergedInto: String? = nil) {
+    public init(id: String = ThoughtIDs.topic(), title: String, icon: TopicIcon, owner: Owner, createdAt: Date = Date(),
+                mergedInto: String? = nil, note: String? = nil) {
         self.id = id
         self.title = title
         self.icon = icon
         self.owner = owner
         self.createdAt = createdAt
         self.mergedInto = mergedInto
+        self.note = note
     }
+
+    public static let maxNoteLength = 200
+
+    /// Beschreibung in Speicherform: getrimmt, höchstens `maxNoteLength` Zeichen, leer = nil.
+    public static func normalizedNote(_ note: String?) -> String? {
+        guard let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(maxNoteLength)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Die Beschreibung, falls vorhanden (getrimmt, nicht leer).
+    public var describedNote: String? { Self.normalizedNote(note) }
+
+    /// Vom Nutzer angelegt oder beschrieben: wird nie automatisch zusammengeführt, umbenannt oder entfernt.
+    public var isUserDefined: Bool { owner == .user || describedNote != nil }
 }
 
 // MARK: - KI (H1 implementiert, H2 ruft auf)
@@ -251,12 +270,19 @@ public struct TopicIndexEntry: Sendable, Equatable {
     public var name: String
     public var count: Int
     public var hint: [String]
+    /// Beschreibung des Nutzers (`Topic.note`), geht als `about` mit; nil = keine
+    public var about: String?
+    /// Ein Name oder Stichwort aus Name/Beschreibung steht im Transkript (`TopicMentions`). Solche Themen
+    /// kommen immer in den Index und überstehen jede Kürzung des Prompts.
+    public var mentioned: Bool
 
-    public init(topicID: String, name: String, count: Int, hint: [String]) {
+    public init(topicID: String, name: String, count: Int, hint: [String], about: String? = nil, mentioned: Bool = false) {
         self.topicID = topicID
         self.name = name
         self.count = count
         self.hint = hint
+        self.about = about
+        self.mentioned = mentioned
     }
 }
 

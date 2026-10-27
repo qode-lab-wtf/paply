@@ -210,6 +210,24 @@ final class ThoughtsModel {
         }
     }
 
+    /// Thema mit Beschreibung („Worum geht's?“) anlegen; Paply ordnet Gedanken danach zu (KONZEPT §6.3).
+    func createTopic(title: String, icon: TopicIcon, note: String?) -> Topic {
+        let topic = Topic(title: title.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, owner: .user,
+                          note: Topic.normalizedNote(note))
+        changeTopics { $0.append(topic) }
+        return topic
+    }
+
+    /// Beschreibung setzen oder entfernen (nil/leer). Wer ein Thema beschreibt, behält es: owner = user wie „Behalten“.
+    func setTopicNote(_ id: String, _ note: String?) {
+        let value = Topic.normalizedNote(note)
+        changeTopics { topics in
+            guard let i = topics.firstIndex(where: { $0.id == id }) else { return }
+            topics[i].note = value
+            if value != nil { topics[i].owner = .user }
+        }
+    }
+
     /// Ziel behält seine ID, die Quellen werden Alias (`mergedInto`), Gedanken wandern zum Ziel (§6.10).
     func mergeTopics(_ ids: [String], into target: String, title: String?) -> UndoToken {
         let token = UndoToken()
@@ -480,6 +498,7 @@ final class ThoughtsModel {
         deleted = byID.values.filter { $0.deletedAt != nil }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        TopicPalette.register(stored) // Themenfarben (Oberfläche)
         recomputeDerived()
     }
 
@@ -487,6 +506,7 @@ final class ThoughtsModel {
         let renamed = Set(stored.filter { topicByID[$0.id]?.title != $0.title || topicByID[$0.id]?.mergedInto != $0.mergedInto }.map(\.id))
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        TopicPalette.register(stored)
         recomputeDerived()
         guard !renamed.isEmpty else { return }
         for thought in thoughts where renamed.contains(thought.topicId ?? "") || renamed.contains(resolvedTopic(thought.topicId)?.id ?? "") {

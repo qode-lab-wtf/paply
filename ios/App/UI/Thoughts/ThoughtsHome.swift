@@ -2,13 +2,18 @@ import PaplyKit
 import SwiftUI
 import UIKit
 
-// Tab „Gedanken“ (KONZEPT §2, §3.1): großer Titel, Chips, Liste wie Apple Notizen. Kompakter Kopf:
-// Suche als Lupe in der Leiste (eigene Seite), Aufnahme-Knopf in der unteren Werkzeugleiste – so
-// verdeckt er nie Zeilen. Viele Gedanken: List lädt Zeilen erst beim Scrollen, Abschnitte entstehen
-// in einem Durchlauf ohne Kalender je Zeile.
+// Tab „Gedanken“: Die Startseite ist eine Landkarte der Themen (Entwurf „Landkarte“). Oben eine Zeile
+// Überblick und die Leiste „Offen“ mit der nächsten Aufgabe. Thema antippen → die Karte zoomt hinein,
+// das Panel mit den Karten des Themas gleitet hoch (Raststufen wie Apple Karten). Kompakter Kopf:
+// Suche als Lupe (eigene Seite), Aufnahme-Knopf in der unteren Werkzeugleiste.
+
+/// Die Landkarte der Themen (Map/ThoughtMapView.swift)
+typealias ThoughtMap = ThoughtMapView
 
 struct ThoughtsTab: View {
     @Environment(ThoughtsNav.self) private var nav
+    @Environment(\.captureZoom) private var zoom
+    @State private var checkoff = TaskCheckoff()
 
     var body: some View {
         @Bindable var nav = nav
@@ -16,8 +21,11 @@ struct ThoughtsTab: View {
             ThoughtsHome()
                 .navigationDestination(for: ThoughtsRoute.self) { route in
                     switch route {
-                    case .thought(let id, let task):
+                    case .thought(let id, let task, let source):
                         ThoughtDetailView(id: id, focusTask: task)
+                            .detailZoom(source, in: zoom)
+                    case .tasks:
+                        TasksPage()
                     case .search:
                         ThoughtsSearchView()
                     case .topics:
@@ -34,29 +42,47 @@ struct ThoughtsTab: View {
         }
         .overlay(alignment: .bottom) { ThoughtsToastHost() }
         .modifier(CaptureInsetBarModifier())
+        .environment(checkoff)
     }
 }
 
 struct ThoughtsHome: View {
+    /// Panel-Kennung „Ohne Thema“ (gleich der Kennung der Karte)
+    static let noTopicID = ThoughtMap.noTopicID
+    /// Panel-Kennung „Noch nicht geordnet“ (wird geordnet, wartet, Fehler) – nur das Panel, die Karte bleibt
+    static let pendingID = "_pending"
+
     @Environment(ThoughtsModel.self) private var model
     @Environment(ThoughtsNav.self) private var nav
     @Environment(CaptureFlow.self) private var flow
-    @Environment(\.captureZoom) private var zoom
     @Environment(\.accessibilityReduceMotion) private var reduce
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @State private var topicAction: TopicAction?
+    /// Höhe des Kopfs über der Karte (Überblick, Einrichten, „Offen“)
+    @State private var headerHeight: CGFloat = 0
 
     var body: some View {
         content
             .background(PaplyBackground())
             .navigationTitle("Gedanken")
+            // Karte statt Liste: kompakter Kopf wie in Karten/Wo ist?, damit die Karte Platz hat
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
             .toolbar { bottomBar }
             .topicActions($topicAction)
-            .onChange(of: model.topics.map(\.id)) { _, ids in
-                // gewähltes Thema gelöscht oder zusammengeführt → zurück zu „Alle“
-                if case .topic(let id) = nav.filter, !ids.contains(id) {
-                    withAnimation(PaplyMotion.smooth(reduce)) { nav.filter = .all }
+            .onChange(of: model.topics.map(\.id)) { _, _ in
+                // gewähltes Thema gelöscht → zurück zur Übersicht (Zusammenführen löst `topic(_:)` auf)
+                if let id = nav.focusedTopic, !TopicPalette.isNeutral(id), model.topic(id) == nil {
+                    withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) }
                 }
+            }
+            .onChange(of: nav.focusedTopic) { _, new in
+                // VoiceOver: Panel gleich groß, damit alles erreichbar ist
+                if new != nil, voiceOver { nav.panelDetent = .large }
+            }
+            .onChange(of: nav.focusedTopic.map { model.panelThoughts($0).isEmpty } ?? false) { _, empty in
+                // alles geordnet bzw. alle Gedanken woandershin verschoben → Panel schließen
+                if empty { withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) } }
             }
     }
 
@@ -70,98 +96,68 @@ struct ThoughtsHome: View {
                 tryIt: { flow.openBig() }
             )
         } else {
-            list
+            board
         }
     }
 
-    private var list: some View {
-        let topicsByID = Dictionary(model.topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let thisYear = Calendar.current.component(.year, from: Date())
-        return List {
+    private var board: some View {
+        GeometryReader { geo in
+            let bottom = geo.safeAreaInsets.bottom
+            let full = geo.size.height + bottom
+            let heights = PanelHeights(small: 96 + bottom,
+                                       medium: max(min(full * 0.5, full - 200), 96 + bottom + 120),
+                                       large: full - 4)
+            let panelID = nav.focusedTopic
+            ZStack(alignment: .bottom) {
+                // Karte über die volle Höhe (ihr Hintergrund läuft unter dem Kopf durch); ihr Inhalt
+                // beginnt unter dem Kopf. Im Thema gehört der Platz der Karte und dem Panel.
+                ThoughtMap(focusedTopic: mapFocus,
+                           bottomInset: panelID != nil ? heights[nav.panelDetent] : bottom,
+                           onOpenThought: { nav.path.append(.thought($0)) })
+                    .safeAreaPadding(.top, panelID == nil ? headerHeight : 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if panelID == nil {
+                    header
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 6)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if let panelID {
+                    TopicPanel(topicID: panelID, heights: heights, bottomInset: bottom,
+                               detent: Bindable(nav).panelDetent,
+                               onClose: { withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) } },
+                               onAction: { topicAction = $0 })
+                        .id(panelID == Self.pendingID ? panelID : "topic")
+                        .transition(reduce ? .opacity : .move(edge: .bottom))
+                }
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .animation(PaplyMotion.smooth(reduce), value: panelID == nil)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ThoughtsSummaryLine()
             if SetupGuide.shared.isVisible(model: model) {
-                Section {
-                    SetupCard()
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
+                SetupBanner()
             }
-            Section {
-                chips
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
-            switch nav.filter {
-            case .all:
-                thoughtSections(model.thoughts, topics: topicsByID, showTopic: true, thisYear: thisYear)
-            case .tasks:
-                TaskSections()
-            case .topic(let id):
-                if let topic = topicsByID[id] {
-                    Section {
-                        TopicHeader(topic: topic, count: model.count(of: id)) { topicAction = $0 }
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                    }
-                    let open = model.openTasks(topicID: id)
-                    if !open.isEmpty {
-                        Section {
-                            TopicOpenTasks(items: open) { task, thought in
-                                withAnimation(PaplyMotion.smooth(reduce)) { model.toggleTask(thought.id, task.id) }
-                            } onOpen: { task, thought in
-                                nav.path.append(.thought(thought.id, task: task.id))
-                            }
-                        } header: {
-                            ThoughtsSectionHeader(title: "Offen")
-                        }
-                    }
-                    thoughtSections(model.thoughts.filter { $0.topicId == id }, topics: topicsByID, showTopic: false, thisYear: thisYear)
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .listSectionSpacing(10)
-        .contentMargins(.top, 2, for: .scrollContent)
-        .scrollContentBackground(.hidden)
-        .animation(PaplyMotion.bouncy(reduce), value: model.thoughts.first?.id)
-    }
-
-    @ViewBuilder
-    private func thoughtSections(_ thoughts: [Thought], topics: [String: Topic], showTopic: Bool, thisYear: Int) -> some View {
-        let sections = ThoughtSections.make(thoughts)
-        ForEach(sections) { section in
-            Section {
-                ForEach(section.thoughts) { thought in
-                    ThoughtListRow(thought: thought, topic: topics[thought.topicId ?? ""], showTopic: showTopic,
-                                   time: section.timeLabel(thought.createdAt, thisYear: thisYear),
-                                   zoomSource: flow.zoomSource == thought.id)
-                }
-            } header: {
-                ThoughtsSectionHeader(title: section.title)
-            }
+            OpenTasksBar()
         }
     }
 
-    // MARK: Chips
-
-    private var chips: some View {
-        // Themen nach letzter Aktivität: ein Durchlauf über die (neueste zuerst sortierten) Gedanken
-        var order: [String: Int] = [:]
-        for thought in model.thoughts {
-            if let id = thought.topicId, order[id] == nil { order[id] = order.count }
-        }
-        let selectedID: String? = if case .topic(let id) = nav.filter { id } else { nil }
-        let active = model.topics
-            .filter { model.showsAsChip($0) || $0.id == selectedID }
-            .sorted { (order[$0.id] ?? .max, $0.title) < (order[$1.id] ?? .max, $1.title) }
-        let open = model.openTasks(topicID: nil).count
-        let recentlyDone = model.doneTasks(days: 7).count
-        return TopicChips(
-            topics: active,
-            taskCount: open > 0 || recentlyDone > 0 ? open : nil,
-            selection: nav.filter,
-            onSelect: { nav.filter = $0 },
-            onAction: { topicAction = $0 }
+    /// Fokus der Karte: Thema bzw. „Ohne Thema“; „Noch nicht geordnet“ lässt die Karte in der Übersicht
+    private var mapFocus: Binding<String?> {
+        Binding(
+            get: { nav.focusedTopic == Self.pendingID ? nil : nav.focusedTopic },
+            set: { new in
+                guard new != nav.focusedTopic else { return }
+                if new == nil, nav.focusedTopic == Self.pendingID { return }
+                nav.focus(new)
+            }
         )
     }
 
@@ -177,6 +173,9 @@ struct ThoughtsHome: View {
             }
             .accessibilityLabel("Suchen")
             Menu {
+                Button { nav.path.append(.tasks) } label: {
+                    Label("Aufgaben", systemImage: "checklist")
+                }
                 Button { nav.path.append(.topics) } label: {
                     Label("Themen bearbeiten", systemImage: "square.grid.2x2")
                 }
@@ -197,7 +196,7 @@ struct ThoughtsHome: View {
     }
 
     /// Unten wie in Notizen: Anzahl in der Mitte, Aufnahme-Knopf rechts (§3.1, zweiter Weg neben dem Knopf
-    /// im Sperrbildschirm). Als Werkzeugleiste verdeckt er keine Zeilen.
+    /// im Sperrbildschirm). Als Werkzeugleiste verdeckt er nichts.
     @ToolbarContentBuilder
     private var bottomBar: some ToolbarContent {
         ToolbarItemGroup(placement: .bottomBar) {
@@ -219,17 +218,8 @@ struct ThoughtsHome: View {
     }
 
     private var countText: String {
-        switch nav.filter {
-        case .all:
-            let n = model.thoughts.count
-            return n == 1 ? "1 Gedanke" : "\(n) Gedanken"
-        case .tasks:
-            let n = model.openTasks(topicID: nil).count
-            return n == 1 ? "1 offene Aufgabe" : "\(n) offene Aufgaben"
-        case .topic(let id):
-            let n = model.count(of: id)
-            return n == 1 ? "1 Gedanke" : "\(n) Gedanken"
-        }
+        let n = nav.focusedTopic.map { model.panelThoughts($0).count } ?? model.thoughts.count
+        return n == 1 ? "1 Gedanke" : "\(n) Gedanken"
     }
 }
 
@@ -336,7 +326,7 @@ struct ThoughtsSearchView: View {
                     ForEach(topics) { topic in
                         Button { open(topic) } label: {
                             HStack(spacing: 12) {
-                                TopicBadge(icon: topic.icon, size: 30)
+                                TopicTintBadge(topicID: topic.id, icon: topic.icon, size: 30)
                                 Text(topic.title).foregroundStyle(Color.paplyText)
                                 Spacer()
                                 Text("\(model.count(of: topic.id))")
@@ -378,7 +368,7 @@ struct ThoughtsSearchView: View {
                             Button { open(topic) } label: {
                                 HStack(spacing: 10) {
                                     TopicGlyph(key: topic.icon.rawValue, size: 17)
-                                        .foregroundStyle(ThoughtTint.mint)
+                                        .foregroundStyle(TopicPalette.tint(for: topic.id).ink)
                                     Text("Thema: \(topic.title)").foregroundStyle(Color.paplyText)
                                 }
                             }
@@ -415,7 +405,7 @@ struct ThoughtsSearchView: View {
     private func open(_ topic: Topic) {
         nav.searchText = ""
         presented = false
-        nav.filter = .topic(topic.id)
+        nav.focus(topic.id)
         nav.path = []
     }
 }

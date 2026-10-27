@@ -218,3 +218,64 @@ Die Beispiele im Prompt stammen bewusst nicht aus dem Bewertungssatz.
 | danach | E3 (`medium`, Stabilität), E2 (20b ≤ 40 000), E5 (Kaltstart + Ton) | – | je ≤ 60 000 am Tag |
 
 Befehle: `/tmp/paply-thoughts-eval/run.sh run e1 --cases e02,e04,… --budget 55000` (Wrapper liest den Schlüssel nur in die Umgebung), danach `paply-bench thoughts-eval score e1`.
+
+## Themen mit Beschreibung (Prompt v3), 27.10.: 7 von 8 Fällen, 120b `low`
+
+**Was neu ist:** Ein Thema kann eine Beschreibung haben („Worum geht's?“, `Topic.note`). Treffer findet der Code
+(`TopicMentions`), nicht die KI. Der Prompt hat genau eine Zeile mehr (KONZEPT §6.4). Neue Themen, die nur einen
+Namen aus einer Beschreibung tragen, leitet der Code auf das beschriebene Thema um (§6.7).
+
+**Satz:** `Tests/Fixtures/Thoughts/described.json`. Er enthält 4 beschriebene Nutzer-Themen ohne Gedanken (Firma
+„Kessler Digital“, Kunde „Brandt Logistik“, Verein „Ruderclub“, Person „Oma Ilse“) und dazu store-a. Die 8 Fälle sind
+kurz und deutsch, bewertet wird nur das Thema. `expect.mentioned` legt fest, welche Themen der Code als Treffer
+markieren soll. Das prüfen `plan` und `swift test` offline; alle 8 Fälle stimmen.
+
+**Lauf:**
+
+- Befehl: `paply-bench thoughts-eval run d1 --set described --ledger described --budget 25000 --tight 1`.
+- Budget: eigener Ledger mit hartem Budget von 25 000 Tokens, vom Koordinator freigegeben. Der Ledger des
+  Prüfstands stand von E1 Tag 1 noch bei 50 619.
+- `--tight`: Ab dem 2. Aufruf rechnet der Wächter mit einer engeren oberen Grenze. Dafür nimmt er die
+  Eingabe-Schätzung mal dem größten gemessenen Verhältnis von Groq-Prompt-Tokens zu Schätzung, mal 1,05, und dazu
+  das volle `max_completion_tokens`.
+- Es gab kein 429.
+
+| Fall | Art | Treffer (Code) | erwartet | erhalten | Tokens |
+| --- | --- | --- | --- | --- | --- |
+| d01 | Firma, Name | Kessler Digital | Kessler Digital | – (nicht gelaufen, Budget) | – |
+| d02 | Kunde, Name gebeugt („Brandts“) | Brandt Logistik, Kessler Digital | Brandt Logistik | Brandt Logistik ✓ | 3 217 |
+| d03 | Verein, ohne Namen | – | Ruderclub | Ruderclub ✓ | 2 989 |
+| d04 | Person, ohne Namen („meine Großmutter“) | – | Oma Ilse | Familie ✗ | 3 021 |
+| d05 | Verein nur beiläufig (Beuel im Umzug) | Ruderclub | Umzug | Umzug ✓ | 3 430 |
+| d06 | Firma nur beiläufig (Hauptinhalt Fluxo) | Kessler Digital | Fluxo | Fluxo ✓ | 3 079 |
+| d07 | Kunde, ohne Namen (Handscanner, Lagerhalle) | – | Brandt Logistik (auch: Kessler Digital) | Brandt Logistik ✓ | 3 027 |
+| d08 | Person mit Namen, Versuchung „Omas Geburtstag“ | Oma Ilse | Oma Ilse | Oma Ilse ✓ | 3 233 |
+
+**Ergebnis: 6/7 richtig, 21 996 Tokens** (Median 3 079, im Mittel 3 142 je Gedanke).
+
+- Alle 7 Antworten waren gültig, und alle Texte überstanden das Sicherheitsnetz.
+- Kein neues Thema und kein `mustNotAdd`-Treffer.
+- Die Umleitung im Code (`topic:described`) musste kein einziges Mal greifen.
+- Beide Fälle mit nur beiläufigem Namen folgten dem Hauptinhalt.
+- Zwei der drei Fälle ohne Namen wurden über die Beschreibung richtig zugeordnet.
+
+**Nicht gelaufen: d01.** Nach 7 Aufrufen blieben 3 004 Tokens. Die obere Grenze des nächsten Aufrufs lag bei 4 375
+Tokens, damit wäre das harte Budget nicht sicher gewesen. d01 ist der einfachste Fall (Firmenname direkt genannt),
+der Treffer ist offline geprüft.
+
+**Fehlgriff d04:**
+
+- „Großmutter“ steht nicht in der Beschreibung („Meine Oma Ilse …“). Deshalb gibt es keinen Treffer, und die KI
+  nahm das breitere KI-Thema Familie (n = 3).
+- Der Code kann Synonyme nicht sicher erkennen.
+- Für den Nutzer hilft es, wenn die Beschreibung beide Wörter enthält.
+- Für den Prompt wäre ein Nachschärfen der neuen Zeile nur mit einer erneuten Messung sinnvoll (offener Punkt).
+
+**Kosten von v3:**
+
+- Systemprompt: 6 436 → 6 723 Bytes (+287 Bytes ≈ +95 Tokens nach Bytes/3).
+- Je beschriebenes Thema kommen in der Nutzer-Nachricht `about` (≤ 200 Zeichen) und bei Treffern
+  `"mentioned": true` dazu.
+- Themen ohne Beschreibung senden dieselben Felder wie in v2.
+
+Dateien: `/tmp/paply-thoughts-eval/d1.jsonl`, `d1-p3-r1-120b-low-results.json`, `d1-p3-r1-120b-low-review.md`.

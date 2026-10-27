@@ -95,9 +95,11 @@ public enum TopicHygiene {
         /// Schwerpunkt der Embeddings (optional; nur bei gleicher Sprache vergleichbar)
         public var centroid: [Float]?
         public var language: String?
+        /// Vom Nutzer angelegt oder beschrieben (`Topic.isUserDefined`): behält bei einem Vorschlag ID und Namen.
+        public var isUserDefined: Bool
 
         public init(topicID: String, name: String, count: Int, keywords: [String], exampleTitles: [String] = [],
-                    centroid: [Float]? = nil, language: String? = nil) {
+                    centroid: [Float]? = nil, language: String? = nil, isUserDefined: Bool = false) {
             self.topicID = topicID
             self.name = name
             self.count = count
@@ -105,6 +107,7 @@ public enum TopicHygiene {
             self.exampleTitles = exampleTitles
             self.centroid = centroid
             self.language = language
+            self.isUserDefined = isUserDefined
         }
     }
 
@@ -120,13 +123,14 @@ public enum TopicHygiene {
 
     /// Lokale Paarsuche: Namensnähe, Kosinus der Schwerpunkte ≥ 0,7 (gleiche Sprache) oder
     /// Jaccard der Schlagwörter ≥ 0,4. Abgelehnte Paare kommen nie wieder. Höchstens `limit`.
+    /// Zwei Nutzer-Themen sind nie ein Paar: Der Nutzer hat beide bewusst angelegt bzw. beschrieben.
     public static func candidatePairs(_ profiles: [Profile], declined: Set<[String]>, limit: Int = 5) -> [(a: String, b: String, score: Double)] {
         var pairs: [(a: String, b: String, score: Double)] = []
         for i in profiles.indices {
             for j in profiles.indices where j > i {
                 let a = profiles[i], b = profiles[j]
                 let key = [a.topicID, b.topicID].sorted()
-                guard !declined.contains(key) else { continue }
+                guard !declined.contains(key), !(a.isUserDefined && b.isUserDefined) else { continue }
                 var score = 0.0
                 let entryB = TopicIndexEntry(topicID: b.topicID, name: b.name, count: b.count, hint: [])
                 if matchExisting(a.name, among: [entryB]) != nil { score = max(score, 1) }
@@ -189,19 +193,25 @@ public enum TopicHygiene {
     }
 
     /// Prüft die Vorschlags-Antwort: nur gefragte Paare, nur `merge == true`, Name gültig; höchstens 2.
-    public static func validateSuggestions(_ json: String, asked: [(a: String, b: String)]) -> [TopicSuggestion] {
+    /// Gehört ein Nutzer-Thema (`protected`) zum Paar, ist es das Ziel (`a`, behält ID, Namen und Beschreibung)
+    /// und der vorgeschlagene Name entfällt. Angewandt wird ein Vorschlag nur, wenn der Nutzer ihn bestätigt.
+    public static func validateSuggestions(_ json: String, asked: [(a: String, b: String)],
+                                           protected: Set<String> = []) -> [TopicSuggestion] {
         guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
               let pairs = object["pairs"] as? [[String: Any]] else { return [] }
         let allowed = Set(asked.map { [$0.a, $0.b].sorted() })
         var seen = Set<[String]>()
         var result: [TopicSuggestion] = []
         for pair in pairs {
-            guard let a = pair["a"] as? String, let b = pair["b"] as? String, pair["merge"] as? Bool == true else { continue }
+            guard var a = pair["a"] as? String, var b = pair["b"] as? String, pair["merge"] as? Bool == true else { continue }
             let key = [a, b].sorted()
             guard allowed.contains(key), !seen.contains(key) else { continue }
+            guard !(protected.contains(a) && protected.contains(b)) else { continue }
             seen.insert(key)
             var name = (pair["name"] as? String)?.trimmed
             if let n = name, !isValidNewName(n) { name = nil }
+            if protected.contains(b) { swap(&a, &b) }
+            if protected.contains(a) { name = nil }
             let reason = String(((pair["reason"] as? String) ?? "").trimmed.prefix(80))
             result.append(TopicSuggestion(a: a, b: b, name: name, reason: reason))
             if result.count == 2 { break }

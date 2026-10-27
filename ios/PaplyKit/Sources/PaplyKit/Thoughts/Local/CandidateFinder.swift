@@ -102,23 +102,40 @@ public actor CandidateFinder: CandidateFinding {
         let summaries = TopicIndex.summaries(topics: topics, thoughts: thoughts)
         let mean = query.vector.flatMap { options.centerVectors ? index.meanVector(model: $0.model, space: $0.space) : nil }
         let clock = now()
+        let haystack = TopicMentions.Haystack(text)
 
         var active: [(entry: TopicIndexEntry, fit: Double, count: Int)] = []
         var provisional: [(entry: TopicIndexEntry, fit: Double, last: Date)] = []
+        var mentioned: [(entry: TopicIndexEntry, fit: Double, hits: Int, isActive: Bool, last: Date)] = []
+        var activeTotal = 0
         for summary in summaries {
             let fit = TopicIndex.fit(summary: summary, index: index, queryTerms: query.terms, queryVector: query.vector,
                                      mean: mean, cosineFloor: options.cosineFloor)
-            let entry = TopicIndexEntry(topicID: summary.topic.id, name: summary.topic.title, count: summary.count, hint: fit.hint)
-            if summary.isActive {
+            let hits = TopicMentions.matches(TopicMentions.terms(summary.topic), in: haystack)
+            let entry = TopicIndexEntry(topicID: summary.topic.id, name: summary.topic.title, count: summary.count, hint: fit.hint,
+                                        about: summary.topic.describedNote, mentioned: !hits.isEmpty)
+            if summary.isActive { activeTotal += 1 }
+            if !hits.isEmpty {
+                // Namens-Treffer: immer im Index, auch vorläufig oder außerhalb des 60-Tage-Fensters
+                mentioned.append((entry, fit.score, hits.count, summary.isActive, summary.lastActivity ?? summary.topic.createdAt))
+            } else if summary.isActive {
                 active.append((entry, fit.score, summary.count))
             } else if let last = summary.lastActivity, clock.timeIntervalSince(last) <= TopicIndex.provisionalWindow {
                 provisional.append((entry, fit.score, last))
             }
         }
-        let full = active.count >= TopicIndex.maxActive
-        let sortedActive = active.sorted { $0.fit != $1.fit ? $0.fit > $1.fit : $0.count > $1.count }.prefix(TopicIndex.maxActive)
-        let sortedProvisional = provisional.sorted { $0.fit != $1.fit ? $0.fit > $1.fit : $0.last > $1.last }.prefix(TopicIndex.maxProvisional)
-        return (sortedActive.map(\.entry) + sortedProvisional.map(\.entry), full)
+        let full = activeTotal >= TopicIndex.maxActive
+        let ranked = mentioned.sorted { $0.hits != $1.hits ? $0.hits > $1.hits : $0.fit > $1.fit }
+        let pinned = ranked.prefix(TopicIndex.maxMentioned)
+        for extra in ranked.dropFirst(TopicIndex.maxMentioned) { // nur bei sehr vielen Treffern
+            if extra.isActive { active.append((extra.entry, extra.fit, extra.entry.count)) } else { provisional.append((extra.entry, extra.fit, extra.last)) }
+        }
+        let pinnedActive = pinned.filter(\.isActive).count
+        let sortedActive = active.sorted { $0.fit != $1.fit ? $0.fit > $1.fit : $0.count > $1.count }
+            .prefix(max(0, TopicIndex.maxActive - pinnedActive))
+        let sortedProvisional = provisional.sorted { $0.fit != $1.fit ? $0.fit > $1.fit : $0.last > $1.last }
+            .prefix(max(0, TopicIndex.maxProvisional - (pinned.count - pinnedActive)))
+        return (pinned.map(\.entry) + sortedActive.map(\.entry) + sortedProvisional.map(\.entry), full)
     }
 
     public func candidates(forText text: String, languages: [String], excluding: String) async -> [CandidateEntry] {

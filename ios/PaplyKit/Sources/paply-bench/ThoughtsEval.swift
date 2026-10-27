@@ -5,6 +5,12 @@
 //   paply-bench thoughts-eval run <stufe> [Optionen]          Groq-Aufrufe (Schlüssel aus PAPLY_GROQ_KEY)
 //       --cases e01,e03 · --limit N (Fälle) · --budget T (Tokens dieser Sitzung)
 //       --model large|small · --effort low|medium · --run k
+//       --set eval|described (Standard eval; described = Themen mit Beschreibung, described.json)
+//       --ledger <tag>  eigener Ledger `ledger-<tag>-…json` mit Tagesgrenze = --budget (vom Koordinator
+//                       freigegebenes Sonderbudget statt der 60 000 des Prüfstands)
+//       --tight 1       Budget-Wächter ab dem 2. Aufruf: Eingabe-Schätzung × größtes gemessenes Verhältnis
+//                       (Groq-Prompt-Tokens / Schätzung) × 1,05 + volles max_completion_tokens – weiter eine
+//                       obere Grenze, aber ohne den Bytes/3-Aufschlag; reserviert im Ledger genau diesen Wert
 //   paply-bench thoughts-eval score <stufe> [--run k] [--model …] [--effort …] [--prompt v]
 //                                                             offline: validieren, bewerten, Prüfdatei für Opus
 //                                                             (--prompt: Prompt-Version der Antworten, Standard aktuell)
@@ -75,7 +81,11 @@ enum ThoughtsEval {
 
     /// `StructureInput` als Datei (Themen, Kandidaten, Teil), ohne Satzliste.
     struct InputSnapshot: Codable {
-        struct TopicRow: Codable { var id: String; var name: String; var count: Int; var hint: [String] }
+        struct TopicRow: Codable {
+            var id: String; var name: String; var count: Int; var hint: [String]
+            /// ab Prompt v3 (fehlt in älteren Aufzeichnungen)
+            var about: String?; var mentioned: Bool?
+        }
         struct CandidateRow: Codable {
             var id: String; var title: String; var topicID: String?; var when: String; var excerpt: String; var score: Double
         }
@@ -101,7 +111,9 @@ enum ThoughtsEval {
             spokenLanguages = input.spokenLanguages
             uiLanguage = input.uiLanguage
             vocabulary = input.vocabulary
-            topics = input.topics.map { TopicRow(id: $0.topicID, name: $0.name, count: $0.count, hint: $0.hint) }
+            topics = input.topics.map {
+                TopicRow(id: $0.topicID, name: $0.name, count: $0.count, hint: $0.hint, about: $0.about, mentioned: $0.mentioned)
+            }
             topicsFull = input.topicsFull
             candidates = input.candidates.map {
                 CandidateRow(id: $0.thoughtID, title: $0.title, topicID: $0.topicID, when: $0.when, excerpt: $0.excerpt, score: $0.localScore)
@@ -114,7 +126,10 @@ enum ThoughtsEval {
         var input: StructureInput {
             StructureInput(transcript: transcript, sentences: [], spokenLanguages: spokenLanguages, uiLanguage: uiLanguage,
                            vocabulary: vocabulary,
-                           topics: topics.map { TopicIndexEntry(topicID: $0.id, name: $0.name, count: $0.count, hint: $0.hint) },
+                           topics: topics.map {
+                               TopicIndexEntry(topicID: $0.id, name: $0.name, count: $0.count, hint: $0.hint, about: $0.about,
+                                               mentioned: $0.mentioned ?? false)
+                           },
                            topicsFull: topicsFull,
                            candidates: candidates.map {
                                CandidateEntry(thoughtID: $0.id, title: $0.title, topicID: $0.topicID, when: $0.when,
@@ -176,11 +191,14 @@ enum ThoughtsEval {
         }
     }
 
-    static func ledger(for model: String) -> TokenLedger {
+    /// `tag`: eigener Ledger mit Tagesgrenze `tagLimit` (z. B. `--ledger described --budget 25000`).
+    static func ledger(for model: String, tag: String? = nil, tagLimit: Int? = nil) -> TokenLedger {
         var configured = TokenLedger.Limits()
         configured.dailyTokens = model == models.large ? dailyLargeTokens : totalSmallTokens
+        if tag != nil, let tagLimit { configured.dailyTokens = min(configured.dailyTokens, tagLimit) }
         let limits = configured
-        let url = outDir.appendingPathComponent("ledger-\(model.replacingOccurrences(of: "/", with: "_")).json")
+        let prefix = tag.map { "ledger-\($0)-" } ?? "ledger-"
+        let url = outDir.appendingPathComponent("\(prefix)\(model.replacingOccurrences(of: "/", with: "_")).json")
         return TokenLedger(fileURL: url, limits: { limits })
     }
 
@@ -188,17 +206,18 @@ enum ThoughtsEval {
     /// `part`/`partCount`: Teile-Modus (Teil 1 läuft mit vollem Schema, `input.part` ist dort nil).
     static func call(stage: String, caseID: String, run: Int, input: StructureInput, model: String, key: String,
                      synthetic: Bool, note: String? = nil, part: Int? = nil, partCount: Int? = nil,
-                     now: Date, timeZone: TimeZone) async throws -> CallRecord {
+                     now: Date, timeZone: TimeZone, ledgerTag: String? = nil, ledgerLimit: Int? = nil,
+                     reserve: Int? = nil) async throws -> CallRecord {
         precondition(model.hasPrefix("openai/gpt-oss"), "nie qwen")
         let built = try ThoughtPrompt.build(input, now: now, timeZone: timeZone)
         if model == models.small, totalTokens(model: model) + built.estimate > totalSmallTokens {
             throw Stop.budget("20b-Gesamtgrenze \(totalSmallTokens) wäre überschritten")
         }
-        let ledger = ledger(for: model)
+        let ledger = ledger(for: model, tag: ledgerTag, tagLimit: ledgerLimit)
         var reservation: TokenLedger.Reservation?
         while reservation == nil {
             do {
-                reservation = try await ledger.reserve(model: model, amount: built.estimate, unit: .tokens)
+                reservation = try await ledger.reserve(model: model, amount: reserve ?? built.estimate, unit: .tokens)
             } catch {
                 switch error {
                 case .minute(let retryAt):
@@ -311,6 +330,8 @@ enum ThoughtsEval {
             var terms: [Term]?
             var corrections: [Correction]?
             var titleAbout: String
+            /// nur described.json: Themen mit Namens-Treffer (`TopicMentions`)
+            var mentioned: [String]?
         }
 
         struct Keep: Decodable { var kind: String; var any: [String] }
@@ -347,7 +368,8 @@ enum ThoughtsEval {
         func topicName(_ id: String) -> String { topics.first { $0.id == id }?.title ?? id }
     }
 
-    static func loadFixture() throws -> Fixture {
+    /// `set`: "eval" (store-a + eval.jsonl) oder "described" (store-a + Themen und Fälle aus described.json).
+    static func loadFixture(set: String = "eval") throws -> Fixture {
         let data = try Data(contentsOf: fixturesDir.appendingPathComponent("store-a.json"))
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let topicsBlock = root["topics"] as? [String: Any],
@@ -364,10 +386,21 @@ enum ThoughtsEval {
             item.removeValue(forKey: "_createdAtLocal")
             return try decoder.decode(Thought.self, from: JSONSerialization.data(withJSONObject: item))
         }
-        let topics = try rawTopics.map { try decoder.decode(Topic.self, from: JSONSerialization.data(withJSONObject: $0)) }
-        let lines = try String(contentsOf: fixturesDir.appendingPathComponent("eval.jsonl"), encoding: .utf8).split(separator: "\n")
-        let cases = try lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-            .map { try JSONDecoder().decode(EvalCase.self, from: Data($0.utf8)) }
+        var topics = try rawTopics.map { try decoder.decode(Topic.self, from: JSONSerialization.data(withJSONObject: $0)) }
+        let cases: [EvalCase]
+        if set == "described" {
+            let described = try Data(contentsOf: fixturesDir.appendingPathComponent("described.json"))
+            guard let object = try JSONSerialization.jsonObject(with: described) as? [String: Any],
+                  let extra = object["topics"] as? [[String: Any]], let rawCases = object["cases"] as? [[String: Any]] else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            topics += try extra.map { try decoder.decode(Topic.self, from: JSONSerialization.data(withJSONObject: $0)) }
+            cases = try rawCases.map { try JSONDecoder().decode(EvalCase.self, from: JSONSerialization.data(withJSONObject: $0)) }
+        } else {
+            let lines = try String(contentsOf: fixturesDir.appendingPathComponent("eval.jsonl"), encoding: .utf8).split(separator: "\n")
+            cases = try lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                .map { try JSONDecoder().decode(EvalCase.self, from: Data($0.utf8)) }
+        }
         return Fixture(timeZone: (root["timezone"] as? String).flatMap(TimeZone.init(identifier:)) ?? .current,
                        uiLanguage: root["uiLanguage"] as? String ?? "de",
                        vocabulary: root["vocabulary"] as? [String] ?? [], topics: topics, thoughts: thoughts, cases: cases)
@@ -429,6 +462,9 @@ enum ThoughtsEval {
         var effort = "low"
         var run = 1
         var prompt = ThoughtPrompt.version
+        var set = "eval"
+        var ledgerTag: String?
+        var tight = false
 
         init(_ arguments: ArraySlice<String>) {
             var rest = arguments
@@ -442,6 +478,9 @@ enum ThoughtsEval {
                 case "--effort": effort = value == "medium" ? "medium" : "low"
                 case "--run": run = Int(value) ?? 1
                 case "--prompt": prompt = Int(value.drop(while: { $0 == "v" })) ?? prompt
+                case "--set": set = value == "described" ? "described" : "eval"
+                case "--ledger": ledgerTag = value.isEmpty ? nil : value
+                case "--tight": tight = value == "1" || value == "true"
                 default: fail("Unbekannte Option \(flag)")
                 }
             }
@@ -456,7 +495,8 @@ enum ThoughtsEval {
     static func main(_ arguments: [String]) async {
         guard let command = arguments.first else { fail("thoughts-eval plan | run <stufe> | score <stufe>") }
         let fixture: Fixture
-        do { fixture = try loadFixture() } catch { fail("Fixtures nicht lesbar: \(error)") }
+        let set = arguments.firstIndex(of: "--set").flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil } ?? "eval"
+        do { fixture = try loadFixture(set: set) } catch { fail("Fixtures nicht lesbar: \(error)") }
         switch command {
         case "plan":
             await plan(Options(arguments.dropFirst()), fixture: fixture)
@@ -474,8 +514,8 @@ enum ThoughtsEval {
     /// Offline: was gesendet würde (Schätzung, Teile, Themen, Kandidaten, erwartete Verwandte gesendet?).
     static func plan(_ options: Options, fixture: Fixture) async {
         var total = 0
-        print("| Fall | Teile | Schätzung | Themen | Kandidaten (Wert) | Pflicht-Verwandte gesendet | gekürzt |")
-        print("| --- | --- | --- | --- | --- | --- | --- |")
+        print("| Fall | Teile | Schätzung | Themen | Kandidaten (Wert) | Pflicht-Verwandte gesendet | gekürzt | Treffer |")
+        print("| --- | --- | --- | --- | --- | --- | --- | --- |")
         for evalCase in options.selected(fixture) {
             let prepared = await prepare(evalCase, fixture: fixture, effort: options.effort)
             var estimate = 0
@@ -491,7 +531,11 @@ enum ThoughtsEval {
             let required = evalCase.expect.related.filter { $0.status == "required" }
             let hit = required.filter { !sent.isDisjoint(with: $0.ids) }.count
             let candidates = prepared.base.candidates.map { String(format: "%@ %.2f", String($0.thoughtID.prefix(6)), $0.localScore) }
-            print("| \(evalCase.id) | \(prepared.parts.count) | \(estimate) | \(prepared.base.topics.count)\(prepared.base.topicsFull ? " voll" : "") | \(candidates.joined(separator: ", ")) | \(hit)/\(required.count) | \(trimmed.joined(separator: ",")) |")
+            var mentioned = prepared.base.topics.filter(\.mentioned).map(\.name).joined(separator: ", ")
+            if let expected = evalCase.expect.mentioned {
+                mentioned += Set(expected) == Set(prepared.base.topics.filter(\.mentioned).map(\.name)) ? " ✓" : " ✗ Soll: \(expected)"
+            }
+            print("| \(evalCase.id) | \(prepared.parts.count) | \(estimate) | \(prepared.base.topics.count)\(prepared.base.topicsFull ? " voll" : "") | \(candidates.joined(separator: ", ")) | \(hit)/\(required.count) | \(trimmed.joined(separator: ",")) | \(mentioned) |")
         }
         print("\nSchätzung gesamt: \(total) Tokens (obere Grenze: Eingabe/3 + max_completion_tokens + 256)")
     }
@@ -502,7 +546,10 @@ enum ThoughtsEval {
         precondition(model.hasPrefix("openai/gpt-oss"), "nie qwen")
         var spent = 0
         var casesRun = 0
+        /// größtes Verhältnis Groq-Prompt-Tokens / Eingabe-Schätzung dieser Sitzung (`--tight`)
+        var promptRatio: Double?
         guard options.prompt == ThoughtPrompt.version else { fail("Aufrufe nur mit dem aktuellen Prompt v\(ThoughtPrompt.version)") }
+        if options.ledgerTag != nil, options.budget == Int.max { fail("--ledger braucht --budget (Tagesgrenze des eigenen Ledgers)") }
         print("Stufe \(stage) · Prompt v\(ThoughtPrompt.version) · \(model) · \(options.effort) · Lauf \(options.run) · bisher 24 h: \(totalTokens(model: model, since: Date().addingTimeInterval(-86_400)))")
         for evalCase in options.selected(fixture) {
             guard casesRun < options.limit else { break }
@@ -526,16 +573,27 @@ enum ThoughtsEval {
                     print("\(evalCase.id): Eingabe zu groß, übersprungen")
                     break
                 }
-                if spent + built.estimate > options.budget {
-                    print("Sitzungsbudget \(options.budget) erreicht (verbraucht \(spent), nächste Schätzung \(built.estimate)) – Ende")
+                let promptEstimate = built.estimate - built.maxCompletionTokens - 256
+                var bound = built.estimate
+                if options.tight, let promptRatio {
+                    bound = min(built.estimate, Int((Double(promptEstimate) * promptRatio * 1.05).rounded(.up)) + built.maxCompletionTokens)
+                }
+                if spent + bound > options.budget {
+                    print("Sitzungsbudget \(options.budget) erreicht (verbraucht \(spent), nächste obere Grenze \(bound)) – Ende")
                     return
                 }
                 do {
                     let record = try await call(stage: stage, caseID: evalCase.id, run: options.run, input: input, model: model,
                                                 key: key, synthetic: false, note: "Kandidaten: H2 CandidateFinder (Standard-Optionen)",
                                                 part: part, partCount: part == nil ? nil : prepared.parts.count,
-                                                now: evalCase.date, timeZone: fixture.timeZone)
-                    let used = record.usage?.total ?? 0
+                                                now: evalCase.date, timeZone: fixture.timeZone,
+                                                ledgerTag: options.ledgerTag, ledgerLimit: options.budget,
+                                                reserve: options.tight ? bound : nil)
+                    // ohne Zählung (z. B. json_validate_failed, Netzfehler) zählt die obere Grenze
+                    let used = record.usage?.total ?? (record.status.hasPrefix("http-429") ? 0 : bound)
+                    if let prompt = record.usage?.prompt, promptEstimate > 0 {
+                        promptRatio = max(promptRatio ?? 0, Double(prompt) / Double(promptEstimate))
+                    }
                     spent += used
                     let partLabel = part.map { " Teil \($0)/\(prepared.parts.count)" } ?? ""
                     print("\(evalCase.id)\(partLabel): \(record.status) \(record.finishReason ?? "-") · Tokens \(record.usage.map { "\($0.prompt)+\($0.completion)=\($0.total)" } ?? "?") (Schätzung \(record.estimate)) · \(Int(record.latencyMs)) ms")

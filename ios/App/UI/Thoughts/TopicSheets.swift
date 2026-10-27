@@ -58,8 +58,8 @@ struct TopicPickerSheet: View {
                 }
             }
             .navigationDestination(isPresented: $creating) {
-                TopicEditor(mode: .create(prefill: query)) { title, icon in
-                    let topic = model.createTopic(title: title, icon: icon)
+                TopicEditor(mode: .create(prefill: query)) { title, icon, note in
+                    let topic = model.createTopic(title: title, icon: icon, note: note)
                     choose(topic.id)
                 }
             }
@@ -115,7 +115,7 @@ struct TopicPickerSheet: View {
     }
 }
 
-// MARK: - Thema anlegen / bearbeiten (Name + Symbolraster)
+// MARK: - Thema anlegen / bearbeiten (Name, Beschreibung, Symbolraster)
 
 struct TopicEditor: View {
     enum Mode {
@@ -124,22 +124,26 @@ struct TopicEditor: View {
     }
 
     let mode: Mode
-    let onDone: (String, TopicIcon) -> Void
+    /// Name, Symbol, Beschreibung („Worum geht's?“; nil = keine)
+    let onDone: (String, TopicIcon, String?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var icon: TopicIcon
+    @State private var note: String
     @FocusState private var nameFocused: Bool
 
-    init(mode: Mode, onDone: @escaping (String, TopicIcon) -> Void) {
+    init(mode: Mode, onDone: @escaping (String, TopicIcon, String?) -> Void) {
         self.mode = mode
         self.onDone = onDone
         switch mode {
         case .create(let prefill):
             _name = State(initialValue: prefill)
             _icon = State(initialValue: .sparkles)
+            _note = State(initialValue: "")
         case .edit(let topic):
             _name = State(initialValue: topic.title)
             _icon = State(initialValue: topic.icon)
+            _note = State(initialValue: topic.describedNote ?? "")
         }
     }
 
@@ -159,6 +163,22 @@ struct TopicEditor: View {
                         .onSubmit(save)
                 }
                 .padding(.vertical, 4)
+            }
+            .listRowBackground(Color.paplyRow)
+            Section {
+                TextField("Namen, Firmen, Personen – damit Paply Gedanken richtig zuordnet", text: $note, axis: .vertical)
+                    .lineLimit(2...5)
+                    .foregroundStyle(Color.paplyText)
+                    .onChange(of: note) { _, value in
+                        if value.count > Topic.maxNoteLength { note = String(value.prefix(Topic.maxNoteLength)) }
+                    }
+            } header: {
+                Text("Worum geht's?")
+            } footer: {
+                if note.count > Topic.maxNoteLength - 40 {
+                    Text("Noch \(Topic.maxNoteLength - note.count) Zeichen")
+                        .monospacedDigit()
+                }
             }
             .listRowBackground(Color.paplyRow)
             Section {
@@ -189,7 +209,7 @@ struct TopicEditor: View {
 
     private func save() {
         guard !trimmed.isEmpty else { return }
-        onDone(trimmed, icon)
+        onDone(trimmed, icon, Topic.normalizedNote(note))
         if !isCreate { dismiss() }
     }
 }
@@ -325,9 +345,10 @@ struct TopicActionsModifier: ViewModifier {
             .sheet(item: iconSheet) { item in
                 if let topic = model.topic(item.id) {
                     NavigationStack {
-                        TopicEditor(mode: .edit(topic)) { title, icon in
+                        TopicEditor(mode: .edit(topic)) { title, icon, note in
                             if title != topic.title { model.renameTopic(topic.id, title: title) }
                             if icon != topic.icon { model.setTopicIcon(topic.id, icon) }
+                            if note != topic.describedNote { model.setTopicNote(topic.id, note) }
                         }
                     }
                     .presentationDetents([.medium, .large])

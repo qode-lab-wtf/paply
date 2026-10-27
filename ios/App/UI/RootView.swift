@@ -103,8 +103,7 @@ struct RootView: View {
         case "thoughts":
             nav.tab = .thoughts
             if path == "tasks" {
-                nav.path = []
-                nav.filter = .tasks
+                nav.path = [.tasks]
             }
         default:
             break
