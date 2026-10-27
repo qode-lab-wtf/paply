@@ -39,11 +39,15 @@ public actor ThoughtStore {
 
     public nonisolated let root: URL
     private let clock: @Sendable () -> Date
+    /// true erst, wenn alles Vorhandene lesbar war. Vor dem ersten Entsperren nach einem Neustart
+    /// (Data Protection) bleibt es false; jeder Zugriff und `reloadIfNeeded()` lädt dann nach.
     private var loaded = false
+    private var loadAttempts = 0
     private var cache: [String: Thought] = [:]
     private var sourceCache: [String: ThoughtSource] = [:]
     private var topicsDoc = TopicsDocument()
-    private var topicsReadable = true
+    /// `topics.json` gelesen (oder nicht vorhanden). Solange false, wird es nie geschrieben.
+    private var topicsReadable = false
     /// laufende Aufnahmen dieses Prozesses: `recover()` fasst sie nicht an
     private var activeCaptures: Set<String> = []
     private var reconstructed: [String] = []
@@ -84,19 +88,42 @@ public actor ThoughtStore {
 
     // MARK: Laden
 
-    /// Lädt beim ersten Zugriff (nicht im `init`, damit der App-Start nicht wartet).
+    /// Lädt beim ersten Zugriff (nicht im `init`, damit der App-Start nicht wartet). War etwas nicht lesbar
+    /// (geschützt), bleibt `loaded` false und der nächste Zugriff lädt das Fehlende nach. Bereits Geladenes und
+    /// in diesem Prozess Geschriebenes bleibt dabei erhalten; nachgeladene Gedanken und Themen werden gemeldet.
     private func ensureLoaded() throws {
         if loaded { return }
         try FileSafety.createDirectory(thoughtsDirectory)
-        loadThoughts()
-        loadTopics()
-        loaded = true
+        let isRetry = loadAttempts > 0
+        loadAttempts += 1
+        let known = Set(cache.keys)
+        let topicsBefore = topicsReadable
+        let thoughtsComplete = loadThoughts()
+        if !topicsReadable { loadTopics() }
+        loaded = thoughtsComplete && topicsReadable
+        guard isRetry else { return }
+        for id in cache.keys where !known.contains(id) { changeBroadcast.yield(id) }
+        if topicsReadable && !topicsBefore { changeBroadcast.yield(Self.topicsChangeID) }
     }
 
-    private func loadThoughts() {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: thoughtsDirectory.path)) ?? []
-        let ids = names.filter(Self.isValidID)
-        guard !ids.isEmpty else { return }
+    /// Nach `protectedDataDidBecomeAvailable` (erstes Entsperren nach Neustart) aufrufen: lädt nach, was
+    /// vorher nicht lesbar war, und meldet es über `changes`. true = Ablage vollständig gelesen.
+    @discardableResult
+    public func reloadIfNeeded() -> Bool {
+        try? ensureLoaded()
+        return loaded
+    }
+
+    /// true = alles Vorhandene gelesen (geschützte Dateien zählen als nicht gelesen).
+    private func loadThoughts() -> Bool {
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: thoughtsDirectory.path)
+        } catch {
+            return false // Ordner nicht lesbar: später erneut
+        }
+        let ids = names.filter { Self.isValidID($0) && cache[$0] == nil }
+        guard !ids.isEmpty else { return true }
         let base = thoughtsDirectory
         let decoded = Parallel.map(ids.count) { index -> Thought? in
             let url = base.appendingPathComponent(ids[index], isDirectory: true).appendingPathComponent("thought.json")
@@ -104,14 +131,18 @@ public actor ThoughtStore {
                   thought.id == ids[index] else { return nil }
             return thought
         }
+        var complete = true
         for (index, id) in ids.enumerated() {
             if let thought = decoded[index] {
                 cache[id] = thought
+            } else if FileSafety.exists(thoughtURL(id)), (try? Data(contentsOf: thoughtURL(id))) == nil {
+                complete = false // vorhanden, aber geschützt: nicht rekonstruieren, später erneut lesen
             } else if let rebuilt = reconstruct(id) {
                 cache[id] = rebuilt
                 reconstructed.append(id)
             }
         }
+        return complete
     }
 
     /// `thought.json` fehlt oder ist beschädigt: aus Ton und `source.json` neu aufbauen (nie still verwerfen).
@@ -143,13 +174,14 @@ public actor ThoughtStore {
         return thought
     }
 
+    /// Setzt `topicsReadable`, sobald `topics.json` gelesen (oder nicht vorhanden) ist.
     private func loadTopics() {
         let fm = FileManager.default
         if fm.fileExists(atPath: topicsURL.path) {
             guard let data = try? Data(contentsOf: topicsURL) else {
-                topicsReadable = false // geschützt/nicht lesbar: nie überschreiben
-                return
+                return // geschützt/nicht lesbar: nie überschreiben, später erneut
             }
+            topicsReadable = true
             if let doc = try? ThoughtJSON.decoder().decode(TopicsDocument.self, from: data) {
                 topicsDoc = doc
                 return
@@ -164,6 +196,10 @@ public actor ThoughtStore {
             }
             return
         }
+        if fm.fileExists(atPath: topicsPrevURL.path), (try? Data(contentsOf: topicsPrevURL)) == nil {
+            return // nur der Vorgänger liegt da und ist geschützt: später erneut
+        }
+        topicsReadable = true
         if let prev = try? Data(contentsOf: topicsPrevURL),
            let doc = try? ThoughtJSON.decoder().decode(TopicsDocument.self, from: prev) {
             topicsDoc = doc
@@ -304,6 +340,9 @@ public actor ThoughtStore {
     public func saveSourceOnce(_ id: String, _ source: ThoughtSource) throws {
         try ensureLoaded()
         guard Self.isValidID(id) else { throw ThoughtStoreError.invalidID }
+        // Endgültig gelöscht (z. B. während der Verschriftlichung): keinen Ordner neu anlegen, sonst kehrte
+        // der Gedanke nach einem Neustart als Rekonstruktion zurück.
+        guard cache[id] != nil else { throw ThoughtStoreError.notFound }
         guard !hasSource(id) else { throw ThoughtStoreError.sourceExists }
         let dir = directory(id)
         if !FileSafety.exists(dir) { try FileSafety.createDirectory(dir) }
@@ -337,6 +376,20 @@ public actor ThoughtStore {
     /// Aufnahme beendet: Zustand `captured`, Dauer setzen. Ohne Ton (0 ms) wird der Eintrag entfernt.
     @discardableResult
     public func finishCapture(_ id: String, durationMs: Int) throws -> Thought? {
+        try completeCapture(id, durationMs: durationMs, deletedAt: nil)
+    }
+
+    /// Aufnahme beendet und – beim Verwerfen – im selben Schritt in „Zuletzt gelöscht“ (`deletedAt`).
+    /// Ein einziges atomares Update: Die Warteschlange sieht den Gedanken nie als `captured` ohne `deletedAt`
+    /// und schickt ihn deshalb nicht an Groq. `deletedAt == nil` lässt den Löschstand unverändert.
+    /// Ohne Ton (0 ms) wird der Eintrag entfernt. Fehlt der Gedanke (schon endgültig entfernt): `.notFound`.
+    public func finishCapture(_ id: String, durationMs: Int, deletedAt: Date?) async throws {
+        let finished = try completeCapture(id, durationMs: durationMs, deletedAt: deletedAt)
+        if finished == nil && durationMs > 0 { throw ThoughtStoreError.notFound }
+    }
+
+    @discardableResult
+    private func completeCapture(_ id: String, durationMs: Int, deletedAt: Date?) throws -> Thought? {
         activeCaptures.remove(id)
         guard durationMs > 0 else {
             purge(id)
@@ -345,6 +398,7 @@ public actor ThoughtStore {
         return try update(id) { thought in
             thought.state = .captured
             thought.durationMs = durationMs
+            if let deletedAt { thought.deletedAt = deletedAt }
         }
     }
 
@@ -437,6 +491,7 @@ public actor ThoughtStore {
 
     public func setPendingSuggestions(_ suggestions: [TopicSuggestion]) throws {
         try ensureLoaded()
+        guard topicsReadable else { throw ThoughtStoreError.unavailable } // Vorschläge beruhen auf den Themen
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(suggestions), to: suggestionsURL)
         changeBroadcast.yield(Self.topicsChangeID)
     }

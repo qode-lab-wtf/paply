@@ -86,7 +86,13 @@ final class ThoughtsModel {
                 if case .saved = event { self?.refreshUsage() }
             }
         })
-        listeners.append(Task { [weak self] in await self?.load() })
+        // Vor dem ersten Entsperren nach einem Neustart wäre alles leer: erst danach laden
+        ProtectedData.whenReadable { [weak self] deferred in
+            self?.listeners.append(Task { [weak self] in
+                if deferred { await backend.store.reloadIfNeeded() }
+                await self?.load()
+            })
+        }
     }
 
     // MARK: Lesen

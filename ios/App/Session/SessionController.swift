@@ -127,6 +127,11 @@ final class SessionController {
         case .granted:
             break
         case .undetermined:
+            // Im Hintergrund (Gedanken-Knopf Fall B) kann iOS nicht fragen – die Anfrage hinge.
+            // Sofort scheitern; der Aufrufer holt die App nach vorne, dort kommt die Frage.
+            guard UIApplication.shared.applicationState == .active else {
+                return failStart(trigger: trigger, stage: "permission", code: 0, text: "Mikrofon noch nicht erlaubt – bitte in Paply bestätigen")
+            }
             let granted = await AVAudioApplication.requestRecordPermission()
             Diag.log("mic.permission", ["granted": .b(granted)])
             if !granted { return failStart(trigger: trigger, stage: "permission", code: 0, text: "Mikrofon nicht erlaubt") }
@@ -171,6 +176,8 @@ final class SessionController {
     }
 
     func stopSession(reason: String) {
+        // „Ausschalten“ beendet auch einen laufenden Gedanken – gesichert, nie verworfen
+        if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.app) }
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
         startedForThought = false
@@ -1120,6 +1127,10 @@ extension SessionController {
         thoughtSessionEnd?.cancel()
         thoughtSessionEnd = Task {
             try? await Task.sleep(for: .seconds(Self.thoughtOnlySessionSeconds))
+            guard !Task.isCancelled, startedForThought, !isThoughtActive, dictation == nil, status != .off else { return }
+            // Danach wird die App ausgesetzt: Wartet noch ein Gedanke (Netz, Kontingent), übernimmt ein
+            // BGProcessingTask. In Fall B kam die App nie nach vorne, also gab es noch keinen.
+            await ThoughtsEnvironment.scheduleBackgroundProcessing()
             guard !Task.isCancelled, startedForThought, !isThoughtActive, dictation == nil, status != .off else { return }
             stopSession(reason: "thought-session-end")
         }

@@ -5,6 +5,110 @@ import Testing
 
 @Suite("Gedanken-Speicher")
 struct StoreTests {
+    // MARK: Geschützte Dateien (B1), Endgültig löschen (W1), Verwerfen (W2)
+
+    private static func setPermissions(_ mode: Int, _ urls: [URL]) {
+        for url in urls { try? FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path) }
+    }
+
+    /// B1: Vor dem ersten Entsperren nicht lesbar → kein leerer Index für die ganze Laufzeit, `topics.json`
+    /// bleibt unberührt; nach dem Entsperren lädt der Speicher nach und meldet es.
+    @Test func protectedFilesAreLoadedLaterAndNeverOverwritten() async throws {
+        let root = StoreSupport.temporaryRoot()
+        let first = try ThoughtStore(root: root)
+        let thought = StoreSupport.thought(title: "Tomaten gießen", text: "Die Tomaten gießen.")
+        try await first.save(thought)
+        try await first.saveTopics([Topic(id: "t_garden", title: "Garten", icon: .leaf, owner: .user)])
+        let thoughtFile = first.directory(thought.id).appendingPathComponent("thought.json")
+        let topicsFile = root.appendingPathComponent("topics.json")
+        let topicsBefore = try Data(contentsOf: topicsFile)
+        Self.setPermissions(0o000, [thoughtFile, topicsFile])
+        defer {
+            Self.setPermissions(0o644, [thoughtFile, topicsFile])
+            StoreSupport.remove(root)
+        }
+
+        let locked = try ThoughtStore(root: root)
+        #expect(await locked.all().isEmpty)
+        #expect(await locked.topics().isEmpty)
+        await #expect(throws: ThoughtStoreError.unavailable) {
+            try await locked.saveTopics([Topic(id: "t_neu", title: "Neu", icon: .leaf, owner: .ai)])
+        }
+        await #expect(throws: ThoughtStoreError.unavailable) { try await locked.updateTopics { $0.removeAll() } }
+        #expect(await locked.reloadIfNeeded() == false)
+        // nichts rekonstruiert, nichts als beschädigt beiseitegelegt
+        let rest = try FileManager.default.contentsOfDirectory(atPath: first.directory(thought.id).path)
+        #expect(rest.contains("thought.json") && !rest.contains { $0.hasPrefix("damaged-") })
+
+        var changes = locked.changes.makeAsyncIterator()
+        Self.setPermissions(0o644, [thoughtFile, topicsFile])               // erstes Entsperren
+        #expect(await locked.reloadIfNeeded())
+        #expect(await locked.thought(thought.id)?.title == "Tomaten gießen")
+        #expect(await locked.topics().map(\.id) == ["t_garden"])
+        #expect(try Data(contentsOf: topicsFile) == topicsBefore)
+        var seen: [String] = []
+        while seen.count < 2, let change = await changes.next() { seen.append(change) }
+        #expect(Set(seen) == [thought.id, ThoughtStore.topicsChangeID])
+        // danach normal beschreibbar
+        try await locked.saveTopics([Topic(id: "t_garden", title: "Garten", icon: .leaf, owner: .user),
+                                     Topic(id: "t_neu", title: "Neu", icon: .leaf, owner: .ai)])
+        #expect(await locked.topics().count == 2)
+    }
+
+    /// B1: Auch ohne ausdrücklichen Aufruf lädt der nächste Zugriff nach, sobald die Dateien lesbar sind.
+    @Test func nextAccessRetriesAfterUnreadableDirectory() async throws {
+        let root = StoreSupport.temporaryRoot()
+        let first = try ThoughtStore(root: root)
+        let thought = StoreSupport.thought(title: "Lampen bestellen")
+        try await first.save(thought)
+        let directory = first.thoughtsDirectory
+        Self.setPermissions(0o000, [directory])
+        defer {
+            Self.setPermissions(0o755, [directory])
+            StoreSupport.remove(root)
+        }
+        let locked = try ThoughtStore(root: root)
+        #expect(await locked.all().isEmpty)
+        Self.setPermissions(0o755, [directory])
+        #expect(await locked.all().map(\.id) == [thought.id])
+    }
+
+    /// W1: Nach dem endgültigen Löschen legt `saveSourceOnce` keinen Ordner mehr an.
+    @Test func sourceForAPurgedThoughtIsRejected() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        let thought = StoreSupport.thought(state: .transcribing)
+        try await store.save(thought)
+        await store.purge(thought.id)
+        let source = ThoughtSource(text: "Hallo", sentences: [], model: "whisper-large-v3", createdAt: Date(),
+                                   languages: ["de"], audioSeconds: 1)
+        await #expect(throws: ThoughtStoreError.notFound) { try await store.saveSourceOnce(thought.id, source) }
+        #expect(!FileManager.default.fileExists(atPath: store.directory(thought.id).path))
+        #expect(await (try ThoughtStore(root: root)).thought(thought.id) == nil)
+    }
+
+    /// W2: `finishCapture(_:durationMs:deletedAt:)` ein Schritt; ohne Ton weg, unbekannt → `.notFound`.
+    @Test func finishCaptureWithDeletion() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        let at = Date(timeIntervalSince1970: 1_793_093_400)
+        let (thought, writer) = try await store.beginCapture(trigger: .control, at: at)
+        writer.append(StoreSupport.tone(seconds: 1))
+        let duration = writer.close()
+        try await store.finishCapture(thought.id, durationMs: duration, deletedAt: at)
+        let saved = try #require(await store.thought(thought.id))
+        #expect(saved.state == .captured && saved.deletedAt == at && saved.durationMs == duration && saved.rev == 2)
+        await #expect(throws: ThoughtStoreError.notFound) {
+            try await store.finishCapture("s_gibtsnicht", durationMs: 1_000, deletedAt: at)
+        }
+        let (empty, emptyWriter) = try await store.beginCapture(trigger: .control, at: at)
+        _ = emptyWriter.close()
+        try await store.finishCapture(empty.id, durationMs: 0, deletedAt: at)
+        #expect(await store.thought(empty.id) == nil)
+    }
+
     // MARK: Aufnahme und WAV
 
     @Test func captureWritesWAVAndPlaceholderSynchronously() async throws {

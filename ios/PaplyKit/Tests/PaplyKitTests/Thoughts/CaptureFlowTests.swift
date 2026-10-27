@@ -5,7 +5,7 @@ import Testing
 // Besitzer: H3. Ende-zu-Ende der Aufnahme aus Sicht von ThoughtCapture (App), mit Ersatzteilen aus
 // ProcessingTests (kein Groq): genau die Aufruf-Reihenfolge der App –
 // beginCapture → expectLiveTranscript → Samples → close → finishCapture → liveTranscript / kick,
-// bzw. Verwerfen: finishCapture → delete.
+// bzw. Verwerfen: cancelLiveTranscript → finishCapture(deletedAt:) in einem Schritt.
 
 @Suite("Gedanken-Aufnahme (H3-Ablauf)")
 struct CaptureFlowTests {
@@ -71,14 +71,16 @@ struct CaptureFlowTests {
         #expect(await h.structurer.calls == 1)
     }
 
-    @Test func discardedThoughtGoesToTrashAndIsNeverProcessed() async throws {
+    @Test(arguments: [false, true])
+    func discardedThoughtGoesToTrashAndIsNeverProcessed(live: Bool) async throws {
         let h = try Harness.make()
         defer { h.cleanup() }
-        let (id, writer) = try await start(h, live: false)
+        let (id, writer) = try await start(h, live: live)
         writer.append(StoreSupport.tone(seconds: 1))
-        // Verwerfen wie ThoughtCapture.discard: sichern, dann in „Zuletzt gelöscht“
-        try await h.store.finishCapture(id, durationMs: writer.close())
-        try await h.store.delete(id)
+        // Verwerfen wie ThoughtCapture.discard: Live-Erwartung aufheben, dann sichern und in
+        // „Zuletzt gelöscht“ in EINEM Schritt (nie `captured` ohne `deletedAt` sichtbar)
+        if live { await h.processor.cancelLiveTranscript(id) }
+        try await h.store.finishCapture(id, durationMs: writer.close(), deletedAt: h.clock.now)
         await h.run()
         let trashed = try #require(await h.thought(id))
         #expect(trashed.deletedAt != nil)
@@ -86,7 +88,7 @@ struct CaptureFlowTests {
         #expect(await h.transcriber.calls == 0)
         #expect(await h.structurer.calls == 0)
         #expect(await h.store.audioURL(id) != nil) // Ton bleibt für die Wiederherstellung
-        // Wiederherstellen → normal geordnet
+        // Wiederherstellen → sofort normal geordnet (Dateiweg, kein Warten auf die Live-Pipeline)
         try await h.store.restore(id)
         await h.run()
         #expect(await h.thought(id)?.state == .done)

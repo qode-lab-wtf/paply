@@ -36,11 +36,38 @@ final class HistoryStore {
         return dir.appendingPathComponent("history.json")
     }()
 
+    /// false = vor dem ersten Entsperren nach einem Neustart: Datei nicht lesbar. Bis zum Nachladen
+    /// wird nichts gespeichert (sonst ersetzte ein einzelner neuer Eintrag den ganzen Verlauf).
+    @ObservationIgnored private var isLoaded = false
+
     private init() {
+        load()
+        if !isLoaded {
+            Task { @MainActor in
+                ProtectedData.whenReadable { _ in HistoryStore.shared.reloadIfNeeded() }
+            }
+        }
+    }
+
+    private func load() {
+        guard ProtectedData.isReadable else { return }
         if let data = try? Data(contentsOf: fileURL),
            let stored = try? JSONDecoder().decode([HistoryEntry].self, from: data) {
             entries = stored
         }
+        isLoaded = true
+    }
+
+    /// Nach dem ersten Entsperren: gespeicherten Verlauf lesen; inzwischen Neues bleibt obenauf.
+    func reloadIfNeeded() {
+        guard !isLoaded else { return }
+        let added = entries
+        load()
+        guard isLoaded, !added.isEmpty else { return }
+        let ids = Set(added.map(\.id))
+        entries = added + entries.filter { !ids.contains($0.id) }
+        if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
+        save()
     }
 
     /// Neuer Eintrag – oder Ersatz des Eintrags mit derselben ID (nach „Erneut versuchen“).
@@ -91,6 +118,7 @@ final class HistoryStore {
     private static let saveQueue = DispatchQueue(label: "paply.history-save", qos: .utility)
 
     private func save() {
+        guard isLoaded else { return }
         let snapshot = entries
         let url = fileURL
         Self.saveQueue.async {

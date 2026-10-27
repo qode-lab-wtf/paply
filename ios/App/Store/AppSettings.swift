@@ -92,36 +92,36 @@ final class AppSettings {
     }
 
     var holdDuration: HoldDuration {
-        didSet { SharedSettings.holdDuration = holdDuration }
+        didSet { save { SharedSettings.holdDuration = holdDuration } }
     }
 
     var autoOpenApp: Bool {
-        didSet { SharedSettings.autoOpenApp = autoOpenApp }
+        didSet { save { SharedSettings.autoOpenApp = autoOpenApp } }
     }
 
     var logHostBundleID: Bool {
-        didSet { SharedSettings.logHostBundleID = logHostBundleID }
+        didSet { save { SharedSettings.logHostBundleID = logHostBundleID } }
     }
 
     /// Versteckter Entwicklerbereich (5× auf die Version tippen)
     var developerMode: Bool {
-        didSet { UserDefaults.standard.set(developerMode, forKey: Key.developerMode) }
+        didSet { save { UserDefaults.standard.set(developerMode, forKey: Key.developerMode) } }
     }
 
     var idlePause: IdlePauseMode {
-        didSet { UserDefaults.standard.set(idlePause.rawValue, forKey: Key.idlePause) }
+        didSet { save { UserDefaults.standard.set(idlePause.rawValue, forKey: Key.idlePause) } }
     }
 
     var testOptions: PipelineTestOptions {
         didSet {
-            UserDefaults.standard.set(try? JSONEncoder().encode(testOptions), forKey: Key.testOptions)
+            save { UserDefaults.standard.set(try? JSONEncoder().encode(testOptions), forKey: Key.testOptions) }
         }
     }
 
     /// „Sprachen, die du sprichst“: automatisch (Tastaturen + Gerätesprachen) oder eigene Liste
     /// (`paply.spokenLanguages`).
     var spokenLanguagesAuto: Bool {
-        didSet { UserDefaults.standard.set(spokenLanguagesAuto, forKey: Key.spokenAuto) }
+        didSet { save { UserDefaults.standard.set(spokenLanguagesAuto, forKey: Key.spokenAuto) } }
     }
 
     /// Zuletzt im Vordergrund abgeleitete Sprachen (gespeichert, damit sie im Hintergrund gelten)
@@ -132,32 +132,107 @@ final class AppSettings {
     private(set) var apiKeySuffix: String?
     @ObservationIgnored private var cachedAPIKey: String?
 
+    /// false = vor dem ersten Entsperren nach einem Neustart gelesen: UserDefaults lieferten nur
+    /// Standardwerte. Bis `reloadIfNeeded()` wird NICHTS gespeichert – sonst überschrieben die leeren
+    /// Werte die echten (z. B. die Eigenen Begriffe).
+    @ObservationIgnored private(set) var isLoaded: Bool
+
+    /// Gespeicherter Stand (UserDefaults, App Group, Schlüsselbund)
+    private struct Stored {
+        var paply: PaplySettings
+        var holdDuration: HoldDuration
+        var autoOpenApp: Bool
+        var logHostBundleID: Bool
+        var testOptions: PipelineTestOptions
+        var spokenLanguagesAuto: Bool
+        var idlePause: IdlePauseMode
+        var developerMode: Bool
+        var detectedSpokenLanguages: [String]
+        var apiKey: String?
+
+        static func read() -> Stored {
+            let defaults = UserDefaults.standard
+            var paply = PaplySettings()
+            if let data = defaults.data(forKey: Key.settings),
+               let stored = try? JSONDecoder().decode(PaplySettings.self, from: data) {
+                paply = stored
+            }
+            // V1: Sprache immer automatisch
+            paply.language = nil
+            var testOptions = PipelineTestOptions()
+            if let data = defaults.data(forKey: Key.testOptions),
+               let stored = try? JSONDecoder().decode(PipelineTestOptions.self, from: data) {
+                testOptions = stored
+            }
+            return Stored(
+                paply: paply,
+                holdDuration: SharedSettings.holdDuration,
+                autoOpenApp: SharedSettings.autoOpenApp,
+                logHostBundleID: SharedSettings.logHostBundleID,
+                testOptions: testOptions,
+                spokenLanguagesAuto: defaults.object(forKey: Key.spokenAuto) as? Bool ?? true,
+                idlePause: IdlePauseMode(rawValue: defaults.string(forKey: Key.idlePause) ?? "") ?? .off,
+                developerMode: defaults.bool(forKey: Key.developerMode),
+                detectedSpokenLanguages: defaults.stringArray(forKey: Key.spokenDetected) ?? [],
+                apiKey: Keychain.readAPIKey()
+            )
+        }
+    }
+
     private init() {
-        var loaded = PaplySettings()
-        if let data = UserDefaults.standard.data(forKey: Key.settings),
-           let stored = try? JSONDecoder().decode(PaplySettings.self, from: data) {
-            loaded = stored
+        isLoaded = ProtectedData.isReadable
+        let stored = Stored.read()
+        paply = stored.paply
+        holdDuration = stored.holdDuration
+        autoOpenApp = stored.autoOpenApp
+        logHostBundleID = stored.logHostBundleID
+        testOptions = stored.testOptions
+        spokenLanguagesAuto = stored.spokenLanguagesAuto
+        idlePause = stored.idlePause
+        developerMode = stored.developerMode
+        detectedSpokenLanguages = stored.detectedSpokenLanguages
+        cachedAPIKey = stored.apiKey
+        hasAPIKey = stored.apiKey != nil
+        apiKeySuffix = stored.apiKey.map { String($0.suffix(4)) }
+        if !isLoaded {
+            Diag.log("settings.load.deferred")
+            // erst nach dem init anmelden: `reloadIfNeeded` greift auf `shared` zu (SessionController)
+            Task { @MainActor in
+                ProtectedData.whenReadable { _ in AppSettings.shared.reloadIfNeeded() }
+            }
         }
-        // V1: Sprache immer automatisch
-        loaded.language = nil
-        paply = loaded
-        holdDuration = SharedSettings.holdDuration
-        autoOpenApp = SharedSettings.autoOpenApp
-        logHostBundleID = SharedSettings.logHostBundleID
-        if let data = UserDefaults.standard.data(forKey: Key.testOptions),
-           let stored = try? JSONDecoder().decode(PipelineTestOptions.self, from: data) {
-            testOptions = stored
-        } else {
-            testOptions = PipelineTestOptions()
+    }
+
+    /// Nach dem ersten Entsperren: alles neu lesen, ohne zu schreiben (`isLoaded` ist dabei noch false).
+    func reloadIfNeeded() {
+        guard !isLoaded, ProtectedData.isReadable else { return }
+        let stored = Stored.read()
+        paply = stored.paply
+        holdDuration = stored.holdDuration
+        autoOpenApp = stored.autoOpenApp
+        logHostBundleID = stored.logHostBundleID
+        testOptions = stored.testOptions
+        spokenLanguagesAuto = stored.spokenLanguagesAuto
+        idlePause = stored.idlePause
+        developerMode = stored.developerMode
+        detectedSpokenLanguages = stored.detectedSpokenLanguages
+        if let key = stored.apiKey {
+            cachedAPIKey = key
+            hasAPIKey = true
+            apiKeySuffix = String(key.suffix(4))
         }
-        spokenLanguagesAuto = UserDefaults.standard.object(forKey: Key.spokenAuto) as? Bool ?? true
-        idlePause = IdlePauseMode(rawValue: UserDefaults.standard.string(forKey: Key.idlePause) ?? "") ?? .off
-        developerMode = UserDefaults.standard.bool(forKey: Key.developerMode)
-        detectedSpokenLanguages = UserDefaults.standard.stringArray(forKey: Key.spokenDetected) ?? []
-        let key = Keychain.readAPIKey()
-        cachedAPIKey = key
-        hasAPIKey = key != nil
-        apiKeySuffix = key.map { String($0.suffix(4)) }
+        isLoaded = true
+        Diag.log("settings.load", ["afterUnlock": .b(true), "apiKey": .b(hasAPIKey)])
+        SessionController.shared.refreshShared() // Tastatur: Schlüssel vorhanden?
+    }
+
+    /// Nur mit gelesenem Stand speichern.
+    private func save(_ write: () -> Void) {
+        guard isLoaded else {
+            Diag.log("settings.save.skipped", ["why": .s("not-loaded")])
+            return
+        }
+        write()
     }
 
     /// Aus dem Speicher; nur wenn noch nichts da ist (z. B. vor dem ersten Entsperren), erneut lesen.
@@ -186,6 +261,8 @@ final class AppSettings {
     /// häufigste eingestreute Sprachwechsel, und ohne zweite Sprache greift das
     /// Sprachwechsel-Beispiel (Schutz gegen verschluckte englische Sätze) nicht.
     func refreshDetectedSpokenLanguages() {
+        reloadIfNeeded()
+        guard isLoaded else { return }
         let keyboards = UITextInputMode.activeInputModes.compactMap(\.primaryLanguage)
         var detected = Self.languageCodes(keyboards + Locale.preferredLanguages)
         if detected.count == 1, detected[0] != "en" { detected.append("en") }
@@ -227,8 +304,10 @@ final class AppSettings {
     }
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(paply) {
-            UserDefaults.standard.set(data, forKey: Key.settings)
+        save {
+            if let data = try? JSONEncoder().encode(paply) {
+                UserDefaults.standard.set(data, forKey: Key.settings)
+            }
         }
     }
 }

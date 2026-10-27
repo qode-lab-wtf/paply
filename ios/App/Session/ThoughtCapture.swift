@@ -6,7 +6,7 @@ import UIKit
 // Aufnahme eines Gedankens (KONZEPT §5). Besitzer: H3.
 //
 // Erfassen ist heilig: Eintrag und WAV entstehen synchron vor jedem `await`, der Ton liegt auf der
-// Platte, bevor irgendetwas ins Netz geht. Unterbrechung, Tastatur oder 30-Min.-Grenze sichern den
+// Platte, bevor irgendetwas ins Netz geht. Unterbrechung, Tastatur oder 10-Min.-Grenze sichern den
 // Gedanken – verworfen wird nur auf ausdrücklichen Wunsch (`discard`).
 
 enum ThoughtToggleOutcome: Sendable, Equatable {
@@ -78,6 +78,20 @@ final class ThoughtCapture {
     @ObservationIgnored private var ticker: Task<Void, Never>?
     /// Start läuft (Fall B kann Sekunden dauern) – ein zweiter Druck darf keine zweite Aufnahme starten
     @ObservationIgnored private var starting = false
+    /// Gedanke, dessen Start gerade läuft: Eintrag und Live Activity gibt es schon, das Mikro noch nicht.
+    @ObservationIgnored private(set) var startingID: String?
+    /// „Fertig“/„Verwerfen“ aus der Live Activity während des Starts – ausgeführt, sobald er steht.
+    private enum PendingStop {
+        case finish(ThoughtFinishReason), discard
+
+        var logName: String {
+            switch self {
+            case .finish(let reason): reason.rawValue
+            case .discard: "discard"
+            }
+        }
+    }
+    @ObservationIgnored private var pendingStop: PendingStop?
 
     /// Was zur laufenden Aufnahme gehört (nur Main-Actor).
     private final class Recording {
@@ -130,18 +144,25 @@ final class ThoughtCapture {
             ThoughtBridge.showNotice("Diktat läuft gerade", symbol: "keyboard")
             return .refused("Diktat läuft gerade")
         }
-        guard Self.protectedFilesWritable() else {
+        // Vor dem ersten Entsperren nach einem Neustart: nichts anlegen, nichts speichern (Ablage wirkt leer)
+        guard ProtectedData.isReadable else {
             logStart(case: "-", ok: false, stage: "before-first-unlock", trigger: trigger, begin: begin)
             ThoughtBridge.showNotice("Nach dem Neustart einmal entsperren", symbol: "lock")
             return .refused("Nach dem Neustart einmal entsperren")
         }
+        // Inzwischen entsperrt, aber der Prozess hat es nicht mitbekommen: Aufgeschobenes jetzt laden
+        ProtectedData.check()
 
         guard store != nil else {
             logStart(case: "-", ok: false, stage: "no-store", trigger: trigger, begin: begin)
             return .refused("Gedanken-Ablage nicht bereit")
         }
         starting = true
-        defer { starting = false }
+        defer {
+            starting = false
+            startingID = nil
+            pendingStop = nil
+        }
 
         // 1) Synchron: Eintrag + WAV anlegen (vor jedem await)
         let startedAt = Date()
@@ -154,6 +175,7 @@ final class ThoughtCapture {
         }
         let (placeholder, file) = prepared
         let id = placeholder.id
+        startingID = id
         guard let store else { return .refused("Gedanken-Ablage nicht bereit") }
 
         // 2) Live Activity zuerst (AudioRecordingIntent verlangt eine laufende Activity)
@@ -179,22 +201,53 @@ final class ThoughtCapture {
             let failure = session.lastStartFailure
             logStart(case: fall, ok: false, stage: failure?.stage ?? "attach", trigger: trigger, begin: begin,
                      code: failure?.code, fourCC: failure?.fourCC)
+            // Während des Starts schon „Fertig“/„Verwerfen“ gedrückt: nicht nach vorne holen und neu starten
+            if pendingStop != nil { return .stopped(id) }
             return .needsForeground(failure?.fourCC.isEmpty == false ? failure!.fourCC : "Mikro ließ sich nicht starten")
         }
 
-        recording = Recording(id: id, trigger: trigger, startedAt: startedAt, startedNs: begin, placeholder: placeholder, file: file)
-        recording?.live = live
+        let rec = Recording(id: id, trigger: trigger, startedAt: startedAt, startedNs: begin, placeholder: placeholder, file: file)
+        rec.live = live
+        recording = rec
         // Läuft die Live-Pipeline, wartet die Warteschlange auf ihr Ergebnis (sonst Whisper doppelt)
         if live != nil { await processor?.expectLiveTranscript(id) }
+        // Während des Wartens beendet (Unterbrechung, Tastatur): nicht wieder als laufend melden
+        guard recording === rec, !rec.finishing else { return .stopped(id) }
         active = Active(id: id, startedAt: startedAt, speechDetected: false)
         ThoughtBridge.recordingChanged(id: id, startedAt: startedAt)
         startTicker(id: id)
         logStart(case: fall, ok: true, stage: "recording", trigger: trigger, begin: begin)
+        // „Fertig“/„Verwerfen“ kam, während Fall B noch startete: jetzt ausführen
+        if let pending = pendingStop {
+            pendingStop = nil
+            Diag.log("thought.pendingStop", ["id": .s(Self.short(id)), "action": .s(pending.logName)])
+            switch pending {
+            case .finish(let reason): finish(reason)
+            case .discard: discard()
+            }
+            return .stopped(id)
+        }
         return .started(id)
+    }
+
+    /// Gehört `id` zur laufenden oder gerade startenden Aufnahme? (Live Activity „Fertig“/„Verwerfen“)
+    func isCurrent(_ id: String) -> Bool {
+        active?.id == id || startingID == id
+    }
+
+    /// Start läuft noch (Mikro nicht dran): Stopp bzw. Verwerfen vormerken. true = vorgemerkt.
+    private func deferIfStarting(_ stop: PendingStop) -> Bool {
+        guard let id = startingID, recording?.id != id else { return false }
+        // Verwerfen gewinnt gegen ein vorgemerktes „Fertig“ (ausdrücklicher Wunsch)
+        if case .discard = pendingStop { return true }
+        pendingStop = stop
+        Diag.log("thought.pendingStop.set", ["id": .s(Self.short(id)), "action": .s(stop.logName)])
+        return true
     }
 
     /// Stoppt und sichert. Nie verwerfen (auch nicht bei Unterbrechung).
     func finish(_ reason: ThoughtFinishReason) {
+        if deferIfStarting(.finish(reason)) { return }
         guard let rec = recording, !rec.finishing else { return }
         rec.finishing = true
         let stopNs = MonoClock.now()
@@ -252,6 +305,7 @@ final class ThoughtCapture {
     /// Nicht endgültig: Der Gedanke landet mit Ton in „Zuletzt gelöscht“ (`deletedAt`), die
     /// Oberfläche kann ihn wiederherstellen; dann wird er normal geordnet.
     func discard() {
+        if deferIfStarting(.discard) { return }
         guard let rec = recording, !rec.finishing else { return }
         rec.finishing = true
         let id = rec.id
@@ -269,11 +323,17 @@ final class ThoughtCapture {
             // Live-Erwartung aufheben: Ein Wiederherstellen ordnet dann sofort über den Dateiweg.
             if rec.live != nil { await processor?.cancelLiveTranscript(id) }
             let durationMs = rec.file.close()
-            // Erst sichern (captured + Dauer), dann in „Zuletzt gelöscht“ – die Warteschlange
-            // überspringt gelöschte Gedanken, nach Wiederherstellen wird normal geordnet.
+            // Sichern und in „Zuletzt gelöscht“ in EINEM Schritt: Die Warteschlange sieht den Gedanken
+            // nie als `captured` ohne `deletedAt`. Nach Wiederherstellen wird normal geordnet.
+            // Ohne Ton (0 ms) entfernt der Store den Eintrag ganz.
             var inTrash = false
-            if let store, (try? await store.finishCapture(id, durationMs: durationMs)) != nil {
-                inTrash = (try? await store.delete(id)) != nil
+            if let store {
+                do {
+                    try await store.finishCapture(id, durationMs: durationMs, deletedAt: Date())
+                    inTrash = durationMs > 0
+                } catch {
+                    Diag.log("thought.discard.failed", ["id": .s(Self.short(id)), "code": .i((error as NSError).code)])
+                }
             }
             if recording === rec { recording = nil }
             Diag.log("thought.discard", [
@@ -365,19 +425,6 @@ final class ThoughtCapture {
     }
 
     static func short(_ id: String) -> String { String(id.prefix(10)) }
-
-    /// Nach einem Neustart ohne Entsperren sind Dateien (und Schlüsselbund) nicht verfügbar.
-    private static func protectedFilesWritable() -> Bool {
-        let dir = ThoughtsEnvironment.root
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let probe = dir.appendingPathComponent(".probe")
-        do {
-            try Data([1]).write(to: probe, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            return true
-        } catch {
-            return false
-        }
-    }
 }
 
 // MARK: - Bausteine (thread-sicher)

@@ -30,13 +30,17 @@ actor MockStructurer: ThoughtStructuring {
 actor MockTranscriber: ThoughtTranscribing {
     private var queue: [TranscriptionResult]
     private(set) var calls = 0
+    private var onCall: (@Sendable () async -> Void)?
 
     init(_ results: [TranscriptionResult] = []) { queue = results }
 
     func push(_ result: TranscriptionResult) { queue.append(result) }
+    /// läuft während des „Uploads“ (z. B. endgültig löschen, während Whisper arbeitet)
+    func setOnCall(_ block: @escaping @Sendable () async -> Void) { onCall = block }
 
     func transcribe(audioURL: URL, apiKey: String, settings: PaplySettings) async -> TranscriptionResult {
         calls += 1
+        if let onCall { await onCall() }
         return queue.isEmpty ? .success(text: "ähm also die Tomaten im Garten muss ich morgen gießen", languages: ["de"], audioSeconds: 2, model: "whisper-large-v3")
             : queue.removeFirst()
     }
@@ -71,7 +75,8 @@ struct Harness {
 
     static func make(structurer: MockStructurer = MockStructurer(), transcriber: MockTranscriber = MockTranscriber(),
                      configure: (inout ThoughtProcessor.Options) -> Void = { _ in },
-                     onSleep: (@Sendable () -> Void)? = nil, name: String = #function) throws -> Harness {
+                     onSleep: (@Sendable () -> Void)? = nil,
+                     onSettings: (@Sendable () async -> Void)? = nil, name: String = #function) throws -> Harness {
         let root = StoreSupport.temporaryRoot(name)
         let clock = TestClock()
         let store = try ThoughtStore(root: root, now: clock.function)
@@ -80,7 +85,8 @@ struct Harness {
         options.autoRetry = false
         configure(&options)
         let environment = ProcessorEnvironment(apiKey: { flags.key }, isOnline: { flags.online },
-                                               isDictationBusy: { flags.checkBusy() }, settings: { PaplySettings() }, uiLanguage: "de")
+                                               isDictationBusy: { flags.checkBusy() },
+                                               settings: { await onSettings?(); return PaplySettings() }, uiLanguage: "de")
         var finderOptions = CandidateFinder.Options()
         finderOptions.models = []
         let ledger = TokenLedger(fileURL: root.appendingPathComponent("ledger.json"), limits: { TokenLedger.Limits() }, now: clock.function)
@@ -479,6 +485,91 @@ struct ProcessingTests {
         #expect(candidate.when.hasPrefix("heute"))
         #expect(await h.thought(id)?.ai?.promptVersion == ThoughtPrompt.version)
         #expect(ThoughtProcessor.Options().promptVersion == ThoughtPrompt.version)
+    }
+
+    /// W1: Endgültig gelöscht, während Whisper arbeitet → kein `source.json`, kein Ordner, keine Rückkehr
+    /// nach Neustart und kein Ordnen.
+    @Test func purgeDuringTranscriptionStaysPurged() async throws {
+        let transcriber = MockTranscriber()
+        let h = try Harness.make(transcriber: transcriber)
+        defer { h.cleanup() }
+        let id = try await h.capture()
+        let store = h.store
+        await transcriber.setOnCall { await store.purge(id) }
+        await h.run()
+        #expect(await h.transcriber.calls == 1)
+        #expect(await h.structurer.calls == 0)
+        #expect(await h.thought(id) == nil)
+        #expect(!FileManager.default.fileExists(atPath: h.store.directory(id).path))
+        let restarted = try ThoughtStore(root: h.root)
+        #expect(await restarted.thought(id) == nil)
+        await h.run()
+        #expect(await h.transcriber.calls == 1)
+    }
+
+    /// W2: Gelöscht nach dem Planen, direkt vor dem Upload → nichts geht an Whisper.
+    @Test func deletedBeforeUploadIsNotTranscribed() async throws {
+        let target = Box<String?>(nil)
+        let storeBox = Box<ThoughtStore?>(nil)
+        let h = try Harness.make(onSettings: {
+            if let store = storeBox.value, let id = target.value { try? await store.delete(id) }
+        })
+        defer { h.cleanup() }
+        storeBox.value = h.store
+        let id = try await h.capture()
+        target.value = id
+        await h.run()
+        #expect(await h.transcriber.calls == 0)
+        let thought = try #require(await h.thought(id))
+        #expect(thought.deletedAt != nil && thought.state == .captured)
+        target.value = nil
+        try await h.store.restore(id)
+        await h.run()
+        #expect(await h.transcriber.calls == 1)
+        #expect(await h.thought(id)?.state == .done)
+    }
+
+    /// W2: Gelöscht nach dem Verschriftlichen, direkt vor dem Ordnen → nichts geht an gpt-oss;
+    /// nach dem Wiederherstellen wird normal geordnet (ohne zweites Whisper).
+    @Test func deletedBeforeStructuringIsNotSent() async throws {
+        let calls = Box(0)
+        let target = Box<String?>(nil)
+        let storeBox = Box<ThoughtStore?>(nil)
+        let h = try Harness.make(onSettings: {
+            calls.update { $0 += 1 }
+            if calls.value == 2, let store = storeBox.value, let id = target.value { try? await store.delete(id) }
+        })
+        defer { h.cleanup() }
+        storeBox.value = h.store
+        let id = try await h.capture()
+        target.value = id
+        await h.run()
+        #expect(await h.transcriber.calls == 1)
+        #expect(await h.structurer.calls == 0)
+        let thought = try #require(await h.thought(id))
+        #expect(thought.deletedAt != nil && thought.state == .transcribed)
+        try await h.store.restore(id)
+        await h.run()
+        #expect(await h.structurer.calls == 1)
+        #expect(await h.transcriber.calls == 1)
+        #expect(await h.thought(id)?.state == .done)
+    }
+
+    /// W2: Verwerfen sichert und löscht in einem Schritt – die Warteschlange sieht nie „captured“ ohne Löschung.
+    @Test func discardedCaptureNeverReachesGroq() async throws {
+        let h = try Harness.make()
+        defer { h.cleanup() }
+        let (thought, writer) = try await h.store.beginCapture(trigger: .control, at: h.clock.now)
+        writer.append(StoreSupport.tone(seconds: 1))
+        try await h.store.finishCapture(thought.id, durationMs: writer.close(), deletedAt: h.clock.now)
+        let saved = try #require(await h.thought(thought.id))
+        #expect(saved.state == .captured && saved.deletedAt == h.clock.now && saved.durationMs > 0)
+        await h.run()
+        #expect(await h.transcriber.calls == 0)
+        #expect(await h.structurer.calls == 0)
+        try await h.store.restore(thought.id)
+        await h.run()
+        #expect(await h.thought(thought.id)?.state == .done)
     }
 
     /// Verworfen mit Live-Pipeline (H3): Ohne Abbruch wartet der Dateiweg bis `liveWait`; nach

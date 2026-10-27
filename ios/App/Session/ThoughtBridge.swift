@@ -47,8 +47,9 @@ enum ThoughtBridge {
     }
 
     /// „Fertig“ in der Live Activity. Veraltete Activity (andere ID) → nur sie beenden.
+    /// Startet Fall B noch, wird der Stopp vorgemerkt (ThoughtCapture führt ihn aus, sobald das Mikro dran ist).
     static func finishFromActivity(id: String) async {
-        if ThoughtCapture.shared.active?.id == id {
+        if ThoughtCapture.shared.isCurrent(id) {
             ThoughtCapture.shared.finish(.liveActivity)
         } else {
             Diag.log("thought.finish.stale", ["id": .s(ThoughtCapture.short(id))])
@@ -58,7 +59,7 @@ enum ThoughtBridge {
 
     /// „Verwerfen“ in der Live Activity. Veraltete Activity → nur sie beenden.
     static func discardFromActivity(id: String) async {
-        if ThoughtCapture.shared.active?.id == id {
+        if ThoughtCapture.shared.isCurrent(id) {
             ThoughtCapture.shared.discard()
         } else {
             Diag.log("thought.discard.stale", ["id": .s(ThoughtCapture.short(id))])

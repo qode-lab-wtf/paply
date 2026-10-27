@@ -301,7 +301,12 @@ public actor ThoughtProcessor {
             await refused(id, error)
             return nil
         }
-        _ = try? await store.update(id) { $0.state = .transcribing }
+        // Direkt vor dem Upload, atomar im Speicher: gelöscht oder verworfen → nichts geht an Groq.
+        guard let current = try? await store.update(id, { if $0.deletedAt == nil { $0.state = .transcribing } }),
+              current.deletedAt == nil else {
+            await ledger.settle(reservation, actual: 0)
+            return nil
+        }
         eventBroadcast.yield(.processing(id))
         let result = await transcriber.transcribe(audioURL: audioURL, apiKey: key, settings: settings)
         switch result {
@@ -335,6 +340,8 @@ public actor ThoughtProcessor {
             try await store.saveSourceOnce(id, source)
         } catch ThoughtStoreError.sourceExists {
             return await store.source(id)
+        } catch ThoughtStoreError.notFound {
+            return nil // inzwischen endgültig gelöscht: nichts aufheben, nichts neu anlegen
         } catch {
             pendingSources[id] = source // nächster Durchlauf schreibt erneut, ohne Whisper
         }
@@ -421,14 +428,19 @@ public actor ThoughtProcessor {
                                   topics: context.entries, topicsFull: context.full, candidates: candidates,
                                   recordedAt: recordedAt)
         let parts = PartSplitter.split(source)
-        var outcome: StructureOutcome
+        var result: StructureOutcome?
         if parts.count == 1 {
-            outcome = await structurer.structure(base, apiKey: key)
-            if outcome == .unusable(code: "too_large") {
-                outcome = await structureParts(id, source: source, parts: PartSplitter.split(source, force: true), base: base, key: key)
+            result = await structureIfWanted(id, base, key: key)
+            if result == .unusable(code: "too_large") {
+                result = await structureParts(id, source: source, parts: PartSplitter.split(source, force: true), base: base, key: key)
             }
         } else {
-            outcome = await structureParts(id, source: source, parts: parts, base: base, key: key)
+            result = await structureParts(id, source: source, parts: parts, base: base, key: key)
+        }
+        guard let outcome = result else {
+            // gelöscht/verworfen während des Ordnens: zurück auf „verschriftlicht“, Wiederherstellen ordnet neu
+            _ = try? await store.update(id) { if $0.deletedAt != nil { $0.state = .transcribed } }
+            return
         }
         switch outcome {
         case let .success(result, model, usage):
@@ -464,10 +476,17 @@ public actor ThoughtProcessor {
         }
     }
 
+    /// Ordnen nur, solange der Gedanke nicht gelöscht ist – direkt vor jedem Aufruf geprüft. nil = abgebrochen.
+    private func structureIfWanted(_ id: String, _ input: StructureInput, key: String) async -> StructureOutcome? {
+        guard let thought = await store.thought(id), thought.deletedAt == nil else { return nil }
+        return await structurer.structure(input, apiKey: key)
+    }
+
     /// Teile-Modus (§6.2): Teil 1 voll, Teile 2…n kurz, ≥ 60 s Abstand; Fortschritt in `ai-parts.json`.
+    /// nil = gelöscht/verworfen, bevor alle Teile geordnet waren (Fortschritt bleibt gespeichert).
     private func structureParts(_ id: String, source: ThoughtSource, parts: [PartSplitter.Part],
-                                base: StructureInput, key: String) async -> StructureOutcome {
-        guard parts.count > 1 else { return await structurer.structure(base, apiKey: key) }
+                                base: StructureInput, key: String) async -> StructureOutcome? {
+        guard parts.count > 1 else { return await structureIfWanted(id, base, key: key) }
         let hash = String(StableHash.of(source.text), radix: 16)
         var progress = await store.parts(id) ?? StructureParts(transcriptHash: hash, count: parts.count)
         if progress.transcriptHash != hash || progress.count != parts.count {
@@ -477,7 +496,7 @@ public actor ThoughtProcessor {
             var input = base
             input.transcript = parts[0].text
             input.sentences = parts[0].sentences
-            let outcome = await structurer.structure(input, apiKey: key)
+            guard let outcome = await structureIfWanted(id, input, key: key) else { return nil }
             guard case let .success(result, model, usage) = outcome else { return outcome }
             progress.first = AIResultFile(AIResultRecord(result: result, model: model, usage: usage, at: now()))
             progress.lastCallAt = now()
@@ -498,7 +517,7 @@ public actor ThoughtProcessor {
             input.topicsFull = false
             input.candidates = []
             input.part = (index: index + 1, count: parts.count)
-            let outcome = await structurer.structure(input, apiKey: key)
+            guard let outcome = await structureIfWanted(id, input, key: key) else { return nil }
             switch outcome {
             case let .success(result, _, usage):
                 progress.rest.append(StructureParts.Part(cleanText: result.cleanText, tasks: result.tasks.map(StructureParts.StoredTask.init),

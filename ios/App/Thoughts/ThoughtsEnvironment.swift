@@ -5,6 +5,8 @@
 //   `retryAt` (Timer im Prozessor), Aufnahme beendet (ThoughtCapture), BGProcessingTask `com.paply.ios.thoughts`.
 // - Diktat hat Vorrang: `isDictationBusy` = Diktat nimmt auf oder wird poliert (SessionController).
 // - Während verarbeitet wird, hält `beginBackgroundTask` die App bis zu ≈ 30 s wach.
+// - Vor dem ersten Entsperren nach einem Neustart (Fall B, BGTask) ist die Ablage nicht lesbar: Laden,
+//   Reparieren, Aufräumen und Anstoßen warten dann auf das Entsperren (ProtectedData).
 import BackgroundTasks
 import Foundation
 import Network
@@ -72,6 +74,9 @@ enum ThoughtsEnvironment {
     private static var observers: [NSObjectProtocol] = []
     private static var assertion: UIBackgroundTaskIdentifier = .invalid
     private static var eventsTask: Task<Void, Never>?
+    /// Ablage gelesen, repariert, aufgeräumt. nil = noch nicht lesbar (vor dem ersten Entsperren);
+    /// Anstoßen und Planen warten auf diese Aufgabe.
+    private static var storageReady: Task<Void, Never>?
 
     /// Aus `application(_:didFinishLaunchingWithOptions:)` (BGTask muss vor Ende des Starts registriert sein).
     static func bootstrap() {
@@ -91,20 +96,44 @@ enum ThoughtsEnvironment {
         })
         eventsTask = Task {
             for await event in processor.events {
-                if case .processing = event { holdWhileProcessing() }
+                switch event {
+                case .processing:
+                    holdWhileProcessing()
+                case .waiting:
+                    // Fall B: Die App war nie vorne (kein didEnterBackground) – sonst plant niemand
+                    Task { await scheduleBackgroundProcessing() }
+                default:
+                    break
+                }
             }
         }
-        Task {
+        ProtectedData.whenReadable { deferred in startStorage(deferred: deferred) }
+    }
+
+    /// Einmal, sobald die Ablage lesbar ist: beim Start sofort, nach einem Neustart erst nach dem Entsperren.
+    private static func startStorage(deferred: Bool) {
+        guard storageReady == nil else { return }
+        storageReady = Task {
+            // Was vor dem Entsperren schon angefasst wurde, nachladen (meldet es über `changes`)
+            if deferred { await store.reloadIfNeeded() }
             let repaired = (try? await store.recover()) ?? []
             await store.housekeeping(now: Date())
-            Diag.log("thoughts.start", ["repaired": .i(repaired.count)])
-            await processor.kick(reason: "launch")
+            Diag.log("thoughts.start", ["repaired": .i(repaired.count), "afterUnlock": .b(deferred)])
         }
+        kick(deferred ? "unlock" : "launch")
         _ = ThoughtsModel.shared // lädt im Hintergrund
     }
 
     static func kick(_ reason: String) {
-        Task { await processor.kick(reason: reason) }
+        guard let ready = storageReady else {
+            // Vielleicht inzwischen entsperrt: dann startet die Ablage und stößt selbst an
+            ProtectedData.check()
+            return
+        }
+        Task {
+            await ready.value
+            await processor.kick(reason: reason)
+        }
     }
 
     /// Neuer bzw. geänderter Groq-Schlüssel: Wartende sofort versuchen.
@@ -124,14 +153,14 @@ enum ThoughtsEnvironment {
     private static func holdWhileProcessing() {
         guard assertion == .invalid else { return }
         assertion = UIApplication.shared.beginBackgroundTask(withName: "thought-processing") {
-            Task { @MainActor in
-                await processor.cancelRunning()
-                endAssertion()
-            }
+            // Synchron im Handler beenden – sonst beendet iOS die App. Der Abbruch läuft danach.
+            Task { await processor.cancelRunning() }
+            endAssertion()
         }
+        let held = assertion
         Task {
             await processor.waitUntilIdle()
-            endAssertion()
+            if assertion == held { endAssertion() } // nicht eine spätere, neue beenden
         }
     }
 
@@ -157,8 +186,16 @@ enum ThoughtsEnvironment {
     }
 
     private static func runBackgroundTask(_ box: BackgroundTaskBox) {
+        ProtectedData.check()
+        guard let ready = storageReady else {
+            // Vor dem ersten Entsperren: nichts lesbar. Nach dem Entsperren stößt der Start selbst an.
+            Diag.log("thoughts.bgtask.run", ["locked": .b(true)])
+            box.complete(success: false)
+            return
+        }
         Diag.log("thoughts.bgtask.run")
         let work = Task { @MainActor in
+            await ready.value
             await processor.kick(reason: "background")
             await processor.waitUntilIdle()
             await store.housekeeping(now: Date())
@@ -175,6 +212,8 @@ enum ThoughtsEnvironment {
 
     /// Geplant, sobald etwas wartet (Netz nötig); frühestens zum nächsten `retryAt`.
     static func scheduleBackgroundProcessing() async {
+        guard let ready = storageReady else { return } // vor dem Entsperren unbekannt
+        await ready.value
         guard await processor.hasPendingWork() else {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: backgroundTaskID)
             return
