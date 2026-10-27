@@ -79,6 +79,27 @@ struct FinishThoughtIntent: LiveActivityIntent {
     }
 }
 
+/// „Verwerfen“ in der Live Activity: Aufnahme stoppen, nichts an Groq. Der Gedanke landet in
+/// „Zuletzt gelöscht“ (wiederherstellbar), kein Bestätigungsdialog (geht in der Activity nicht).
+struct DiscardThoughtIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource { "Gedanke verwerfen" }
+    static var isDiscoverable: Bool { false }
+
+    @Parameter(title: "Gedanke")
+    var thoughtID: String
+
+    init() {}
+
+    init(thoughtID: String) {
+        self.thoughtID = thoughtID
+    }
+
+    func perform() async throws -> some IntentResult {
+        await ThoughtIntentRunner.discard(id: thoughtID)
+        return .result()
+    }
+}
+
 #if PAPLY_APP
 // Nur im App-Prozess: als Ausweg (Fall B gescheitert) die App kurz nach vorne holen.
 extension ToggleThoughtIntent: ForegroundContinuableIntent {}
@@ -97,7 +118,7 @@ enum ThoughtIntentError: Error, CustomLocalizedStringResourceConvertible {
 
 /// `thought-command.json` – Gedanken-Knopf aus dem Widget-Prozess.
 struct ThoughtCommand: Codable, Sendable {
-    enum Action: String, Codable, Sendable { case toggle, finish }
+    enum Action: String, Codable, Sendable { case toggle, finish, discard }
     var seq: UInt64
     var action: Action
     var trigger: String
@@ -158,6 +179,15 @@ enum ThoughtIntentRunner {
         await ThoughtBridge.finishFromActivity(id: id)
         #else
         forward(.finish, trigger: "liveActivity", id: id)
+        #endif
+    }
+
+    static func discard(id: String) async {
+        Diag.log("thought.intent", ["intent": .s("discard"), "process": .s(PaplyProcess.current.rawValue), "id": .s(String(id.prefix(8)))])
+        #if PAPLY_APP
+        await ThoughtBridge.discardFromActivity(id: id)
+        #else
+        forward(.discard, trigger: "liveActivity", id: id)
         #endif
     }
 

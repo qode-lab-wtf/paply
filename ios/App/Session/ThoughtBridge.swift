@@ -56,6 +56,16 @@ enum ThoughtBridge {
         }
     }
 
+    /// „Verwerfen“ in der Live Activity. Veraltete Activity → nur sie beenden.
+    static func discardFromActivity(id: String) async {
+        if ThoughtCapture.shared.active?.id == id {
+            ThoughtCapture.shared.discard()
+        } else {
+            Diag.log("thought.discard.stale", ["id": .s(ThoughtCapture.short(id))])
+            endActivity(id: id, immediately: true)
+        }
+    }
+
     /// Fall B gescheitert, die App ist jetzt vorne: hier klappt der Sitzungsstart.
     static func startInForeground(trigger: ThoughtTrigger) async {
         guard ThoughtCapture.shared.active == nil else { return }
@@ -74,6 +84,8 @@ enum ThoughtBridge {
                 _ = await toggle(trigger: ThoughtTrigger(rawValue: command.trigger) ?? .unknown)
             case .finish:
                 if let id = command.thoughtID { await finishFromActivity(id: id) }
+            case .discard:
+                if let id = command.thoughtID { await discardFromActivity(id: id) }
             }
         }
     }
@@ -143,6 +155,14 @@ enum ThoughtBridge {
         }
     }
 
+    /// Nach „Verwerfen“: kurz „Verworfen“, dann weg.
+    static func showDiscarded(id: String) {
+        guard activityThoughtID == id else { return }
+        var state = content(.discarded, startedAt: activityStartedAt)
+        state.note = "Verworfen"
+        finishActivity(id: id, state: state, dwell: 2, alert: nil)
+    }
+
     /// S1 ohne Warteschlange: kurz „Gesichert“ zeigen.
     static func showSavedWithoutProcessing(id: String, note: String?) {
         guard activityThoughtID == id else { return }
@@ -172,7 +192,7 @@ enum ThoughtBridge {
         case .saved(let id, let topicTitle, let topicIcon):
             var state = content(.saved, startedAt: activityStartedAt)
             state.topicTitle = topicTitle
-            state.topicSymbol = topicIcon.map(symbol(for:))
+            state.topicSymbol = topicIcon?.rawValue
             finishActivity(id: id, state: state, dwell: 4, alert: nil)
         case .waiting(let id, let thoughtState, let message):
             var state = content(.waiting, startedAt: activityStartedAt)
@@ -239,36 +259,6 @@ enum ThoughtBridge {
         case .waitingNetwork: "wifi.slash"
         case .waitingKey: "key"
         default: "hourglass"
-        }
-    }
-
-    /// TopicIcon (Mac-Enum) → SF Symbol
-    static func symbol(for icon: TopicIcon) -> String {
-        switch icon {
-        case .sparkles: "sparkles"
-        case .lightbulb: "lightbulb"
-        case .home: "house"
-        case .code: "chevron.left.forwardslash.chevron.right"
-        case .mapPin: "mappin"
-        case .sun: "sun.max"
-        case .moon: "moon"
-        case .heart: "heart"
-        case .coffee: "cup.and.saucer"
-        case .briefcase: "briefcase"
-        case .calendar: "calendar"
-        case .messageCircle: "message"
-        case .book: "book"
-        case .music: "music.note"
-        case .camera: "camera"
-        case .leaf: "leaf"
-        case .flag: "flag"
-        case .circleHelp: "questionmark.circle"
-        case .pencil: "pencil"
-        case .plane: "airplane"
-        case .wallet: "creditcard"
-        case .users: "person.2"
-        case .list: "list.bullet"
-        case .zap: "bolt"
         }
     }
 }

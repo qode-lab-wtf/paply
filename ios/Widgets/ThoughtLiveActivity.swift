@@ -23,17 +23,19 @@ struct ThoughtLiveActivity: Widget {
                     ThoughtTrailing(state: state, large: true)
                         .padding(.trailing, 4)
                 }
+                DynamicIslandExpandedRegion(.center) {
+                    if state.phase == .recording {
+                        Text(state.warnLimit ? "Gedanke · noch 1 Min." : "Gedanke")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(state.warnLimit ? Color.paplyBeak : Color.paplyText)
+                    }
+                }
                 DynamicIslandExpandedRegion(.bottom) {
                     if state.phase == .recording {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Gedanke").font(.subheadline.weight(.semibold))
-                                if state.warnLimit {
-                                    Text("Noch 1 Min.").font(.caption).foregroundStyle(Color.paplyBeak)
-                                }
-                            }
-                            Spacer()
-                            FinishButton(thoughtID: id, fullWidth: false)
+                        // „Fertig“ primär, „Verwerfen“ sekundär – beide gut treffbar
+                        HStack(spacing: 10) {
+                            DiscardButton(thoughtID: id, fullWidth: false)
+                            FinishButton(thoughtID: id, fullWidth: true)
                         }
                     } else {
                         ThoughtStatusText(state: state)
@@ -97,6 +99,8 @@ private struct ThoughtLeading: View {
             Image(systemName: "checkmark").font(.system(size: size * 0.7, weight: .bold)).foregroundStyle(Color.paplyGreenBright)
         case .empty, .failed:
             Image(systemName: "exclamationmark").font(.system(size: size * 0.7, weight: .bold)).foregroundStyle(Color.paplyBeak)
+        case .discarded:
+            Image(systemName: "trash").font(.system(size: size * 0.6, weight: .semibold)).foregroundStyle(Color.paplyText.opacity(0.7))
         }
     }
 }
@@ -117,7 +121,7 @@ private struct ThoughtTrailing: View {
         case .saved:
             if let title = state.topicTitle {
                 HStack(spacing: 3) {
-                    Image(systemName: state.topicSymbol ?? "circle.fill")
+                    Image(systemName: TopicIconKey.sfSymbol(state.topicSymbol))
                     Text(title).lineLimit(1)
                 }
                 .font(large ? .callout.weight(.semibold) : .caption.weight(.semibold))
@@ -132,6 +136,8 @@ private struct ThoughtTrailing: View {
             Text("Nichts").font(.caption.weight(.semibold)).foregroundStyle(Color.paplyBeak)
         case .failed:
             EmptyView()
+        case .discarded:
+            Text("Weg").font(.caption.weight(.semibold)).foregroundStyle(Color.paplyText.opacity(0.7))
         }
     }
 }
@@ -150,7 +156,7 @@ private struct ThoughtStatusText: View {
             if let title = state.topicTitle {
                 HStack(spacing: 4) {
                     Text("Gespeichert ·")
-                    Image(systemName: state.topicSymbol ?? "circle.fill")
+                    Image(systemName: TopicIconKey.sfSymbol(state.topicSymbol))
                     Text(title).privacySensitive()
                 }
             } else {
@@ -162,6 +168,8 @@ private struct ThoughtStatusText: View {
             Text("Nichts verstanden – nichts gespeichert")
         case .failed:
             Text(state.note ?? "Ton gesichert · Paply versucht es später")
+        case .discarded:
+            Text("Verworfen · in „Zuletzt gelöscht“")
         }
     }
 }
@@ -182,6 +190,26 @@ private struct FinishButton: View {
                 .background(Capsule().fill(Color.paplyGreenBright))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// „Verwerfen“ – sekundär (dezent), aber gut treffbar. Ein LiveActivityIntent, läuft im App-Prozess.
+private struct DiscardButton: View {
+    let thoughtID: String
+    let fullWidth: Bool
+
+    var body: some View {
+        Button(intent: DiscardThoughtIntent(thoughtID: thoughtID)) {
+            Label("Verwerfen", systemImage: "trash")
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: fullWidth ? .infinity : nil)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .foregroundStyle(Color.paplyText.opacity(0.85))
+                .background(Capsule().fill(Color.white.opacity(0.14)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Gedanken verwerfen")
     }
 }
 
@@ -215,7 +243,10 @@ private struct ThoughtLockScreenView: View {
                 }
             }
             if state.phase == .recording {
-                FinishButton(thoughtID: thoughtID, fullWidth: true)
+                HStack(spacing: 10) {
+                    DiscardButton(thoughtID: thoughtID, fullWidth: false)
+                    FinishButton(thoughtID: thoughtID, fullWidth: true)
+                }
             }
         }
         .padding(16)

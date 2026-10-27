@@ -5,11 +5,13 @@ import Foundation
 /// Auf dem Sperrbildschirm erscheinen nie Titel oder Text, höchstens der Themenname.
 struct ThoughtActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable, Sendable {
-        enum Phase: String, Codable, Hashable, Sendable { case recording, processing, saved, waiting, empty, failed }
+        /// `discarded`: in der Live Activity verworfen (liegt in „Zuletzt gelöscht“)
+        enum Phase: String, Codable, Hashable, Sendable { case recording, processing, saved, waiting, empty, failed, discarded }
         var phase: Phase
         var startedAt: Date
         var topicTitle: String?
-        /// SF-Symbol des Themas
+        /// Schlüssel des Themen-Symbols = `TopicIcon.rawValue` (z. B. "map-pin"); Darstellung über
+        /// `TopicIconKey` (Shared/UI) – die Widget-Erweiterung kennt PaplyKit nicht
         var topicSymbol: String?
         /// `wifi.slash` / `hourglass` / `key`
         var waitSymbol: String?

@@ -34,6 +34,25 @@ final class ThoughtCapture {
 
     private(set) var active: Active?
 
+    /// Letzter Stopp (für die Oberfläche, z. B. „Anruf – Aufnahme gesichert“)
+    struct LastStop: Equatable {
+        let id: String
+        let reason: ThoughtFinishReason
+        let at: Date
+    }
+
+    private(set) var lastStop: LastStop?
+    var lastStopReason: ThoughtFinishReason? { lastStop?.reason }
+
+    /// Zuletzt verworfener Gedanke (liegt in „Zuletzt gelöscht“). Die Oberfläche kann 10 s lang
+    /// „Widerrufen“ anbieten (ThoughtsModel.restore).
+    struct LastDiscard: Equatable {
+        let id: String
+        let at: Date
+    }
+
+    private(set) var lastDiscard: LastDiscard?
+
     /// Lock-Wert (0…1), für TimelineView – keine SwiftUI-Invalidierung je Sample.
     var level: Float { levelBox.value }
 
@@ -172,6 +191,7 @@ final class ThoughtCapture {
         let stopNs = MonoClock.now()
         let id = rec.id
         if reason == .interruption { lastInterruptionStop = (id, Date()) }
+        lastStop = LastStop(id: id, reason: reason, at: Date())
         ticker?.cancel()
         ticker = nil
         active = nil
@@ -212,7 +232,9 @@ final class ThoughtCapture {
         }
     }
 
-    /// Ausdrücklich verwerfen (große Aufnahme-Ansicht). Ton und Eintrag weg.
+    /// Ausdrücklich verwerfen (große Aufnahme-Ansicht oder „Verwerfen“ in der Live Activity).
+    /// Nichts geht an Groq. Nicht endgültig: Der Gedanke landet mit Ton in „Zuletzt gelöscht“
+    /// (`deletedAt`), die Oberfläche kann ihn wiederherstellen.
     func discard() {
         guard let rec = recording, !rec.finishing else { return }
         rec.finishing = true
@@ -223,13 +245,24 @@ final class ThoughtCapture {
         levelBox.set(0)
         SessionController.shared.detachThought(id: id)
         rec.live?.cancel()
-        rec.file.discard()
-        recording = nil
+        lastDiscard = LastDiscard(id: id, at: Date())
         ThoughtBridge.recordingChanged(id: nil, startedAt: nil)
-        ThoughtBridge.endActivity(id: id, immediately: true)
-        let placeholder = rec.placeholder
-        Task { await removePlaceholder(placeholder) }
-        Diag.log("thought.discard", ["id": .s(Self.short(id)), "durationS": .d(Date().timeIntervalSince(rec.startedAt).rounded())])
+        ThoughtBridge.showDiscarded(id: id)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Task {
+            let durationMs = rec.file.close()
+            var thought = rec.placeholder
+            thought.state = .captured
+            thought.durationMs = durationMs
+            thought.deletedAt = Date()
+            thought.updatedAt = Date()
+            let saved = await save(thought)
+            if recording === rec { recording = nil }
+            Diag.log("thought.discard", [
+                "id": .s(Self.short(id)), "durationMs": .i(durationMs), "saved": .b(saved), "store": .b(store != nil),
+                "app": .s(SessionController.appState),
+            ])
+        }
     }
 
     // MARK: Zeitgrenzen und Sprache
