@@ -245,4 +245,10 @@ public struct NoSpeechStreak: Sendable, Equatable {
         times = []
         return true
     }
+
+    /// Ausgelöst, aber gerade läuft eine neue Aufnahme: scharf lassen – die nächste abgeschlossene
+    /// Aufnahme ohne Sprache löst wieder aus (Neustart nie mitten in eine laufende Aufnahme).
+    public mutating func keepArmed(now: Double) {
+        times = Array(repeating: now, count: Self.needed - 1)
+    }
 }

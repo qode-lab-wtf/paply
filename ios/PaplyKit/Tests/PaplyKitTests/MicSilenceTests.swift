@@ -236,4 +236,19 @@ private func run(_ streak: inout NoSpeechStreak, _ recordings: [(speech: Bool, s
         #expect(run(&streak, [(false, 19.4, 0), (false, 2.2, 28.3), (false, 2.0, 31.5), (false, 2.2, 43)])
                 == [false, true, false, true])
     }
+
+    /// Läuft schon die nächste Aufnahme, bleibt die Regel scharf: Die nächste ohne Sprache löst aus
+    @Test func keepArmedTriggersOnTheNextSilentRecording() {
+        var streak = NoSpeechStreak()
+        let first = streak.completed(speech: false, seconds: 3, now: 0)
+        let second = streak.completed(speech: false, seconds: 3, now: 10)
+        #expect(!first && second)
+        streak.keepArmed(now: 10)
+        let third = streak.completed(speech: false, seconds: 3, now: 20)
+        #expect(third)
+        streak.keepArmed(now: 30)
+        let heard = streak.completed(speech: true, seconds: 3, now: 40)
+        let after = streak.completed(speech: false, seconds: 3, now: 50)
+        #expect(!heard && !after)
+    }
 }

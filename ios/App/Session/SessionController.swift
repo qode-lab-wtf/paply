@@ -939,7 +939,9 @@ final class SessionController {
         let attempt = silenceRestarts.count
         silenceRestartTask = Task {
             let begin = MonoClock.now()
-            let outcome = await audio.restartFresh()
+            // Nur digitale Stille verwirft den Anfang einer laufenden Aufnahme; bei „nichts verstanden“
+            // liefert das Mikro Ton – davon darf nichts verloren gehen.
+            let outcome = await audio.restartFresh(discardRecording: cause == .silent)
             var fields: DiagFields = [
                 "trigger": .s(trigger), "attempt": .i(attempt), "ms": .ms(MonoClock.msSince(begin)),
                 "app": .s(Self.appState), "mic": .s(Self.micPermission),
@@ -986,6 +988,13 @@ final class SessionController {
             "status": .s(status.rawValue), "marked": .b(micSilent),
         ]
         Diag.log("session.noSpeechStreak", fields)
+        // Läuft schon die nächste Aufnahme, nicht dazwischenfunken: scharf lassen, die nächste
+        // abgeschlossene Aufnahme ohne Sprache löst im Leerlauf aus.
+        if dictation != nil || isThoughtActive {
+            noSpeechStreak.keepArmed(now: now)
+            Diag.log("session.noSpeechStreak.deferred", ["kind": .s(kind)])
+            return .none
+        }
         guard status == .ready || status == .recording, !micSilent, silenceRestartTask == nil else { return .none }
         if UIApplication.shared.applicationState == .active {
             restartSilentMic(trigger: "no-speech", cause: .noSpeech)
@@ -1007,7 +1016,8 @@ final class SessionController {
         guard status != .off else { return }
         micRestartCause = cause
         status = .interrupted
-        detail = cause == .silent ? "Mikro war stumm – Paply startet neu" : "Zweimal nichts verstanden – Paply startet das Mikro neu"
+        detail = reason == "restarts-exhausted" ? "Mikro hängt – Paply einmal schließen und neu öffnen"
+            : cause == .silent ? "Mikro war stumm – Paply startet neu" : "Zweimal nichts verstanden – Paply startet das Mikro neu"
         Diag.log("session.micSilent", ["reason": .s(reason), "cause": .s(cause.rawValue), "app": .s(Self.appState),
                                         "dictating": .b(dictation != nil), "thought": .b(isThoughtActive)])
         if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.micSilent) }

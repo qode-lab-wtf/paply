@@ -346,7 +346,8 @@ final class KeyboardViewController: UIInputViewController {
             // vorne. Automatisch öffnen höchstens alle 30 s; half der Neustart nicht, steht die
             // Meldung mit „Paply starten“ da.
             let last = AppGroup.defaults?.object(forKey: Self.silentOpenNsKey) as? Double
-            let recently = last.map { MonoClock.ms(from: UInt64($0), to: MonoClock.now()) < Self.silentAutoOpenPause } ?? false
+            // Monotone Uhr beginnt nach einem Neustart des iPhones bei 0 → negativer Abstand zählt nicht als „eben“
+            let recently = last.map { let ms = MonoClock.ms(from: UInt64($0), to: MonoClock.now()); return ms >= 0 && ms < Self.silentAutoOpenPause } ?? false
             Diag.log("kb.micRestart", ["cause": .s(restart == .silent ? "silent" : "noSpeech"),
                                        "autoOpen": .b(SharedSettings.autoOpenApp && !recently)])
             if SharedSettings.autoOpenApp, !recently {
