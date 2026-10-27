@@ -1,0 +1,878 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04F28D0E89A4D13D50D099A1 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C515A2729ED0FEE867CF6F78 /* AppGroup.swift */; };
+		057318D155E15AEDBE3A2431 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E9958ECB23C7D6BF2C446C /* HistoryStore.swift */; };
+		0619B17CB8816D1FE973EF89 /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
+		075D57CA1C93F696BBF2E070 /* FlashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEB31306E107ADC2F9ADA22C /* FlashView.swift */; };
+		09CA8C6DD4EDB4E97527198A /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CFE296D653DF4B9E936A9B /* SharedSettings.swift */; };
+		0F9FE35C09AF583E1FF54FDB /* ShortcutBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D6DAEB9943A5E72D3DEF82 /* ShortcutBridge.swift */; };
+		1393A54221DD8155A0629EDE /* LevelChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8DD5888A85A20E1837B253 /* LevelChannel.swift */; };
+		1A841718E7622E61A02289A3 /* AppOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D182544A8427A8D9BA2F803 /* AppOpener.swift */; };
+		1D94CDB3A4190567D5C4638C /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CFE296D653DF4B9E936A9B /* SharedSettings.swift */; };
+		1EE5B47CCACD70BB23051AB5 /* PanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EBE24EF15D9A33A275AA563 /* PanelView.swift */; };
+		1F2BE3EAE77B05AD3F0E22F0 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D1A73142E02BB36F10F427 /* Brand.swift */; };
+		20093683807629774A2CBE2B /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B113CB6A3B13E5535479869 /* Components.swift */; };
+		28C3541FFEA226C66586F551 /* LevelChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8DD5888A85A20E1837B253 /* LevelChannel.swift */; };
+		2EB1B6142040B885E099D9F0 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D1A73142E02BB36F10F427 /* Brand.swift */; };
+		31EAEFD0155EC7C25ABE3767 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */; };
+		37145C428D8995D1418FB6C5 /* PaplyShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30B63C670726089A0FE71EB /* PaplyShortcuts.swift */; };
+		3B2616902323B35D84119AD8 /* MonoClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538BDAD38D348D4AD4EF3685 /* MonoClock.swift */; };
+		473C8AA6189511B6392B7BDB /* DarwinBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */; };
+		490B24FCF28FB1D2A873A064 /* MonoClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538BDAD38D348D4AD4EF3685 /* MonoClock.swift */; };
+		4BECC19923200D20041C0153 /* Diag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92833402C9166B969077C2CF /* Diag.swift */; };
+		5A42417E47CC1ED8D8350521 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1D44366C159314D195BA1D /* SharedStore.swift */; };
+		5A75734DFF8D9EC3E98828F6 /* DictationActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042D6D3F4F80DA00AE89D823 /* DictationActivity.swift */; };
+		5D61B6C6D2DCB5D3687D0DBD /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C515A2729ED0FEE867CF6F78 /* AppGroup.swift */; };
+		608CFFCBF9353BBE6529C154 /* TestPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE1D11D68ADDDD157331B2CA /* TestPageView.swift */; };
+		6174B199C3F3196F84BDF321 /* BrandUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19FCC308D8722798CEFC568C /* BrandUI.swift */; };
+		6423AD7DA78AF45266C07FF2 /* DarwinBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */; };
+		6686AE606A448E5F2213C0CE /* MonoClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538BDAD38D348D4AD4EF3685 /* MonoClock.swift */; };
+		66B4701F9B7EA891C26662E8 /* HistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BE46E3028D0B3168693C030 /* HistoryDetailView.swift */; };
+		6D18A5AA761BAE8D000F7FC5 /* LevelChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8DD5888A85A20E1837B253 /* LevelChannel.swift */; };
+		73F6A2250996E80DB3A9F397 /* Diag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92833402C9166B969077C2CF /* Diag.swift */; };
+		7B37B8ECD3F1B254A9D3A773 /* DeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D610BE924E785550DF1AF3E /* DeviceMonitor.swift */; };
+		7F87D8E2133BA9AE7E9E0703 /* PaplyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65299AE05C8D760F700DB5B /* PaplyWidgets.swift */; };
+		8552BE15871C56E91C8D13C0 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB83141FC8D0BC2E178B374 /* AppSettings.swift */; };
+		8B284AD2A10825C5C90A1420 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1D44366C159314D195BA1D /* SharedStore.swift */; };
+		8CAFE335BFF614E42E26590D /* Diag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92833402C9166B969077C2CF /* Diag.swift */; };
+		8DE3E803361BFF622A3AE98C /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
+		9127BF1621CFD0C7CA5484B0 /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CFE296D653DF4B9E936A9B /* SharedSettings.swift */; };
+		9C3B4353C28EB3E72575D035 /* AudioTapProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8974C40529DFB1D8761B623 /* AudioTapProcessor.swift */; };
+		9E103FDB3E7567EBD82B30B6 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17BCC199927577F73B846F7F /* Keychain.swift */; };
+		9ED521DBF479B0C7A4AFED10 /* DarwinBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */; };
+		A59BDE97C42CED3DE4B80A8E /* PaplyKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2DC9B028B15A423DEA60FEB0 /* PaplyKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A7292ECA42BF83F122E8655C /* BrandUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19FCC308D8722798CEFC568C /* BrandUI.swift */; };
+		AA8929C738857BBC6D9798A3 /* AudioEngineHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C46B85FF400DC1F932ADEE /* AudioEngineHost.swift */; };
+		AC685CE7D49817FB76AEC78A /* PaplyKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2D6306CA718AD054AFF8524A /* PaplyKit */; };
+		ACDE32AA7FA4FF3BE548DA46 /* ToggleDictationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40DEAE75E2BFC3F11D6050 /* ToggleDictationIntent.swift */; };
+		AD2DAA1B994680623FAC14FA /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF72D5D66C8B4EDDD06AB29F /* RootView.swift */; };
+		B789CA40D246AD12AE28F260 /* PaplyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4E88615BBB6B88DF532C8589 /* PaplyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BB382618AA18102D033E2782 /* ToggleDictationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E40DEAE75E2BFC3F11D6050 /* ToggleDictationIntent.swift */; };
+		C048E09CA377777A3BFB3023 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC91B1771B577E04CF8A270 /* NetworkMonitor.swift */; };
+		C792C981FC471C6BD24CF301 /* DictationActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042D6D3F4F80DA00AE89D823 /* DictationActivity.swift */; };
+		D59CF9A3ECE26857236C3FFF /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C515A2729ED0FEE867CF6F78 /* AppGroup.swift */; };
+		DE3C580D59FB1BFAB5C2FB21 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72FC59997AB6553C2A82B21 /* DiagnosticsView.swift */; };
+		E30A582F111A4CE3B521FE13 /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */; };
+		E91C198889867B5C8874F07E /* PaplyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8968A98A0CB6C512AD78D995 /* PaplyApp.swift */; };
+		EAFF3703FA3D0BBD40CCB20F /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1D44366C159314D195BA1D /* SharedStore.swift */; };
+		EBE9D771357E1B9144BBC537 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F11F9D1337FC14CA767374 /* SettingsView.swift */; };
+		F46394BC1CC0EF06B94B9E25 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65D1A73142E02BB36F10F427 /* Brand.swift */; };
+		F53E665EB72C175AC2CFCFDB /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */; };
+		FB72FEFB177EEBD864949552 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 724B91F7AB66ADC38A2BE72A /* KeyboardViewController.swift */; };
+		FB94787CCF8338731479839D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD39327CA0E2F3231965BD9F /* Assets.xcassets */; };
+		FB9A404548916B334E2340BB /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */; };
+		FC662E55064F57778D1A3232 /* SessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A563AF278F4644CA4DF97F2D /* SessionController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BAC42C03ED7C9C393EE437C2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3968B366DA8E38AD8B3CDD97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2AC1F65776F201425F11FA64;
+			remoteInfo = PaplyKeyboard;
+		};
+		E1B00EE08FB9EB5AD74A182E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3968B366DA8E38AD8B3CDD97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0901EEBB910F60E31BD6FB40;
+			remoteInfo = PaplyWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		459589A006368F3F78BE1E55 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A59BDE97C42CED3DE4B80A8E /* PaplyKeyboard.appex in Embed Foundation Extensions */,
+				B789CA40D246AD12AE28F260 /* PaplyWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		042D6D3F4F80DA00AE89D823 /* DictationActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationActivity.swift; sourceTree = "<group>"; };
+		0A0835388D0B98631942A231 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		0B4BAFB96CDE746F75A9369A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		0EBE24EF15D9A33A275AA563 /* PanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelView.swift; sourceTree = "<group>"; };
+		17BCC199927577F73B846F7F /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		18D6DAEB9943A5E72D3DEF82 /* ShortcutBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutBridge.swift; sourceTree = "<group>"; };
+		19FCC308D8722798CEFC568C /* BrandUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandUI.swift; sourceTree = "<group>"; };
+		1B113CB6A3B13E5535479869 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		1D610BE924E785550DF1AF3E /* DeviceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceMonitor.swift; sourceTree = "<group>"; };
+		2DC9B028B15A423DEA60FEB0 /* PaplyKeyboard.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaplyKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMetrics.swift; sourceTree = "<group>"; };
+		46CFE296D653DF4B9E936A9B /* SharedSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSettings.swift; sourceTree = "<group>"; };
+		4E88615BBB6B88DF532C8589 /* PaplyWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PaplyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		538BDAD38D348D4AD4EF3685 /* MonoClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonoClock.swift; sourceTree = "<group>"; };
+		5A8DD5888A85A20E1837B253 /* LevelChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelChannel.swift; sourceTree = "<group>"; };
+		5E40DEAE75E2BFC3F11D6050 /* ToggleDictationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleDictationIntent.swift; sourceTree = "<group>"; };
+		65D1A73142E02BB36F10F427 /* Brand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brand.swift; sourceTree = "<group>"; };
+		724B91F7AB66ADC38A2BE72A /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
+		73F11F9D1337FC14CA767374 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		81AF1F373569A7AD0BA6F5D1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		85E9958ECB23C7D6BF2C446C /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		8968A98A0CB6C512AD78D995 /* PaplyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaplyApp.swift; sourceTree = "<group>"; };
+		8BE46E3028D0B3168693C030 /* HistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryDetailView.swift; sourceTree = "<group>"; };
+		8D182544A8427A8D9BA2F803 /* AppOpener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOpener.swift; sourceTree = "<group>"; };
+		92833402C9166B969077C2CF /* Diag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diag.swift; sourceTree = "<group>"; };
+		A30B63C670726089A0FE71EB /* PaplyShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaplyShortcuts.swift; sourceTree = "<group>"; };
+		A563AF278F4644CA4DF97F2D /* SessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionController.swift; sourceTree = "<group>"; };
+		A8A62F106602024098A8B782 /* Paply.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Paply.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABDCAEB5A101BA9CEC6F796E /* PaplyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PaplyKit; path = PaplyKit; sourceTree = SOURCE_ROOT; };
+		AC1D44366C159314D195BA1D /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
+		B65299AE05C8D760F700DB5B /* PaplyWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaplyWidgets.swift; sourceTree = "<group>"; };
+		BE1D11D68ADDDD157331B2CA /* TestPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestPageView.swift; sourceTree = "<group>"; };
+		C515A2729ED0FEE867CF6F78 /* AppGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
+		CD39327CA0E2F3231965BD9F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CEB31306E107ADC2F9ADA22C /* FlashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlashView.swift; sourceTree = "<group>"; };
+		D288431EC7536305454A395A /* Paply.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Paply.entitlements; sourceTree = "<group>"; };
+		D336163DDE0A7FB5963B874B /* PaplyKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaplyKeyboard.entitlements; sourceTree = "<group>"; };
+		D3C46B85FF400DC1F932ADEE /* AudioEngineHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineHost.swift; sourceTree = "<group>"; };
+		E34004E2220C07BBE1757CE1 /* PaplyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PaplyWidgets.entitlements; sourceTree = "<group>"; };
+		E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
+		E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarwinBus.swift; sourceTree = "<group>"; };
+		E72FC59997AB6553C2A82B21 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		E8974C40529DFB1D8761B623 /* AudioTapProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTapProcessor.swift; sourceTree = "<group>"; };
+		EEB83141FC8D0BC2E178B374 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		FA884CD392CEFBC8D42640C9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FCC91B1771B577E04CF8A270 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
+		FF72D5D66C8B4EDDD06AB29F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		99E62FC1C0136742AA8CF66F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC685CE7D49817FB76AEC78A /* PaplyKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		08510C2B53049FE703AF5F65 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				81AF1F373569A7AD0BA6F5D1 /* Info.plist */,
+				E34004E2220C07BBE1757CE1 /* PaplyWidgets.entitlements */,
+				B65299AE05C8D760F700DB5B /* PaplyWidgets.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
+		2906D73B8B2768FA48CD80CA /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				C515A2729ED0FEE867CF6F78 /* AppGroup.swift */,
+				65D1A73142E02BB36F10F427 /* Brand.swift */,
+				E65994A0A11B6584CC5A9FB9 /* DarwinBus.swift */,
+				92833402C9166B969077C2CF /* Diag.swift */,
+				5A8DD5888A85A20E1837B253 /* LevelChannel.swift */,
+				538BDAD38D348D4AD4EF3685 /* MonoClock.swift */,
+				3DD3EB96080712F6C7E2344A /* ProcessMetrics.swift */,
+				E5077C37A7B86C61A3E9EF73 /* SharedModels.swift */,
+				46CFE296D653DF4B9E936A9B /* SharedSettings.swift */,
+				AC1D44366C159314D195BA1D /* SharedStore.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		35A707A1E29C7DF566F64083 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				19FCC308D8722798CEFC568C /* BrandUI.swift */,
+				042D6D3F4F80DA00AE89D823 /* DictationActivity.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		367A352AD8DA1F7CB5C82FD4 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				ABDCAEB5A101BA9CEC6F796E /* PaplyKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		3974DEF28A39E64BF3F49428 /* Keyboard */ = {
+			isa = PBXGroup;
+			children = (
+				8D182544A8427A8D9BA2F803 /* AppOpener.swift */,
+				FA884CD392CEFBC8D42640C9 /* Info.plist */,
+				724B91F7AB66ADC38A2BE72A /* KeyboardViewController.swift */,
+				0EBE24EF15D9A33A275AA563 /* PanelView.swift */,
+				D336163DDE0A7FB5963B874B /* PaplyKeyboard.entitlements */,
+			);
+			path = Keyboard;
+			sourceTree = "<group>";
+		};
+		421DE37C7D05B8FFF710BD99 /* Store */ = {
+			isa = PBXGroup;
+			children = (
+				EEB83141FC8D0BC2E178B374 /* AppSettings.swift */,
+				85E9958ECB23C7D6BF2C446C /* HistoryStore.swift */,
+				17BCC199927577F73B846F7F /* Keychain.swift */,
+			);
+			path = Store;
+			sourceTree = "<group>";
+		};
+		56D7C2D5F0BD1F17907EF805 = {
+			isa = PBXGroup;
+			children = (
+				9ED3BEB821A38CB07A57719C /* App */,
+				F4BAE65FBE3711B4FAA062CE /* Config */,
+				3974DEF28A39E64BF3F49428 /* Keyboard */,
+				367A352AD8DA1F7CB5C82FD4 /* Packages */,
+				75B23DE8FDEB69AEAC0ACDAA /* Shared */,
+				08510C2B53049FE703AF5F65 /* Widgets */,
+				CC96DCBB2C55B8EECA605FBB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5C55B330BE290CC563BDC133 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				A30B63C670726089A0FE71EB /* PaplyShortcuts.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		5F6B36C8AFB5AA4D86385410 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				1B113CB6A3B13E5535479869 /* Components.swift */,
+				E72FC59997AB6553C2A82B21 /* DiagnosticsView.swift */,
+				CEB31306E107ADC2F9ADA22C /* FlashView.swift */,
+				8BE46E3028D0B3168693C030 /* HistoryDetailView.swift */,
+				FF72D5D66C8B4EDDD06AB29F /* RootView.swift */,
+				73F11F9D1337FC14CA767374 /* SettingsView.swift */,
+				BE1D11D68ADDDD157331B2CA /* TestPageView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		70A9C8E7AC1A9A87017BEC40 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				D3C46B85FF400DC1F932ADEE /* AudioEngineHost.swift */,
+				E8974C40529DFB1D8761B623 /* AudioTapProcessor.swift */,
+				1D610BE924E785550DF1AF3E /* DeviceMonitor.swift */,
+				FCC91B1771B577E04CF8A270 /* NetworkMonitor.swift */,
+				A563AF278F4644CA4DF97F2D /* SessionController.swift */,
+				18D6DAEB9943A5E72D3DEF82 /* ShortcutBridge.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
+		75B23DE8FDEB69AEAC0ACDAA /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				2906D73B8B2768FA48CD80CA /* Core */,
+				BDF9203AFC96ED8B16917417 /* Intents */,
+				35A707A1E29C7DF566F64083 /* UI */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		9ED3BEB821A38CB07A57719C /* App */ = {
+			isa = PBXGroup;
+			children = (
+				5C55B330BE290CC563BDC133 /* Intents */,
+				70A9C8E7AC1A9A87017BEC40 /* Session */,
+				421DE37C7D05B8FFF710BD99 /* Store */,
+				5F6B36C8AFB5AA4D86385410 /* UI */,
+				CD39327CA0E2F3231965BD9F /* Assets.xcassets */,
+				0B4BAFB96CDE746F75A9369A /* Info.plist */,
+				D288431EC7536305454A395A /* Paply.entitlements */,
+				8968A98A0CB6C512AD78D995 /* PaplyApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		BDF9203AFC96ED8B16917417 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				5E40DEAE75E2BFC3F11D6050 /* ToggleDictationIntent.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		CC96DCBB2C55B8EECA605FBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A8A62F106602024098A8B782 /* Paply.app */,
+				2DC9B028B15A423DEA60FEB0 /* PaplyKeyboard.appex */,
+				4E88615BBB6B88DF532C8589 /* PaplyWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F4BAE65FBE3711B4FAA062CE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				0A0835388D0B98631942A231 /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0901EEBB910F60E31BD6FB40 /* PaplyWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 412E0C95D1FF23BEF51DD187 /* Build configuration list for PBXNativeTarget "PaplyWidgets" */;
+			buildPhases = (
+				7560B9EE796A6677E3E283D4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaplyWidgets;
+			packageProductDependencies = (
+			);
+			productName = PaplyWidgets;
+			productReference = 4E88615BBB6B88DF532C8589 /* PaplyWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		2AC1F65776F201425F11FA64 /* PaplyKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D8A6A8FAC26299850B88470A /* Build configuration list for PBXNativeTarget "PaplyKeyboard" */;
+			buildPhases = (
+				F5465431E738ACF287B60516 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaplyKeyboard;
+			packageProductDependencies = (
+			);
+			productName = PaplyKeyboard;
+			productReference = 2DC9B028B15A423DEA60FEB0 /* PaplyKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C4178FFD0F84178E911DF5A9 /* Paply */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 36439CF4367434B8D7FFEBD4 /* Build configuration list for PBXNativeTarget "Paply" */;
+			buildPhases = (
+				8A157484B906CB9DAAF4A1E0 /* Sources */,
+				40AB80D0F2AA059EEF74D85D /* Resources */,
+				99E62FC1C0136742AA8CF66F /* Frameworks */,
+				459589A006368F3F78BE1E55 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D5CFE000FC92229ED78C885A /* PBXTargetDependency */,
+				EE1642422E9B923071B74B73 /* PBXTargetDependency */,
+			);
+			name = Paply;
+			packageProductDependencies = (
+				2D6306CA718AD054AFF8524A /* PaplyKit */,
+			);
+			productName = Paply;
+			productReference = A8A62F106602024098A8B782 /* Paply.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3968B366DA8E38AD8B3CDD97 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					0901EEBB910F60E31BD6FB40 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					2AC1F65776F201425F11FA64 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					C4178FFD0F84178E911DF5A9 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 482A779E2E3F961E39B1AAFA /* Build configuration list for PBXProject "Paply" */;
+			developmentRegion = de;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				de,
+			);
+			mainGroup = 56D7C2D5F0BD1F17907EF805;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3951F3A532C08493426C750C /* XCLocalSwiftPackageReference "PaplyKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CC96DCBB2C55B8EECA605FBB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C4178FFD0F84178E911DF5A9 /* Paply */,
+				2AC1F65776F201425F11FA64 /* PaplyKeyboard */,
+				0901EEBB910F60E31BD6FB40 /* PaplyWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		40AB80D0F2AA059EEF74D85D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB94787CCF8338731479839D /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7560B9EE796A6677E3E283D4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5D61B6C6D2DCB5D3687D0DBD /* AppGroup.swift in Sources */,
+				1F2BE3EAE77B05AD3F0E22F0 /* Brand.swift in Sources */,
+				A7292ECA42BF83F122E8655C /* BrandUI.swift in Sources */,
+				473C8AA6189511B6392B7BDB /* DarwinBus.swift in Sources */,
+				73F6A2250996E80DB3A9F397 /* Diag.swift in Sources */,
+				5A75734DFF8D9EC3E98828F6 /* DictationActivity.swift in Sources */,
+				1393A54221DD8155A0629EDE /* LevelChannel.swift in Sources */,
+				3B2616902323B35D84119AD8 /* MonoClock.swift in Sources */,
+				7F87D8E2133BA9AE7E9E0703 /* PaplyWidgets.swift in Sources */,
+				8DE3E803361BFF622A3AE98C /* ProcessMetrics.swift in Sources */,
+				F53E665EB72C175AC2CFCFDB /* SharedModels.swift in Sources */,
+				9127BF1621CFD0C7CA5484B0 /* SharedSettings.swift in Sources */,
+				5A42417E47CC1ED8D8350521 /* SharedStore.swift in Sources */,
+				ACDE32AA7FA4FF3BE548DA46 /* ToggleDictationIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A157484B906CB9DAAF4A1E0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D59CF9A3ECE26857236C3FFF /* AppGroup.swift in Sources */,
+				8552BE15871C56E91C8D13C0 /* AppSettings.swift in Sources */,
+				AA8929C738857BBC6D9798A3 /* AudioEngineHost.swift in Sources */,
+				9C3B4353C28EB3E72575D035 /* AudioTapProcessor.swift in Sources */,
+				F46394BC1CC0EF06B94B9E25 /* Brand.swift in Sources */,
+				6174B199C3F3196F84BDF321 /* BrandUI.swift in Sources */,
+				20093683807629774A2CBE2B /* Components.swift in Sources */,
+				6423AD7DA78AF45266C07FF2 /* DarwinBus.swift in Sources */,
+				7B37B8ECD3F1B254A9D3A773 /* DeviceMonitor.swift in Sources */,
+				8CAFE335BFF614E42E26590D /* Diag.swift in Sources */,
+				DE3C580D59FB1BFAB5C2FB21 /* DiagnosticsView.swift in Sources */,
+				C792C981FC471C6BD24CF301 /* DictationActivity.swift in Sources */,
+				075D57CA1C93F696BBF2E070 /* FlashView.swift in Sources */,
+				66B4701F9B7EA891C26662E8 /* HistoryDetailView.swift in Sources */,
+				057318D155E15AEDBE3A2431 /* HistoryStore.swift in Sources */,
+				9E103FDB3E7567EBD82B30B6 /* Keychain.swift in Sources */,
+				6D18A5AA761BAE8D000F7FC5 /* LevelChannel.swift in Sources */,
+				6686AE606A448E5F2213C0CE /* MonoClock.swift in Sources */,
+				C048E09CA377777A3BFB3023 /* NetworkMonitor.swift in Sources */,
+				E91C198889867B5C8874F07E /* PaplyApp.swift in Sources */,
+				37145C428D8995D1418FB6C5 /* PaplyShortcuts.swift in Sources */,
+				E30A582F111A4CE3B521FE13 /* ProcessMetrics.swift in Sources */,
+				AD2DAA1B994680623FAC14FA /* RootView.swift in Sources */,
+				FC662E55064F57778D1A3232 /* SessionController.swift in Sources */,
+				EBE9D771357E1B9144BBC537 /* SettingsView.swift in Sources */,
+				FB9A404548916B334E2340BB /* SharedModels.swift in Sources */,
+				1D94CDB3A4190567D5C4638C /* SharedSettings.swift in Sources */,
+				EAFF3703FA3D0BBD40CCB20F /* SharedStore.swift in Sources */,
+				0F9FE35C09AF583E1FF54FDB /* ShortcutBridge.swift in Sources */,
+				608CFFCBF9353BBE6529C154 /* TestPageView.swift in Sources */,
+				BB382618AA18102D033E2782 /* ToggleDictationIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F5465431E738ACF287B60516 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				04F28D0E89A4D13D50D099A1 /* AppGroup.swift in Sources */,
+				1A841718E7622E61A02289A3 /* AppOpener.swift in Sources */,
+				2EB1B6142040B885E099D9F0 /* Brand.swift in Sources */,
+				9ED521DBF479B0C7A4AFED10 /* DarwinBus.swift in Sources */,
+				4BECC19923200D20041C0153 /* Diag.swift in Sources */,
+				FB72FEFB177EEBD864949552 /* KeyboardViewController.swift in Sources */,
+				28C3541FFEA226C66586F551 /* LevelChannel.swift in Sources */,
+				490B24FCF28FB1D2A873A064 /* MonoClock.swift in Sources */,
+				1EE5B47CCACD70BB23051AB5 /* PanelView.swift in Sources */,
+				0619B17CB8816D1FE973EF89 /* ProcessMetrics.swift in Sources */,
+				31EAEFD0155EC7C25ABE3767 /* SharedModels.swift in Sources */,
+				09CA8C6DD4EDB4E97527198A /* SharedSettings.swift in Sources */,
+				8B284AD2A10825C5C90A1420 /* SharedStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D5CFE000FC92229ED78C885A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2AC1F65776F201425F11FA64 /* PaplyKeyboard */;
+			targetProxy = BAC42C03ED7C9C393EE437C2 /* PBXContainerItemProxy */;
+		};
+		EE1642422E9B923071B74B73 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0901EEBB910F60E31BD6FB40 /* PaplyWidgets */;
+			targetProxy = E1B00EE08FB9EB5AD74A182E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		07434D5AEAD8A26D416487FD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Keyboard/PaplyKeyboard.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Keyboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PAPLY_BUNDLE_PREFIX).keyboard";
+				PRODUCT_NAME = PaplyKeyboard;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PAPLY_KEYBOARD";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		3F6E0DDFB081FE699989FDD1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = App/Paply.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PAPLY_BUNDLE_PREFIX)";
+				PRODUCT_NAME = Paply;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PAPLY_APP";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		89F5B77E678D35EB7FA5F5E2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0A0835388D0B98631942A231 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A41D47EAA4ED66ECCD89B5C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Widgets/PaplyWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PAPLY_BUNDLE_PREFIX).widgets";
+				PRODUCT_NAME = PaplyWidgets;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PAPLY_WIDGETS";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A9B6E2580AD0B86E0585663F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = App/Paply.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PAPLY_BUNDLE_PREFIX)";
+				PRODUCT_NAME = Paply;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PAPLY_APP";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		BEFE5099816FC3951A207430 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Widgets/PaplyWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PAPLY_BUNDLE_PREFIX).widgets";
+				PRODUCT_NAME = PaplyWidgets;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PAPLY_WIDGETS";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		DB747BADE4CB66A12EF225C0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0A0835388D0B98631942A231 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		F489C8B4330546064795F606 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Keyboard/PaplyKeyboard.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Keyboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PAPLY_BUNDLE_PREFIX).keyboard";
+				PRODUCT_NAME = PaplyKeyboard;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PAPLY_KEYBOARD";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		36439CF4367434B8D7FFEBD4 /* Build configuration list for PBXNativeTarget "Paply" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9B6E2580AD0B86E0585663F /* Debug */,
+				3F6E0DDFB081FE699989FDD1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		412E0C95D1FF23BEF51DD187 /* Build configuration list for PBXNativeTarget "PaplyWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A41D47EAA4ED66ECCD89B5C3 /* Debug */,
+				BEFE5099816FC3951A207430 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		482A779E2E3F961E39B1AAFA /* Build configuration list for PBXProject "Paply" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DB747BADE4CB66A12EF225C0 /* Debug */,
+				89F5B77E678D35EB7FA5F5E2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D8A6A8FAC26299850B88470A /* Build configuration list for PBXNativeTarget "PaplyKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F489C8B4330546064795F606 /* Debug */,
+				07434D5AEAD8A26D416487FD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3951F3A532C08493426C750C /* XCLocalSwiftPackageReference "PaplyKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PaplyKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2D6306CA718AD054AFF8524A /* PaplyKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PaplyKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 3968B366DA8E38AD8B3CDD97 /* Project object */;
+}

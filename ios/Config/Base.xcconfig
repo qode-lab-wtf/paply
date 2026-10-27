@@ -1,0 +1,17 @@
+// Paply iOS – gemeinsame Einstellungen für App, Tastatur und Widgets.
+//
+// Auf dem MacBook per Befehlszeile überschreibbar (siehe scripts/device-build.sh):
+//   xcodebuild … DEVELOPMENT_TEAM=ABCDE12345 PAPLY_BUNDLE_PREFIX=de.beispiel.paply
+//
+// Bundle-IDs: App = Präfix, Tastatur = Präfix.keyboard, Widgets = Präfix.widgets.
+// Die App-Group-ID steht über $(PAPLY_APP_GROUP) in den Info.plists und Entitlements;
+// der Code liest sie zur Laufzeit aus der Info.plist.
+
+PAPLY_BUNDLE_PREFIX = com.paply.ios
+PAPLY_APP_GROUP = group.$(PAPLY_BUNDLE_PREFIX)
+
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
