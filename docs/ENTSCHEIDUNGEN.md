@@ -98,3 +98,23 @@ iPhone, Phase 1 V1 bauen, Phase 2 TestFlight erst auf Allans Wunsch.
   App Group und Darwin-Notifications.
 - **Groq-Zugang:** V1 mit Allans eigenem Schlüssel in den Einstellungen; für globale Nutzer später ein
   Paply-Zugang über eigenen Server.
+
+## 2026-10-27 — Paply iOS: „Gedanken“ als zweiter Weg (von Allan bestätigt)
+
+Erweiterung von V1 (vorher „nur Diktat“), nachdem Phase 0 den Hauptweg 🌐 → Diktat → Text ins Feld auf
+Allans iPhone bestätigt hat.
+
+- **Zwei klare Wege:** 🌐 = Diktat (Text ins aktuelle Feld). Paply-Knopf auf Sperrbildschirm,
+  im Kontrollzentrum, per Siri (Aktionstaste ab iPhone 15 Pro) = **Gedanke**.
+- **Auslöser:** Ein Druck nimmt sofort auf, ohne Entsperren und ohne App, wie ein Diktiergerät. Oben bzw. auf
+  dem Sperrbildschirm erscheint eine schöne Paply-Anzeige mit Zeit; Antippen öffnet die große Ansicht.
+- **Beenden:** gleicher Knopf nochmal oder „Fertig“ in der Anzeige; kein Auto-Stopp.
+- **KI (Groq-Schlüssel):** Titel und aufgeräumter Text (Original bleibt abrufbar), Themen automatisch,
+  Aufgaben erkennen, verwandte Gedanken verbinden. Mit festem, kleinem Regelrahmen, damit es sich
+  durchdacht anfühlt.
+- **Gestaltung und Mac-Abgleich** überlässt Allan der Bauleitung: hochwertig, einfach, wenige Optionen,
+  „wie eine Apple-App, die eine 10 von 10 ist“; nichts muss vom Mac übernommen werden.
+- **Hardware-Tasten:** Laut/Leise und Seitentaste sind für Apps nicht belegbar, Rückseite-Tippen gefällt
+  Allan nicht; Hauptersatz ist der Sperrbildschirm- bzw. Kontrollzentrum-Knopf.
+- **Text aus der Schnelltaste:** Direkt ins Feld darf nur die gerade offene Tastatur einsetzen; ist Paply
+  offen, wird eingesetzt, sonst Verlauf, Zwischenablage und Angebot beim nächsten 🌐.
