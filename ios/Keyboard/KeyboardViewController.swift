@@ -592,7 +592,11 @@ final class KeyboardViewController: UIInputViewController {
             panel.showRecording(status: "Paply hört zu")
             ensureLevels()
         case .polishing:
-            panel.showMessage(.init(title: "Poliere …", subtitle: nil, spinner: true), look: .forest)
+            // Kein Text: die Welle wird zum ruhigen Schimmer; nach 6 s ein dezenter Hinweis
+            panel.showWorking()
+            schedule(after: .seconds(6)) { controller in
+                if controller.state == .polishing { controller.panel.showSlowHint() }
+            }
         case .inserted(let unpolished):
             panel.showMessage(.init(title: "Eingesetzt", subtitle: unpolished ? "ohne Polieren" : nil, check: true), look: .green)
         case .empty:
@@ -759,8 +763,9 @@ final class KeyboardViewController: UIInputViewController {
         return false
     }
 
-    /// Wellenform lebt: beim Verbinden (Atmen) und während der Aufnahme
-    private var isLive: Bool { state == .connecting || isRecording }
+    /// Wellenform lebt: beim Verbinden (Atmen), während der Aufnahme und beim Polieren (Schimmer).
+    /// Danach steht die Bildrate still (kein Dauer-Rendering).
+    private var isLive: Bool { state == .connecting || isRecording || state == .polishing }
 
     private var isRetryableFailure: Bool {
         if case .failure(.network(_, true)) = state { return true }

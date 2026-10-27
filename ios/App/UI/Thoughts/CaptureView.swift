@@ -128,12 +128,8 @@ struct CaptureView: View {
             TimelineView(.periodic(from: active.startedAt, by: 1)) { context in
                 let elapsed = max(0, context.date.timeIntervalSince(active.startedAt))
                 VStack(spacing: 8) {
-                    Text(ThoughtDate.clock(elapsed))
-                        .font(.system(size: min(clockSize, 96), weight: .light, design: .rounded))
-                        .monospacedDigit()
+                    RollingClock(seconds: Int(elapsed), font: .system(size: min(clockSize, 96), weight: .light, design: .rounded))
                         .foregroundStyle(Color.paplyText)
-                        .contentTransition(.numericText())
-                        .animation(PaplyMotion.smooth(reduce), value: Int(elapsed))
                         .accessibilityLabel("Aufnahme läuft, \(ThoughtDate.spokenClock(elapsed))")
                     if elapsed >= ThoughtCapture.warnAfter {
                         Text("Noch \(max(1, Int((ThoughtCapture.limit - elapsed) / 60 + 0.999))) Min.")
@@ -145,7 +141,7 @@ struct CaptureView: View {
             }
         case .done, .stoppedElsewhere:
             Text("Wird geordnet …")
-                .font(.system(size: min(clockSize, 96) * 0.42, weight: .regular, design: .rounded))
+                .font(.system(size: min(clockSize, 96) * 0.42, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.paplyText)
                 .frame(height: min(clockSize, 96) * 1.2)
                 .transition(.opacity)
@@ -168,7 +164,7 @@ struct CaptureView: View {
     private var caption: some View {
         switch phase {
         case .stoppedElsewhere:
-            Text("Aufnahme gesichert")
+            Text(flow.stopNote)
                 .font(.subheadline)
                 .foregroundStyle(Color.paplySecondaryText)
         case .done:

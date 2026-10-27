@@ -62,7 +62,10 @@ enum ThoughtsDebug {
             ?? model.thoughts.first { $0.state == .done }
         switch screen {
         case "topic":
-            if let id = rich?.topicId { nav.filter = .topic(id) }
+            // aktives Thema mit offenen Aufgaben
+            let topic = model.topics.filter { model.isActive($0) }
+                .max { model.openTasks(topicID: $0.id).count < model.openTasks(topicID: $1.id).count }
+            if let id = topic?.id ?? rich?.topicId { nav.filter = .topic(id) }
         case "tasks":
             nav.filter = .tasks
         case "detail":
@@ -86,9 +89,11 @@ enum ThoughtsDebug {
         case "bar-ordering":
             if let first = model.thoughts.first { flow.debugShow(.ordering(first.id)) }
         case "search":
-            nav.searchPresented = true
-            try? await Task.sleep(for: .milliseconds(300))
+            nav.path = [.search]
+            try? await Task.sleep(for: .milliseconds(700))
             nav.searchText = "Porto"
+        case "search-empty":
+            nav.path = [.search]
         case "settings":
             nav.showSettings = true
         case "dictation":
@@ -112,6 +117,8 @@ enum ThoughtsDebug {
 @Observable
 final class DemoCapture: CaptureDriving {
     private(set) var active: ThoughtCapture.Active?
+    private(set) var lastStop: ThoughtCapture.LastStop?
+    private(set) var lastDiscard: ThoughtCapture.LastDiscard?
     @ObservationIgnored private let model: ThoughtsModel
     @ObservationIgnored private var speechTask: Task<Void, Never>?
 
@@ -150,11 +157,13 @@ final class DemoCapture: CaptureDriving {
 
     func finish(_ reason: ThoughtFinishReason) {
         speechTask?.cancel()
+        if let active { lastStop = ThoughtCapture.LastStop(id: active.id, reason: reason, at: Date()) }
         active = nil
     }
 
     func discard() {
         speechTask?.cancel()
+        if let active { lastDiscard = ThoughtCapture.LastDiscard(id: active.id, at: Date()) }
         active = nil
     }
 }

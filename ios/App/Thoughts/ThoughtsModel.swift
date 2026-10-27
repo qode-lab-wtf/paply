@@ -1,49 +1,104 @@
-// GERÜST (G0.1, Koordinator). Besitzer: H2. Öffentliche Signatur aus KONZEPT.md §9.2 – bitte stabil
-// lassen, H4 baut dagegen. Die Logik hier ist ein einfacher Speicher im RAM (für `preview` und
-// solange der ThoughtStore noch nicht angebunden ist); H2 ersetzt sie durch Store + Prozessor.
+// Besitzer: H2. Öffentliche Signatur aus KONZEPT.md §9.2 – bitte stabil lassen, H4 baut dagegen.
+//
+// Zwei Betriebsarten:
+// - angebunden (`shared`): ThoughtStore + ThoughtProcessor (ThoughtsEnvironment). Änderungen der Oberfläche
+//   wirken sofort im RAM und werden der Reihe nach atomar im Speicher-Akteur geschrieben (`store.update`).
+//   Was die Warteschlange schreibt, kommt über `store.changes` herein.
+// - nur RAM (`preview`, `ThoughtsModel()`, `init(thoughts:topics:…)`): gleiche Logik ohne Speicher.
 import Foundation
 import Observation
 import PaplyKit
 
+/// Speicher, Warteschlange und Ledger für das angebundene Modell.
+struct ThoughtsBackend {
+    let store: ThoughtStore
+    let processor: ThoughtProcessor
+    let ledger: TokenLedger
+    let dailyTokens: @Sendable () -> Int
+}
+
 @MainActor
 @Observable
 final class ThoughtsModel {
-    static let shared = ThoughtsModel()
+    static let shared = ThoughtsModel(backend: ThoughtsEnvironment.backend)
 
     /// 60 Beispiel-Gedanken, 8 Themen, alle Zustände (für SwiftUI-Previews und den Oberflächenbau).
     static var preview: ThoughtsModel { ThoughtsPreviewData.make() }
 
     /// ohne gelöschte, neueste zuerst
     private(set) var thoughts: [Thought] = []
+    /// zuletzt gelöscht zuerst
     private(set) var deleted: [Thought] = []
-    /// aufgelöst, ohne zusammengeführte
+    /// aufgelöst, ohne zusammengeführte; nach letzter Aktivität
     private(set) var topics: [Topic] = []
     private(set) var suggestions: [TopicSuggestion] = []
+    /// Verbrauch der letzten 24 h (Entwicklerbereich); nil = unbekannt
+    private(set) var usage: ThoughtsUsage?
+    /// „Themenpflege jetzt prüfen“ läuft
+    private(set) var isCheckingTopics = false
+    /// Ergebnis der letzten Prüfung, kurz („2 Vorschläge“, „Keine ähnlichen Themen“, „Groq-Schlüssel fehlt“)
+    private(set) var topicCheckResult: String?
+    /// Speicher gelesen (angebunden) bzw. sofort true (RAM)
+    private(set) var isLoaded = false
+    /// geladene `source.json` (Detail „Original“, Suche im Rohtext)
+    private var sources: [String: ThoughtSource] = [:]
 
-    @ObservationIgnored private var sources: [String: ThoughtSource] = [:]
-    @ObservationIgnored private var undoStack: [UndoToken: Snapshot] = [:]
+    @ObservationIgnored private let backend: ThoughtsBackend?
+    @ObservationIgnored private var byID: [String: Thought] = [:]
+    @ObservationIgnored private var allTopics: [Topic] = []
+    @ObservationIgnored private var topicByID: [String: Topic] = [:]
+    @ObservationIgnored private var counts: [String: Int] = [:]
+    @ObservationIgnored private var incoming: [String: [(id: String, link: ThoughtLink)]] = [:]
+    @ObservationIgnored private var searchIndex = ThoughtSearchIndex()
+    @ObservationIgnored private var undoActions: [UndoToken: () -> Void] = [:]
+    @ObservationIgnored private var pendingWrites: [String: Int] = [:]
+    @ObservationIgnored private var writeChain: Task<Void, Never>?
+    @ObservationIgnored private var changedWhileLoading: Set<String> = []
+    @ObservationIgnored private var requestedSources: Set<String> = []
+    @ObservationIgnored private var listeners: [Task<Void, Never>] = []
 
-    private struct Snapshot {
-        var thoughts: [Thought]
-        var deleted: [Thought]
-        var topics: [Topic]
+    /// leer, nur RAM (`-PaplyEmpty`)
+    init() {
+        backend = nil
+        isLoaded = true
     }
 
-    init() {}
-
+    /// nur RAM (Vorschau, `-PaplyMany`)
     init(thoughts: [Thought], topics: [Topic], sources: [String: ThoughtSource] = [:], suggestions: [TopicSuggestion] = []) {
-        self.thoughts = thoughts.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
-        self.deleted = thoughts.filter { $0.deletedAt != nil }
-        self.topics = topics.filter { $0.mergedInto == nil }
+        backend = nil
         self.sources = sources
         self.suggestions = suggestions
+        replaceAll(thoughts, topics: topics)
+        rebuildSearchIndex()
+        isLoaded = true
+    }
+
+    /// angebunden an Speicher und Warteschlange
+    init(backend: ThoughtsBackend) {
+        self.backend = backend
+        listeners.append(Task { [weak self] in
+            for await id in backend.store.changes {
+                await self?.refresh(id)
+            }
+        })
+        listeners.append(Task { [weak self] in
+            for await event in backend.processor.events {
+                if case .saved = event { self?.refreshUsage() }
+            }
+        })
+        listeners.append(Task { [weak self] in await self?.load() })
     }
 
     // MARK: Lesen
 
+    func thought(_ id: String) -> Thought? {
+        track()
+        return byID[id]
+    }
+
     func topic(_ id: String?) -> Topic? {
-        guard let id else { return nil }
-        return topics.first { $0.id == id }
+        track()
+        return resolvedTopic(id)
     }
 
     /// aktiv = ≥ 2 Gedanken oder vom Nutzer angelegt (§7.3)
@@ -52,12 +107,13 @@ final class ThoughtsModel {
     }
 
     func count(of topicID: String) -> Int {
-        thoughts.reduce(0) { $0 + ($1.topicId == topicID ? 1 : 0) }
+        track()
+        return counts[topicID] ?? 0
     }
 
     func openTasks(topicID: String?) -> [(task: ThoughtTask, thought: Thought)] {
         thoughts
-            .filter { topicID == nil || $0.topicId == topicID }
+            .filter { topicID == nil || resolvedTopic($0.topicId)?.id == topicID }
             .flatMap { thought in thought.tasks.filter { !$0.done }.map { (task: $0, thought: thought) } }
             .sorted { a, b in
                 switch (a.task.dueAt, b.task.dueAt) {
@@ -76,102 +132,150 @@ final class ThoughtsModel {
             .sorted { ($0.task.doneAt ?? .distantPast) > ($1.task.doneAt ?? .distantPast) }
     }
 
-    /// Einfache Suche (Wortanfänge, UND, ohne Groß/Klein und Akzente). H2 ersetzt durch den Index.
+    /// Lokal, sofort: ohne Groß/Klein und Akzente, UND, Wortanfänge; Ausschnitt mit Fundstellen.
     func search(_ query: String) -> [SearchHit] {
-        let words = query.split(separator: " ").map { Self.fold(String($0)) }.filter { !$0.isEmpty }
-        guard !words.isEmpty else { return [] }
-        return thoughts.compactMap { thought in
-            let title = thought.title ?? ""
-            let text = thought.text ?? ""
-            let topicName = topic(thought.topicId)?.title ?? ""
-            let haystack = Self.fold([title, text, topicName, thought.tasks.map(\.text).joined(separator: " ")].joined(separator: " "))
-            guard words.allSatisfy({ haystack.contains($0) }) else { return nil }
-            let inTitle = words.contains { Self.fold(title).contains($0) }
-            return SearchHit(thoughtID: thought.id, field: inTitle ? .title : .text, snippet: String((inTitle ? title : text).prefix(120)), score: inTitle ? 2 : 1)
-        }
-        .sorted { $0.score > $1.score }
+        track()
+        return searchIndex.search(query).filter { byID[$0.thoughtID]?.deletedAt == nil }
     }
 
-    func source(_ id: String) -> ThoughtSource? { sources[id] }
-
-    func audioURL(_ id: String) -> URL? { nil }
-
-    func linked(_ id: String) -> [(thought: Thought, link: ThoughtLink, incoming: Bool)] {
-        var result: [(thought: Thought, link: ThoughtLink, incoming: Bool)] = []
-        if let thought = thoughts.first(where: { $0.id == id }) {
-            for link in thought.links {
-                if let other = thoughts.first(where: { $0.id == link.target }) { result.append((other, link, false)) }
+    func source(_ id: String) -> ThoughtSource? {
+        if let source = sources[id] { return source }
+        if let store = backend?.store, !requestedSources.contains(id) {
+            requestedSources.insert(id)
+            Task { [weak self] in
+                guard let source = await store.source(id) else { return }
+                self?.sources[id] = source
             }
         }
-        for other in thoughts where other.id != id {
-            for link in other.links where link.target == id { result.append((other, link, true)) }
+        return nil
+    }
+
+    func audioURL(_ id: String) -> URL? {
+        guard let store = backend?.store, let file = byID[id]?.audio?.file else { return nil }
+        let fm = FileManager.default
+        let primary = store.directory(id).appendingPathComponent(file)
+        if fm.fileExists(atPath: primary.path) { return primary }
+        let other = file == "audio.wav" ? store.m4aURL(id) : store.wavURL(id)
+        return fm.fileExists(atPath: other.path) ? other : nil
+    }
+
+    func linked(_ id: String) -> [(thought: Thought, link: ThoughtLink, incoming: Bool)] {
+        track()
+        var result: [(thought: Thought, link: ThoughtLink, incoming: Bool)] = []
+        if let thought = byID[id] {
+            for link in thought.links {
+                if let other = byID[link.target], other.deletedAt == nil { result.append((other, link, false)) }
+            }
+        }
+        for (other, link) in incoming[id] ?? [] {
+            if let thought = byID[other], thought.deletedAt == nil { result.append((thought, link, true)) }
         }
         return result
     }
 
     // MARK: Ändern (setzt owner = user)
 
-    func setTitle(_ id: String, _ value: String) { update(id) { $0.title = value; $0.titleOwner = .user } }
-    func setText(_ id: String, _ value: String) { update(id) { $0.text = value; $0.textOwner = .user; $0.textIsRaw = false } }
-    func setTopic(_ id: String, topicID: String?) { update(id) { $0.topicId = topicID; $0.topicOwner = .user } }
+    func setTitle(_ id: String, _ value: String) {
+        change(id) { $0.title = value; $0.titleOwner = .user }
+    }
+
+    func setText(_ id: String, _ value: String) {
+        change(id) { $0.text = value; $0.textOwner = .user; $0.textIsRaw = false }
+    }
+
+    func setTopic(_ id: String, topicID: String?) {
+        change(id) { $0.topicId = topicID; $0.topicOwner = .user }
+    }
 
     func createTopic(title: String, icon: TopicIcon) -> Topic {
-        let topic = Topic(title: title, icon: icon, owner: .user)
-        topics.append(topic)
+        let topic = Topic(title: title.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, owner: .user)
+        changeTopics { $0.append(topic) }
         return topic
     }
 
     func renameTopic(_ id: String, title: String) {
-        guard let i = topics.firstIndex(where: { $0.id == id }) else { return }
-        topics[i].title = title
-        topics[i].owner = .user
+        let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        changeTopics { topics in
+            if let i = topics.firstIndex(where: { $0.id == id }) { topics[i].title = value }
+        }
     }
 
     func setTopicIcon(_ id: String, _ icon: TopicIcon) {
-        guard let i = topics.firstIndex(where: { $0.id == id }) else { return }
-        topics[i].icon = icon
-        topics[i].owner = .user
+        changeTopics { topics in
+            if let i = topics.firstIndex(where: { $0.id == id }) { topics[i].icon = icon }
+        }
     }
 
+    /// Ziel behält seine ID, die Quellen werden Alias (`mergedInto`), Gedanken wandern zum Ziel (§6.10).
     func mergeTopics(_ ids: [String], into target: String, title: String?) -> UndoToken {
-        let token = remember()
-        for i in thoughts.indices where ids.contains(thoughts[i].topicId ?? "") && thoughts[i].topicId != target {
-            thoughts[i].topicId = target
-            bump(&thoughts[i])
+        let token = UndoToken()
+        let merged = ids.filter { $0 != target }
+        let oldTitle = topicByID[target]?.title
+        let moved = byID.values.compactMap { thought -> (id: String, topic: String)? in
+            guard let topic = thought.topicId, let resolved = resolvedTopic(topic)?.id, merged.contains(resolved) else { return nil }
+            return (thought.id, topic)
         }
-        topics.removeAll { ids.contains($0.id) && $0.id != target }
-        if let title, let i = topics.firstIndex(where: { $0.id == target }) { topics[i].title = title }
-        suggestions.removeAll { ids.contains($0.a) || ids.contains($0.b) }
+        let newTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        changeTopics { topics in
+            for i in topics.indices where merged.contains(topics[i].id) { topics[i].mergedInto = target }
+            if let newTitle, !newTitle.isEmpty, let i = topics.firstIndex(where: { $0.id == target }) { topics[i].title = newTitle }
+        }
+        for item in moved {
+            let source = item.topic
+            change(item.id) { if $0.topicId == source { $0.topicId = target } }
+        }
+        let involved = Set(ids + [target])
+        setSuggestions(suggestions.filter { !involved.contains($0.a) && !involved.contains($0.b) })
+        undoActions[token] = { [weak self] in
+            guard let self else { return }
+            self.changeTopics { topics in
+                for i in topics.indices where merged.contains(topics[i].id) && topics[i].mergedInto == target { topics[i].mergedInto = nil }
+                if let oldTitle, let i = topics.firstIndex(where: { $0.id == target }) { topics[i].title = oldTitle }
+            }
+            for item in moved {
+                let original = item.topic
+                self.change(item.id) { if $0.topicId == target { $0.topicId = original } }
+            }
+        }
         return token
     }
 
+    /// „Thema löschen? Gedanken bleiben, nur ohne Thema.“ Aliasse auf das Thema fallen mit weg.
     func deleteTopic(_ id: String) {
-        for i in thoughts.indices where thoughts[i].topicId == id {
-            thoughts[i].topicId = nil
-            bump(&thoughts[i])
+        let removed = Set(allTopics.filter { $0.id == id || resolvedTopic($0.id)?.id == id }.map(\.id))
+        for thought in byID.values where removed.contains(thought.topicId ?? "") {
+            change(thought.id) { if let topic = $0.topicId, removed.contains(topic) { $0.topicId = nil } }
         }
-        topics.removeAll { $0.id == id }
+        changeTopics { $0.removeAll { removed.contains($0.id) } }
+        setSuggestions(suggestions.filter { !removed.contains($0.a) && !removed.contains($0.b) })
     }
 
+    /// Vorläufiges Thema übernehmen („Behalten“ macht es aktiv)
     func keepProvisional(_ id: String) {
-        guard let i = topics.firstIndex(where: { $0.id == id }) else { return }
-        topics[i].owner = .user
+        changeTopics { topics in
+            if let i = topics.firstIndex(where: { $0.id == id }) { topics[i].owner = .user }
+        }
     }
 
     func toggleTask(_ thoughtID: String, _ taskID: String) {
-        update(thoughtID) { thought in
+        let now = Date()
+        change(thoughtID) { thought in
             guard let k = thought.tasks.firstIndex(where: { $0.id == taskID }) else { return }
             thought.tasks[k].done.toggle()
-            thought.tasks[k].doneAt = thought.tasks[k].done ? Date() : nil
+            thought.tasks[k].doneAt = thought.tasks[k].done ? now : nil
         }
     }
 
     func addTask(_ thoughtID: String, text: String) {
-        update(thoughtID) { $0.tasks.append(ThoughtTask(text: text, owner: .user)) }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        let task = ThoughtTask(text: value, owner: .user)
+        change(thoughtID) { $0.tasks.append(task) }
     }
 
     func editTask(_ thoughtID: String, _ taskID: String, text: String) {
-        update(thoughtID) { thought in
+        change(thoughtID) { thought in
             guard let k = thought.tasks.firstIndex(where: { $0.id == taskID }) else { return }
             thought.tasks[k].text = text
             thought.tasks[k].owner = .user
@@ -179,74 +283,311 @@ final class ThoughtsModel {
     }
 
     func deleteTask(_ thoughtID: String, _ taskID: String) {
-        update(thoughtID) { $0.tasks.removeAll { $0.id == taskID } }
+        change(thoughtID) { $0.tasks.removeAll { $0.id == taskID } }
     }
 
+    /// Selbst verknüpfen. Gespeichert wird nur im neueren der beiden Gedanken (§6.9).
     func addLink(_ id: String, to target: String) {
-        update(id) { $0.links.append(ThoughtLink(target: target, kind: .sameMatter, reason: "", origin: .user)) }
+        guard id != target, let a = byID[id], let b = byID[target] else { return }
+        guard !a.links.contains(where: { $0.target == target }), !b.links.contains(where: { $0.target == id }) else { return }
+        let (owner, other) = a.createdAt >= b.createdAt ? (id, target) : (target, id)
+        let link = ThoughtLink(target: other, kind: .sameMatter, reason: "", origin: .user)
+        change(owner) { $0.links.append(link) }
     }
 
     func removeLink(_ id: String, target: String) {
-        update(id) { $0.links.removeAll { $0.target == target } }
-        update(target) { $0.links.removeAll { $0.target == id } }
+        change(id) { $0.links.removeAll { $0.target == target } }
+        change(target) { $0.links.removeAll { $0.target == id } }
     }
 
+    /// In „Zuletzt gelöscht“; widerrufbar
     func delete(_ id: String) -> UndoToken {
-        let token = remember()
-        if let i = thoughts.firstIndex(where: { $0.id == id }) {
-            var thought = thoughts.remove(at: i)
-            thought.deletedAt = Date()
-            deleted.insert(thought, at: 0)
-        }
+        let token = UndoToken()
+        let now = Date()
+        change(id) { $0.deletedAt = now }
+        undoActions[token] = { [weak self] in self?.restore(id) }
         return token
     }
 
+    /// Aus „Zuletzt gelöscht“ zurück. Nicht Geordnetes (z. B. in der Live Activity verworfen) wird danach geordnet.
     func restore(_ id: String) {
-        guard let i = deleted.firstIndex(where: { $0.id == id }) else { return }
-        var thought = deleted.remove(at: i)
-        thought.deletedAt = nil
-        thoughts.append(thought)
-        thoughts.sort { $0.createdAt > $1.createdAt }
+        change(id) { $0.deletedAt = nil }
+        guard let processor = backend?.processor, byID[id]?.state != .done else { return }
+        write(id) { _ in await processor.kick(reason: "restore") } // nach dem Schreiben
     }
 
-    func purge(_ id: String) { deleted.removeAll { $0.id == id } }
-    func purgeAllDeleted() { deleted.removeAll() }
+    /// Endgültig: Ton, Text, Cache und Embedding (§7.6)
+    func purge(_ id: String) {
+        apply(nil, id: id)
+        write(id) { await $0.purge(id) }
+    }
 
-    func reorganize(_ id: String) { update(id) { $0.state = .structuring } }
+    func purgeAllDeleted() {
+        for thought in deleted { purge(thought.id) }
+    }
 
-    func accept(_ s: TopicSuggestion) { _ = mergeTopics([s.a, s.b], into: s.a, title: s.name) }
-    func decline(_ s: TopicSuggestion) { suggestions.removeAll { $0 == s } }
+    /// „Erneut ordnen“ / „Erneut versuchen“: bewusst neue Anfrage
+    func reorganize(_ id: String) {
+        guard let current = byID[id] else { return }
+        var optimistic = current
+        optimistic.state = current.state == .done ? .structuring : .captured
+        optimistic.status = Thought.Status()
+        apply(optimistic, id: id) // die Warteschlange schreibt gleich den echten Stand
+        guard let processor = backend?.processor else { return }
+        Task { await processor.reorganize(id) }
+    }
+
+    func accept(_ s: TopicSuggestion) {
+        _ = mergeTopics([s.a, s.b], into: s.a, title: s.name)
+        setSuggestions(suggestions.filter { $0 != s })
+    }
+
+    func decline(_ s: TopicSuggestion) {
+        setSuggestions(suggestions.filter { $0 != s })
+        write(ThoughtStore.topicsChangeID) { try await $0.declineMerge(s.a, s.b) }
+    }
 
     func undo(_ token: UndoToken) {
-        guard let snapshot = undoStack.removeValue(forKey: token) else { return }
-        thoughts = snapshot.thoughts
-        deleted = snapshot.deleted
-        topics = snapshot.topics
+        undoActions.removeValue(forKey: token)?()
     }
 
-    // MARK: Hilfen
+    // MARK: Entwicklerbereich
 
-    private func update(_ id: String, _ change: (inout Thought) -> Void) {
-        guard let i = thoughts.firstIndex(where: { $0.id == id }) else { return }
-        change(&thoughts[i])
-        bump(&thoughts[i])
+    /// Verbrauch der letzten 24 h aus dem Ledger neu lesen.
+    func refreshUsage() {
+        guard let backend else { return }
+        Task { [weak self] in
+            let summary = await backend.ledger.summary()
+            self?.usage = ThoughtsUsage(tokens: summary.tokens, audioSeconds: summary.audioSeconds, requests: summary.requests,
+                                        dailyTokens: backend.dailyTokens())
+        }
     }
 
-    private func bump(_ thought: inout Thought) {
+    /// „Themenpflege jetzt prüfen“: ohne 7-Tage-Grenze, ein Aufruf an gpt-oss-20b.
+    func checkTopicsNow() {
+        runTopicHygiene(force: true)
+    }
+
+    // MARK: Laden und Aktualisieren
+
+    private func load() async {
+        guard let backend else { return }
+        let store = backend.store
+        let all = await store.all()
+        let storedTopics = await store.topics()
+        let pending = await store.pendingSuggestions()
+        replaceAll(all, topics: storedTopics)
+        suggestions = pending
+        isLoaded = true
+        for id in changedWhileLoading { await refresh(id) }
+        changedWhileLoading = []
+        refreshUsage()
+        // Rohtexte und Suchindex im Hintergrund (≈ 2 000 kleine Dateien)
+        let loadedSources = await store.allSources()
+        for (id, source) in loadedSources where sources[id] == nil { sources[id] = source }
+        rebuildSearchIndex()
+        runTopicHygiene(force: false)
+    }
+
+    /// Eine Änderung aus dem Speicher übernehmen (Warteschlange, andere Schreiber).
+    private func refresh(_ id: String) async {
+        guard let store = backend?.store else { return }
+        if !isLoaded { changedWhileLoading.insert(id) }
+        if id == ThoughtStore.topicsChangeID {
+            guard (pendingWrites[id] ?? 0) == 0 else { return }
+            let stored = await store.topics()
+            suggestions = await store.pendingSuggestions()
+            setTopics(stored)
+            return
+        }
+        guard (pendingWrites[id] ?? 0) == 0 else { return }
+        let thought = await store.thought(id)
+        guard (pendingWrites[id] ?? 0) == 0 else { return }
+        if let thought, sources[id] == nil, thought.state == .done || thought.state == .structuring {
+            if let source = await store.source(id) { sources[id] = source }
+        }
+        apply(thought, id: id)
+    }
+
+    // MARK: Schreiben
+
+    /// Sofort im RAM ändern, dann der Reihe nach atomar im Speicher (gleiche Änderung auf dem aktuellen Stand).
+    private func change(_ id: String, _ edit: @escaping @Sendable (inout Thought) -> Void) {
+        guard var thought = byID[id] else { return }
+        let before = thought
+        edit(&thought)
+        guard thought != before else { return }
         thought.rev += 1
         thought.updatedAt = Date()
+        apply(thought, id: id)
+        write(id) { _ = try await $0.update(id, edit) }
     }
 
-    private func remember() -> UndoToken {
-        let token = UndoToken()
-        undoStack[token] = Snapshot(thoughts: thoughts, deleted: deleted, topics: topics)
-        return token
+    private func changeTopics(_ edit: @escaping @Sendable (inout [Topic]) -> Void) {
+        var next = allTopics
+        edit(&next)
+        setTopics(next)
+        write(ThoughtStore.topicsChangeID) { _ = try await $0.updateTopics(edit) }
     }
 
-    private static func fold(_ s: String) -> String {
-        s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    private func setSuggestions(_ next: [TopicSuggestion]) {
+        guard next != suggestions else { return }
+        suggestions = next
+        write(ThoughtStore.topicsChangeID) { try await $0.setPendingSuggestions(next) }
+    }
+
+    private func write(_ key: String, _ operation: @escaping @Sendable (ThoughtStore) async throws -> Void) {
+        guard let store = backend?.store else { return }
+        pendingWrites[key, default: 0] += 1
+        let previous = writeChain
+        writeChain = Task { [weak self] in
+            await previous?.value
+            do {
+                try await operation(store)
+            } catch {
+                Diag.log("thought.write.failed", ["error": .s(String(describing: type(of: error)))])
+            }
+            await self?.writeFinished(key)
+        }
+    }
+
+    private func writeFinished(_ key: String) async {
+        let remaining = (pendingWrites[key] ?? 1) - 1
+        pendingWrites[key] = remaining > 0 ? remaining : nil
+        if remaining <= 0 { await refresh(key) }
+    }
+
+    // MARK: Abgeleitete Daten
+
+    /// Ansichten lesen über Methoden; so hängen sie trotzdem an `thoughts`.
+    private func track() {
+        _ = thoughts.count
+        _ = topics.count
+    }
+
+    private static func isVisible(_ thought: Thought) -> Bool {
+        thought.state != .recording && thought.state != .empty
+    }
+
+    private func replaceAll(_ all: [Thought], topics stored: [Topic]) {
+        byID = [:]
+        for thought in all where Self.isVisible(thought) { byID[thought.id] = thought }
+        thoughts = byID.values.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+        deleted = byID.values.filter { $0.deletedAt != nil }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+        allTopics = stored
+        topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        recomputeDerived()
+    }
+
+    private func setTopics(_ stored: [Topic]) {
+        let renamed = Set(stored.filter { topicByID[$0.id]?.title != $0.title || topicByID[$0.id]?.mergedInto != $0.mergedInto }.map(\.id))
+        allTopics = stored
+        topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        recomputeDerived()
+        guard !renamed.isEmpty else { return }
+        for thought in thoughts where renamed.contains(thought.topicId ?? "") || renamed.contains(resolvedTopic(thought.topicId)?.id ?? "") {
+            indexForSearch(thought)
+        }
+    }
+
+    /// Einen Gedanken einsortieren (nil = entfernt).
+    private func apply(_ thought: Thought?, id: String) {
+        let old = byID[id]
+        let new = thought.flatMap { Self.isVisible($0) ? $0 : nil }
+        byID[id] = new
+        if let old, let new, old.deletedAt == nil, new.deletedAt == nil, old.createdAt == new.createdAt,
+           let i = thoughts.firstIndex(where: { $0.id == id }) {
+            thoughts[i] = new // häufigster Fall: an Ort und Stelle
+        } else {
+            if let old {
+                if old.deletedAt == nil { thoughts.removeAll { $0.id == id } } else { deleted.removeAll { $0.id == id } }
+            }
+            if let new {
+                if new.deletedAt == nil {
+                    let index = thoughts.firstIndex { $0.createdAt < new.createdAt } ?? thoughts.endIndex
+                    thoughts.insert(new, at: index)
+                } else {
+                    let index = deleted.firstIndex { ($0.deletedAt ?? .distantPast) < (new.deletedAt ?? .distantPast) } ?? deleted.endIndex
+                    deleted.insert(new, at: index)
+                }
+            }
+        }
+        recomputeDerived()
+        if let new, new.deletedAt == nil { indexForSearch(new) } else { searchIndex.remove(id) }
+    }
+
+    private func recomputeDerived() {
+        var nextCounts: [String: Int] = [:]
+        var lastActivity: [String: Date] = [:]
+        var nextIncoming: [String: [(id: String, link: ThoughtLink)]] = [:]
+        for thought in thoughts {
+            if let topic = resolvedTopic(thought.topicId)?.id {
+                nextCounts[topic, default: 0] += 1
+                lastActivity[topic] = max(lastActivity[topic] ?? .distantPast, thought.createdAt)
+            }
+            for link in thought.links { nextIncoming[link.target, default: []].append((thought.id, link)) }
+        }
+        counts = nextCounts
+        incoming = nextIncoming
+        let visible = allTopics.filter { $0.mergedInto == nil }.sorted { a, b in
+            let x = lastActivity[a.id] ?? a.createdAt, y = lastActivity[b.id] ?? b.createdAt
+            return x != y ? x > y : a.title < b.title
+        }
+        if visible != topics { topics = visible }
+    }
+
+    private func resolvedTopic(_ id: String?) -> Topic? {
+        guard var current = id else { return nil }
+        var seen: Set<String> = []
+        while let topic = topicByID[current] {
+            guard let next = topic.mergedInto, seen.insert(current).inserted else { return topic }
+            current = next
+        }
+        return nil
+    }
+
+    private func indexForSearch(_ thought: Thought) {
+        searchIndex.upsert(thought, topicName: resolvedTopic(thought.topicId)?.title, raw: sources[thought.id]?.text)
+    }
+
+    private func rebuildSearchIndex() {
+        var index = ThoughtSearchIndex()
+        for thought in thoughts {
+            index.upsert(thought, topicName: resolvedTopic(thought.topicId)?.title, raw: sources[thought.id]?.text)
+        }
+        searchIndex = index
+    }
+
+    // MARK: Themenpflege
+
+    private func runTopicHygiene(force: Bool) {
+        guard let backend, !isCheckingTopics else { return }
+        isCheckingTopics = force
+        let apiKey = AppSettings.shared.apiKey
+        Task { [weak self] in
+            if !force, ThoughtsEnvironment.isDictationBusy() {
+                self?.isCheckingTopics = false
+                return
+            }
+            let outcome = await TopicHygieneRunner.run(store: backend.store, ledger: backend.ledger, apiKey: apiKey, force: force)
+            guard let self else { return }
+            self.suggestions = await backend.store.pendingSuggestions()
+            self.isCheckingTopics = false
+            switch outcome {
+            case .suggestions(let list):
+                self.topicCheckResult = list.isEmpty ? "Keine ähnlichen Themen" : (list.count == 1 ? "1 Vorschlag" : "\(list.count) Vorschläge")
+                self.refreshUsage()
+            case .notDue:
+                self.topicCheckResult = nil
+            case .skipped(let code):
+                self.topicCheckResult = code == "key" ? "Groq-Schlüssel fehlt" : code == "budget" ? "Kontingent erreicht" : "Später erneut"
+            }
+            Diag.log("thoughts.hygiene", ["force": .b(force), "outcome": .s(String(describing: outcome).prefix(40).description)])
+        }
     }
 }
+
+// MARK: - Vorschau
 
 /// Beispieldaten ohne echte Personendaten.
 @MainActor
@@ -273,15 +614,21 @@ private enum ThoughtsPreviewData {
             ("Retro am Freitag", "In der Retro ansprechen, dass die Reviews zu lange liegen bleiben."),
             ("App für Einkaufslisten", "Idee: Einkaufsliste, die sich nach dem Laden sortiert, in dem ich gerade bin."),
         ]
+        // Die drei neuesten sind fertig (Abschnitt „Heute“), danach je ein Zwischen- und Wartezustand.
         let states: [ThoughtState] = [.captured, .transcribing, .structuring, .waitingNetwork, .waitingKey,
                                       .waitingLimit, .waitingBudget, .needsAttention]
+        let firstState = 3
         var thoughts: [Thought] = []
         var sources: [String: ThoughtSource] = [:]
         let now = Date()
+        let startOfDay = Calendar.current.startOfDay(for: now)
         for i in 0..<60 {
             let sample = samples[i % samples.count]
             let topic = topics[i % topics.count]
-            let created = now.addingTimeInterval(-Double(i) * 36_000 - Double(i % 5) * 1_800)
+            // die ersten sechs dicht beieinander (heute, sofern der Tag schon begonnen hat), dann alle ~10 h
+            let created = i < 6
+                ? max(startOfDay.addingTimeInterval(60 * Double(6 - i)), now.addingTimeInterval(-Double(i) * 1_500))
+                : now.addingTimeInterval(-Double(i) * 36_000 - Double(i % 5) * 1_800)
             var thought = Thought(
                 createdAt: created,
                 durationMs: 8_000 + (i * 7_919) % 90_000,
@@ -307,21 +654,28 @@ private enum ThoughtsPreviewData {
                 thought.links = [ThoughtLink(target: thoughts[i - 1].id, kind: [.continues, .sameMatter, .changes][i % 3],
                                              reason: "Gleiches Anliegen", origin: .ai, createdAt: created)]
             }
-            if i < states.count {
-                // die neuesten zeigen die Zwischen- und Wartezustände
-                thought.state = states[i]
+            if i == 1 {
+                thought.links = [ThoughtLink(target: thoughts[0].id, kind: .continues, reason: "Gleicher Knopf", origin: .ai, createdAt: created)]
+            }
+            let stateIndex = i - firstState
+            if stateIndex >= 0, stateIndex < states.count {
+                // Zwischen- und Wartezustände
+                thought.state = states[stateIndex]
                 thought.title = nil
                 thought.text = nil
                 thought.titleOwner = .system
                 thought.textOwner = .system
                 thought.topicId = nil
                 thought.tasks = []
+                thought.links = []
                 thought.ai = nil
-                thought.status = Thought.Status(message: statusMessage(states[i]), attempts: states[i] == .needsAttention ? 5 : 1)
-            } else if i == states.count {
+                thought.audio = Thought.AudioInfo(file: "audio.wav")
+                thought.status = Thought.Status(message: statusMessage(states[stateIndex]),
+                                                attempts: states[stateIndex] == .needsAttention ? 5 : 1)
+            } else if i == firstState + states.count {
                 thought.textIsRaw = true // „nicht geordnet“
                 thought.topicId = nil
-            } else if i == states.count + 1 {
+            } else if i == firstState + states.count + 1 {
                 thought.topicId = provisional.id // vorläufiges Thema (1 Gedanke)
             }
             if i == 59 { thought.deletedAt = now.addingTimeInterval(-86_400) }

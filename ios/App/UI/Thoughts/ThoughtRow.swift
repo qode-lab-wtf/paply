@@ -15,6 +15,8 @@ struct ThoughtRow: View {
     var snippet: AttributedString?
     /// Titel mit Fundstellen (Suche)
     var highlightedTitle: AttributedString?
+    /// Anfang des Rohtexts, solange der Gedanke noch nicht geordnet ist
+    var raw: String?
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduce
@@ -56,8 +58,7 @@ struct ThoughtRow: View {
         } else if let note = thought.stateNote, note.action != .reorganize {
             HStack(spacing: 6) {
                 Text(time).foregroundStyle(Color.paplyText.opacity(0.78))
-                Image(systemName: note.symbol)
-                    .imageScale(.small)
+                LucideImage(note.icon, size: 14, stroke: 2, relativeTo: .subheadline)
                     .foregroundStyle(note.tint == .paplyBeak ? Color.paplyBeak : Color.paplySecondaryText)
                 Text(note.text)
                     .foregroundStyle(note.tint == .paplyBeak ? Color.paplyBeak : Color.paplySecondaryText)
@@ -83,7 +84,16 @@ struct ThoughtRow: View {
 
     private var titleText: Text {
         if let highlightedTitle { return Text(highlightedTitle) }
-        return Text(thought.displayTitle)
+        return Text(title)
+    }
+
+    /// Noch nicht geordnet: Anfang des Rohtexts, sonst „Gedanke · 0:42“ – so bleiben Wartende unterscheidbar
+    private var title: String {
+        if thought.state != .done, thought.title?.isEmpty ?? true,
+           let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            return String(raw.prefix(90))
+        }
+        return thought.displayTitle
     }
 
     // MARK: Fußzeile
@@ -100,16 +110,14 @@ struct ThoughtRow: View {
             HStack(spacing: 10) {
                 if thought.openTaskCount > 0 {
                     HStack(spacing: 3) {
-                        Image(systemName: "circle")
-                            .imageScale(.small)
+                        LucideImage(.circle, size: 12, stroke: 2.2, relativeTo: .caption)
                         Text("\(thought.openTaskCount)")
                             .monospacedDigit()
                     }
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
                 }
                 if !thought.links.isEmpty {
-                    Image(systemName: "link")
-                        .imageScale(.small)
+                    LucideImage(.link, size: 13, stroke: 2.1, relativeTo: .caption)
                 }
             }
             .font(.caption.weight(.medium))
@@ -122,9 +130,11 @@ struct ThoughtRow: View {
         if hasFooter {
             HStack(spacing: 10) {
                 if showTopic, let topic {
-                    Label(topic.title, systemImage: topic.icon.systemImage)
-                        .labelStyle(TopicLabelStyle())
-                        .foregroundStyle(ThoughtTint.mint.opacity(0.9))
+                    HStack(spacing: 5) {
+                        TopicGlyph(key: topic.icon.rawValue, size: 13, stroke: 1.9, relativeTo: .caption)
+                        Text(topic.title)
+                    }
+                    .foregroundStyle(ThoughtTint.mint.opacity(0.9))
                         .lineLimit(1)
                         .transition(.asymmetric(insertion: .offset(x: -8).combined(with: .opacity), removal: .opacity))
                 }
@@ -145,7 +155,7 @@ struct ThoughtRow: View {
     }
 
     private var accessibilityText: String {
-        var parts = [thought.displayTitle, time]
+        var parts = [title, time]
         if thought.isProcessing {
             parts.append("Wird geordnet")
         } else if let note = thought.stateNote {
@@ -158,6 +168,56 @@ struct ThoughtRow: View {
         if open > 0 { parts.append(open == 1 ? "1 offene Aufgabe" : "\(open) offene Aufgaben") }
         if !thought.links.isEmpty { parts.append("verknüpft") }
         return parts.joined(separator: ", ")
+    }
+}
+
+// MARK: - Zeile mit allen Aktionen (Übersicht, Thema, Suche)
+
+struct ThoughtListRow: View {
+    let thought: Thought
+    let topic: Topic?
+    let showTopic: Bool
+    let time: String
+    var snippet: AttributedString?
+    var highlightedTitle: AttributedString?
+    /// Ziel des Zoom-Übergangs, wenn die große Aufnahme-Ansicht in diese neue Zeile zurückkehrt
+    var zoomSource = false
+
+    @Environment(ThoughtsModel.self) private var model
+    @Environment(ThoughtsNav.self) private var nav
+    @Environment(\.captureZoom) private var zoom
+    @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduce
+
+    var body: some View {
+        Button {
+            nav.path.append(.thought(thought.id))
+        } label: {
+            ThoughtRow(thought: thought, topic: topic, showTopic: showTopic, time: time, snippet: snippet,
+                       highlightedTitle: highlightedTitle,
+                       raw: thought.state == .done ? nil : model.source(thought.id)?.text)
+        }
+        .captureZoomSource(thought.id, in: zoomSource ? zoom : nil)
+        .listRowBackground(Color.paplyRow)
+        .modifier(ThoughtRowActions(
+            thought: thought,
+            onDelete: delete,
+            onTopic: { nav.topicPicker = SheetID(id: thought.id) },
+            onCopy: {
+                ThoughtClipboard.copy(thought)
+                nav.show(ThoughtsToast(text: "Kopiert"), reduceMotion: reduce)
+            },
+            onReorganize: { model.reorganize(thought.id) }
+        ))
+    }
+
+    private func delete() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        var token: UndoToken?
+        withAnimation(PaplyMotion.smooth(reduce)) { token = model.delete(thought.id) }
+        guard let token else { return }
+        nav.show(ThoughtsToast(text: "Gelöscht", undo: token, seconds: 4), reduceMotion: reduce)
+        ThoughtsUndo.register(undoManager, name: "Löschen", model: model, token: token)
     }
 }
 

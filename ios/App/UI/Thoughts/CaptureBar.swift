@@ -102,10 +102,12 @@ struct CaptureBarContent: View {
             line(icon: AnyView(markIcon), text: "Wird geordnet …", shimmer: true)
         case .saved(let id):
             savedLine(id)
-        case .waiting(_, let symbol, let text):
-            line(icon: AnyView(symbolIcon(symbol, tint: .paplySecondaryText)), text: text)
+        case .waiting(_, let icon, let text):
+            line(icon: AnyView(glyphIcon(icon, tint: .paplySecondaryText)), text: text)
         case .nothing:
-            line(icon: AnyView(symbolIcon("exclamationmark.circle.fill", tint: .paplyBeak)), text: "Nichts verstanden – nichts gespeichert")
+            line(icon: AnyView(glyphIcon(.triangleAlert, tint: .paplyBeak)), text: "Nichts verstanden – nichts gespeichert")
+        case .discarded(let id):
+            discardedLine(id)
         case .note(let text):
             line(icon: AnyView(markIcon), text: text)
         case .hidden:
@@ -153,7 +155,7 @@ struct CaptureBarContent: View {
     }
 
     private func savedLine(_ id: String) -> some View {
-        let topic = model.thoughts.first { $0.id == id }.flatMap { model.topic($0.topicId) }
+        let topic = model.thought(id).flatMap { model.topic($0.topicId) }
         return HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: compact ? 18 : 22, weight: .semibold))
@@ -164,10 +166,11 @@ struct CaptureBarContent: View {
                     .foregroundStyle(Color.paplyText)
                 if let topic {
                     Text("·").foregroundStyle(Color.paplyTertiaryText)
-                    Label(topic.title, systemImage: topic.icon.systemImage)
-                        .labelStyle(TopicLabelStyle())
-                        .foregroundStyle(ThoughtTint.mint)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        TopicGlyph(key: topic.icon.rawValue, size: 15, relativeTo: .subheadline)
+                        Text(topic.title).lineLimit(1)
+                    }
+                    .foregroundStyle(ThoughtTint.mint)
                 }
             }
             .font(.subheadline.weight(.semibold))
@@ -193,11 +196,34 @@ struct CaptureBarContent: View {
             .frame(width: compact ? 22 : 30, height: compact ? 22 : 30)
     }
 
-    private func symbolIcon(_ symbol: String, tint: Color) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: compact ? 15 : 18, weight: .semibold))
+    private func glyphIcon(_ icon: Lucide, tint: Color) -> some View {
+        LucideImage(icon, size: compact ? 16 : 19, stroke: 2, relativeTo: .subheadline)
             .foregroundStyle(tint)
             .frame(width: compact ? 22 : 30, height: compact ? 22 : 30)
+    }
+
+    /// „Verworfen · Widerrufen“ (10 s) – der Gedanke liegt in „Zuletzt gelöscht“
+    private func discardedLine(_ id: String) -> some View {
+        HStack(spacing: 10) {
+            glyphIcon(.volumeOff, tint: .paplySecondaryText)
+            Text("Verworfen")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.paplyText)
+            Spacer(minLength: 6)
+            Button {
+                withAnimation(.paplySmooth) { model.restore(id) }
+                flow.discardUndone()
+            } label: {
+                Text("Widerrufen")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.paplyGreenBright)
+                    .padding(.horizontal, compact ? 6 : 10)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .sensoryFeedback(.success, trigger: model.thought(id) != nil)
+        }
     }
 
     private func open() {
@@ -206,7 +232,7 @@ struct CaptureBarContent: View {
             flow.openBig(source: CaptureFlow.barSource)
         case .ordering(let id), .saved(let id), .waiting(let id, _, _):
             nav.open(id)
-        case .nothing, .note, .hidden:
+        case .nothing, .note, .hidden, .discarded:
             break
         }
     }

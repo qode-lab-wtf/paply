@@ -4,30 +4,27 @@ import UIKit
 
 // MARK: - Bausteine
 
-/// Kleines farbiges Symbol vor einer Zeile – wie in den iOS-Einstellungen.
+/// Kleines Symbol vor einer Zeile: ruhige, einheitliche Kachel mit Linien-Glyphe (Lucide).
 struct SettingsIcon: View {
-    let symbol: String
-    var tint: Color = .paplyGreen
+    let glyph: Lucide
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
+        LucideImage(glyph, size: 17, stroke: 1.9, scales: false)
+            .foregroundStyle(Color.paplyText.opacity(0.92))
             .frame(width: 29, height: 29)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.1)))
             .accessibilityHidden(true)
     }
 }
 
 struct SettingsRow: View {
     let title: String
-    let symbol: String
-    var tint: Color = .paplyGreen
+    let glyph: Lucide
     var value: String?
 
     var body: some View {
         HStack(spacing: 12) {
-            SettingsIcon(symbol: symbol, tint: tint)
+            SettingsIcon(glyph: glyph)
             Text(title).foregroundStyle(Color.paplyText)
             Spacer(minLength: 8)
             if let value {
@@ -39,14 +36,31 @@ struct SettingsRow: View {
     }
 }
 
-/// Symbol des Gedanken-Knopfs: p-Kopf auf Mint-Gold (wie das Steuerelement im Sperrbildschirm)
+/// Symbol des Gedanken-Knopfs: p-Kopf in Mint auf derselben ruhigen Kachel
 struct ThoughtSettingsIcon: View {
     var body: some View {
-        PaplyMark(monochrome: .paplyForest)
+        PaplyMark(monochrome: ThoughtTint.mint)
             .frame(width: 15, height: 16)
             .frame(width: 29, height: 29)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(ThoughtTint.fill))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.1)))
             .accessibilityHidden(true)
+    }
+}
+
+/// „Feedback senden“: kurzer Text + Diagnose-Protokoll (nur Ereignisse, IDs, Zeiten – nie Diktattext).
+/// Das Protokoll entsteht erst, wenn ein Ziel gewählt ist (Mail, Nachrichten, AirDrop …).
+struct FeedbackPackage: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .utf8PlainText) { _ in
+            let url = await Task.detached(priority: .userInitiated) { DiagReader.export() }.value
+            guard let url else { throw CocoaError(.fileWriteUnknown) }
+            return SentTransferredFile(url)
+        }
+    }
+
+    @MainActor
+    static var message: String {
+        "Feedback zu Paply \(SettingsView.versionText), iOS \(UIDevice.current.systemVersion):\n\n"
     }
 }
 
@@ -95,10 +109,10 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink(value: Route.spokenLanguages) {
-                    SettingsRow(title: "Sprachen", symbol: "globe", value: languagesSummary)
+                    SettingsRow(title: "Sprachen", glyph: .globe, value: languagesSummary)
                 }
                 NavigationLink(value: Route.vocabulary) {
-                    SettingsRow(title: "Eigene Begriffe", symbol: "text.book.closed", tint: .paplyGreenDeep, value: vocabularySummary)
+                    SettingsRow(title: "Eigene Begriffe", glyph: .bookA, value: vocabularySummary)
                 }
             } header: {
                 Text("Erkennung")
@@ -114,12 +128,12 @@ struct SettingsView: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        SettingsIcon(symbol: "mic.fill", tint: .paplyMicDot)
+                        SettingsIcon(glyph: .mic)
                         Text("Mikro bereit halten").foregroundStyle(Color.paplyText)
                     }
                 }
             } footer: {
-                Text("So lange nach der letzten Nutzung hört Paply sofort zu. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst. Läuft das Mikro, nimmt der Gedanken-Knopf sofort auf.")
+                Text("So lange nach der letzten Nutzung hört Paply sofort zu, wenn du in der Tastatur diktierst. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst. Der Gedanken-Knopf braucht das nicht: Er startet das Mikro selbst, auch wenn Paply nicht läuft.")
             }
             .paplyRows()
 
@@ -141,14 +155,28 @@ struct SettingsView: View {
             Section {
                 if setup.needsKeyboardSetup {
                     NavigationLink(value: Route.keyboardSetup) {
-                        SettingsRow(title: "Tastatur einrichten", symbol: "keyboard.fill", tint: .paplyDanger, value: "fehlt noch")
+                        SettingsRow(title: "Tastatur einrichten", glyph: .keyboard, value: "fehlt noch")
                     }
                 }
                 if settings.developerMode {
                     NavigationLink(value: Route.developer) {
-                        SettingsRow(title: "Entwicklerbereich", symbol: "hammer.fill", tint: .gray)
+                        SettingsRow(title: "Entwicklerbereich", glyph: .hammer)
                     }
                 }
+            }
+            .paplyRows()
+
+            Section {
+                ShareLink(item: FeedbackPackage(), subject: Text("Paply-Feedback"), message: Text(FeedbackPackage.message),
+                          preview: SharePreview("Paply-Diagnose")) {
+                    HStack(spacing: 12) {
+                        SettingsIcon(glyph: .messageSquare)
+                        Text("Feedback senden").foregroundStyle(Color.paplyText)
+                        Spacer()
+                    }
+                }
+            } footer: {
+                Text("Mit Diagnose-Protokoll: nur Abläufe, Zeiten und Kennungen – keine Diktate, keine Gedanken.")
             }
             .paplyRows()
 
@@ -183,7 +211,7 @@ struct SettingsView: View {
         Section {
             if settings.hasAPIKey {
                 HStack(spacing: 12) {
-                    SettingsIcon(symbol: "key.fill", tint: .paplyBeakDeep)
+                    SettingsIcon(glyph: .keyRound)
                     Text("Schlüssel gespeichert").foregroundStyle(Color.paplyText)
                     Spacer()
                     Text(maskedKey).foregroundStyle(Color.paplyText.opacity(0.55)).monospaced()
@@ -199,7 +227,7 @@ struct SettingsView: View {
             } else {
                 Link(destination: Self.groqKeysURL) {
                     HStack(spacing: 12) {
-                        SettingsIcon(symbol: "key.fill", tint: .paplyBeakDeep)
+                        SettingsIcon(glyph: .keyRound)
                         Text("Kostenlosen Schlüssel holen").foregroundStyle(Color.paplyText)
                         Spacer()
                         Image(systemName: "arrow.up.right")
@@ -438,6 +466,8 @@ struct VocabularyView: View {
 struct GuideCard: View {
     let title: String
     let symbol: String
+    /// Linien-Glyphe statt SF-Symbol (Gedanken-Anleitung)
+    var glyph: Lucide?
     let steps: [String]
     let buttons: [(String, URL?)]
     var tint: AnyShapeStyle = AnyShapeStyle(Color.paplyGreenBright)
@@ -445,12 +475,18 @@ struct GuideCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.paplyForest)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(tint))
-                Text(title).font(.headline).foregroundStyle(Color.paplyText)
+                Group {
+                    if let glyph {
+                        LucideImage(glyph, size: 21, stroke: 2, scales: false)
+                    } else {
+                        Image(systemName: symbol)
+                            .font(.system(size: 20, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(Color.paplyForest)
+                .frame(width: 42, height: 42)
+                .background(Circle().fill(tint))
+                Text(title).font(.paplyTitle(.headline, weight: .semibold)).foregroundStyle(Color.paplyText)
             }
             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -494,6 +530,18 @@ struct KeyboardSetupView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // Erst erklären, warum – dann die Schritte
+                HStack(alignment: .top, spacing: 10) {
+                    LucideImage(.shieldCheck, size: 18, stroke: 1.9, relativeTo: .subheadline)
+                        .foregroundStyle(ThoughtTint.mint)
+                        .padding(.top, 1)
+                    Text("Vollzugriff braucht die Tastatur nur, um mit der Paply-App zu sprechen. Die Tastatur selbst sendet nichts ins Internet und merkt sich nichts, was du tippst.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.paplyText.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 4)
+
                 VStack(alignment: .leading, spacing: 10) {
                     statusLine("Paply als Tastatur hinzugefügt", done: setup.keyboardEnabled)
                     statusLine("Vollzugriff erlaubt", done: setup.fullAccessSeen)
@@ -502,16 +550,17 @@ struct KeyboardSetupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .paplyCard()
 
-                GuideCard(title: "So geht’s", symbol: "keyboard.fill", steps: [
+                GuideCard(title: "So geht’s", symbol: "keyboard.fill", glyph: .keyboard, steps: [
                     "„Einstellungen öffnen“ tippen – du landest bei Paply.",
                     "„Tastaturen“ → „Paply“ einschalten.",
                     "„Vollen Zugriff erlauben“ einschalten.",
-                    "In einem Textfeld 🌐 tippen, bis Paply erscheint.",
+                    "Unter Allgemein → Tastatur → Tastaturen auf „Bearbeiten“ tippen und Paply direkt hinter deine Haupttastatur ziehen.",
+                    "In einem Textfeld die Weltkugel tippen, bis Paply erscheint.",
                 ], buttons: [
                     ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
                 ])
 
-                Text("Den vollen Zugriff braucht die Tastatur nur, um mit der Paply-App zu sprechen. Die Tastatur selbst sendet nichts ins Internet. Falls schon alles erlaubt ist: einmal Paply in der Tastatur öffnen, dann verschwindet dieser Hinweis.")
+                Text("Falls schon alles erlaubt ist: einmal Paply in der Tastatur öffnen, dann wird es hier abgehakt.")
                     .font(.footnote)
                     .foregroundStyle(Color.paplyText.opacity(0.55))
                     .padding(.horizontal, 4)
@@ -783,7 +832,7 @@ private struct KeySteps: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Color.paplyForest)
                         .frame(width: 20, height: 20)
-                        .background(Circle().fill(Color.paplyGreenBright))
+                        .background(Circle().fill(Color.paplyText.opacity(0.85)))
                     Text(step)
                         .font(.subheadline)
                         .foregroundStyle(Color.paplyText.opacity(0.85))

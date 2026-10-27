@@ -47,21 +47,35 @@ private struct DictationHome: View {
     let showToast: (String) -> Void
     private let history = HistoryStore.shared
     @Environment(ThoughtsNav.self) private var nav
+    @Environment(ThoughtsModel.self) private var model
+    @State private var confirmClear = false
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
+                if SetupGuide.shared.isVisible(model: model) {
+                    SetupCard()
+                        .padding(.bottom, 6)
+                }
                 SessionCard()
 
-                Text("Verlauf")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(Color.paplyText)
-                    .padding(.top, 14)
-                    .padding(.leading, 4)
-                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Verlauf")
+                        .font(.paplyTitle(.title3, weight: .semibold))
+                        .foregroundStyle(Color.paplyText)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    if !history.entries.isEmpty {
+                        Button("Alles löschen") { confirmClear = true }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.paplyDanger)
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.horizontal, 4)
 
                 if history.entries.isEmpty {
-                    Text("Noch keine Diktate. Tippe in einem Textfeld auf 🌐 und wähle Paply – oder probier es auf der Testseite.")
+                    Text("Noch keine Diktate. Tippe in einem Textfeld auf \(Image(systemName: "globe")) und wähle Paply – oder probier es auf der Testseite.")
                         .font(.subheadline)
                         .foregroundStyle(Color.paplyText.opacity(0.6))
                         .padding(16)
@@ -88,6 +102,14 @@ private struct DictationHome: View {
         }
         .background(PaplyBackground())
         .onAppear { SetupStatus.shared.refresh() }
+        .confirmationDialog("Ganzen Verlauf löschen?", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("Alles löschen", role: .destructive) {
+                withAnimation(.paplySmooth) { history.deleteAll() }
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Alle Diktate auf diesem iPhone werden entfernt. Das lässt sich nicht widerrufen.")
+        }
         .navigationTitle("Diktat")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -174,9 +196,6 @@ private struct HistoryRow: View {
 /// Keine Technikwerte – die stehen im Entwicklerbereich.
 private struct SessionCard: View {
     private let session = SessionController.shared
-    private let settings = AppSettings.shared
-    private let setup = SetupStatus.shared
-    @Environment(ThoughtsNav.self) private var nav
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -188,9 +207,9 @@ private struct SessionCard: View {
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.title3.weight(.semibold))
+                        .font(.paplyTitle(.title3, weight: .semibold))
                         .foregroundStyle(Color.paplyText)
-                    Text(subtitle)
+                    subtitle
                         .font(.subheadline)
                         .foregroundStyle(Color.paplyText.opacity(0.62))
                         .fixedSize(horizontal: false, vertical: true)
@@ -209,46 +228,10 @@ private struct SessionCard: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 16)
-
-            if let step = nextStep {
-                Divider().overlay(Color.white.opacity(0.12)).padding(.vertical, 14)
-                if step.route == .settings {
-                    Button {
-                        nav.showSettings = true
-                    } label: {
-                        stepLabel(step)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    NavigationLink(value: step.route) {
-                        stepLabel(step)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
         }
         .padding(18)
         .paplyCard(cornerRadius: 22)
         .animation(.paplySmooth, value: session.status)
-    }
-
-    private func stepLabel(_ step: Step) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: step.symbol)
-                .foregroundStyle(Color.paplyBeak)
-                .frame(width: 22)
-            Text(step.text)
-                .font(.subheadline)
-                .foregroundStyle(Color.paplyText)
-            Spacer(minLength: 8)
-            Text(step.action)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.paplyGreenBright)
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.paplyText.opacity(0.35))
-        }
-        .contentShape(Rectangle())
     }
 
     private var isOn: Bool { session.status == .ready || session.status == .recording }
@@ -269,18 +252,19 @@ private struct SessionCard: View {
         }
     }
 
-    private var subtitle: String {
+    /// 🌐 als Symbol im Fließtext (kein farbiges Emoji)
+    private var subtitle: Text {
+        let globe = Image(systemName: "globe")
         switch session.status {
         case .off:
-            "Schalte das Mikro ein, dann hört Paply sofort zu, wenn du 🌐 tippst."
+            return Text("Schalte das Mikro ein, dann hört Paply sofort zu, wenn du \(globe) tippst.")
         case .ready, .recording:
             if let until = session.holdUntil {
-                "Tippe in einem Textfeld auf 🌐 und sprich. Bereit bis \(Format.time.string(from: until))."
-            } else {
-                "Tippe in einem Textfeld auf 🌐 und sprich."
+                return Text("Tippe in einem Textfeld auf \(globe) und sprich. Bereit bis \(Format.time.string(from: until)).")
             }
+            return Text("Tippe in einem Textfeld auf \(globe) und sprich.")
         case .interrupted:
-            "Zum Beispiel nach einem Anruf. Einmal neu starten, dann geht’s weiter."
+            return Text("Zum Beispiel nach einem Anruf. Einmal neu starten, dann geht’s weiter.")
         }
     }
 
@@ -290,26 +274,6 @@ private struct SessionCard: View {
         case .interrupted: "Neu starten"
         case .ready, .recording: "Ausschalten"
         }
-    }
-
-    private struct Step {
-        let symbol: String
-        let text: String
-        let action: String
-        let route: Route
-    }
-
-    private var nextStep: Step? {
-        if !settings.hasAPIKey {
-            return Step(symbol: "key.fill", text: "Groq-Schlüssel fehlt", action: "Eintragen", route: .settings)
-        }
-        if !setup.keyboardEnabled {
-            return Step(symbol: "keyboard", text: "Tastatur noch nicht eingerichtet", action: "Einrichten", route: .keyboardSetup)
-        }
-        if !setup.fullAccessSeen {
-            return Step(symbol: "lock.open", text: "Vollzugriff für die Tastatur fehlt", action: "Anleitung", route: .keyboardSetup)
-        }
-        return nil
     }
 
     private func toggle() {

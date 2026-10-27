@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ])
         SessionController.shared.bootstrap()
         ThoughtBridge.bootstrap()
+        // Gedanken: Speicher, Warteschlange, BGTask „com.paply.ios.thoughts“ (muss vor Ende des Starts registriert sein)
+        ThoughtsEnvironment.bootstrap()
         return true
     }
 }

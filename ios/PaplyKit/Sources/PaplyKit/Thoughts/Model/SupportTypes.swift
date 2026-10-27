@@ -1,11 +1,11 @@
-// GERÜST (G0.1, Koordinator). Besitzer: H2. Signatur aus KONZEPT.md §9.2 bitte nicht ändern.
+// Besitzer: H2. Signatur aus KONZEPT.md §9.2 bitte nicht ändern.
 import Foundation
 
 // Hilfstypen der UI-Fassade (ThoughtsModel, §9.2), die §9.2 nennt, aber nicht ausformuliert.
 // H2 darf Felder ergänzen; die vorhandenen bitte stabil lassen (H4 baut dagegen).
 
 /// Vorschlag der Themenpflege: zwei Themen zusammenführen (§3.8, §6.10).
-public struct TopicSuggestion: Sendable, Identifiable, Hashable {
+public struct TopicSuggestion: Sendable, Identifiable, Hashable, Codable {
     public var id: String { a + "|" + b }
     public var a: String
     public var b: String
@@ -47,4 +47,20 @@ public struct SearchHit: Sendable, Identifiable, Equatable {
 public struct UndoToken: Sendable, Hashable {
     public let id: String
     public init(id: String = UUID().uuidString) { self.id = id }
+}
+
+/// Verbrauch der letzten 24 h (Entwicklerbereich): Tokens und Audiosekunden laut Ledger.
+public struct ThoughtsUsage: Sendable, Equatable {
+    public var tokens: Int
+    public var audioSeconds: Int
+    public var requests: Int
+    /// Tagesbudget (Tokens), gegen das gezählt wird
+    public var dailyTokens: Int
+
+    public init(tokens: Int, audioSeconds: Int, requests: Int, dailyTokens: Int) {
+        self.tokens = tokens
+        self.audioSeconds = audioSeconds
+        self.requests = requests
+        self.dailyTokens = dailyTokens
+    }
 }

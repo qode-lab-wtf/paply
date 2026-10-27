@@ -79,8 +79,9 @@ struct FinishThoughtIntent: LiveActivityIntent {
     }
 }
 
-/// „Verwerfen“ in der Live Activity: Aufnahme stoppen, nichts an Groq. Der Gedanke landet in
-/// „Zuletzt gelöscht“ (wiederherstellbar), kein Bestätigungsdialog (geht in der Activity nicht).
+/// „Verwerfen“ in der Live Activity: Aufnahme stoppen, kein weiterer Upload, keine Strukturierung
+/// (schon während der Aufnahme verschickte Stücke lassen sich nicht zurückholen). Der Gedanke landet
+/// in „Zuletzt gelöscht“ (wiederherstellbar); kein Bestätigungsdialog (geht in der Activity nicht).
 struct DiscardThoughtIntent: LiveActivityIntent {
     static var title: LocalizedStringResource { "Gedanke verwerfen" }
     static var isDiscoverable: Bool { false }

@@ -7,7 +7,8 @@ import WidgetKit
 struct PaplyWidgetsBundle: WidgetBundle {
     var body: some Widget {
         DictationLiveActivity()
-        DictationControl()
+        // „Paply-Diktat“ als Steuerelement nicht mehr anbieten: Diktat läuft über 🌐,
+        // Gedanken über den Knopf (zwei klare Wege). DictationControl bleibt im Code.
         ThoughtLiveActivity()
         ThoughtControl()
     }

@@ -56,9 +56,8 @@ final class ThoughtCapture {
     /// Lock-Wert (0…1), für TimelineView – keine SwiftUI-Invalidierung je Sample.
     var level: Float { levelBox.value }
 
-    /// Von H2 gesetzt (ThoughtsEnvironment), sobald Speicher und Warteschlange stehen.
-    /// Ohne Store schreibt der S1-Rückfall WAV + Platzhalter; ohne Prozessor gibt es keine
-    /// Live-Pipeline (also keinen Netzverkehr).
+    /// Gesetzt von ThoughtBridge.connect (aus ThoughtsEnvironment.bootstrap) – dieselben Instanzen
+    /// wie im ThoughtsModel. Ohne Store startet keine Aufnahme.
     @ObservationIgnored var store: ThoughtStore?
     @ObservationIgnored var processor: ThoughtProcessor?
 
@@ -127,13 +126,20 @@ final class ThoughtCapture {
         }
         if SessionController.shared.active?.source == .keyboard {
             logStart(case: "-", ok: false, stage: "dictation", trigger: trigger, begin: begin)
+            // Sonst wirkt der Knopf tot: kurz in der Live Activity sagen, warum nichts passiert
+            ThoughtBridge.showNotice("Diktat läuft gerade", symbol: "keyboard")
             return .refused("Diktat läuft gerade")
         }
         guard Self.protectedFilesWritable() else {
             logStart(case: "-", ok: false, stage: "before-first-unlock", trigger: trigger, begin: begin)
+            ThoughtBridge.showNotice("Nach dem Neustart einmal entsperren", symbol: "lock")
             return .refused("Nach dem Neustart einmal entsperren")
         }
 
+        guard store != nil else {
+            logStart(case: "-", ok: false, stage: "no-store", trigger: trigger, begin: begin)
+            return .refused("Gedanken-Ablage nicht bereit")
+        }
         starting = true
         defer { starting = false }
 
@@ -148,6 +154,7 @@ final class ThoughtCapture {
         }
         let (placeholder, file) = prepared
         let id = placeholder.id
+        guard let store else { return .refused("Gedanken-Ablage nicht bereit") }
 
         // 2) Live Activity zuerst (AudioRecordingIntent verlangt eine laufende Activity)
         ThoughtBridge.startActivity(id: id, startedAt: startedAt)
@@ -167,7 +174,7 @@ final class ThoughtCapture {
             // Kein Mikro: Eintrag ohne Ton verwerfen (keine Leiche), App kurz nach vorne holen
             live?.cancel()
             file.discard()
-            await removePlaceholder(placeholder)
+            await store.discardCapture(id)
             ThoughtBridge.endActivity(id: id, immediately: true)
             let failure = session.lastStartFailure
             logStart(case: fall, ok: false, stage: failure?.stage ?? "attach", trigger: trigger, begin: begin,
@@ -177,6 +184,8 @@ final class ThoughtCapture {
 
         recording = Recording(id: id, trigger: trigger, startedAt: startedAt, startedNs: begin, placeholder: placeholder, file: file)
         recording?.live = live
+        // Läuft die Live-Pipeline, wartet die Warteschlange auf ihr Ergebnis (sonst Whisper doppelt)
+        if live != nil { await processor?.expectLiveTranscript(id) }
         active = Active(id: id, startedAt: startedAt, speechDetected: false)
         ThoughtBridge.recordingChanged(id: id, startedAt: startedAt)
         startTicker(id: id)
@@ -207,18 +216,23 @@ final class ThoughtCapture {
             }
             SessionController.shared.detachThought(id: id)
             let durationMs = rec.file.close()
-            var thought = rec.placeholder
-            thought.state = .captured
-            thought.durationMs = durationMs
-            thought.updatedAt = Date()
-            let saved = await save(thought)
+            // Zustand `captured` + Dauer; ohne Ton (0 ms) entfernt der Store den Eintrag
+            let saved: Thought?
+            do {
+                saved = try await store?.finishCapture(id, durationMs: durationMs)
+            } catch {
+                saved = nil
+                Diag.log("thought.save.failed", ["id": .s(Self.short(id)), "code": .i((error as NSError).code)])
+            }
             if recording === rec { recording = nil }
             Diag.log("thought.stop", [
                 "id": .s(Self.short(id)), "reason": .s(reason.rawValue), "durationMs": .i(durationMs),
-                "saved": .b(saved), "store": .b(store != nil), "live": .b(rec.live != nil),
-                "app": .s(SessionController.appState),
+                "saved": .b(saved != nil), "live": .b(rec.live != nil), "app": .s(SessionController.appState),
             ])
-            // Live-Pipeline: Rohtext Sekunden nach dem Stopp an die Warteschlange
+            if saved == nil {
+                ThoughtBridge.showResult(.empty(id))
+            }
+            // Live-Pipeline: Rohtext Sekunden nach dem Stopp an die Warteschlange, sonst Dateiweg
             if let live = rec.live, let processor {
                 let outcome = await live.finish()
                 await processor.liveTranscript(id, outcome: outcome)
@@ -226,15 +240,17 @@ final class ThoughtCapture {
                 await processor?.kick(reason: "captured")
             }
             if processor == nil {
-                // S1: ohne Warteschlange nur „Gesichert“ zeigen
                 ThoughtBridge.showSavedWithoutProcessing(id: id, note: Self.stopNote(reason))
             }
         }
     }
 
     /// Ausdrücklich verwerfen (große Aufnahme-Ansicht oder „Verwerfen“ in der Live Activity).
-    /// Nichts geht an Groq. Nicht endgültig: Der Gedanke landet mit Ton in „Zuletzt gelöscht“
-    /// (`deletedAt`), die Oberfläche kann ihn wiederherstellen.
+    /// Ehrlich: Während der Aufnahme können schon Stücke an Whisper gegangen sein (Live-Pipeline).
+    /// Ab dem Verwerfen bricht sie ab (laufende Uploads werden gestoppt), es folgt kein weiterer
+    /// Upload und keine Strukturierung – die Warteschlange überspringt gelöschte Gedanken.
+    /// Nicht endgültig: Der Gedanke landet mit Ton in „Zuletzt gelöscht“ (`deletedAt`), die
+    /// Oberfläche kann ihn wiederherstellen; dann wird er normal geordnet.
     func discard() {
         guard let rec = recording, !rec.finishing else { return }
         rec.finishing = true
@@ -250,16 +266,18 @@ final class ThoughtCapture {
         ThoughtBridge.showDiscarded(id: id)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
+            // Live-Erwartung aufheben: Ein Wiederherstellen ordnet dann sofort über den Dateiweg.
+            if rec.live != nil { await processor?.cancelLiveTranscript(id) }
             let durationMs = rec.file.close()
-            var thought = rec.placeholder
-            thought.state = .captured
-            thought.durationMs = durationMs
-            thought.deletedAt = Date()
-            thought.updatedAt = Date()
-            let saved = await save(thought)
+            // Erst sichern (captured + Dauer), dann in „Zuletzt gelöscht“ – die Warteschlange
+            // überspringt gelöschte Gedanken, nach Wiederherstellen wird normal geordnet.
+            var inTrash = false
+            if let store, (try? await store.finishCapture(id, durationMs: durationMs)) != nil {
+                inTrash = (try? await store.delete(id)) != nil
+            }
             if recording === rec { recording = nil }
             Diag.log("thought.discard", [
-                "id": .s(Self.short(id)), "durationMs": .i(durationMs), "saved": .b(saved), "store": .b(store != nil),
+                "id": .s(Self.short(id)), "durationMs": .i(durationMs), "inTrash": .b(inTrash),
                 "app": .s(SessionController.appState),
             ])
         }
@@ -301,48 +319,19 @@ final class ThoughtCapture {
     private static func stopNote(_ reason: ThoughtFinishReason) -> String? {
         switch reason {
         case .interruption: "Gesichert · Anruf hat unterbrochen"
+        case .keyboardTookOver: "Gesichert – Diktat hat übernommen"
         case .limit: "Nach 10 Min. gespeichert"
         case .storage: "Speicher voll · bisheriger Ton gesichert"
         default: nil
         }
     }
 
-    // MARK: Speicher (Store von H2, sonst S1-Rückfall)
+    // MARK: Speicher (ThoughtStore, H2)
 
     private func beginCapture(trigger: ThoughtTrigger, at date: Date) async throws -> (Thought, CaptureFile) {
-        if let store {
-            do {
-                let (thought, writer) = try await store.beginCapture(trigger: trigger, at: date)
-                return (thought, CaptureFile(writer: writer))
-            } catch ThoughtStoreError.notImplemented {
-                // Gerüst: weiter mit dem Rückfall
-            }
-        }
-        return try SpikeCaptureStore.begin(trigger: trigger, at: date)
-    }
-
-    private func save(_ thought: Thought) async -> Bool {
-        if let store {
-            do {
-                try await store.save(thought)
-                return true
-            } catch ThoughtStoreError.notImplemented {
-            } catch {
-                Diag.log("thought.save.failed", ["id": .s(Self.short(thought.id)), "code": .i((error as NSError).code)])
-                return false
-            }
-        }
-        return SpikeCaptureStore.save(thought)
-    }
-
-    private func removePlaceholder(_ thought: Thought) async {
-        if let store {
-            var empty = thought
-            empty.state = .empty
-            empty.deletedAt = Date()
-            if (try? await store.save(empty)) != nil { return }
-        }
-        SpikeCaptureStore.remove(thought.id)
+        guard let store else { throw CocoaError(.fileNoSuchFile) }
+        let (thought, writer) = try await store.beginCapture(trigger: trigger, at: date)
+        return (thought, CaptureFile(writer: writer))
     }
 
     // MARK: Live-Pipeline (§5.3.2)
@@ -379,7 +368,8 @@ final class ThoughtCapture {
 
     /// Nach einem Neustart ohne Entsperren sind Dateien (und Schlüsselbund) nicht verfügbar.
     private static func protectedFilesWritable() -> Bool {
-        guard let dir = SpikeCaptureStore.root else { return false }
+        let dir = ThoughtsEnvironment.root
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let probe = dir.appendingPathComponent(".probe")
         do {
             try Data([1]).write(to: probe, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
@@ -434,27 +424,18 @@ final class ThoughtLevelBox: @unchecked Sendable {
     }
 }
 
-/// Ziel der Samples: WAVWriter (H2) oder S1-Rückfall.
+/// Ziel der Samples: der WAVWriter des Stores (eigene serielle Queue, blockiert nie).
 final class CaptureFile: Sendable {
-    private let appendBlock: @Sendable ([Float]) -> Void
-    private let closeBlock: @Sendable () -> Int
-    private let discardBlock: @Sendable () -> Void
+    private let writer: WAVWriter
 
     init(writer: WAVWriter) {
-        appendBlock = { writer.append($0) }
-        closeBlock = { writer.close() }
-        discardBlock = { _ = writer.close() }
+        self.writer = writer
     }
 
-    init(append: @escaping @Sendable ([Float]) -> Void, close: @escaping @Sendable () -> Int, discard: @escaping @Sendable () -> Void) {
-        appendBlock = append
-        closeBlock = close
-        discardBlock = discard
-    }
-
-    func append(_ samples: [Float]) { appendBlock(samples) }
-    func close() -> Int { closeBlock() }
-    func discard() { discardBlock() }
+    func append(_ samples: [Float]) { writer.append(samples) }
+    func close() -> Int { writer.close() }
+    /// Datei schließen; das Löschen übernimmt `ThoughtStore.discardCapture`.
+    func discard() { _ = writer.close() }
 }
 
 /// Live-Verschriftlichung während der Aufnahme (ohne Polieren, mit Stücken).
@@ -487,125 +468,5 @@ final class LivePipeline: @unchecked Sendable {
         feed.cancel()
         let pipeline = pipeline
         Task.detached { await pipeline.cancel() }
-    }
-}
-
-// MARK: - S1-Rückfall (entfällt, sobald ThoughtStore von H2 steht)
-
-/// Minimaler Speicher für den Spike: `Application Support/Gedanken/thoughts/<id>/thought.json`
-/// (Platzhalter, Format §7.3, Zeiten in ms) und `audio.wav` (16 kHz mono Int16).
-enum SpikeCaptureStore {
-    static let root: URL? = {
-        guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        let dir = base.appendingPathComponent("Gedanken", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
-                                                 attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-        return dir
-    }()
-
-    static func folder(_ id: String) -> URL? {
-        root?.appendingPathComponent("thoughts", isDirectory: true).appendingPathComponent(id, isDirectory: true)
-    }
-
-    static func begin(trigger: ThoughtTrigger, at date: Date) throws -> (Thought, CaptureFile) {
-        let thought = Thought(createdAt: date, trigger: trigger, state: .recording,
-                              audio: Thought.AudioInfo(file: "audio.wav"), updatedAt: date)
-        guard let dir = folder(thought.id) else { throw CocoaError(.fileNoSuchFile) }
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
-                                                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-        try write(thought, to: dir)
-        let wav = try SpikeWAVFile(url: dir.appendingPathComponent("audio.wav"))
-        let file = CaptureFile(append: { wav.append($0) }, close: { wav.close() }, discard: { wav.discard() })
-        return (thought, file)
-    }
-
-    static func save(_ thought: Thought) -> Bool {
-        guard let dir = folder(thought.id) else { return false }
-        return (try? write(thought, to: dir)) != nil
-    }
-
-    static func remove(_ id: String) {
-        guard let dir = folder(id) else { return }
-        try? FileManager.default.removeItem(at: dir)
-    }
-
-    private static func write(_ thought: Thought, to dir: URL) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .millisecondsSince1970
-        encoder.outputFormatting = [.sortedKeys]
-        try encoder.encode(thought).write(to: dir.appendingPathComponent("thought.json"),
-                                          options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-    }
-}
-
-/// WAV-Datei mit eigener serieller Queue; der Kopf wird beim Schließen ergänzt.
-final class SpikeWAVFile: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "paply.thought-wav", qos: .userInitiated)
-    private let url: URL
-    private let handle: FileHandle
-    // nur auf `queue`
-    private var sampleCount = 0
-    private var lastSync = 0
-    private var closed = false
-
-    init(url: URL) throws {
-        self.url = url
-        guard FileManager.default.createFile(atPath: url.path, contents: Self.header(dataBytes: 0),
-                                             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-        else { throw CocoaError(.fileWriteUnknown) }
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableURL = url
-        try? mutableURL.setResourceValues(values)
-        handle = try FileHandle(forWritingTo: url)
-        _ = try handle.seekToEnd()
-    }
-
-    /// blockiert nie (Audio-Thread)
-    func append(_ samples: [Float]) {
-        queue.async { [self] in
-            guard !closed else { return }
-            var data = Data(capacity: samples.count * 2)
-            for sample in samples {
-                var value = Int16(max(-1, min(1, sample)) * Float(Int16.max)).littleEndian
-                withUnsafeBytes(of: &value) { data.append(contentsOf: $0) }
-            }
-            try? handle.write(contentsOf: data)
-            sampleCount += samples.count
-            // alle 2 s auf die Platte (Absturz verliert höchstens ~2 s)
-            if sampleCount - lastSync >= 32_000 {
-                lastSync = sampleCount
-                try? handle.synchronize()
-            }
-        }
-    }
-
-    /// Kopf ergänzen, schließen; Dauer in ms
-    func close() -> Int {
-        queue.sync {
-            guard !closed else { return sampleCount / 16 }
-            closed = true
-            try? handle.seek(toOffset: 0)
-            try? handle.write(contentsOf: Self.header(dataBytes: sampleCount * 2))
-            try? handle.synchronize()
-            try? handle.close()
-            return sampleCount / 16
-        }
-    }
-
-    func discard() {
-        _ = close()
-        try? FileManager.default.removeItem(at: url)
-    }
-
-    private static func header(dataBytes: Int) -> Data {
-        var data = Data()
-        func put(_ string: String) { data.append(contentsOf: Array(string.utf8)) }
-        func u32(_ v: UInt32) { withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) } }
-        func u16(_ v: UInt16) { withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) } }
-        put("RIFF"); u32(UInt32(36 + dataBytes)); put("WAVE")
-        put("fmt "); u32(16); u16(1); u16(1); u32(16_000); u32(32_000); u16(2); u16(16)
-        put("data"); u32(UInt32(dataBytes))
-        return data
     }
 }

@@ -1,6 +1,7 @@
 import AppIntents
 
-/// Kurzbefehl für „Rückseite doppelt tippen“ (Bedienungshilfen → Tippen → Rückseite) und Siri.
+/// Siri und Kurzbefehle: nur noch der Gedanke. Das Diktat läuft über 🌐 (zwei klare Wege);
+/// ToggleDictationIntent bleibt im Code, wird aber nicht mehr angeboten.
 struct PaplyShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         // Gedanke (KONZEPT §3.6): antwortet ohne Dialog, sonst spricht Siri in die Aufnahme
@@ -13,15 +14,6 @@ struct PaplyShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Gedanke",
             systemImageName: "text.bubble"
-        )
-        AppShortcut(
-            intent: ToggleDictationIntent(),
-            phrases: [
-                "\(.applicationName)-Diktat an oder aus",
-                "Diktat mit \(.applicationName)",
-            ],
-            shortTitle: "Diktat an/aus",
-            systemImageName: "waveform"
         )
     }
 }

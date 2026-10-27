@@ -42,8 +42,7 @@ struct TaskLine: View {
                 if let subtitle {
                     HStack(spacing: 4) {
                         if let icon = subtitle.icon {
-                            Image(systemName: icon.systemImage)
-                                .imageScale(.small)
+                            TopicGlyph(key: icon.rawValue, size: 12, stroke: 1.9, relativeTo: .caption)
                                 .foregroundStyle(ThoughtTint.mint.opacity(0.85))
                         }
                         Text(subtitle.text)
@@ -87,7 +86,11 @@ struct TaskSections: View {
         if open.isEmpty && pending.isEmpty {
             Section {
                 ContentUnavailableView {
-                    Label("Keine offenen Aufgaben", systemImage: "checklist")
+                    Label {
+                        Text("Keine offenen Aufgaben")
+                    } icon: {
+                        LucideImage(.listChecks, size: 44, stroke: 1.6, relativeTo: .largeTitle)
+                    }
                 } description: {
                     Text("Paply erkennt sie, wenn du sagst: „Ich muss …“ oder „Nicht vergessen …“.")
                 }

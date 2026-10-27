@@ -11,7 +11,7 @@ struct ThoughtActivityAttributes: ActivityAttributes {
         var startedAt: Date
         var topicTitle: String?
         /// Schlüssel des Themen-Symbols = `TopicIcon.rawValue` (z. B. "map-pin"); Darstellung über
-        /// `TopicIconKey` (Shared/UI) – die Widget-Erweiterung kennt PaplyKit nicht
+        /// `TopicGlyph` (Lucide, Shared/UI) – die Widget-Erweiterung kennt PaplyKit nicht
         var topicSymbol: String?
         /// `wifi.slash` / `hourglass` / `key`
         var waitSymbol: String?

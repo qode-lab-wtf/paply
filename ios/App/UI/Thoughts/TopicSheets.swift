@@ -14,7 +14,7 @@ struct TopicPickerSheet: View {
     @State private var creating = false
     @State private var chosen = 0
 
-    private var current: String? { model.thoughts.first { $0.id == thoughtID }?.topicId }
+    private var current: String? { model.thought(thoughtID)?.topicId }
 
     var body: some View {
         NavigationStack {
@@ -22,7 +22,7 @@ struct TopicPickerSheet: View {
                 if query.isEmpty {
                     Section {
                         Button { choose(nil) } label: {
-                            pickRow(title: "Ohne Thema", symbol: "circle.dashed", count: nil, selected: current == nil, badge: false)
+                            pickRow(title: "Ohne Thema", count: nil, selected: current == nil, icon: nil)
                         }
                     }
                     .listRowBackground(Color.paplyRow)
@@ -30,16 +30,20 @@ struct TopicPickerSheet: View {
                 Section {
                     ForEach(filtered) { topic in
                         Button { choose(topic.id) } label: {
-                            pickRow(title: topic.title, symbol: topic.icon.systemImage, count: model.count(of: topic.id),
-                                    selected: current == topic.id, badge: true, icon: topic.icon)
+                            pickRow(title: topic.title, count: model.count(of: topic.id),
+                                    selected: current == topic.id, icon: topic.icon)
                         }
                     }
                     Button {
                         creating = true
                     } label: {
-                        Label(query.isEmpty ? "Neues Thema …" : "„\(query)“ anlegen …", systemImage: "plus.circle.fill")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(Color.paplyGreenBright)
+                        HStack(spacing: 12) {
+                            LucideImage(.circlePlus, size: 22, stroke: 1.8)
+                                .frame(width: 30, height: 30)
+                            Text(query.isEmpty ? "Neues Thema …" : "„\(query)“ anlegen …")
+                                .font(.body.weight(.semibold))
+                        }
+                        .foregroundStyle(Color.paplyGreenBright)
                     }
                 }
                 .listRowBackground(Color.paplyRow)
@@ -73,13 +77,12 @@ struct TopicPickerSheet: View {
         return sorted.filter { $0.title.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
-    private func pickRow(title: String, symbol: String, count: Int?, selected: Bool, badge: Bool, icon: TopicIcon? = nil) -> some View {
+    private func pickRow(title: String, count: Int?, selected: Bool, icon: TopicIcon?) -> some View {
         HStack(spacing: 12) {
-            if badge, let icon {
+            if let icon {
                 TopicBadge(icon: icon, size: 30)
             } else {
-                Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .semibold))
+                LucideImage(.circleDashed, size: 17, stroke: 1.9, scales: false)
                     .foregroundStyle(Color.paplySecondaryText)
                     .frame(width: 30, height: 30)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.08)))
@@ -203,8 +206,7 @@ struct TopicIconGrid: View {
                 Button {
                     withAnimation(.paplySmooth) { selection = icon }
                 } label: {
-                    Image(systemName: icon.systemImage)
-                        .font(.system(size: cell * 0.4, weight: .semibold))
+                    TopicGlyph(key: icon.rawValue, size: cell * 0.46, stroke: selected ? 2 : 1.7, scales: false)
                         .foregroundStyle(selected ? Color.paplyForest : Color.paplyText.opacity(0.85))
                         .frame(width: cell, height: cell)
                         .background {

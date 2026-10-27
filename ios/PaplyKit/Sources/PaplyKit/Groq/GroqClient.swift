@@ -471,3 +471,123 @@ struct ChatStreamParser {
         return .success(ChatCompletion(content: message?["content"] as? String, finishReason: first["finish_reason"] as? String))
     }
 }
+
+// MARK: - Strukturierte Antworten (Gedanken, KONZEPT §6.2)
+
+/// Eine Anfrage mit striktem JSON-Schema (`response_format: json_schema, strict: true`).
+package struct StructuredChatRequest: Sendable {
+    package var model: String
+    package var system: String
+    package var user: String
+    package var schemaName: String
+    /// Schema als JSON-Bytes (siehe `ThoughtSchema.data`).
+    package var schema: Data
+    package var maxCompletionTokens: Int
+    /// "low" | "medium"
+    package var reasoningEffort: String
+    package var temperature: Double
+
+    package init(model: String, system: String, user: String, schemaName: String, schema: Data,
+                 maxCompletionTokens: Int, reasoningEffort: String = "low", temperature: Double = 0.1) {
+        self.model = model
+        self.system = system
+        self.user = user
+        self.schemaName = schemaName
+        self.schema = schema
+        self.maxCompletionTokens = maxCompletionTokens
+        self.reasoningEffort = reasoningEffort
+        self.temperature = temperature
+    }
+}
+
+package struct StructuredChatResponse: Sendable, Equatable {
+    package var content: String?
+    package var finishReason: String?
+    package var usage: TokenUsage?
+
+    package init(content: String?, finishReason: String?, usage: TokenUsage?) {
+        self.content = content
+        self.finishReason = finishReason
+        self.usage = usage
+    }
+}
+
+extension GroqClient {
+    /// Leerlauf-Timeout der strukturierten Anfrage. Ohne Stream schweigt die Verbindung, bis die
+    /// ganze Antwort fertig ist (Reasoning + JSON), deshalb großzügiger als beim Polieren.
+    static let structuredIdleTimeout: TimeInterval = 120
+
+    /// Genau ein Versuch, ohne Stream (wie Mac `groq.js`). Wiederholungen, Ausweichmodell und
+    /// Ledger regelt `ThoughtStructurer` (§6.8). Fehler kommen als `GroqFailure`:
+    /// `.http(400, "json_validate_failed", _)` = Schema nicht erfüllt, 401/403/404/429/5xx,
+    /// `.network`, `.invalidResponse`. `finish_reason` prüft der Aufrufer.
+    package func chatStructured(_ request: StructuredChatRequest) async -> Result<StructuredChatResponse, GroqFailure> {
+        await structuredCall(request).result
+    }
+
+    /// **Nur Prüfstand und Debug-Diagnose.** Wie `chatStructured`, dazu bei `json_validate_failed` das Feld
+    /// `error.failed_generation` von Groq: die verworfene Modellantwort. Sie enthält Nutzertext und darf in der
+    /// App nie ins Protokoll – die App-Pfade (`ThoughtStructurer`) rufen nur `chatStructured` auf und bekommen
+    /// den Text gar nicht erst. Bewusst nicht als Feld an `GroqFailure`: Das Enum wird im Diktat an ~20 Stellen
+    /// zerlegt, ein weiterer Wert hätte alle diese Stellen geändert.
+    package func chatStructuredDiagnosed(_ request: StructuredChatRequest) async
+        -> (result: Result<StructuredChatResponse, GroqFailure>, failedGeneration: String?) {
+        await structuredCall(request)
+    }
+
+    private func structuredCall(_ request: StructuredChatRequest) async
+        -> (result: Result<StructuredChatResponse, GroqFailure>, failedGeneration: String?) {
+        guard let schema = try? JSONSerialization.jsonObject(with: request.schema) else { return (.failure(.invalidResponse), nil) }
+        let body: [String: Any] = [
+            "model": request.model,
+            "messages": [["role": "system", "content": request.system], ["role": "user", "content": request.user]],
+            "temperature": request.temperature,
+            "reasoning_effort": request.reasoningEffort,
+            "max_completion_tokens": request.maxCompletionTokens,
+            "response_format": ["type": "json_schema",
+                                "json_schema": ["name": request.schemaName, "strict": true, "schema": schema]],
+        ]
+        var urlRequest = self.request("chat/completions", method: "POST")
+        urlRequest.timeoutInterval = Self.structuredIdleTimeout
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        let (sent, errorBody) = await sendKeepingErrorBody(urlRequest)
+        let result: Result<StructuredChatResponse, GroqFailure> = sent.flatMap { data in
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let choice = (object["choices"] as? [[String: Any]])?.first else { return .failure(.invalidResponse) }
+            let message = choice["message"] as? [String: Any]
+            var usage: TokenUsage?
+            if let u = object["usage"] as? [String: Any], let total = u["total_tokens"] as? Int {
+                usage = TokenUsage(prompt: u["prompt_tokens"] as? Int ?? 0, completion: u["completion_tokens"] as? Int ?? 0,
+                                   total: total)
+            }
+            return .success(StructuredChatResponse(content: message?["content"] as? String,
+                                                   finishReason: choice["finish_reason"] as? String, usage: usage))
+        }
+        return (result, errorBody.flatMap(Self.failedGeneration))
+    }
+
+    /// Wie `send`, behält aber bei HTTP-Fehlern den Antwortkörper (für `failed_generation`).
+    /// `send` selbst bleibt unverändert (Diktat).
+    private func sendKeepingErrorBody(_ request: URLRequest) async -> (Result<Data, GroqFailure>, Data?) {
+        if Task.isCancelled { return (.failure(.cancelled), nil) }
+        do {
+            let (data, response) = try await transport.withSession { try await $0.data(for: request) }
+            guard let http = response as? HTTPURLResponse else { return (.failure(.invalidResponse), nil) }
+            guard (200..<300).contains(http.statusCode) else {
+                let failure = GroqFailure.http(status: http.statusCode, code: Self.errorCode(data),
+                                               retryAfter: Self.retryAfter(http) ?? Self.retryAfter(message: Self.errorMessage(data)))
+                return (.failure(failure), data)
+            }
+            return (.success(data), nil)
+        } catch {
+            return (.failure(Self.failure(for: error)), nil)
+        }
+    }
+
+    static func failedGeneration(_ data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = object["error"] as? [String: Any] else { return nil }
+        return error["failed_generation"] as? String
+    }
+}

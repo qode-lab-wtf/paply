@@ -2,8 +2,8 @@ import PaplyKit
 import SwiftUI
 
 // Entwicklerbereich → Gedanken (KONZEPT §3.9). Für Nutzer gibt es hier nichts einzustellen.
-// Modell und Tagesbudget liegen unter festen Schlüsseln in UserDefaults; die Verarbeitung (H2)
-// liest sie dort. Verbrauch und „Themenpflege jetzt prüfen“ brauchen noch eine Schnittstelle im Modell.
+// Modell und Tagesbudget liegen unter festen Schlüsseln in UserDefaults (ThoughtsEnvironment liest
+// sie); Verbrauch und Themenpflege kommen aus dem ThoughtsModel.
 
 enum ThoughtsDevKeys {
     /// "openai/gpt-oss-120b" (Standard) oder "openai/gpt-oss-20b"
@@ -28,21 +28,43 @@ struct ThoughtsDeveloperSection: View {
             Stepper(value: $dailyTokens, in: 20_000...150_000, step: 10_000) {
                 LabeledContent("Tagesbudget", value: "\(dailyTokens.formatted(.number.locale(Locale(identifier: "de_DE")))) Tokens")
             }
-            LabeledContent("Verbrauch 24 h", value: "–")
+            LabeledContent("Verbrauch 24 h", value: usageText)
             NavigationLink(value: Route.thoughtQueue) {
                 LabeledContent("Warteschlange", value: "\(queue)")
             }
             NavigationLink(value: Route.provisionalTopics) {
                 LabeledContent("Vorläufige Themen", value: "\(provisional)")
             }
-            Button("Themenpflege jetzt prüfen") {}
-                .disabled(true)
+            Button {
+                model.checkTopicsNow()
+            } label: {
+                HStack {
+                    Text("Themenpflege jetzt prüfen")
+                    Spacer()
+                    if model.isCheckingTopics {
+                        ProgressView()
+                    } else if let result = model.topicCheckResult {
+                        Text(result).foregroundStyle(Color.paplySecondaryText)
+                    }
+                }
+            }
+            .disabled(model.isCheckingTopics)
         } header: {
             Text("Gedanken")
         } footer: {
-            Text("Verbrauch und Themenpflege erscheinen, sobald die Verarbeitung sie meldet. Die Warteschlange zeigt nur Kennungen und Zustände, nie Text.")
+            Text("Die Warteschlange zeigt nur Kennungen und Zustände, nie Text. Themenpflege: ein Aufruf an gpt-oss-20b.")
         }
         .listRowBackground(Color.paplyRow)
+        .onAppear { model.refreshUsage() }
+    }
+
+    /// „23 400 Tokens · 12 Audio-Min.“
+    private var usageText: String {
+        guard let usage = model.usage else { return "–" }
+        let de = Locale(identifier: "de_DE")
+        let tokens = usage.tokens.formatted(.number.locale(de))
+        let minutes = Int((Double(usage.audioSeconds) / 60).rounded())
+        return "\(tokens) Tokens · \(minutes) Audio-Min."
     }
 }
 

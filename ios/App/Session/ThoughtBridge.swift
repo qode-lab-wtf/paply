@@ -159,8 +159,33 @@ enum ThoughtBridge {
     static func showDiscarded(id: String) {
         guard activityThoughtID == id else { return }
         var state = content(.discarded, startedAt: activityStartedAt)
-        state.note = "Verworfen"
+        state.note = "Verworfen · wird nicht geordnet"
         finishActivity(id: id, state: state, dwell: 2, alert: nil)
+    }
+
+    /// Kurzer Hinweis ohne Aufnahme (z. B. Knopf während eines Tastatur-Diktats): 2 s, dann weg.
+    /// Läuft gerade eine Gedanken-Activity, bleibt sie unangetastet.
+    static func showNotice(_ note: String, symbol: String) {
+        guard activityThoughtID == nil, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        var state = content(.waiting, startedAt: Date())
+        state.waitSymbol = symbol
+        state.note = note
+        do {
+            let activity = try Activity.request(
+                attributes: ThoughtActivityAttributes(thoughtID: "notice"),
+                content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(60)),
+                pushType: nil
+            )
+            let activityID = activity.id
+            Task.detached {
+                try? await Task.sleep(for: .seconds(2))
+                guard let activity = Activity<ThoughtActivityAttributes>.activities.first(where: { $0.id == activityID }) else { return }
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+            Diag.log("thought.notice", ["symbol": .s(symbol)])
+        } catch {
+            Diag.log("thought.notice.failed", ["code": .i((error as NSError).code)])
+        }
     }
 
     /// S1 ohne Warteschlange: kurz „Gesichert“ zeigen.
@@ -181,6 +206,11 @@ enum ThoughtBridge {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
         Diag.log("thought.activity.end", ["id": .s(ThoughtCapture.short(id)), "immediately": .b(immediately)])
+    }
+
+    /// Ergebnis ohne Warteschlangen-Ereignis zeigen (z. B. Aufnahme ohne Ton → „Nichts verstanden“).
+    static func showResult(_ event: ProcessorEvent) {
+        handle(event)
     }
 
     /// Ereignisse der Warteschlange (H2) → Phasen

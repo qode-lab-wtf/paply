@@ -6,16 +6,24 @@ import UIKit
 struct ThoughtsEmptyState: View {
     let setup: () -> Void
     let tryIt: () -> Void
+    @Environment(ThoughtsModel.self) private var model
 
     var body: some View {
+        let showSetup = SetupGuide.shared.isVisible(model: model)
         GeometryReader { geo in
             ScrollView {
                 VStack(spacing: 0) {
-                    LockScreenIllustration()
-                        .frame(height: 248)
-                        .padding(.bottom, 30)
+                    if showSetup {
+                        // Die Karte erklärt den Knopf schon – die Illustration kommt danach
+                        SetupCard()
+                            .padding(.bottom, 30)
+                    } else {
+                        LockScreenIllustration()
+                            .frame(height: 236)
+                            .padding(.bottom, 26)
+                    }
                     Text("Deine Gedanken")
-                        .font(.title.weight(.bold))
+                        .font(.paplyTitle(.title))
                         .foregroundStyle(Color.paplyText)
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(.isHeader)
@@ -25,9 +33,10 @@ struct ThoughtsEmptyState: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 10)
+                    // Zuerst ausprobieren: dabei fragt iOS nach dem Mikro
                     VStack(spacing: 6) {
-                        Button(action: setup) {
-                            Text("Knopf einrichten")
+                        Button(action: tryIt) {
+                            Text("Hier ausprobieren")
                                 .font(.headline)
                                 .foregroundStyle(Color.paplyForest)
                                 .frame(maxWidth: 300)
@@ -36,8 +45,8 @@ struct ThoughtsEmptyState: View {
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(PressScaleStyle(scale: 0.97))
-                        Button(action: tryIt) {
-                            Text("Hier ausprobieren")
+                        Button(action: setup) {
+                            Text("Knopf einrichten")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(Color.paplyGreenBright)
                                 .frame(minHeight: 44)
@@ -45,9 +54,9 @@ struct ThoughtsEmptyState: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(.top, 28)
+                    .padding(.top, 26)
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, showSetup ? 16 : 32)
                 .padding(.vertical, 24)
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity, minHeight: geo.size.height)
@@ -144,6 +153,8 @@ struct LockScreenIllustration: View {
 // MARK: - Anleitung Gedanken-Knopf (§3.9)
 
 struct ThoughtButtonGuideView: View {
+    @State private var confirmed = 0
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -155,19 +166,19 @@ struct ThoughtButtonGuideView: View {
                     .foregroundStyle(Color.paplyText.opacity(0.75))
                     .padding(.horizontal, 4)
 
-                GuideCard(title: "Sperrbildschirm", symbol: "lock.fill", steps: [
+                GuideCard(title: "Sperrbildschirm", symbol: "lock.fill", glyph: .lock, steps: [
                     "Sperrbildschirm lange drücken → Anpassen → Sperrbildschirm.",
                     "Bei der Taschenlampe auf „–“ tippen, dann „+“.",
                     "„Paply-Gedanke“ wählen.",
                 ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
 
-                GuideCard(title: "Kontrollzentrum", symbol: "switch.2", steps: [
+                GuideCard(title: "Kontrollzentrum", symbol: "switch.2", glyph: .toggleRight, steps: [
                     "Kontrollzentrum öffnen → oben links „+“ → „Steuerelement hinzufügen“.",
                     "„Paply-Gedanke“ suchen und antippen.",
                 ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
 
                 if DeviceInfo.hasActionButton {
-                    GuideCard(title: "Aktionstaste", symbol: "button.programmable", steps: [
+                    GuideCard(title: "Aktionstaste", symbol: "button.programmable", glyph: .circleDot, steps: [
                         "Einstellungen → Aktionstaste → Steuerelement.",
                         "„Paply-Gedanke“ wählen.",
                     ], buttons: [
@@ -175,7 +186,7 @@ struct ThoughtButtonGuideView: View {
                     ], tint: AnyShapeStyle(ThoughtTint.fill))
                 }
 
-                GuideCard(title: "Siri", symbol: "waveform", steps: [
+                GuideCard(title: "Siri", symbol: "waveform", glyph: .audioLines, steps: [
                     "„Hey Siri, Gedanke mit Paply“.",
                     "Beenden: nochmal sagen oder „Fertig“ tippen.",
                 ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
@@ -185,9 +196,27 @@ struct ThoughtButtonGuideView: View {
                     .foregroundStyle(Color.paplyTertiaryText)
                     .padding(.horizontal, 4)
                     .padding(.top, 4)
+
+                if !SetupGuide.shared.buttonConfirmed {
+                    Button {
+                        SetupGuide.shared.confirmButton()
+                        confirmed += 1
+                    } label: {
+                        Text("Ist eingerichtet")
+                            .font(.headline)
+                            .foregroundStyle(Color.paplyForest)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 50)
+                            .background(Capsule().fill(Color.paplyGreenBright))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressScaleStyle(scale: 0.97))
+                    .padding(.top, 8)
+                }
             }
             .padding(16)
         }
+        .sensoryFeedback(.success, trigger: confirmed)
         .background(PaplyBackground())
         .navigationTitle("Gedanken-Knopf")
         .navigationBarTitleDisplayMode(.inline)

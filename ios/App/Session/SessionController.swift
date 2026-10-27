@@ -64,6 +64,11 @@ final class SessionController {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var bootstrapped = false
     @ObservationIgnored private var startTask: Task<Bool, Never>?
+    /// Sitzung wurde nur für einen Gedanken gestartet (Fall B) und Diktat ist nicht in Gebrauch:
+    /// Dann endet sie 5 Min. nach dem Gedanken (kein Dauer-Mikro, das niemand bestellt hat).
+    @ObservationIgnored private var startedForThought = false
+    @ObservationIgnored private var thoughtSessionEnd: Task<Void, Never>?
+    static let thoughtOnlySessionSeconds: Double = 5 * 60
     /// Letzter gescheiterter Sitzungsstart (für das Gedanken-Protokoll `thought.start`, Spike S1)
     @ObservationIgnored private(set) var lastStartFailure: (stage: String, code: Int, fourCC: String)?
     @ObservationIgnored private var pauseTask: Task<Void, Never>?
@@ -168,6 +173,8 @@ final class SessionController {
     func stopSession(reason: String) {
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
+        startedForThought = false
+        thoughtSessionEnd?.cancel()
         pauseTask?.cancel()
         idlePaused = false
         audio.stop()
@@ -198,6 +205,7 @@ final class SessionController {
     func beginDictation(id: String, source: DictationSource, commandLatencyMs: Double? = nil) -> BeginResult {
         // Gedanken-Haken: Die Tastatur übernimmt – der Gedanke wird gesichert, nie verworfen.
         if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.keyboardTookOver) }
+        if source == .keyboard, startedForThought { keepSessionForDictation() }
         guard status == .ready || status == .recording, audio.isRunning || idlePaused else {
             reportDictationError(id: id, source: source, code: status == .interrupted ? .interrupted : .sessionNotReady)
             return .notReady
@@ -1060,11 +1068,15 @@ extension SessionController {
         let begin = MonoClock.now()
         let ready = (status == .ready || status == .recording) && (audio.isRunning || idlePaused)
         let fall = ready ? "A" : "B"
+        thoughtSessionEnd?.cancel()
         if !ready {
             guard await startSession(trigger: "thought-intent") else {
                 Diag.log("thought.attach", ["id": .s(String(id.prefix(8))), "case": .s(fall), "ok": .b(false), "ms": .ms(MonoClock.msSince(begin))])
                 return false
             }
+            // Sitzung nur für den Gedanken? Dann später wieder aus (außer Diktat ist in Gebrauch).
+            startedForThought = !dictationInUse
+            Diag.log("session.thoughtOnly", ["on": .b(startedForThought), "dictationInUse": .b(!startedForThought)])
         }
         pauseTask?.cancel()
         if idlePaused {
@@ -1095,6 +1107,31 @@ extension SessionController {
         lastActivityAt = Date()
         publish()
         schedulePauseIfIdle(reason: "thought-end")
+        if startedForThought, !dictationInUse { scheduleThoughtSessionEnd() }
+    }
+
+    /// Die Paply-Tastatur wurde schon zum Diktieren benutzt → normale Bereithalte-Einstellung.
+    private var dictationInUse: Bool {
+        HistoryStore.shared.entries.contains { $0.source == .keyboard }
+    }
+
+    /// 5 Min. nach dem Gedanken endet eine nur dafür gestartete Sitzung.
+    private func scheduleThoughtSessionEnd() {
+        thoughtSessionEnd?.cancel()
+        thoughtSessionEnd = Task {
+            try? await Task.sleep(for: .seconds(Self.thoughtOnlySessionSeconds))
+            guard !Task.isCancelled, startedForThought, !isThoughtActive, dictation == nil, status != .off else { return }
+            stopSession(reason: "thought-session-end")
+        }
+        Diag.log("session.thoughtOnly.scheduledEnd", ["inS": .d(Self.thoughtOnlySessionSeconds)])
+    }
+
+    /// Die Tastatur diktiert in einer Sitzung, die ein Gedanke gestartet hat: ab jetzt gilt die
+    /// normale Bereithalte-Einstellung.
+    private func keepSessionForDictation() {
+        startedForThought = false
+        thoughtSessionEnd?.cancel()
+        Diag.log("session.thoughtOnly", ["on": .b(false), "reason": .s("keyboard")])
     }
 
     /// Solange ein Gedanke aufnimmt: keine Leerlauf-Pause, kein Ablauf der Bereithalte-Dauer.

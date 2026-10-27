@@ -11,6 +11,10 @@ protocol CaptureDriving: AnyObject {
     var active: ThoughtCapture.Active? { get }
     /// 0…1, Lock-Wert – wird je Bild gelesen, nie beobachtet
     var level: Float { get }
+    /// letzter Stopp mit Grund (Anruf, Knopf, Live Activity …)
+    var lastStop: ThoughtCapture.LastStop? { get }
+    /// zuletzt verworfener Gedanke (liegt in „Zuletzt gelöscht“, 10 s widerrufbar)
+    var lastDiscard: ThoughtCapture.LastDiscard? { get }
     func toggle(trigger: ThoughtTrigger) async -> ThoughtToggleOutcome
     func finish(_ reason: ThoughtFinishReason)
     func discard()
@@ -27,9 +31,11 @@ final class CaptureFlow {
         case recording
         case ordering(String)
         case saved(String)
-        case waiting(String, symbol: String, text: String)
+        case waiting(String, icon: Lucide, text: String)
         case nothing
         case note(String)
+        /// verworfen – 10 s „Widerrufen“
+        case discarded(String)
     }
 
     static let fabSource = "capture.fab"
@@ -50,6 +56,8 @@ final class CaptureFlow {
     private(set) var finishing: String?
     /// Aufnahme endete ohne „Fertig“ hier (Anruf, Knopf, Live Activity), während die Ansicht offen war
     private(set) var stoppedElsewhere = false
+    /// Text dazu, je nach Grund („Anruf – Aufnahme gesichert“)
+    private(set) var stopNote = "Aufnahme gesichert"
     /// zählt hoch, wenn der Gedanke gespeichert ist, während die große Ansicht offen ist (Haptik)
     private(set) var savedPulse = 0
     /// zählt hoch bei „Nichts verstanden“ (Schütteln + Warnung)
@@ -128,6 +136,19 @@ final class CaptureFlow {
         discarding = true
         driver.discard()
         trackedID = nil
+    }
+
+    /// Verworfen (App oder Live Activity): 10 s „Widerrufen“ in der Leiste
+    func discardChanged(_ discard: ThoughtCapture.LastDiscard?) {
+        guard let discard, Date().timeIntervalSince(discard.at) < 10 else { return }
+        discarding = false
+        trackedID = nil
+        lostTask?.cancel()
+        setBar(.discarded(discard.id), hideAfter: max(1, 10 - Date().timeIntervalSince(discard.at)))
+    }
+
+    /// „Widerrufen“ in der Leiste wurde getippt
+    func discardUndone() {
         setBar(.hidden)
     }
 
@@ -162,6 +183,7 @@ final class CaptureFlow {
             setBar(.ordering(old.id))
             if showBig, finishing == nil {
                 // Anruf, Knopf im Sperrbildschirm, Live Activity: kurz sagen, dann schließen
+                stopNote = Self.stopText(driver.lastStop?.id == old.id ? driver.lastStop?.reason : nil)
                 stoppedElsewhere = true
                 Task {
                     try? await Task.sleep(for: .seconds(1.4))
@@ -202,7 +224,7 @@ final class CaptureFlow {
         case .waitingNetwork, .waitingKey, .waitingLimit, .waitingBudget, .needsAttention:
             trackedID = nil
             let note = Self.waitNote(state)
-            setBar(.waiting(id, symbol: note.symbol, text: note.text), hideAfter: 3)
+            setBar(.waiting(id, icon: note.icon, text: note.text), hideAfter: 3)
         case .empty:
             trackedID = nil
             nothingPulse += 1
@@ -210,13 +232,24 @@ final class CaptureFlow {
         }
     }
 
-    private static func waitNote(_ state: ThoughtState) -> (symbol: String, text: String) {
+    private static func waitNote(_ state: ThoughtState) -> (icon: Lucide, text: String) {
         switch state {
-        case .waitingNetwork: ("wifi.slash", "Gesichert · wartet auf Netz")
-        case .waitingKey: ("key", "Gesichert · Groq-Schlüssel fehlt")
-        case .waitingLimit: ("hourglass", "Gesichert · Groq-Limit")
-        case .waitingBudget: ("hourglass", "Gesichert · Kontingent erreicht")
-        default: ("exclamationmark.triangle.fill", "Ton gesichert · Paply versucht es später")
+        case .waitingNetwork: (.wifiOff, "Gesichert · wartet auf Netz")
+        case .waitingKey: (.keyRound, "Gesichert · Groq-Schlüssel fehlt")
+        case .waitingLimit: (.hourglass, "Gesichert · Groq-Limit")
+        case .waitingBudget: (.hourglass, "Gesichert · Kontingent erreicht")
+        default: (.triangleAlert, "Ton gesichert · Paply versucht es später")
+        }
+    }
+
+    /// Warum die Aufnahme ohne „Fertig“ hier endete (§3.4, §3.7)
+    private static func stopText(_ reason: ThoughtFinishReason?) -> String {
+        switch reason {
+        case .interruption: "Anruf – Aufnahme gesichert"
+        case .keyboardTookOver: "Diktat übernimmt – Aufnahme gesichert"
+        case .limit: "Nach 10 Min. gespeichert"
+        case .storage: "Speicher voll · bisheriger Ton gesichert"
+        case .liveActivity, .button, .app, nil: "Aufnahme gesichert"
         }
     }
 
@@ -253,11 +286,14 @@ struct CaptureTracker: View {
 
     var body: some View {
         let id = flow.trackedID
-        let thought = id.flatMap { id in model.thoughts.first { $0.id == id } }
+        let thought = id.flatMap { model.thought($0) }
         let tracked = Tracked(id: id, state: thought?.state, topicID: thought?.topicId)
         Color.clear
             .onChange(of: flow.driver.active, initial: true) { old, new in
                 flow.activeChanged(from: old, to: new)
+            }
+            .onChange(of: flow.driver.lastDiscard) { _, new in
+                flow.discardChanged(new)
             }
             .onChange(of: tracked) { _, new in
                 guard new.id != nil else { return }

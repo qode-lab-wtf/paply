@@ -31,15 +31,14 @@ struct ThoughtOriginalSection: View {
                 withAnimation(PaplyMotion.smooth(reduce)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
-                    Text("ORIGINAL")
-                        .font(.caption.weight(.semibold))
-                        .tracking(0.6)
+                    Text("Original")
+                        .font(.paplyTitle(.subheadline, weight: .semibold))
                     Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.bold))
+                        .font(.caption.weight(.bold))
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                     Spacer()
                 }
-                .foregroundStyle(Color.paplyTertiaryText)
+                .foregroundStyle(Color.paplySecondaryText)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -50,7 +49,7 @@ struct ThoughtOriginalSection: View {
 
             if expanded {
                 if audioRemoved {
-                    Label("Ton nach 30 Tagen entfernt.", systemImage: "waveform.slash")
+                    LucideLabel(title: "Ton nach 30 Tagen entfernt.", icon: .volumeOff, size: 15, relativeTo: .subheadline, spacing: 8)
                         .font(.subheadline)
                         .foregroundStyle(Color.paplySecondaryText)
                         .docRow(top: 4, bottom: 10)

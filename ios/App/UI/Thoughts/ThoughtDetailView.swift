@@ -33,7 +33,7 @@ struct ThoughtDetailView: View {
 
     private enum Field: Hashable { case title, text, newTask, task(String) }
 
-    private var thought: Thought? { model.thoughts.first { $0.id == id } ?? (leaving ? lastKnown : nil) }
+    private var thought: Thought? { model.thought(id) ?? (leaving ? lastKnown : nil) }
     private var isEditing: Bool { editingTitle || editingText || addingTask || editingTaskID != nil }
 
     var body: some View {
@@ -59,8 +59,8 @@ struct ThoughtDetailView: View {
         } message: {
             Text("Er liegt danach 30 Tage unter „Zuletzt gelöscht“.")
         }
-        .onAppear { lastKnown = model.thoughts.first { $0.id == id } }
-        .onChange(of: model.thoughts.first { $0.id == id }) { _, new in
+        .onAppear { lastKnown = model.thought(id) }
+        .onChange(of: model.thought(id)) { _, new in
             if let new { lastKnown = new }
         }
         .onDisappear { commitAll() }
@@ -96,21 +96,19 @@ struct ThoughtDetailView: View {
     @ViewBuilder
     private func header(_ thought: Thought) -> some View {
         let topic = model.topic(thought.topicId)
-        // Themen-Pille
-        Button {
-            nav.topicPicker = SheetID(id: thought.id)
-        } label: {
-            TopicPill(topic: topic)
+        // Themen-Pille und Datum in einer Zeile (bei wenig Platz untereinander)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                topicButton(thought, topic: topic)
+                Spacer(minLength: 8)
+                dateText(thought)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                topicButton(thought, topic: topic)
+                dateText(thought)
+            }
         }
-        .buttonStyle(PressScaleStyle(scale: 0.95))
-        .docRow(top: 8, bottom: 10)
-        .accessibilityLabel(topic.map { "Thema \($0.title), ändern" } ?? "Kein Thema, Thema wählen")
-
-        // Datum · Uhrzeit · Länge
-        Text(dateLine(thought))
-            .font(.subheadline)
-            .foregroundStyle(Color.paplySecondaryText)
-            .docRow(bottom: 6)
+        .docRow(top: 4, bottom: 12)
 
         // Titel
         Group {
@@ -130,16 +128,16 @@ struct ThoughtDetailView: View {
                     .accessibilityHint(thought.state == .done ? "Tippen zum Bearbeiten" : "")
             }
         }
-        .font(.title2.weight(.bold))
+        .font(.paplyTitle(.title2))
         .foregroundStyle(Color.paplyText)
-        .docRow(bottom: 12)
+        .docRow(bottom: 10)
 
         // Hinweis-Band (nur bei Zustand ≠ fertig bzw. nicht geordnet)
         if thought.isProcessing {
-            StatusBand(symbol: "sparkles", text: "Wird geordnet …", tint: ThoughtTint.mint, shimmer: true)
+            StatusBand(icon: .sparkles, text: "Wird geordnet …", tint: ThoughtTint.mint, shimmer: true)
                 .docRow(bottom: 14)
         } else if let note = thought.stateNote {
-            StatusBand(symbol: note.symbol, text: note.text, tint: note.tint == .paplyBeak ? .paplyBeak : ThoughtTint.mint,
+            StatusBand(icon: note.icon, text: note.text, tint: note.tint == .paplyBeak ? .paplyBeak : ThoughtTint.mint,
                        actionTitle: note.actionTitle) {
                 perform(note.action, thought)
             }
@@ -218,8 +216,7 @@ struct ThoughtDetailView: View {
                     beginNewTask()
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "plus")
-                            .font(.title3.weight(.medium))
+                        LucideImage(.circlePlus, size: 22, stroke: 1.8, relativeTo: .body)
                             .frame(minWidth: 28)
                         Text("Aufgabe")
                             .font(.body.weight(.medium))
@@ -308,16 +305,36 @@ struct ThoughtDetailView: View {
     }
 
     private func sectionLabel(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.caption.weight(.semibold))
-            .tracking(0.6)
-            .foregroundStyle(Color.paplyTertiaryText)
-            .docRow(top: 10, bottom: 4)
+        Text(title)
+            .font(.paplyTitle(.subheadline, weight: .semibold))
+            .foregroundStyle(Color.paplySecondaryText)
+            .docRow(top: 8, bottom: 2)
             .accessibilityAddTraits(.isHeader)
     }
 
+    private func topicButton(_ thought: Thought, topic: Topic?) -> some View {
+        Button {
+            nav.topicPicker = SheetID(id: thought.id)
+        } label: {
+            TopicPill(topic: topic)
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.95))
+        .fixedSize()
+        .accessibilityLabel(topic.map { "Thema \($0.title), ändern" } ?? "Kein Thema, Thema wählen")
+    }
+
+    private func dateText(_ thought: Thought) -> some View {
+        Text(dateLine(thought))
+            .font(.footnote)
+            .monospacedDigit()
+            .foregroundStyle(Color.paplySecondaryText)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    /// „Di., 27. Okt. · 08:14 · 1:12 Min.“
     private func dateLine(_ thought: Thought) -> String {
-        var parts = [ThoughtDate.longDay.string(from: thought.createdAt), Format.time.string(from: thought.createdAt)]
+        var parts = [ThoughtDate.shortDay.string(from: thought.createdAt), Format.time.string(from: thought.createdAt)]
         if thought.durationMs > 0 { parts.append(ThoughtDate.duration(ms: thought.durationMs)) }
         return parts.joined(separator: " · ")
     }
@@ -396,7 +413,7 @@ struct ThoughtDetailView: View {
         guard editingTitle else { return }
         editingTitle = false
         let value = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let current = model.thoughts.first(where: { $0.id == id }), !value.isEmpty, value != current.title {
+        if let current = model.thought(id), !value.isEmpty, value != current.title {
             model.setTitle(id, value)
         }
     }
@@ -405,7 +422,7 @@ struct ThoughtDetailView: View {
         guard editingText else { return }
         editingText = false
         let value = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let current = model.thoughts.first(where: { $0.id == id }), value != (current.text ?? "") {
+        if let current = model.thought(id), value != (current.text ?? "") {
             model.setText(id, value)
         }
     }
@@ -427,7 +444,7 @@ struct ThoughtDetailView: View {
         guard let taskID = editingTaskID else { return }
         editingTaskID = nil
         let value = taskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let current = model.thoughts.first { $0.id == id }?.tasks.first { $0.id == taskID }
+        let current = model.thought(id)?.tasks.first { $0.id == taskID }
         if value.isEmpty {
             withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(id, taskID) }
         } else if value != current?.text {
@@ -472,13 +489,11 @@ struct TopicPill: View {
     var body: some View {
         HStack(spacing: 6) {
             if let topic {
-                Image(systemName: topic.icon.systemImage)
-                    .imageScale(.small)
+                TopicGlyph(key: topic.icon.rawValue, size: 15, stroke: 1.9, relativeTo: .subheadline)
                 Text(topic.title)
                     .lineLimit(1)
             } else {
-                Image(systemName: "tag")
-                    .imageScale(.small)
+                LucideImage(.tag, size: 15, stroke: 1.9, relativeTo: .subheadline)
                 Text("Thema wählen")
             }
             Image(systemName: "chevron.down")
@@ -497,7 +512,7 @@ struct TopicPill: View {
 
 /// Hinweis-Band unter dem Datum (§3.2, §3.7)
 struct StatusBand: View {
-    let symbol: String
+    let icon: Lucide
     let text: String
     var tint: Color = ThoughtTint.mint
     var shimmer = false
@@ -508,14 +523,14 @@ struct StatusBand: View {
         // Knopf rechts, wenn Text und Knopf nebeneinander passen; sonst darunter (keine Silbentrennung)
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
-                icon
+                glyph
                 label.fixedSize()
                 Spacer(minLength: 8)
                 button
             }
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    icon
+                HStack(alignment: .top, spacing: 10) {
+                    glyph
                     label.fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
@@ -529,9 +544,8 @@ struct StatusBand: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var icon: some View {
-        Image(systemName: symbol)
-            .font(.subheadline.weight(.semibold))
+    private var glyph: some View {
+        LucideImage(icon, size: 17, stroke: 2, relativeTo: .subheadline)
             .foregroundStyle(tint)
     }
 
@@ -563,10 +577,10 @@ struct RelatedRow: View {
     let incoming: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "arrow.turn.down.right")
-                .font(.subheadline.weight(.semibold))
+        HStack(alignment: .top, spacing: 10) {
+            LucideImage(.cornerDownRight, size: 17, stroke: 2, relativeTo: .body)
                 .foregroundStyle(ThoughtTint.mint.opacity(0.8))
+                .padding(.top, 2)
             VStack(alignment: .leading, spacing: 4) {
                 Text(other.displayTitle)
                     .font(.body.weight(.semibold))

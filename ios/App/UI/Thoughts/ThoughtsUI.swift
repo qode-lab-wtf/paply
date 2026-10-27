@@ -126,35 +126,11 @@ extension View {
 // MARK: - Themen-Symbole
 
 extension TopicIcon {
-    /// SF Symbol (gleiche Zuordnung wie die Live Activity in `ThoughtBridge.symbol(for:)`)
-    var systemImage: String {
-        switch self {
-        case .sparkles: "sparkles"
-        case .lightbulb: "lightbulb"
-        case .home: "house"
-        case .code: "chevron.left.forwardslash.chevron.right"
-        case .mapPin: "mappin"
-        case .sun: "sun.max"
-        case .moon: "moon"
-        case .heart: "heart"
-        case .coffee: "cup.and.saucer"
-        case .briefcase: "briefcase"
-        case .calendar: "calendar"
-        case .messageCircle: "message"
-        case .book: "book"
-        case .music: "music.note"
-        case .camera: "camera"
-        case .leaf: "leaf"
-        case .flag: "flag"
-        case .circleHelp: "questionmark.circle"
-        case .pencil: "pencil"
-        case .plane: "airplane"
-        case .wallet: "creditcard"
-        case .users: "person.2"
-        case .list: "list.bullet"
-        case .zap: "bolt"
-        }
-    }
+    /// SF-Ersatz (eine Zuordnung für App und Widgets: `TopicIconKey`)
+    var systemImage: String { TopicIconKey.sfSymbol(rawValue) }
+
+    /// Linien-Glyphe aus Lucide (wie am Mac)
+    var lucide: Lucide { Lucide.topic(rawValue) }
 
     /// Name für VoiceOver
     var spokenName: String {
@@ -193,8 +169,7 @@ struct TopicBadge: View {
     var size: CGFloat = 44
 
     var body: some View {
-        Image(systemName: icon.systemImage)
-            .font(.system(size: size * 0.45, weight: .semibold))
+        TopicGlyph(key: icon.rawValue, size: size * 0.52, stroke: 2, scales: false)
             .foregroundStyle(Color.paplyForest)
             .frame(width: size, height: size)
             .background(RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).fill(ThoughtTint.fill))
@@ -220,9 +195,11 @@ extension Thought {
         }
     }
 
+    /// Titel; noch nicht geordnet: „Gedanke · 0:42“ (Dauer), damit Wartende unterscheidbar sind
     var displayTitle: String {
         if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return title }
-        return state == .done ? "Ohne Titel" : "Neuer Gedanke"
+        if state == .done { return "Ohne Titel" }
+        return durationMs > 0 ? "Gedanke · \(ThoughtDate.clock(Double(durationMs) / 1000))" : "Gedanke"
     }
 
     /// Eine Zeile Vorschau (ohne Zeilenumbrüche)
@@ -241,17 +218,17 @@ extension Thought {
     var stateNote: ThoughtStateNote? {
         switch state {
         case .waitingNetwork:
-            ThoughtStateNote(symbol: "wifi.slash", text: status.message ?? "Gesichert · wartet auf Netz", tint: .paplySecondaryText)
+            ThoughtStateNote(icon: .wifiOff, text: status.message ?? "Gesichert · wartet auf Netz", tint: .paplySecondaryText)
         case .waitingKey:
-            ThoughtStateNote(symbol: "key", text: status.message ?? "Gesichert · Groq-Schlüssel fehlt", tint: .paplySecondaryText, action: .enterKey)
+            ThoughtStateNote(icon: .keyRound, text: status.message ?? "Gesichert · Groq-Schlüssel fehlt", tint: .paplySecondaryText, action: .enterKey)
         case .waitingLimit:
-            ThoughtStateNote(symbol: "hourglass", text: status.message ?? Self.limitText(status.retryAt), tint: .paplySecondaryText)
+            ThoughtStateNote(icon: .hourglass, text: status.message ?? Self.limitText(status.retryAt), tint: .paplySecondaryText)
         case .waitingBudget:
-            ThoughtStateNote(symbol: "hourglass", text: status.message ?? "Gesichert · Kontingent für heute erreicht", tint: .paplySecondaryText)
+            ThoughtStateNote(icon: .hourglass, text: status.message ?? "Gesichert · Kontingent für heute erreicht", tint: .paplySecondaryText)
         case .needsAttention:
-            ThoughtStateNote(symbol: "exclamationmark.triangle.fill", text: status.message ?? "Ton gesichert · nicht verschriftlicht", tint: .paplyBeak, action: .retry)
+            ThoughtStateNote(icon: .triangleAlert, text: status.message ?? "Ton gesichert · nicht verschriftlicht", tint: .paplyBeak, action: .retry)
         case .done where textIsRaw:
-            ThoughtStateNote(symbol: "text.quote", text: "Nicht geordnet · Original-Wortlaut", tint: .paplySecondaryText, action: .reorganize)
+            ThoughtStateNote(icon: .quote, text: "Nicht geordnet · Original-Wortlaut", tint: .paplySecondaryText, action: .reorganize)
         default:
             nil
         }
@@ -265,7 +242,7 @@ extension Thought {
 
 struct ThoughtStateNote: Equatable {
     enum Action: Equatable { case enterKey, retry, reorganize }
-    let symbol: String
+    let icon: Lucide
     let text: String
     let tint: Color
     var action: Action?
@@ -303,6 +280,64 @@ enum ThoughtShare {
     }
 }
 
+// MARK: - Schrift
+
+/// Titel der Navigationsleisten in SF Pro Rounded: groß 31 pt fett (etwas kompakter als 34),
+/// inline 17 pt halbfett. Folgt Dynamic Type beim Start.
+enum PaplyNavigationBar {
+    @MainActor
+    static func apply() {
+        func rounded(_ size: CGFloat, _ weight: UIFont.Weight, _ style: UIFont.TextStyle) -> UIFont {
+            let base = UIFont.systemFont(ofSize: size, weight: weight)
+            let font = base.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: size) } ?? base
+            return UIFontMetrics(forTextStyle: style).scaledFont(for: font)
+        }
+        let bar = UINavigationBar.appearance()
+        bar.largeTitleTextAttributes = [.font: rounded(31, .bold, .largeTitle), .foregroundColor: Brand.text]
+        bar.titleTextAttributes = [.font: rounded(17, .semibold, .headline), .foregroundColor: Brand.text]
+    }
+}
+
+extension Font {
+    /// Titel mit Charakter: SF Pro Rounded, folgt Dynamic Type
+    static func paplyTitle(_ style: Font.TextStyle = .title2, weight: Font.Weight = .bold) -> Font {
+        .system(style, design: .rounded, weight: weight)
+    }
+}
+
+/// Zeit „1:12“ mit festen Ziffernzellen: Jede Ziffer rollt in ihrer eigenen Zelle (numericText),
+/// nichts springt oder überlappt, die Breite bleibt gleich.
+struct RollingClock: View {
+    let seconds: Int
+    let font: Font
+    @Environment(\.accessibilityReduceMotion) private var reduce
+
+    var body: some View {
+        let text = ThoughtDate.clock(TimeInterval(seconds))
+        HStack(spacing: 0) {
+            ForEach(Array(text.enumerated()), id: \.offset) { index, ch in
+                if ch.isNumber {
+                    // Zelle so breit wie „0“ (Ziffern sind gleich breit), Ziffer darin
+                    Text("0").hidden()
+                        .overlay {
+                            Text(String(ch))
+                                .contentTransition(reduce ? .identity : .numericText(countsDown: false))
+                                .animation(reduce ? nil : .smooth(duration: 0.28), value: ch)
+                        }
+                        .clipped()
+                } else {
+                    Text(String(ch))
+                }
+            }
+        }
+        .font(font)
+        .monospacedDigit()
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ThoughtDate.spokenClock(TimeInterval(seconds)))
+    }
+}
+
 // MARK: - Datum
 
 enum ThoughtDate {
@@ -320,6 +355,14 @@ enum ThoughtDate {
     static let dayMonthYear = formatter("ddMMyy")
     static let month = formatter("MMMM")
     static let monthYear = formatter("MMMMyyyy")
+    /// „Di., 27. Okt.“
+    static let shortDay: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = locale
+        f.dateFormat = "EE, d. MMM"
+        return f
+    }()
+
     static let longDay: DateFormatter = {
         let f = DateFormatter()
         f.locale = locale
@@ -445,6 +488,7 @@ enum RootTab: Hashable { case thoughts, dictation }
 
 enum ThoughtsRoute: Hashable {
     case thought(String, task: String? = nil)
+    case search
     case topics
     case deleted
     case buttonGuide
@@ -476,7 +520,6 @@ final class ThoughtsNav {
     var path: [ThoughtsRoute] = []
     var filter: ThoughtsFilter = .all
     var searchText = ""
-    var searchPresented = false
     var showSettings = false
     /// Themenwahl für diesen Gedanken
     var topicPicker: SheetID?

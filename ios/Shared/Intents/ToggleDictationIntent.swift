@@ -11,6 +11,8 @@ struct ToggleDictationIntent: AudioRecordingIntent, LiveActivityIntent {
     static var description: IntentDescription {
         IntentDescription("Startet ein Diktat mit Paply oder beendet es. Der Text landet in der Zwischenablage und wartet auf 🌐.")
     }
+    /// Nicht mehr in Kurzbefehlen/Siri anbieten (Diktat läuft über 🌐); Code bleibt für interne Nutzung.
+    static var isDiscoverable: Bool { false }
 
     init() {}
 

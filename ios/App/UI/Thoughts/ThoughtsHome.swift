@@ -1,9 +1,11 @@
 import PaplyKit
 import SwiftUI
+import UIKit
 
-// Tab „Gedanken“ (KONZEPT §2, §3.1): großer Titel, Suche, Chips, Liste wie Apple Notizen,
-// Aufnahme-Knopf unten rechts. Viele Gedanken: List lädt Zeilen erst beim Scrollen, Abschnitte
-// entstehen in einem Durchlauf ohne Kalender je Zeile.
+// Tab „Gedanken“ (KONZEPT §2, §3.1): großer Titel, Chips, Liste wie Apple Notizen. Kompakter Kopf:
+// Suche als Lupe in der Leiste (eigene Seite), Aufnahme-Knopf in der unteren Werkzeugleiste – so
+// verdeckt er nie Zeilen. Viele Gedanken: List lädt Zeilen erst beim Scrollen, Abschnitte entstehen
+// in einem Durchlauf ohne Kalender je Zeile.
 
 struct ThoughtsTab: View {
     @Environment(ThoughtsNav.self) private var nav
@@ -16,6 +18,8 @@ struct ThoughtsTab: View {
                     switch route {
                     case .thought(let id, let task):
                         ThoughtDetailView(id: id, focusTask: task)
+                    case .search:
+                        ThoughtsSearchView()
                     case .topics:
                         TopicsEditView()
                     case .deleted:
@@ -38,23 +42,16 @@ struct ThoughtsHome: View {
     @Environment(ThoughtsNav.self) private var nav
     @Environment(CaptureFlow.self) private var flow
     @Environment(\.captureZoom) private var zoom
-    @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduce
     @State private var topicAction: TopicAction?
-    @State private var deletePulse = 0
-    private let session = SessionController.shared
 
     var body: some View {
-        @Bindable var nav = nav
         content
             .background(PaplyBackground())
             .navigationTitle("Gedanken")
             .toolbar { toolbar }
-            .searchable(text: $nav.searchText, isPresented: $nav.searchPresented, prompt: "Gedanken durchsuchen")
-            .searchSuggestions { suggestions }
-            .overlay(alignment: .bottomTrailing) { captureButton }
+            .toolbar { bottomBar }
             .topicActions($topicAction)
-            .sensoryFeedback(.impact(weight: .medium), trigger: deletePulse)
             .onChange(of: model.topics.map(\.id)) { _, ids in
                 // gewähltes Thema gelöscht oder zusammengeführt → zurück zu „Alle“
                 if case .topic(let id) = nav.filter, !ids.contains(id) {
@@ -67,10 +64,7 @@ struct ThoughtsHome: View {
 
     @ViewBuilder
     private var content: some View {
-        let query = nav.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !query.isEmpty {
-            searchResults(query)
-        } else if model.thoughts.isEmpty {
+        if model.thoughts.isEmpty {
             ThoughtsEmptyState(
                 setup: { nav.path.append(.buttonGuide) },
                 tryIt: { flow.openBig() }
@@ -84,15 +78,18 @@ struct ThoughtsHome: View {
         let topicsByID = Dictionary(model.topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let thisYear = Calendar.current.component(.year, from: Date())
         return List {
+            if SetupGuide.shared.isVisible(model: model) {
+                Section {
+                    SetupCard()
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
             Section {
                 chips
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            }
-            if session.status == .interrupted {
-                Section { MicOffHint() }
-                    .listRowBackground(Color.paplyRow)
             }
             switch nav.filter {
             case .all:
@@ -104,7 +101,7 @@ struct ThoughtsHome: View {
                     Section {
                         TopicHeader(topic: topic, count: model.count(of: id)) { topicAction = $0 }
                             .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                     let open = model.openTasks(topicID: id)
                     if !open.isEmpty {
@@ -115,7 +112,7 @@ struct ThoughtsHome: View {
                                 nav.path.append(.thought(thought.id, task: task.id))
                             }
                         } header: {
-                            sectionHeader("Offen")
+                            ThoughtsSectionHeader(title: "Offen")
                         }
                     }
                     thoughtSections(model.thoughts.filter { $0.topicId == id }, topics: topicsByID, showTopic: false, thisYear: thisYear)
@@ -123,9 +120,9 @@ struct ThoughtsHome: View {
             }
         }
         .listStyle(.insetGrouped)
-        .listSectionSpacing(.compact)
+        .listSectionSpacing(10)
+        .contentMargins(.top, 2, for: .scrollContent)
         .scrollContentBackground(.hidden)
-        .contentMargins(.bottom, 92, for: .scrollContent)
         .animation(PaplyMotion.bouncy(reduce), value: model.thoughts.first?.id)
     }
 
@@ -135,43 +132,14 @@ struct ThoughtsHome: View {
         ForEach(sections) { section in
             Section {
                 ForEach(section.thoughts) { thought in
-                    row(thought, topic: topics[thought.topicId ?? ""], showTopic: showTopic,
-                        time: section.timeLabel(thought.createdAt, thisYear: thisYear))
+                    ThoughtListRow(thought: thought, topic: topics[thought.topicId ?? ""], showTopic: showTopic,
+                                   time: section.timeLabel(thought.createdAt, thisYear: thisYear),
+                                   zoomSource: flow.zoomSource == thought.id)
                 }
             } header: {
-                sectionHeader(section.title)
+                ThoughtsSectionHeader(title: section.title)
             }
         }
-    }
-
-    private func row(_ thought: Thought, topic: Topic?, showTopic: Bool, time: String, snippet: AttributedString? = nil,
-                     highlightedTitle: AttributedString? = nil) -> some View {
-        Button {
-            nav.path.append(.thought(thought.id))
-        } label: {
-            ThoughtRow(thought: thought, topic: topic, showTopic: showTopic, time: time, snippet: snippet,
-                       highlightedTitle: highlightedTitle)
-        }
-        .captureZoomSource(thought.id, in: flow.zoomSource == thought.id ? zoom : nil)
-        .listRowBackground(Color.paplyRow)
-        .modifier(ThoughtRowActions(
-            thought: thought,
-            onDelete: { delete(thought) },
-            onTopic: { nav.topicPicker = SheetID(id: thought.id) },
-            onCopy: {
-                ThoughtClipboard.copy(thought)
-                nav.show(ThoughtsToast(text: "Kopiert"), reduceMotion: reduce)
-            },
-            onReorganize: { model.reorganize(thought.id) }
-        ))
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.title3.weight(.bold))
-            .foregroundStyle(Color.paplyText)
-            .textCase(nil)
-            .accessibilityAddTraits(.isHeader)
     }
 
     // MARK: Chips
@@ -182,8 +150,9 @@ struct ThoughtsHome: View {
         for thought in model.thoughts {
             if let id = thought.topicId, order[id] == nil { order[id] = order.count }
         }
+        let selectedID: String? = if case .topic(let id) = nav.filter { id } else { nil }
         let active = model.topics
-            .filter { model.isActive($0) }
+            .filter { model.isActive($0) || $0.id == selectedID }
             .sorted { (order[$0.id] ?? .max, $0.title) < (order[$1.id] ?? .max, $1.title) }
         let open = model.openTasks(topicID: nil).count
         let recentlyDone = model.doneTasks(days: 7).count
@@ -196,65 +165,17 @@ struct ThoughtsHome: View {
         )
     }
 
-    // MARK: Suche (§3.1)
-
-    @ViewBuilder
-    private func searchResults(_ query: String) -> some View {
-        let hits = model.search(query)
-        if hits.isEmpty {
-            ContentUnavailableView.search(text: query)
-                .foregroundStyle(Color.paplyText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            let byID = Dictionary(model.thoughts.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            let topicsByID = Dictionary(model.topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            List {
-                Section {
-                    ForEach(hits) { hit in
-                        if let thought = byID[hit.thoughtID] {
-                            row(thought, topic: topicsByID[thought.topicId ?? ""], showTopic: true,
-                                time: ThoughtDate.compact(thought.createdAt),
-                                snippet: hit.field == .title
-                                    ? SearchHighlight.attributed(thought.previewLine, query: query, color: .paplyText)
-                                    : SearchHighlight.attributed(hit, query: query),
-                                highlightedTitle: SearchHighlight.attributed(thought.displayTitle, query: query))
-                        }
-                    }
-                } header: {
-                    Text(hits.count == 1 ? "1 Treffer" : "\(hits.count) Treffer")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.paplySecondaryText)
-                        .textCase(nil)
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .scrollDismissesKeyboard(.immediately)
-        }
-    }
-
-    @ViewBuilder
-    private var suggestions: some View {
-        let q = nav.searchText.trimmingCharacters(in: .whitespaces)
-        if !q.isEmpty {
-            ForEach(model.topics.filter { $0.title.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }.prefix(3)) { topic in
-                Button {
-                    nav.searchText = ""
-                    nav.searchPresented = false
-                    withAnimation(PaplyMotion.smooth(reduce)) { nav.filter = .topic(topic.id) }
-                } label: {
-                    Label("Thema: \(topic.title)", systemImage: topic.icon.systemImage)
-                        .foregroundStyle(Color.paplyText)
-                }
-            }
-        }
-    }
-
-    // MARK: Leiste oben
+    // MARK: Leisten
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
+            Button {
+                nav.path.append(.search)
+            } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .accessibilityLabel("Suchen")
             Menu {
                 Button { nav.path.append(.topics) } label: {
                     Label("Themen bearbeiten", systemImage: "square.grid.2x2")
@@ -275,68 +196,226 @@ struct ThoughtsHome: View {
         }
     }
 
-    // MARK: Aufnahme-Knopf (§3.1): 60 pt unten rechts, öffnet die große Ansicht per Zoom
-
-    @ViewBuilder
-    private var captureButton: some View {
-        if flow.bar != .recording, !nav.searchPresented {
-            Button {
-                flow.openBig(source: CaptureFlow.fabSource)
-            } label: {
-                PaplyMark(monochrome: .paplyForest)
-                    .frame(width: 24, height: 26)
-                    .offset(x: -1)
-                    .frame(width: 60, height: 60)
-                    .paplyGlass(.prominent(.paplyGreenBright), interactive: true, in: Circle())
-                    .shadow(color: .black.opacity(PaplyStyle.usesGlass ? 0.15 : 0.35), radius: 14, y: 6)
-                    .contentShape(Circle())
+    /// Unten wie in Notizen: Anzahl in der Mitte, Aufnahme-Knopf rechts (§3.1, zweiter Weg neben dem Knopf
+    /// im Sperrbildschirm). Als Werkzeugleiste verdeckt er keine Zeilen.
+    @ToolbarContentBuilder
+    private var bottomBar: some ToolbarContent {
+        ToolbarItemGroup(placement: .bottomBar) {
+            Spacer()
+            // iOS 18: Leiste über der Tab-Leiste mit Anzahl wie in Notizen. iOS 26 setzt den Knopf
+            // neben die schwebende Tab-Leiste – dort hätte der Text keinen Platz.
+            if !PaplyStyle.usesGlass {
+                Text(countText)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color.paplySecondaryText)
+                    .monospacedDigit()
+                    .fixedSize()
+                Spacer()
             }
-            .buttonStyle(PressScaleStyle())
-            .captureZoomSource(CaptureFlow.fabSource, in: zoom)
-            .padding(.trailing, 20)
-            .padding(.bottom, 16)
-            .accessibilityLabel("Gedanke aufnehmen")
-            .accessibilityHint("Öffnet die Aufnahme. Paply ordnet den Gedanken danach.")
-            .transition(.scale(scale: 0.6).combined(with: .opacity))
+            CaptureToolbarButton {
+                flow.openBig(source: CaptureFlow.fabSource)
+            }
         }
     }
 
-    // MARK: Aktionen
-
-    private func delete(_ thought: Thought) {
-        deletePulse += 1
-        var token: UndoToken?
-        withAnimation(PaplyMotion.smooth(reduce)) { token = model.delete(thought.id) }
-        guard let token else { return }
-        nav.show(ThoughtsToast(text: "Gelöscht", undo: token, seconds: 4), reduceMotion: reduce)
-        ThoughtsUndo.register(undoManager, name: "Löschen", model: model, token: token)
+    private var countText: String {
+        switch nav.filter {
+        case .all:
+            let n = model.thoughts.count
+            return n == 1 ? "1 Gedanke" : "\(n) Gedanken"
+        case .tasks:
+            let n = model.openTasks(topicID: nil).count
+            return n == 1 ? "1 offene Aufgabe" : "\(n) offene Aufgaben"
+        case .topic(let id):
+            let n = model.count(of: id)
+            return n == 1 ? "1 Gedanke" : "\(n) Gedanken"
+        }
     }
 }
 
-/// Schmaler Hinweis, wenn der Knopf gerade nicht sofort aufnehmen kann (§2 „Mikro-Status“).
-/// Erscheint nur bei unterbrochenem Mikro. Nach Gerätetest S1 ggf. auch bei „aus“, falls der
-/// Knopf ohne Sitzung nicht im Hintergrund starten kann.
-private struct MicOffHint: View {
-    private let session = SessionController.shared
+/// Aufnahme-Knopf der unteren Leiste: p-Kopf auf Grün (iOS 26: grün getöntes Glas).
+struct CaptureToolbarButton: View {
+    let action: () -> Void
+    @Environment(\.captureZoom) private var zoom
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "mic.slash.fill")
-                .foregroundStyle(Color.paplyBeak)
-                .frame(width: 22)
-            Text("Mikro ist aus – der Gedanken-Knopf öffnet Paply dann kurz.")
-                .font(.subheadline)
-                .foregroundStyle(Color.paplyText)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button("Mikro an") {
-                session.stopSession(reason: "thoughts-hint")
-                Task { await session.startSession(trigger: "thoughts-hint") }
+        Group {
+            if #available(iOS 26, *) {
+                if PaplyStyle.usesGlass {
+                    Button(action: action) {
+                        PaplyMark(monochrome: .paplyForest)
+                            .frame(width: 19, height: 21)
+                            .offset(x: -0.5)
+                            .padding(.horizontal, 4)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(.paplyGreenBright)
+                } else {
+                    classic
+                }
+            } else {
+                classic
             }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.paplyGreenBright)
-            .buttonStyle(.borderless)
         }
-        .padding(.vertical, 2)
+        .captureZoomSource(CaptureFlow.fabSource, in: zoom)
+        .accessibilityLabel("Gedanke aufnehmen")
+        .accessibilityHint("Öffnet die Aufnahme. Paply ordnet den Gedanken danach.")
+    }
+
+    private var classic: some View {
+        Button(action: action) {
+            PaplyMark(monochrome: .paplyForest)
+                .frame(width: 17, height: 19)
+                .offset(x: -0.5)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(Color.paplyGreenBright))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressScaleStyle())
+    }
+}
+
+/// Abschnittskopf der Listen: SF Rounded, ruhig, eng am Inhalt
+struct ThoughtsSectionHeader: View {
+    let title: String
+    var count: Int?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            if let count {
+                Text("\(count)").foregroundStyle(Color.paplyTertiaryText).monospacedDigit()
+            }
+        }
+        .font(.paplyTitle(.title3, weight: .semibold))
+        .foregroundStyle(Color.paplyText)
+        .textCase(nil)
+        .padding(.top, -6)
+        .padding(.bottom, -2)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+// MARK: - Suche (§3.1) als eigene Seite hinter der Lupe
+
+struct ThoughtsSearchView: View {
+    @Environment(ThoughtsModel.self) private var model
+    @Environment(ThoughtsNav.self) private var nav
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    @State private var presented = false
+
+    var body: some View {
+        @Bindable var nav = nav
+        let query = nav.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        Group {
+            if query.isEmpty {
+                topicShortcuts
+            } else {
+                results(query)
+            }
+        }
+        .background(PaplyBackground())
+        .navigationTitle("Suchen")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $nav.searchText, isPresented: $presented,
+                    placement: .navigationBarDrawer(displayMode: .always), prompt: "Gedanken durchsuchen")
+        .task {
+            try? await Task.sleep(for: .milliseconds(350))
+            presented = true
+        }
+        .onDisappear { nav.searchText = "" }
+    }
+
+    /// Leer: Themen als schnelle Wege
+    private var topicShortcuts: some View {
+        let topics = model.topics.filter { model.isActive($0) }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        return List {
+            if !topics.isEmpty {
+                Section {
+                    ForEach(topics) { topic in
+                        Button { open(topic) } label: {
+                            HStack(spacing: 12) {
+                                TopicBadge(icon: topic.icon, size: 30)
+                                Text(topic.title).foregroundStyle(Color.paplyText)
+                                Spacer()
+                                Text("\(model.count(of: topic.id))")
+                                    .monospacedDigit()
+                                    .foregroundStyle(Color.paplyTertiaryText)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .listRowBackground(Color.paplyRow)
+                    }
+                } header: {
+                    ThoughtsSectionHeader(title: "Themen")
+                } footer: {
+                    Text("Sucht in Titel, Text, Rohtext, Aufgaben und Themen – auf dem iPhone, ohne Netz.")
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(14)
+        .contentMargins(.top, 4, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private func results(_ query: String) -> some View {
+        let hits = model.search(query)
+        if hits.isEmpty {
+            ContentUnavailableView.search(text: query)
+                .foregroundStyle(Color.paplyText)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            let byID = Dictionary(model.thoughts.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let topicsByID = Dictionary(model.topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let topicHits = model.topics.filter { $0.title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            List {
+                if !topicHits.isEmpty {
+                    Section {
+                        ForEach(topicHits.prefix(3)) { topic in
+                            Button { open(topic) } label: {
+                                HStack(spacing: 10) {
+                                    TopicGlyph(key: topic.icon.rawValue, size: 17)
+                                        .foregroundStyle(ThoughtTint.mint)
+                                    Text("Thema: \(topic.title)").foregroundStyle(Color.paplyText)
+                                }
+                            }
+                            .listRowBackground(Color.paplyRow)
+                        }
+                    }
+                }
+                Section {
+                    ForEach(hits) { hit in
+                        if let thought = byID[hit.thoughtID] {
+                            ThoughtListRow(thought: thought, topic: topicsByID[thought.topicId ?? ""], showTopic: true,
+                                           time: ThoughtDate.compact(thought.createdAt),
+                                           snippet: hit.field == .title
+                                               ? SearchHighlight.attributed(thought.previewLine, query: query, color: .paplyText)
+                                               : SearchHighlight.attributed(hit, query: query),
+                                           highlightedTitle: SearchHighlight.attributed(thought.displayTitle, query: query))
+                        }
+                    }
+                } header: {
+                    Text(hits.count == 1 ? "1 Treffer" : "\(hits.count) Treffer")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.paplySecondaryText)
+                        .textCase(nil)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .listSectionSpacing(14)
+            .contentMargins(.top, 4, for: .scrollContent)
+            .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.immediately)
+        }
+    }
+
+    private func open(_ topic: Topic) {
+        nav.searchText = ""
+        presented = false
+        nav.filter = .topic(topic.id)
+        nav.path = []
     }
 }

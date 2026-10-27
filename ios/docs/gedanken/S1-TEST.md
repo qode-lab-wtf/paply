@@ -23,12 +23,15 @@ hinzufügen → „Paply-Gedanke“). In Paply: Entwicklerbereich → Diagnose �
 8. **Anruf:** Während einer Aufnahme anrufen lassen und annehmen. Was zeigt die Live Activity danach?
 9. **Diktat-Gegenprobe:** In Notizen 🌐 → Paply → diktieren: klappt wie vorher? Dann einen Gedanken
    starten und währenddessen 🌐 tippen: Der Gedanke wird gesichert, das Diktat startet.
-10. **Protokoll schicken:** Entwicklerbereich → Diagnose → Teilen.
+10. **Verwerfen aus der Live Activity:** Aufnahme starten, ein paar Wörter sagen, auf dem Sperrbildschirm
+    (bzw. Dynamic Island lange drücken) **„Verwerfen“** tippen. Kurz „Verworfen“, dann weg. In Paply liegt
+    der Gedanke unter „Zuletzt gelöscht“ und lässt sich wiederherstellen.
+11. **Protokoll schicken:** Entwicklerbereich → Diagnose → Teilen.
 
 **Im Protokoll** (für den Koordinator): `thought.start` (`case` A/B, `ok`, `stage`, `code`, `fourCC`,
 `process`, `locked`), `thought.intent` (`process`: `app` oder `wg`), `thought.attach`, `thought.stop`
 (`reason`, `durationMs`), `thought.activity.*`, `thought.foreground.request` (Fall B gescheitert),
-`thought.intent.forward.timeout` (Knopf lief in der Erweiterung, App antwortete nicht).
+`thought.intent.forward.timeout` (Knopf lief in der Erweiterung, App antwortete nicht), `thought.discard`.
 
 **Entscheidet:** Fall B im Hintergrund ja/nein (sonst kurz Paply öffnen), Toggle oder Knopf im Control,
 Verhalten mit Siri.

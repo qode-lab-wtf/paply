@@ -28,6 +28,7 @@ struct RootView: View {
     private let session = SessionController.shared
 
     init() {
+        PaplyNavigationBar.apply()
         let model = ThoughtsLaunch.makeModel()
         _model = State(initialValue: model)
         _flow = State(initialValue: CaptureFlow(driver: ThoughtsLaunch.makeDriver(model: model)))

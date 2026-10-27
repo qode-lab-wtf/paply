@@ -43,7 +43,7 @@ struct TopicChips: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 chips
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 2)
             }
             .scrollClipDisabled()
             .onChange(of: selection) { _, new in
@@ -56,12 +56,12 @@ struct TopicChips: View {
     @ViewBuilder
     private var chips: some View {
         let row = HStack(spacing: 8) {
-            chip(.all, title: "Alle", symbol: nil)
+            chip(.all, title: "Alle", glyph: nil)
             if let taskCount {
-                chip(.tasks, title: "Aufgaben", symbol: "checklist", count: taskCount)
+                chip(.tasks, title: "Aufgaben", glyph: .listChecks, count: taskCount)
             }
             ForEach(topics) { topic in
-                chip(.topic(topic.id), title: topic.title, symbol: topic.icon.systemImage)
+                chip(.topic(topic.id), title: topic.title, glyph: topic.icon.lucide)
                     .contextMenu {
                         Button { onAction(.rename(topic)) } label: { Label("Umbenennen", systemImage: "pencil") }
                         Button { onAction(.icon(topic)) } label: { Label("Symbol", systemImage: "square.grid.2x2") }
@@ -82,7 +82,7 @@ struct TopicChips: View {
         }
     }
 
-    private func chip(_ filter: ThoughtsFilter, title: String, symbol: String?, count: Int? = nil) -> some View {
+    private func chip(_ filter: ThoughtsFilter, title: String, glyph: Lucide?, count: Int? = nil) -> some View {
         let selected = selection == filter
         return Button {
             withAnimation(PaplyMotion.smooth(reduce)) {
@@ -91,9 +91,8 @@ struct TopicChips: View {
             }
         } label: {
             HStack(spacing: 6) {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .imageScale(.small)
+                if let glyph {
+                    LucideImage(glyph, size: 15, stroke: selected ? 2.1 : 1.8, relativeTo: .subheadline)
                         .foregroundStyle(selected ? Color.paplyForest : ThoughtTint.mint)
                 }
                 Text(title)
@@ -107,8 +106,8 @@ struct TopicChips: View {
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(selected ? Color.paplyForest : Color.paplyText)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 36)
+            .padding(.horizontal, 13)
+            .frame(minHeight: 34)
             .background {
                 if selected {
                     Capsule()
@@ -148,10 +147,10 @@ struct TopicHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            TopicBadge(icon: topic.icon, size: 52)
+            TopicBadge(icon: topic.icon, size: 46)
             VStack(alignment: .leading, spacing: 2) {
                 Text(topic.title)
-                    .font(.title2.weight(.bold))
+                    .font(.paplyTitle(.title2))
                     .foregroundStyle(Color.paplyText)
                     .lineLimit(2)
                 Text(count == 1 ? "1 Gedanke" : "\(count) Gedanken")

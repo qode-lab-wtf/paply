@@ -11,7 +11,9 @@ struct ThoughtControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind, provider: ThoughtControlValueProvider()) { isOn in
             ControlWidgetToggle("Gedanke", isOn: isOn, action: SetThoughtRecordingIntent()) { on in
-                Label(on ? "Aufnahme" : "Gedanke", systemImage: on ? "waveform.circle.fill" : "waveform.circle")
+                // Eigenes SF-Symbol (p-Kopf) aus Widgets/Assets.xcassets, erzeugt mit
+                // scripts/make-control-symbol.swift
+                Label(on ? "Aufnahme" : "Gedanke", image: on ? "paply.mark.fill" : "paply.mark")
             }
             .tint(Color.paplyGreenBright)
         }

@@ -121,7 +121,7 @@ private struct ThoughtTrailing: View {
         case .saved:
             if let title = state.topicTitle {
                 HStack(spacing: 3) {
-                    Image(systemName: TopicIconKey.sfSymbol(state.topicSymbol))
+                    TopicGlyph(key: state.topicSymbol, size: large ? 15 : 12, stroke: 2, scales: false)
                     Text(title).lineLimit(1)
                 }
                 .font(large ? .callout.weight(.semibold) : .caption.weight(.semibold))
@@ -156,7 +156,7 @@ private struct ThoughtStatusText: View {
             if let title = state.topicTitle {
                 HStack(spacing: 4) {
                     Text("Gespeichert ·")
-                    Image(systemName: TopicIconKey.sfSymbol(state.topicSymbol))
+                    TopicGlyph(key: state.topicSymbol, size: 15, stroke: 1.8, scales: false)
                     Text(title).privacySensitive()
                 }
             } else {
@@ -169,7 +169,7 @@ private struct ThoughtStatusText: View {
         case .failed:
             Text(state.note ?? "Ton gesichert · Paply versucht es später")
         case .discarded:
-            Text("Verworfen · in „Zuletzt gelöscht“")
+            Text("Verworfen · wird nicht geordnet, liegt in „Zuletzt gelöscht“")
         }
     }
 }

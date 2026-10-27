@@ -604,6 +604,10 @@ case "primer":
         }
     }
     await runAll(configs, parallel: 1, out: URL(fileURLWithPath: args[1]))
+case "candidates":
+    await e0Main(Array(args.dropFirst()))
+case "thoughts-eval":
+    await ThoughtsEval.main(Array(args.dropFirst()))
 case "report":
     report(Array(args.dropFirst()))
 default:

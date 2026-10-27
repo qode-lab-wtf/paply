@@ -292,10 +292,12 @@ public struct StructureInput: Sendable {
     public var part: (index: Int, count: Int)?
     /// "low" | "medium"
     public var reasoningEffort: String
+    /// Aufnahmezeit des Gedankens (`thought.createdAt`); `now` im Prompt. nil = Zeitpunkt der Verarbeitung.
+    public var recordedAt: Date?
 
     public init(transcript: String, sentences: [ThoughtSource.Sentence], spokenLanguages: [String], uiLanguage: String,
                 vocabulary: String, topics: [TopicIndexEntry], topicsFull: Bool, candidates: [CandidateEntry],
-                part: (index: Int, count: Int)? = nil, reasoningEffort: String = "low") {
+                part: (index: Int, count: Int)? = nil, reasoningEffort: String = "low", recordedAt: Date? = nil) {
         self.transcript = transcript
         self.sentences = sentences
         self.spokenLanguages = spokenLanguages
@@ -306,6 +308,7 @@ public struct StructureInput: Sendable {
         self.candidates = candidates
         self.part = part
         self.reasoningEffort = reasoningEffort
+        self.recordedAt = recordedAt
     }
 }
 
@@ -388,8 +391,19 @@ public protocol ThoughtStructuring: Sendable {
 public protocol CandidateFinding: Sendable {
     func topicIndex(forText: String, languages: [String]) async -> (entries: [TopicIndexEntry], full: Bool)
     func candidates(forText: String, languages: [String], excluding: String) async -> [CandidateEntry]
+    /// Wie `candidates(forText:languages:excluding:)`, aber Zeitbezug (`when` wie „heute 09:40“, 3-h-Fenster,
+    /// Aktualität) relativ zu `reference` – der Aufnahmezeit des Gedankens.
+    func candidates(forText: String, languages: [String], excluding: String, relativeTo reference: Date) async -> [CandidateEntry]
     /// Embedding/Schlagwörter fortschreiben
     func didChange(_ thought: Thought) async
+}
+
+extension CandidateFinding {
+    /// Standard für einfache Umsetzungen (Tests): ohne eigenen Zeitbezug.
+    public func candidates(forText text: String, languages: [String], excluding: String,
+                           relativeTo reference: Date) async -> [CandidateEntry] {
+        await candidates(forText: text, languages: languages, excluding: excluding)
+    }
 }
 
 public enum ProcessorEvent: Sendable, Equatable {

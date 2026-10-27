@@ -67,7 +67,7 @@ struct TopicsEditView: View {
                 } header: {
                     header("Neu")
                 } footer: {
-                    Text("Vorläufige Themen mit einem Gedanken. Als Chip erscheinen sie, sobald ein zweiter dazukommt – oder wenn du sie behältst.")
+                    Text("Vorläufige Themen mit einem Gedanken. Als Chip erscheinen sie, sobald ein zweiter dazukommt – oder wenn du sie behältst. Umbenennen allein behält sie nicht.")
                 }
             }
         }
@@ -148,13 +148,20 @@ struct TopicsEditView: View {
                 .lineLimit(2)
             Spacer(minLength: 8)
             if provisional, !editMode.isEditing {
-                Button("Behalten") {
+                // Nur „Behalten“ macht ein vorläufiges Thema aktiv (Umbenennen/Symbol nicht, §3.8)
+                Button {
                     withAnimation(PaplyMotion.smooth(reduce)) { model.keepProvisional(topic.id) }
                     successPulse += 1
+                } label: {
+                    Text("Behalten")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.paplyForest)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.paplyGreenBright))
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.paplyGreenBright)
                 .buttonStyle(.borderless)
+                .accessibilityHint("Macht das Thema dauerhaft und zeigt es als Chip")
             } else {
                 Text("\(count)")
                     .monospacedDigit()
@@ -210,8 +217,8 @@ private struct SuggestionCard: View {
         let a = model.topic(suggestion.a)?.title ?? "?"
         let b = model.topic(suggestion.b)?.title ?? "?"
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "arrow.triangle.merge")
+            HStack(alignment: .center, spacing: 8) {
+                LucideImage(.merge, size: 17, stroke: 2, relativeTo: .body)
                     .foregroundStyle(ThoughtTint.mint)
                 Text("„\(a)“ und „\(b)“ zusammenführen?")
                     .font(.body.weight(.semibold))
