@@ -26,8 +26,8 @@ Freunde schicken. Vorher einmal die Testinformationen ausfüllen:
 > **Diktat:** In jeder App die Weltkugel (🌐) tippen, sprechen, auf die Fläche tippen – der Text steht aufgeräumt
 > im Feld. Paply erkennt deine Sprache selbst, auch gemischt Deutsch/Englisch.
 > **Gedanken:** Paply-Knopf auf dem Sperrbildschirm, als Widget unter der Uhr oder im Kontrollzentrum drücken,
-> reden, „Fertig“. Paply legt den Gedanken mit Titel, Thema und Aufgaben in der App ab – als Text, die Aufnahme
-> wird nach der Umschrift gelöscht.
+> reden, „Fertig“. Paply ordnet den Gedanken auf einer Karte deiner Themen ein – mit Titel, aufgeräumtem Text und
+> Aufgaben, die im Reiter „Aufgaben“ landen. Gespeichert wird nur Text; die Aufnahme wird nach der Umschrift gelöscht.
 > Zum Start brauchst du einen kostenlosen Groq-Schlüssel – die App führt dich in vier Schritten durch die Einrichtung.
 
 ### Was soll getestet werden?
@@ -35,7 +35,8 @@ Freunde schicken. Vorher einmal die Testinformationen ausfüllen:
 > 1. Einrichtung oben in der App (Mikro, Groq-Schlüssel, Tastatur mit Vollzugriff, Gedanken-Knopf).
 > 2. Diktat in WhatsApp/Notizen: 🌐 → sprechen → tippen. Wie gut ist der Text? Wie schnell?
 > 3. Gedanke vom Sperrbildschirm: drücken → sprechen → Fertig. Passen Titel, Thema, Aufgaben?
-> 4. Was war unklar oder hat gehakt? Bitte über „Feedback senden“ in den Einstellungen oder per Screenshot in
+> 4. Karte und Aufgaben: Thema antippen, zoomen, Aufgaben abhaken. Fühlt sich das klar und schnell an?
+> 5. Was war unklar oder hat gehakt? Bitte über „Feedback senden“ in den Einstellungen oder per Screenshot in
 >    TestFlight melden.
 
 ### Feedback-E-Mail
