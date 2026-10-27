@@ -12,6 +12,7 @@ import Foundation
 ///   Ein validiertes KI-Ergebnis liegt vor dem Übernehmen als `ai-result.json` (kein Neukauf nach Absturz).
 /// - Diktat hat Vorrang: kein Groq-Aufruf, solange `isDictationBusy` true ist.
 /// - Nutzerfelder (`owner == .user`) überschreibt die KI nie; gelöschte Gedanken werden nicht übernommen.
+/// - Diagnose (`ThoughtTrace`): Beginn und Ende von Umschrift und Ordnung mit Dauer, Wartegründe – nur Zahlen und Codes.
 public actor ThoughtProcessor {
     public struct Options: Sendable {
         /// Fehlversuche (Server/unlesbar) bis `needsAttention`
@@ -45,6 +46,7 @@ public actor ThoughtProcessor {
     public nonisolated let options: Options
     private let now: @Sendable () -> Date
     private let sleeper: @Sendable (TimeInterval) async -> Void
+    private let trace: ThoughtTrace
 
     private var running: Task<Void, Never>?
     private var restarting: Task<Void, Never>?
@@ -59,15 +61,17 @@ public actor ThoughtProcessor {
     private let eventBroadcast = Broadcast<ProcessorEvent>()
 
     public init(store: ThoughtStore, structurer: ThoughtStructuring, finder: CandidateFinding,
-                ledger: TokenLedger, environment: ProcessorEnvironment) {
+                ledger: TokenLedger, environment: ProcessorEnvironment, trace: ThoughtTrace = .off) {
         self.init(store: store, structurer: structurer, finder: finder, ledger: ledger, environment: environment,
-                  transcriber: FileTranscriber())
+                  transcriber: FileTranscriber(), trace: trace)
     }
 
     public init(store: ThoughtStore, structurer: ThoughtStructuring, finder: CandidateFinding, ledger: TokenLedger,
                 environment: ProcessorEnvironment, transcriber: ThoughtTranscribing, options: Options = Options(),
                 now: @escaping @Sendable () -> Date = Date.init,
-                sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }) {
+                sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
+                trace: ThoughtTrace = .off) {
+        self.trace = trace
         self.store = store
         self.structurer = structurer
         self.finder = finder
@@ -265,7 +269,9 @@ public actor ThoughtProcessor {
         let settings = await environment.settings()
         if let live = liveOutcomes.removeValue(forKey: id) {
             expectedLive[id] = nil
-            switch FileTranscriber.result(from: live, model: settings.transcriptionModel) {
+            let liveResult = FileTranscriber.result(from: live, model: settings.transcriptionModel)
+            traceTranscription(id, liveResult, started: nil)
+            switch liveResult {
             case .noSpeech:
                 await markEmpty(id)
                 return nil
@@ -293,7 +299,7 @@ public actor ThoughtProcessor {
             await attention(id, message: "Ton fehlt · nicht verschriftlicht")
             return nil
         }
-        guard await waitForDictation() else { return nil }
+        guard await waitForDictation(id) else { return nil }
         let seconds = max(1, Int((Double(thought.durationMs) / 1000).rounded(.up)))
         let reservation: TokenLedger.Reservation
         do {
@@ -309,7 +315,11 @@ public actor ThoughtProcessor {
             return nil
         }
         eventBroadcast.yield(.processing(id))
+        trace.log("thought.transcribe.begin", ["id": .s(ThoughtTrace.short(id)), "model": .s(settings.transcriptionModel),
+                                               "audioS": .ms(Double(thought.durationMs) / 1000)])
+        let started = ContinuousClock.now
         let result = await transcriber.transcribe(audioURL: audioURL, apiKey: key, settings: settings)
+        traceTranscription(id, result, started: started)
         switch result {
         case let .success(text, languages, audioSeconds, model):
             await ledger.settle(reservation, actual: Int(audioSeconds.rounded(.up)))
@@ -399,6 +409,7 @@ public actor ThoughtProcessor {
 
     private func structure(_ id: String, source: ThoughtSource) async {
         if let cached = await store.aiResultRecord(id) {
+            trace.log("thought.structure.cached", ["id": .s(ThoughtTrace.short(id))])
             await apply(id, source: source, record: cached)
             return
         }
@@ -414,7 +425,7 @@ public actor ThoughtProcessor {
             await wait(id, .waitingNetwork, message: Self.message(.waitingNetwork))
             return
         }
-        guard await waitForDictation() else { return }
+        guard await waitForDictation(id) else { return }
         _ = try? await store.update(id) { $0.state = .structuring }
         eventBroadcast.yield(.processing(id))
         let settings = await environment.settings()
@@ -431,6 +442,10 @@ public actor ThoughtProcessor {
                                   topics: context.entries, topicsFull: context.full, candidates: candidates,
                                   recordedAt: recordedAt)
         let parts = PartSplitter.split(source)
+        trace.log("thought.structure.begin", ["id": .s(ThoughtTrace.short(id)), "textLen": .i(source.text.count),
+                                              "parts": .i(parts.count), "topics": .i(context.entries.count),
+                                              "candidates": .i(candidates.count)])
+        let started = ContinuousClock.now
         var result: StructureOutcome?
         if parts.count == 1 {
             result = await structureIfWanted(id, base, key: key)
@@ -440,6 +455,7 @@ public actor ThoughtProcessor {
         } else {
             result = await structureParts(id, source: source, parts: parts, base: base, key: key)
         }
+        traceStructure(id, result, started: started)
         guard let outcome = result else {
             // gelöscht/verworfen während des Ordnens: zurück auf „verschriftlicht“, Wiederherstellen ordnet neu
             _ = try? await store.update(id) { if $0.deletedAt != nil { $0.state = .transcribed } }
@@ -490,7 +506,10 @@ public actor ThoughtProcessor {
     /// Ordnen nur, solange der Gedanke nicht gelöscht ist – direkt vor jedem Aufruf geprüft. nil = abgebrochen.
     private func structureIfWanted(_ id: String, _ input: StructureInput, key: String) async -> StructureOutcome? {
         guard let thought = await store.thought(id), thought.deletedAt == nil else { return nil }
-        return await structurer.structure(input, apiKey: key)
+        let structurer = structurer
+        return await ThoughtTrace.$thoughtID.withValue(ThoughtTrace.short(id)) {
+            await structurer.structure(input, apiKey: key)
+        }
     }
 
     /// Teile-Modus (§6.2): Teil 1 voll, Teile 2…n kurz, ≥ 60 s Abstand; Fortschritt in `ai-parts.json`.
@@ -517,10 +536,13 @@ public actor ThoughtProcessor {
             let index = progress.rest.count + 1
             if let last = progress.lastCallAt {
                 let gap = options.partGap - now().timeIntervalSince(last)
-                if gap > 0 { await sleeper(gap) }
+                if gap > 0 {
+                    trace.log("thought.wait", ["id": .s(ThoughtTrace.short(id)), "state": .s("partGap"), "waitS": .ms(gap)])
+                    await sleeper(gap)
+                }
             }
             if Task.isCancelled { return .wait(.waitingNetwork, retryAt: nil, message: "Abgebrochen") }
-            guard await waitForDictation() else { return .wait(.waitingNetwork, retryAt: nil, message: "Abgebrochen") }
+            guard await waitForDictation(id) else { return .wait(.waitingNetwork, retryAt: nil, message: "Abgebrochen") }
             var input = base
             input.transcript = parts[index].text
             input.sentences = parts[index].sentences
@@ -711,6 +733,10 @@ public actor ThoughtProcessor {
             if let attempts { t.status.attempts = attempts }
         }
         if updated != nil { eventBroadcast.yield(.waiting(id, state, message: message)) }
+        var fields: ThoughtTrace.Fields = ["id": .s(ThoughtTrace.short(id)), "state": .s(state.rawValue)]
+        if let retryAt { fields["waitS"] = .ms(max(0, retryAt.timeIntervalSince(now()))) }
+        if let attempts { fields["attempts"] = .i(attempts) }
+        trace.log("thought.wait", fields)
     }
 
     private func attention(_ id: String, message: String, attempts: Int? = nil) async {
@@ -721,6 +747,9 @@ public actor ThoughtProcessor {
             if let attempts { t.status.attempts = attempts }
         }
         if updated != nil { eventBroadcast.yield(.failed(id, message: message)) }
+        var fields: ThoughtTrace.Fields = ["id": .s(ThoughtTrace.short(id)), "why": .s(Self.attentionCode(message))]
+        if let attempts { fields["attempts"] = .i(attempts) }
+        trace.log("thought.attention", fields)
     }
 
     private func refused(_ id: String, _ refusal: TokenLedger.Refusal) async {
@@ -738,15 +767,81 @@ public actor ThoughtProcessor {
         await store.purge(id)
         pendingSources[id] = nil
         eventBroadcast.yield(.empty(id))
+        trace.log("thought.empty", ["id": .s(ThoughtTrace.short(id))])
     }
 
-    /// false, wenn abgebrochen
-    private func waitForDictation() async -> Bool {
+    /// false, wenn abgebrochen. Wartegrund „Diktat“ geht mit der Wartezeit ins Protokoll.
+    private func waitForDictation(_ id: String) async -> Bool {
+        var started: ContinuousClock.Instant?
         while await environment.isDictationBusy() {
-            if Task.isCancelled { return false }
+            if started == nil { started = .now }
+            if Task.isCancelled { break }
             await sleeper(options.dictationPoll)
         }
+        if let started {
+            trace.log("thought.wait.dictation", ["id": .s(ThoughtTrace.short(id)), "ms": ThoughtTrace.milliseconds(since: started)])
+        }
         return !Task.isCancelled
+    }
+
+    // MARK: Diagnose (nur Zahlen und Codes, nie Text)
+
+    private func traceTranscription(_ id: String, _ result: TranscriptionResult, started: ContinuousClock.Instant?) {
+        var fields: ThoughtTrace.Fields = ["id": .s(ThoughtTrace.short(id)), "live": .b(started == nil)]
+        if let started { fields["ms"] = ThoughtTrace.milliseconds(since: started) }
+        switch result {
+        case let .success(text, languages, audioSeconds, model):
+            fields["result"] = .s("ok")
+            fields["textLen"] = .i(text.count)
+            fields["langs"] = .s(languages.joined(separator: ","))
+            fields["audioS"] = .ms(audioSeconds)
+            fields["model"] = .s(model)
+        case .noSpeech:
+            fields["result"] = .s("noSpeech")
+        case .failure(let failure):
+            fields["result"] = .s(failure.rawValue)
+        }
+        trace.log("thought.transcribe.end", fields)
+    }
+
+    private func traceStructure(_ id: String, _ outcome: StructureOutcome?, started: ContinuousClock.Instant) {
+        var fields: ThoughtTrace.Fields = ["id": .s(ThoughtTrace.short(id)), "ms": ThoughtTrace.milliseconds(since: started)]
+        switch outcome {
+        case nil:
+            fields["result"] = .s("cancelled")
+        case let .success(result, model, usage):
+            fields["result"] = .s("ok")
+            fields["model"] = .s(model)
+            fields["fallback"] = .b(model != ThoughtStructurer.primaryModel)
+            fields["tokens"] = .i(usage.total)
+            fields["tasks"] = .i(result.tasks.count)
+            switch result.topic {
+            case .existing: fields["topic"] = .s("existing")
+            case .new: fields["topic"] = .s("new")
+            case .none: fields["topic"] = .s("none")
+            }
+            fields["links"] = .i(result.related.count)
+            fields["textIsRaw"] = .b(result.cleanText == nil)
+            fields["rejections"] = .i(result.rejections.count)
+        case let .wait(state, _, _):
+            fields["result"] = .s("wait")
+            fields["code"] = .s(state.rawValue)
+        case .unusable(let code):
+            fields["result"] = .s("raw")
+            fields["code"] = .s(code)
+        }
+        trace.log("thought.structure.end", fields)
+    }
+
+    /// Fester Code statt der (deutschen) Meldung
+    static func attentionCode(_ text: String) -> String {
+        switch text {
+        case "Ton fehlt · nicht verschriftlicht": "audioMissing"
+        case "Modell nicht verfügbar": "modelMissing"
+        case "Budget zu klein": "budgetTooSmall"
+        case message(.needsAttention): "failed"
+        default: "other"
+        }
     }
 
     // MARK: Texte (§3.7)

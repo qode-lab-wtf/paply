@@ -7,9 +7,15 @@ import SwiftUI
 //   -PaplyEmpty              leeres Modell (leerer Zustand)
 //   -PaplyMany               2 000 Gedanken (Scrollen, Abschnitte)
 //   -PaplyCount <n>          n fertige Gedanken in wenigen Themen (1, 5, 300 … – Fälle der Karte)
-//   -PaplyScreen <name>      overview · topic · topic-small · topic-large · loose · pending · tasks · detail ·
-//                            detail-zoom · detail-raw · detail-waiting · capture · bar · bar-saved · search ·
-//                            settings · dictation · deleted · topics · guide · picker ·
+//   -PaplyTasksDemo          Vorschaudaten mit echt wirkenden Aufgaben in allen Gruppen (überfällig, heute,
+//                            demnächst, irgendwann, erledigt – auch ältere)
+//   -PaplyTopicImages <…>    Themenbilder einspielen, durch Kommas getrennt: „Titel=Pfad“ oder nur „Pfad“ (dann der
+//                            Reihe nach für die Themen mit den meisten Gedanken). Relative Pfade gelten ab dem
+//                            Datenordner der App (`xcrun simctl get_app_container … data`).
+//   -PaplyScreen <name>      overview · topic · topic-small · topic-large · topic-edit · loose · pending · tasks ·
+//                            tasks-done · tasks-all-done · tasks-detail · detail · detail-zoom · detail-raw ·
+//                            detail-waiting · capture · bar · bar-saved · search · settings · dictation · deleted ·
+//                            topics · guide · picker ·
 //                            map (Karte allein, MapDebugScreen; dazu -PaplyMapFocus, -PaplyLight)
 //   -PaplyClassic            iOS-18-Look (ohne Glas, Leiste als Kapsel) auf iOS 26
 //   -PaplyExpandOriginal     „Original“ im Detail aufgeklappt
@@ -17,7 +23,9 @@ import SwiftUI
 //   -PaplyRefuse             gespielte Aufnahme wird abgelehnt (Fehlerzustand)
 enum ThoughtsDebug {
     private static var args: [String] { ProcessInfo.processInfo.arguments }
-    static var previewData: Bool { args.contains("-PaplyPreviewData") || args.contains("-PaplyMany") || count != nil }
+    static var previewData: Bool {
+        args.contains("-PaplyPreviewData") || args.contains("-PaplyMany") || args.contains("-PaplyTasksDemo") || count != nil
+    }
 
     static var count: Int? {
         guard let i = args.firstIndex(of: "-PaplyCount"), i + 1 < args.count else { return nil }
@@ -34,6 +42,7 @@ enum ThoughtsDebug {
         if args.contains("-PaplyEmpty") { return ThoughtsModel() }
         if args.contains("-PaplyMany") { return many() }
         if let count { return sample(count) }
+        if args.contains("-PaplyTasksDemo") { return tasksDemo() }
         if args.contains("-PaplyPreviewData") { return ThoughtsModel.preview }
         return nil
     }
@@ -87,9 +96,81 @@ enum ThoughtsDebug {
         return ThoughtsModel(thoughts: thoughts, topics: base.topics)
     }
 
+    /// Aufgaben wie im Alltag, in allen Gruppen; je an einen passenden Gedanken (frischer Wortlaut nur an Gedanken
+    /// von heute, sonst an ältere – so zeigt die Liste beide Fälle der Fälligkeit)
+    @MainActor
+    private static func tasksDemo() -> ThoughtsModel {
+        let base = ThoughtsModel.preview
+        var thoughts = base.thoughts.map { thought -> Thought in
+            var t = thought
+            t.tasks = []
+            return t
+        }
+        let topics = base.topics
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        func day(_ offset: Int, _ hour: Int = 12, _ minute: Int = 0) -> Date {
+            (calendar.date(byAdding: .day, value: offset, to: today) ?? today).addingTimeInterval(Double(hour * 3_600 + minute * 60))
+        }
+        /// neuester passender Gedanke des Themas: von heute (`fresh`) bzw. älter als ein Tag
+        func index(_ topicTitle: String, fresh: Bool) -> Int? {
+            let topicID = topics.first { $0.title == topicTitle }?.id
+            let candidates = thoughts.indices.filter { thoughts[$0].topicId == topicID && thoughts[$0].state == .done && !thoughts[$0].textIsRaw }
+            return candidates.first { fresh == (thoughts[$0].createdAt >= today) }
+                ?? candidates.first { fresh ? true : thoughts[$0].createdAt < day(-1) }
+                ?? candidates.first
+        }
+        typealias Demo = (topic: String, fresh: Bool, text: String, hint: String?, due: Date?, doneAt: Date?)
+        let demos: [Demo] = [
+            ("Wohnung", false, "Mietvertrag unterschreiben und zurückschicken", "bis Montag", day(-1), nil),
+            ("Finanzen", false, "Rechnung vom Zahnarzt überweisen", "Ende der Woche", day(-3), nil),
+            ("Finanzen", true, "Steuerberater wegen der Belege anrufen", "heute um 15 Uhr", day(0, 15), nil),
+            ("Garten", false, "Tomaten ausgeizen und die Beete gießen", "morgen", day(0), nil),
+            ("Team", true, "Notizen aus der Retro an alle schicken", "heute Abend", day(0, 19), nil),
+            ("Urlaub Portugal", false, "Flug nach Porto buchen", "Freitag", day(3), nil),
+            ("Paply", true, "Testflug-Version an Lena schicken", "morgen", day(1), nil),
+            ("Finanzen", false, "Sparplan um fünfzig Euro erhöhen", "ab dem Ersten", day(5), nil),
+            ("Urlaub Portugal", false, "Hotel in der Altstadt reservieren", "am 12. Dezember", day(46), nil),
+            ("Lesen", false, "Buch über Gewohnheiten in der Bibliothek vormerken", nil, nil, nil),
+            ("Ideen", false, "Einkaufsliste nach Laden sortieren – Prototyp skizzieren", nil, nil, nil),
+            ("Wohnung", false, "Klausel zur Staffelmiete beim Vermieter nachfragen", nil, nil, nil),
+            ("Team", false, "Reviews in der nächsten Runde ansprechen", nil, nil, nil),
+            ("Paply", true, "Gedanken-Knopf auf dem Sperrbildschirm ausprobieren", nil, nil, day(0, 9, 12)),
+            ("Garten", false, "Neuen Gartenschlauch kaufen", "Samstag", day(-1, 12), day(-1, 17, 40)),
+            ("Team", false, "Retro vorbereiten", nil, nil, day(-3, 10)),
+            ("Urlaub Portugal", false, "Reisepass verlängern", "nächste Woche", day(-25), day(-20, 11)),
+            ("Finanzen", false, "Steuerunterlagen sortieren", nil, nil, day(-40, 18)),
+        ]
+        for demo in demos {
+            guard let i = index(demo.topic, fresh: demo.fresh) else { continue }
+            let created = thoughts[i].createdAt
+            thoughts[i].tasks.append(ThoughtTask(text: demo.text, quote: demo.text, dueHint: demo.hint, dueAt: demo.due,
+                                                 done: demo.doneAt != nil, doneAt: demo.doneAt, owner: .ai, createdAt: created))
+        }
+        return ThoughtsModel(thoughts: thoughts + base.deleted, topics: topics, suggestions: base.suggestions)
+    }
+
+    /// `-PaplyTopicImages`: Bilder einspielen (wie „Bild wählen …“, gleicher Zuschnitt)
+    @MainActor
+    private static func applyTopicImages(model: ThoughtsModel) async {
+        guard let i = args.firstIndex(of: "-PaplyTopicImages"), i + 1 < args.count else { return }
+        let ranked = model.topics.sorted { model.count(of: $0.id) > model.count(of: $1.id) }
+        var next = ranked.makeIterator()
+        for entry in args[i + 1].split(separator: ",").map(String.init) {
+            let parts = entry.split(separator: "=", maxSplits: 1).map(String.init)
+            let topic = parts.count == 2 ? model.topics.first { $0.title == parts[0] } : next.next()
+            let path = parts.last ?? entry
+            let url = path.hasPrefix("/") ? URL(fileURLWithPath: path) : URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(path)
+            guard let topic, let data = try? Data(contentsOf: url), let jpeg = await TopicImages.process(data) else { continue }
+            TopicImages.shared.setImage(jpeg, for: topic.id)
+        }
+    }
+
     /// Stellt den gewünschten Bildschirm her (einmal beim Start)
     @MainActor
     static func apply(nav: ThoughtsNav, flow: CaptureFlow, model: ThoughtsModel) async {
+        await applyTopicImages(model: model)
         guard let screen else { return }
         try? await Task.sleep(for: .milliseconds(400))
         let rich = model.thoughts.first { $0.state == .done && !$0.tasks.isEmpty && !$0.links.isEmpty && !$0.textIsRaw }
@@ -106,8 +187,16 @@ enum ThoughtsDebug {
             nav.focus(ThoughtsHome.noTopicID)
         case "pending":
             nav.focus(ThoughtsHome.pendingID)
-        case "tasks":
-            nav.path = [.tasks]
+        case "tasks", "tasks-done", "tasks-all-done":
+            nav.showTasks()
+        case "tasks-detail":
+            nav.showTasks()
+            let agenda = model.taskAgenda()
+            if let item = (agenda.today + agenda.overdue + agenda.upcoming + agenda.someday).first {
+                try? await Task.sleep(for: .milliseconds(1_500))
+                // wie Antippen der Zeile (Zoom aus der Zeile)
+                nav.tasksPath.append(.thought(item.thought.id, task: item.task.id, zoom: "task:\(item.id)"))
+            }
         case "detail":
             if let rich { nav.path = [.thought(rich.id)] }
         case "detail-zoom":

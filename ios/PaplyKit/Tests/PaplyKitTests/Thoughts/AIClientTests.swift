@@ -84,8 +84,8 @@ private func request(_ model: String = ThoughtStructurer.primaryModel, effort: S
 }
 
 /// Mock-Strukturierer mit eigenem Ledger in einem Temp-Ordner.
-private func structurer(_ server: MockServer, ledger: TokenLedger? = nil) -> ThoughtStructurer {
-    ThoughtStructurer(ledger: ledger, transport: server.transport, baseURL: server.baseURL)
+private func structurer(_ server: MockServer, ledger: TokenLedger? = nil, trace: ThoughtTrace = .off) -> ThoughtStructurer {
+    ThoughtStructurer(ledger: ledger, transport: server.transport, baseURL: server.baseURL, trace: trace)
 }
 
 private func tempLedger(limits: TokenLedger.Limits = .init(), now: @escaping @Sendable () -> Date = Date.init) -> TokenLedger {

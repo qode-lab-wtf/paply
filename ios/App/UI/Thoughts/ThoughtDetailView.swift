@@ -16,6 +16,8 @@ struct ThoughtDetailView: View {
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduce
     @Environment(\.dismiss) private var dismiss
+    /// Reiter, in dem das Detail steht (Gedanken oder Aufgaben) – „Verwandt“ öffnet im selben
+    @Environment(\.thoughtsStack) private var stack
 
     @State private var lastKnown: Thought?
     @State private var titleDraft = ""
@@ -248,8 +250,8 @@ struct ThoughtDetailView: View {
             }
             .docRow(top: 4, bottom: 4, background: false)
         } else {
-            // gleiches Abhaken wie Leiste „Offen“, Karten und Aufgabenliste (TaskCheckoff)
-            TaskLine(task: task, pendingDone: checkoff.pending.contains(task.id)) {
+            // gleiches Abhaken wie Reiter „Aufgaben“, Karten und Panel (TaskCheckoff)
+            TaskLine(task: task, recordedAt: thought.createdAt, pendingDone: checkoff.pending.contains(task.id)) {
                 checkoff.toggle(task, thoughtID: thought.id, model: model, reduceMotion: reduce)
             }
             .contentShape(Rectangle())
@@ -257,7 +259,7 @@ struct ThoughtDetailView: View {
             .docRow(top: 4, bottom: 4, background: false)
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 Button(role: .destructive) {
-                    withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(thought.id, task.id) }
+                    deleteTask(task, in: thought)
                 } label: {
                     Label("Löschen", systemImage: "trash")
                 }
@@ -266,7 +268,7 @@ struct ThoughtDetailView: View {
                 ShareLink(item: task.text) { Label("Teilen", systemImage: "square.and.arrow.up") }
                 Button { beginTask(task) } label: { Label("Bearbeiten", systemImage: "pencil") }
                 Button(role: .destructive) {
-                    withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(thought.id, task.id) }
+                    deleteTask(task, in: thought)
                 } label: { Label("Löschen", systemImage: "trash") }
             }
         }
@@ -282,7 +284,7 @@ struct ThoughtDetailView: View {
             ForEach(related, id: \.thought.id) { item in
                 Button {
                     commitAll()
-                    nav.path.append(.thought(item.thought.id))
+                    nav.push(.thought(item.thought.id), on: stack)
                 } label: {
                     RelatedRow(other: item.thought, link: item.link, incoming: item.incoming)
                 }
@@ -448,10 +450,19 @@ struct ThoughtDetailView: View {
         let value = taskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let current = model.thought(id)?.tasks.first { $0.id == taskID }
         if value.isEmpty {
-            withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(id, taskID) }
+            withAnimation(PaplyMotion.smooth(reduce)) { _ = model.deleteTask(id, taskID) }
         } else if value != current?.text {
             model.editTask(id, taskID, text: value)
         }
+    }
+
+    /// Löschen mit „Widerrufen“ (wie im Reiter Aufgaben)
+    private func deleteTask(_ task: ThoughtTask, in thought: Thought) {
+        var token: UndoToken?
+        withAnimation(PaplyMotion.smooth(reduce)) { token = model.deleteTask(thought.id, task.id) }
+        guard let token else { return }
+        nav.show(ThoughtsToast(text: "Aufgabe gelöscht", undo: token, seconds: 4), reduceMotion: reduce)
+        ThoughtsUndo.register(undoManager, name: "Aufgabe löschen", model: model, token: token)
     }
 
     private func commitAll() {
@@ -484,7 +495,7 @@ struct ThoughtDetailView: View {
 
 // MARK: - Bausteine
 
-/// Themen-Pille „◆ Paply ▾“
+/// Themen-Pille „◆ Paply ▾“; mit Themenbild sitzt das Bild als Kreis am linken Rand (wie ein Kontakt-Chip)
 struct TopicPill: View {
     let topic: Topic?
 
@@ -492,9 +503,10 @@ struct TopicPill: View {
     private var tint: TopicTint { TopicPalette.tint(for: topic?.id) }
 
     var body: some View {
-        HStack(spacing: 6) {
+        let hasImage = TopicImages.shared.hasImage(for: topic?.id)
+        HStack(spacing: hasImage ? 7 : 6) {
             if let topic {
-                TopicGlyph(key: topic.icon.rawValue, size: 15, stroke: 1.9, relativeTo: .subheadline)
+                TopicMark(topicID: topic.id, icon: topic.icon, size: 15, stroke: 1.9, relativeTo: .subheadline, imageScale: 1.6)
                 Text(topic.title)
                     .lineLimit(1)
             } else {
@@ -507,8 +519,9 @@ struct TopicPill: View {
         }
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(topic == nil ? Color.paplySecondaryText : tint.ink)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.leading, hasImage ? 4 : 12)
+        .padding(.trailing, 12)
+        .padding(.vertical, hasImage ? 4 : 7)
         .background(Capsule().fill(topic == nil ? Color.white.opacity(0.08) : tint.badge))
         .overlay(Capsule().strokeBorder(topic == nil ? Color.white.opacity(0.1) : tint.stroke, lineWidth: 0.5))
         .contentShape(Capsule())

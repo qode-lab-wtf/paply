@@ -380,3 +380,210 @@ private typealias F = AIFixture
         #expect(ThoughtValidator.assemble(first: first, firstTranscript: "a", parts: [(part, "b")]).cleanText == nil)
     }
 }
+
+/// Prompt v4: Form des Aufgabentexts im Code (`TaskText`) – nur Weglassen am Rand und Großschreiben.
+@Suite struct AITaskTextTests {
+    @Test(arguments: [
+        ("tomaten gießen", "Tomaten gießen"),
+        ("übergabe vorbereiten", "Übergabe vorbereiten"),
+        ("ärzte anrufen", "Ärzte anrufen"),
+        ("3 Kartons bestellen", "3 Kartons bestellen"),
+        ("20 kartons bestellen", "20 kartons bestellen"),
+        ("iPhone reparieren lassen", "iPhone reparieren lassen"),
+        ("eBay-Konto löschen", "eBay-Konto löschen"),
+        ("schufa-Auskunft bestellen", "Schufa-Auskunft bestellen"),
+        ("„paply“ testen", "„Paply“ testen"),
+        ("call the bank", "Call the bank"),
+        ("Anna anrufen", "Anna anrufen"),
+    ])
+    func firstLetterIsCapitalizedSafely(raw: String, expected: String) {
+        #expect(TaskText.tidy(raw, dueHint: nil) == expected)
+    }
+
+    @Test(arguments: [
+        ("morgen einkaufen gehen", "morgen", "Einkaufen gehen"),
+        ("Morgen, einkaufen gehen", "morgen", "Einkaufen gehen"),
+        ("Anna anrufen, morgen früh", "morgen früh", "Anna anrufen"),
+        ("Morgen um 10 Uhr Kunden empfangen", "morgen um 10 Uhr", "Kunden empfangen"),
+        ("call the bank tomorrow", "tomorrow", "Call the bank"),
+        // ab v5 auch in der Mitte, wenn wörtlich und zusammenhängend und mindestens 2 Wörter bleiben
+        ("Reisepass bis Ende November verlängern", "bis Ende November", "Reisepass verlängern"),
+        ("Unterlagen bis Freitag schicken", "bis Freitag", "Unterlagen schicken"),
+        ("Reisepass, bis Ende November, verlängern", "bis Ende November", "Reisepass verlängern"),
+        ("Laufrad im Dezember kaufen", "im Dezember", "Laufrad kaufen"),
+        ("Anna morgen anrufen", "morgen", "Anna anrufen"),
+        // nicht, wenn ein Wort davor ihn regiert (sonst „Anna wegen anrufen“), und nur wörtlich gleich
+        ("Anna wegen Freitag anrufen", "Freitag", "Anna wegen Freitag anrufen"),
+        ("Kuchen backen für morgen", "morgen", "Kuchen backen für morgen"),
+        ("Reisepass bis Ende November verlängern", "Ende November", "Reisepass bis Ende November verlängern"),
+        ("am Freitag Anna anrufen", "Freitag", "Am Freitag Anna anrufen"),
+        ("Unterlagen bis spätestens Freitag schicken", "bis Freitag", "Unterlagen bis spätestens Freitag schicken"),
+        ("Halteverbotszone beantragen bis Freitag", "bis spätestens Freitag", "Halteverbotszone beantragen bis Freitag"),
+        // Verneinung bleibt, auch im Zeitausdruck
+        ("nicht vor Freitag bezahlen", "nicht vor Freitag", "Nicht vor Freitag bezahlen"),
+        // nichts übrig → Text bleibt
+        ("morgen", "morgen", "Morgen"),
+    ])
+    func timeExpressionIsNotDoubled(raw: String, due: String, expected: String) {
+        #expect(TaskText.tidy(raw, dueHint: due) == expected)
+    }
+
+    @Test(arguments: [
+        ("noch Milch kaufen", "Milch kaufen"),
+        ("Noch Milch kaufen", "Milch kaufen"),
+        ("noch die Belege prüfen", "Die Belege prüfen"),
+        ("mal Anna anrufen", "Anna anrufen"),
+        ("eben Brot holen", "Brot holen"),
+        ("Anna anrufen mal", "Anna anrufen"),
+        ("Rechnungen sammeln noch", "Rechnungen sammeln"),
+        // Sinn bleibt: Verneinung, „noch ein…“ (= weiteres), „noch mal“ (= wieder), „erst mal“, Nomen „Mal“
+        ("noch nicht bezahlen", "Noch nicht bezahlen"),
+        ("noch keinen Termin machen", "Noch keinen Termin machen"),
+        ("noch einen Termin machen", "Noch einen Termin machen"),
+        ("noch mal anrufen", "Noch mal anrufen"),
+        ("Anna anrufen noch mal", "Anna anrufen noch mal"),
+        ("Kaffee trinken erst mal", "Kaffee trinken erst mal"),
+        ("Fenster putzen nächstes Mal", "Fenster putzen nächstes Mal"),
+        ("einmal Pizza bestellen", "Einmal Pizza bestellen"),
+        ("nicht mal anrufen", "Nicht mal anrufen"),
+        ("noch", "Noch"),
+    ])
+    func onlySafeFillersAtTheEdgesAreRemoved(raw: String, expected: String) {
+        #expect(TaskText.tidy(raw, dueHint: nil) == expected)
+    }
+
+    @Test func validatorAppliesTheFormAndStillChecksTheQuote() {
+        let result = F.validate(F.answer(tasks: [
+            F.task("bis Freitag noch die Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken", due: "bis Freitag"),
+            F.task("schufa-Auskunft bestellen", "nicht vergessen, die Schufa-Auskunft zu bestellen"),
+        ]))
+        #expect(result.tasks.map(\.text) == ["Die Unterlagen schicken", "Schufa-Auskunft bestellen"])
+        #expect(result.tasks.first?.dueHint == "bis Freitag")
+        // Doppelte nach der Form fallen weg
+        let doubled = F.validate(F.answer(tasks: [F.task("Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken"),
+                                                  F.task("noch Unterlagen schicken", "die Unterlagen schicken")]))
+        #expect(doubled.tasks.count == 1 && doubled.rejections.contains("task:duplicate"))
+        // Abgelehnter Zeitausdruck bleibt im Text (nichts geht verloren)
+        let rejected = F.validate(F.answer(tasks: [F.task("morgen Unterlagen schicken", "Ich muss bis Freitag die Unterlagen schicken", due: "morgen")]))
+        #expect(rejected.tasks.isEmpty || rejected.tasks.first?.text == "Morgen Unterlagen schicken")
+    }
+
+    /// Verneinung bleibt: „nicht verlängern“ ist eine echte Aufgabe; „kündigen“ ohne Verneinung fällt weg (Prüfer).
+    @Test func negatedTaskKeepsItsNegation() {
+        let transcript = "Ich muss beim Fitnessstudio noch Bescheid sagen, dass ich den Vertrag nicht verlängere."
+        let quote = "Ich muss beim Fitnessstudio noch Bescheid sagen, dass ich den Vertrag nicht verlängere"
+        let result = F.validate(F.answer(title: "Vertrag nicht verlängern", clean: transcript, topic: F.topic("none"),
+                                         tasks: [F.task("noch Bescheid sagen: Vertrag nicht verlängern", quote),
+                                                 F.task("Vertrag kündigen", quote)]),
+                                F.input(transcript: transcript))
+        #expect(result.tasks.map(\.text) == ["Bescheid sagen: Vertrag nicht verlängern"])
+        #expect(result.rejections.contains("task:negation"))
+    }
+}
+
+/// Prompt v4: Die Befunde vom iPhone (mit erfundenen Namen) bestehen die Prüfung „nur Wörter des Sprechers“.
+@Suite struct AITaskWordingV4Tests {
+    @Test func coreOfTheSpeakersWordsIsGrounded() {
+        let transcript = "Ich muss bei meiner Firma Brenner noch die neuesten Briefe einmal bearbeiten."
+        let result = F.validate(F.answer(title: "Briefe bei Brenner bearbeiten", clean: transcript, topic: F.topic("none"),
+                                         tasks: [F.task("Neueste Briefe bei Brenner bearbeiten",
+                                                        "Ich muss bei meiner Firma Brenner noch die neuesten Briefe einmal bearbeiten"),
+                                                 F.task("Beim Brenner Briefe bearbeiten",
+                                                        "Ich muss bei meiner Firma Brenner noch die neuesten Briefe einmal bearbeiten")]),
+                                F.input(transcript: transcript))
+        #expect(result.tasks.map(\.text) == ["Neueste Briefe bei Brenner bearbeiten", "Beim Brenner Briefe bearbeiten"])
+    }
+
+    @Test func errandWithSplitTimeExpression() {
+        let transcript = "Ich muss morgen, am besten vormittags, wenn die Kinder in der Schule sind, einkaufen gehen und die drei Gutscheine vom Biomarkt am besten benutzen. Und dafür mir die Einkaufsliste von meinem Agenten nochmal exportieren lassen."
+        let first = "Ich muss morgen, am besten vormittags, wenn die Kinder in der Schule sind, einkaufen gehen und die drei Gutscheine vom Biomarkt am besten benutzen"
+        let result = F.validate(F.answer(title: "Einkaufen mit Gutscheinen", clean: transcript, topic: F.topic("none"),
+                                         tasks: [F.task("Beim Biomarkt einkaufen, Gutscheine nutzen", first, due: "morgen vormittags"),
+                                                 F.task("Einkaufsliste vom Agenten exportieren lassen",
+                                                        "dafür mir die Einkaufsliste von meinem Agenten nochmal exportieren lassen")]),
+                                F.input(transcript: transcript))
+        #expect(result.tasks.map(\.text) == ["Beim Biomarkt einkaufen, Gutscheine nutzen", "Einkaufsliste vom Agenten exportieren lassen"])
+        #expect(result.tasks.map(\.dueHint) == ["morgen vormittags", nil])
+        #expect(!result.rejections.contains("task:due"))
+    }
+
+    @Test func appointmentWithTimeFromTwoClauses() {
+        let transcript = "Morgen möchte ein Kunde bei Brenner 10 Bildschirme kaufen, um 10 Uhr will er kommen."
+        let quote = "Morgen möchte ein Kunde bei Brenner 10 Bildschirme kaufen, um 10 Uhr will er kommen"
+        let result = F.validate(F.answer(title: "Kunde kauft 10 Bildschirme", clean: transcript, topic: F.topic("none"),
+                                         tasks: [F.task("Kunden wegen 10 Bildschirmen empfangen", quote, due: "morgen um 10 Uhr")]),
+                                F.input(transcript: transcript))
+        #expect(result.tasks == [TaskDraft(text: "Kunden wegen 10 Bildschirmen empfangen", quote: quote, dueHint: "morgen um 10 Uhr")])
+    }
+
+    @Test func dueHintFromPiecesStaysInTheQuote() {
+        let quote = "Ich muss morgen, am besten vormittags, wenn die Kinder in der Schule sind, einkaufen gehen"
+        #expect(ThoughtValidator.dueHintInQuote("morgen vormittags", quote: quote))
+        #expect(ThoughtValidator.dueHintInQuote("morgen, am besten vormittags", quote: quote))
+        #expect(ThoughtValidator.dueHintInQuote("Morgen", quote: quote))
+        // ein Wort, das nicht gesprochen wurde
+        #expect(!ThoughtValidator.dueHintInQuote("morgen nachmittags", quote: quote))
+        #expect(!ThoughtValidator.dueHintInQuote("übermorgen", quote: quote))
+        // falsche Reihenfolge
+        #expect(!ThoughtValidator.dueHintInQuote("vormittags morgen", quote: quote))
+        // nur an Wortgrenzen: „morgen“ steckt nicht in „übermorgen“
+        #expect(!ThoughtValidator.dueHintInQuote("morgen", quote: "Ich muss übermorgen die Unterlagen schicken"))
+        // zu weit auseinander (> 20 Wörter) oder zu viele Stücke (> 3)
+        let far = "morgen " + (1...19).map { "wort\($0)" }.joined(separator: " ") + " vormittags"
+        #expect(ThoughtValidator.dueHintInQuote("morgen vormittags", quote: "morgen " + (1...18).map { "wort\($0)" }.joined(separator: " ") + " vormittags"))
+        #expect(!ThoughtValidator.dueHintInQuote("morgen vormittags", quote: far))
+        #expect(!ThoughtValidator.dueHintInQuote("a c e g", quote: "a b c d e f g"))
+        #expect(ThoughtValidator.dueHintInQuote("a c e", quote: "a b c d e f g"))
+    }
+}
+
+/// Bewertungssatz `prompt4.json` (Prompt v4): Die erwarteten Aufgabentexte sind schon in der Form, die der Code
+/// herstellt, und bestehen die Prüfung gegen das Gesprochene; jede erwartete Fälligkeit steht im Transkript.
+@Suite struct AIPrompt4FixtureTests {
+    struct Case: Decodable {
+        struct Expect: Decodable { var tasks: [TaskExpect] }
+        struct TaskExpect: Decodable {
+            var required: Bool
+            var texts: [String]
+            var quote: [String]
+            var due_hint: [String?]?
+        }
+        var id: String
+        var transcript: String
+        var expect: Expect
+    }
+
+    struct Fixture: Decodable {
+        struct Regression: Decodable { var id: String }
+        var cases: [Case]
+        var regression: [Regression]
+    }
+
+    @Test func expectedTasksMatchTheCodeAndTheValidator() throws {
+        let data = try Data(contentsOf: StoreSupport.fixtures.appendingPathComponent("prompt4.json"))
+        let fixture = try JSONDecoder().decode(Fixture.self, from: data)
+        #expect(fixture.cases.count == 6 && fixture.regression.count == 6)
+        for item in fixture.cases {
+            for task in item.expect.tasks where task.required {
+                let dues = (task.due_hint ?? [nil]).compactMap { $0 }
+                for due in dues {
+                    #expect(ThoughtValidator.dueHintInQuote(due, quote: item.transcript), "\(item.id): due „\(due)“")
+                }
+                for core in task.quote {
+                    #expect(ThoughtValidator.locateQuote(core, in: item.transcript) != nil, "\(item.id): Zitat „\(core)“")
+                }
+                for text in task.texts {
+                    #expect(TaskText.tidy(text, dueHint: dues.first) == text, "\(item.id): Form „\(text)“")
+                    #expect(ThoughtValidator.taskWordsGrounded(text, quote: item.transcript), "\(item.id): Wörter „\(text)“")
+                    #expect(ThoughtValidator.digitsContained(text, in: item.transcript), "\(item.id): Ziffern „\(text)“")
+                    #expect(ThoughtValidator.effectiveNegations(text) == ThoughtValidator.effectiveNegations(item.transcript),
+                            "\(item.id): Verneinung „\(text)“")
+                }
+            }
+            // Beispiele des Prompts kommen im Bewertungssatz nicht vor
+            for word in ["Tilda", "Baumarkt"] { #expect(!item.transcript.contains(word)) }
+        }
+        let eval = try String(contentsOf: StoreSupport.fixtures.appendingPathComponent("eval.jsonl"), encoding: .utf8)
+        for entry in fixture.regression { #expect(eval.contains("\"id\": \"\(entry.id)\""), "\(entry.id) fehlt in eval.jsonl") }
+    }
+}

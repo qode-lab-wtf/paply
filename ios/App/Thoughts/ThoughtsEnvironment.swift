@@ -39,8 +39,20 @@ enum ThoughtsEnvironment {
 
     static let finder = CandidateFinder(store: store)
 
-    static let processor = ThoughtProcessor(store: store, structurer: ThoughtStructurer(ledger: ledger), finder: finder,
-                                            ledger: ledger, environment: processorEnvironment)
+    static let processor = ThoughtProcessor(store: store, structurer: ThoughtStructurer(ledger: ledger, trace: trace), finder: finder,
+                                            ledger: ledger, environment: processorEnvironment, trace: trace)
+
+    /// Diagnose der Verarbeitung (Umschrift, Ordnung, Groq, Wartegründe) ins Protokoll – nur Zahlen und Codes, nie Text.
+    nonisolated static let trace = ThoughtTrace { event, fields in
+        Diag.log(event, fields.mapValues { value -> DiagValue in
+            switch value {
+            case .s(let v): .s(v)
+            case .i(let v): .i(v)
+            case .d(let v): .d(v)
+            case .b(let v): .b(v)
+            }
+        })
+    }
 
     static var backend: ThoughtsBackend {
         ThoughtsBackend(store: store, processor: processor, ledger: ledger, dailyTokens: { limits().dailyTokens })

@@ -242,7 +242,7 @@ struct TopicPanelHeader: View {
             if let topic {
                 Menu {
                     Button { onAction(.rename(topic)) } label: { Label("Umbenennen", systemImage: "pencil") }
-                    Button { onAction(.icon(topic)) } label: { Label("Symbol", systemImage: "square.grid.2x2") }
+                    Button { onAction(.icon(topic)) } label: { Label("Bild oder Symbol", systemImage: "photo") }
                     Button { onAction(.merge(topic)) } label: { Label("Zusammenführen …", systemImage: "arrow.triangle.merge") }
                     Divider()
                     Button(role: .destructive) { onAction(.delete(topic)) } label: { Label("Löschen", systemImage: "trash") }
@@ -448,7 +448,7 @@ private struct PanelTaskGroup: View {
 
     private func row(_ item: (task: ThoughtTask, thought: Thought)) -> some View {
         let done = checkoff.isShownDone(item.task)
-        let overdue = !done && (item.task.dueAt.map { $0 < Calendar.current.startOfDay(for: Date()) } ?? false)
+        let due = Self.due(item, done: done)
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             TaskCheckButton(task: item.task, thoughtID: item.thought.id, size: 22)
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
@@ -462,10 +462,10 @@ private struct PanelTaskGroup: View {
                     .font(.footnote)
                     .foregroundStyle(Color.paplySecondaryText)
                     .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
-                if typeSize.isAccessibilitySize, let hint = item.task.dueHint, !hint.isEmpty {
-                    Text(hint)
+                if typeSize.isAccessibilitySize, let due {
+                    Text(due.text)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(overdue ? Color.paplyBeak : ThoughtTint.gold)
+                        .foregroundStyle(due.color)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -473,16 +473,24 @@ private struct PanelTaskGroup: View {
             .onTapGesture { nav.path.append(.thought(item.thought.id, task: item.task.id)) }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
-            if !typeSize.isAccessibilitySize, let hint = item.task.dueHint, !hint.isEmpty {
-                Text(hint)
+            if !typeSize.isAccessibilitySize, let due {
+                Text(due.text)
                     .font(.subheadline)
-                    .foregroundStyle(overdue ? Color.paplyBeak : Color.paplySecondaryText)
+                    .foregroundStyle(due.color)
                     .lineLimit(1)
             }
         }
         .padding(.leading, 14)
         .padding(.trailing, 14)
         .padding(.vertical, 12)
+    }
+
+    /// Fälligkeit wie im Reiter Aufgaben: Wortlaut am Tag der Aufnahme, danach der Tag; überfällig in Warnfarbe
+    private static func due(_ item: (task: ThoughtTask, thought: Thought), done: Bool) -> (text: String, color: Color)? {
+        guard let label = TaskDueLabel.make(task: item.task, recordedAt: item.thought.createdAt) else { return nil }
+        let group = TaskAgenda.group(dueAt: item.task.dueAt, now: Date())
+        let color: Color = done ? .paplySecondaryText : (group == .overdue ? .paplyBeak : (group == .today ? ThoughtTint.mint : .paplySecondaryText))
+        return (TaskDueText.text(label), color)
     }
 }
 
@@ -499,7 +507,8 @@ extension ThoughtsModel {
         // Sammelkreis der Karte: dieselbe Regel wie die Karte (`MapLayout.collected`)
         if id == ThoughtMapView.moreID { return mapCollectedThoughts() }
         if TopicPalette.isNeutral(id) {
-            return thoughts.filter { topic($0.topicId) == nil }
+            // wie die Karte: Laufendes und Wartendes steht im Eingang, nicht unter „Ohne Thema“
+            return thoughts.filter { topic($0.topicId) == nil && !$0.isInMapInbox }
         }
         let resolved = topic(id)?.id ?? id
         return thoughts.filter { $0.topicId == resolved || ($0.topicId != nil && topic($0.topicId)?.id == resolved) }

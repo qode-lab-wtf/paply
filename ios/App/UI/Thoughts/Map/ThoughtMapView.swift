@@ -3,16 +3,25 @@ import SwiftUI
 
 /// „Landkarte“ der Gedanken (Entwurf docs/prototypes/paply-ios/gedanken-richtungen.html, Richtung 2).
 ///
-/// Themen sind leuchtende Kreise (Größe = Anzahl), Gedanken kleine Punkte auf einem Bogen darüber, feine
-/// Linien zeigen Verknüpfungen. Die Anordnung kommt aus `MapLayout` (PaplyKit, im Hintergrund gerechnet) und
-/// bleibt über gemerkte Anker (`MapAnchors`) an ihrem Platz – ein Kreis liegt jedes Mal genau dort.
+/// Themen sind leuchtende Kreise (Größe = Anzahl, auf Wunsch mit Bild), Gedanken kleine Punkte auf einem Bogen
+/// darüber, feine Linien zeigen Verknüpfungen. Die Anordnung kommt aus `MapLayout` (PaplyKit, im Hintergrund
+/// gerechnet) und bleibt über gemerkte Anker (`MapAnchors`) an ihrem Platz – ein Kreis liegt jedes Mal genau dort.
 ///
-/// Bedienung: Tipp auf einen Kreis (oder seinen Namen) setzt `focusedTopic`, die Kamera fährt mit weicher
-/// Feder hinein; Tipp auf einen Punkt öffnet den Gedanken (`onOpenThought`); Tipp auf freie Fläche setzt
-/// `focusedTopic = nil`. Ohne Fokus passt die Karte immer ganz auf den Bildschirm – kein Ziehen, kein Zoomen.
+/// Eingang: Gedanken, die gerade geordnet werden oder warten, stehen auf keinem Kreis (auch nicht unter „Ohne
+/// Thema“). Sie zählen an einer kleinen Kugel unten mittig (`MapInboxOrb`, ohne Anker); ein Tipp darauf setzt
+/// `focusedTopic = ThoughtsHome.pendingID`. Ist ein Gedanke fertig, fliegt ein Punkt mit weicher Feder von der Kugel
+/// zu seinem Kreis und leuchtet dort auf; ein neues Thema wächst dabei an seinem Anker aus dem Nichts. Bei reduzierter
+/// Bewegung und im Fokus erscheint er einfach.
 ///
-/// Kennungen für `focusedTopic`: Themen-ID, `noTopicID` („Ohne Thema“) oder `moreID` (Sammelkreis „Weitere
-/// Themen“ – Gedanken dazu liefert `ThoughtsModel.mapCollectedThoughts()`).
+/// Bedienung (`MapStageView`): Tipp auf einen Kreis (oder seinen Namen) setzt `focusedTopic`, die Kamera fährt mit
+/// weicher Feder hinein; Tipp auf einen Punkt öffnet den Gedanken (`onOpenThought`); Tipp auf freie Fläche setzt
+/// `focusedTopic = nil`. Mit einem Finger verschieben, mit zweien zoomen, Doppeltipp zoomt an der Stelle hinein bzw.
+/// bei starkem Zoom zurück. Ist die Karte verschoben, erscheint der Knopf „Übersicht“. Die Ansicht ist nur Ansicht:
+/// Anker ändern sich nie, nichts wird gespeichert.
+///
+/// Kennungen für `focusedTopic`: Themen-ID, `noTopicID` („Ohne Thema“), `moreID` (Sammelkreis „Weitere
+/// Themen“ – Gedanken dazu liefert `ThoughtsModel.mapCollectedThoughts()`) oder `ThoughtsHome.pendingID` (Panel
+/// „Noch nicht geordnet“: Karte bleibt in der Übersicht, die Kugel tritt zurück).
 ///
 /// Platz: Oben gilt der sichere Bereich der Ansicht (Kopfzeilen per `.safeAreaPadding(.top, …)` o. ä.),
 /// unten `bottomInset` (vom Panel verdeckte Höhe) bzw. der sichere Bereich, je nachdem was größer ist. Bleibt
@@ -33,13 +42,15 @@ struct ThoughtMapView: View {
     @Environment(ThoughtsModel.self) private var model
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @State private var engine = MapEngine()
     @State private var motion = MapMotion()
     @State private var hitBox = MapHitBox()
+    @State private var images = MapImageCache()
     @State private var stageMemory = MapStageMemory()
     @State private var lastFocus: String?
-    @State private var taps = 0
-    @State private var settled = 0
+    /// weckt die Karte zu geplanten Zeitpunkten (Abflug, Landung, Ende eines Übergangs)
+    @State private var clock = 0
     /// Legende nur beim ersten Mal (bis ein Thema geöffnet wurde) bzw. bei wenigen Gedanken
     @AppStorage("paply.map.legendSeen") private var legendSeen = false
 
@@ -60,20 +71,31 @@ struct ThoughtMapView: View {
         let request = anchors.isReady
             ? MapEngine.makeRequest(model: model, anchors: anchors.anchors, anchorRevision: anchors.revision) : nil
         let scene = engine.scene(model: model, total: request?.total ?? 0, now: now) ?? .empty
-        let _ = motion.update(scene, now: now)
-        let _ = settled // nach Übergängen neu zeichnen, damit die Zeitleiste anhält
+        let inbox = MapInbox(model: model)
+        let focus = Self.validFocus(focusedTopic, scene)
+        // Flüge nur, wenn die Kugel zu sehen ist: Übersicht, Panel „Noch nicht geordnet“ zu, Bewegung an
+        let flights = !reduceMotion && focus == nil && focusedTopic != ThoughtsHome.pendingID
+        let _ = motion.update(scene, inbox: inbox.ids, flights: flights, bubbleOf: { engine.bubble(ofThought: $0) }, now: now)
+        let _ = clock // geweckt: neu zeichnen (Zahl der Kugel, Zeitleiste anhalten)
         let style = MapStyle(scheme)
         GeometryReader { outer in
             let insets = outer.safeAreaInsets
             let size = CGSize(width: outer.size.width + insets.leading + insets.trailing,
                               height: outer.size.height + insets.top + insets.bottom)
             let stage = MapStage(size: size, top: insets.top, bottom: max(bottomInset, insets.bottom))
-            stageView(scene: scene, stage: stage, style: style, now: now, ready: request != nil && engine.layout != nil)
+            MapStageView(
+                scene: scene, motion: motion,
+                inbox: MapStageView.Inbox(count: motion.inboxCount(at: now), launched: motion.launched(at: now),
+                                          status: inbox.status ?? .ordering),
+                focusedTopic: $focusedTopic, focusID: focus ?? lastFocus, proposed: stage, style: style,
+                ready: request != nil && engine.layout != nil, legend: showsLegend(scene),
+                loaded: model.isLoaded, hasThoughts: !model.thoughts.isEmpty,
+                hitBox: hitBox, images: images, stageMemory: stageMemory, reduceMotion: reduceMotion, voiceOver: voiceOver,
+                onOpenThought: onOpenThought)
                 .frame(width: size.width, height: size.height)
                 .offset(x: -insets.leading, y: -insets.top)
         }
         .background { style.background }
-        .sensoryFeedback(.impact(weight: .light, intensity: 0.75), trigger: taps)
         .onAppear { anchors.prepare() }
         .onChange(of: request, initial: true) { _, request in
             guard let request else { return }
@@ -84,12 +106,7 @@ struct ThoughtMapView: View {
             lastFocus = id
             if !legendSeen { legendSeen = true }
         }
-        .task(id: scene.version) {
-            let rest = motion.remaining(at: Date())
-            guard rest > 0 else { return }
-            try? await Task.sleep(for: .seconds(rest + 0.05))
-            settled &+= 1
-        }
+        .task(id: motion.generation) { await wake() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Karte der Gedanken")
         .accessibilityAction(.escape) {
@@ -97,9 +114,19 @@ struct ThoughtMapView: View {
         }
     }
 
-    // MARK: Bühne
+    /// Bis alles Geplante vorbei ist, zu jedem nächsten Zeitpunkt neu zeichnen (Abflug: Zahl sinkt; Ende: die
+    /// Zeitleiste hält an). Nichts läuft dauerhaft.
+    private func wake() async {
+        while !Task.isCancelled {
+            let now = Date()
+            guard let next = motion.nextWake(after: now) else { return }
+            try? await Task.sleep(for: .seconds(max(0.01, next.timeIntervalSince(now) + 0.02)))
+            guard !Task.isCancelled else { return }
+            clock &+= 1
+        }
+    }
 
-    private func validFocus(_ scene: MapScene) -> String? {
+    static func validFocus(_ focusedTopic: String?, _ scene: MapScene) -> String? {
         guard let focusedTopic, scene.layout.bubble(focusedTopic) != nil else { return nil }
         return focusedTopic
     }
@@ -108,80 +135,25 @@ struct ThoughtMapView: View {
         scene.total > 0 && (scene.total <= 12 || !legendSeen)
     }
 
-    @ViewBuilder
-    private func stageView(scene: MapScene, stage proposed: MapStage, style: MapStyle, now: Date, ready: Bool) -> some View {
-        let focus = validFocus(scene)
-        let legend = showsLegend(scene)
-        let stage = stageMemory.usable(proposed, needs: Self.neededHeight(scene: scene, focus: focus))
-        let target = Self.camera(scene: scene, focus: focus, stage: stage, legend: legend)
-        let running = motion.isRunning(at: now)
-        ZStack {
-            TimelineView(.animation(minimumInterval: nil, paused: !running)) { timeline in
-                let date = running ? timeline.date : Date()
-                MapCanvas(scene: scene, previous: motion.previous, progress: motion.progress(at: date),
-                          appear: appearance(scene, at: date), camera: target, stage: stage,
-                          focusLevel: focus == nil ? 0 : 1, focusID: focus ?? lastFocus, style: style,
-                          reduceMotion: reduceMotion, hitBox: hitBox,
-                          onTopic: { select($0) }, onThought: onOpenThought)
-            }
-            .modifier(CameraMotion(focus: focus, version: scene.version, reduceMotion: reduceMotion))
-            .mask(Self.topFade(proposed))
+    // MARK: Bühne und Kamera
 
-            if legend {
-                Text(scene.total <= 2 ? "Mit jedem Gedanken wächst deine Karte."
-                     : scene.layout.topicLines.isEmpty ? "Größer = mehr Gedanken" : "Größer = mehr Gedanken · Linien = gehört zusammen")
-                    .font(.caption)
-                    .foregroundStyle(style.tertiary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .position(x: stage.size.width / 2, y: stage.size.height - stage.bottom - 20)
-                    .opacity(focus == nil ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.25), value: focus)
-                    .allowsHitTesting(false)
-            }
-            if ready, scene.layout.bubbles.isEmpty, model.isLoaded {
-                // noch nichts auf der Karte: leer – oder der erste Gedanke wird gerade geordnet
-                let ordering = !model.thoughts.isEmpty
-                VStack(spacing: 6) {
-                    Text(ordering ? "Dein Gedanke wird geordnet …" : "Noch keine Gedanken")
-                        .font(.headline)
-                        .foregroundStyle(style.ink)
-                    Text(ordering ? "Gleich bekommt er seinen Platz auf der Karte." : "Mit jedem Gedanken wächst deine Karte.")
-                        .font(.subheadline)
-                        .foregroundStyle(style.secondary)
-                }
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .position(stage.anchor)
-                .allowsHitTesting(false)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { location in handleTap(location, scene: scene) }
+    /// Unten frei gehaltenes Band in der Übersicht (Kugel des Eingangs bzw. Legende) – immer gleich, damit die Karte
+    /// nicht springt, wenn die Kugel kommt oder geht
+    static let band: CGFloat = 52
+
+    /// Mitte der Kugel (und Start der Flüge): unten mittig über dem unteren Rand der Bühne
+    static func orbCenter(_ stage: MapStage) -> CGPoint {
+        CGPoint(x: stage.size.width / 2, y: stage.size.height - stage.bottom - band / 2 - MapInboxOrb.orbOffset)
     }
 
     /// Unter Kopf und Statusleiste blendet die Karte weich aus (gedimmte Nachbarn im Fokus ragen sonst hinein)
-    private static func topFade(_ stage: MapStage) -> some View {
+    static func topFade(_ stage: MapStage) -> some View {
         let h = max(stage.size.height, 1)
         let start = max(0, stage.top - 6) / h, end = min(1, (stage.top + 22) / h)
         return LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: start),
                                       .init(color: .black, location: end), .init(color: .black, location: 1)],
                               startPoint: .top, endPoint: .bottom)
     }
-
-    private func appearance(_ scene: MapScene, at date: Date) -> [String: CGFloat] {
-        var result: [String: CGFloat] = [:]
-        for dot in scene.layout.dots {
-            if let a = motion.appearance(dot.id, at: date) { result[dot.id] = a }
-        }
-        for bubble in scene.layout.bubbles {
-            let key = "topic:" + bubble.id
-            if let a = motion.appearance(key, at: date) { result[key] = a }
-        }
-        return result
-    }
-
-    // MARK: Kamera
 
     /// So hoch muss der sichtbare Teil mindestens sein, damit die Kamera neu rechnet: im Fokus der ganze Kreis
     /// samt Bogen (2 × Außenradius), in der Übersicht ein brauchbarer Streifen.
@@ -194,9 +166,9 @@ struct ThoughtMapView: View {
     /// Fokus: nur so nah, dass die Punkte gut zu treffen sind (≈ 26 pt Abstand, 1,35- bis 2,2-fach) – die
     /// Nachbarn bleiben am Rand gedimmt sichtbar, man behält die Orientierung. Bogen und Kreis passen immer
     /// in den sichtbaren Teil über dem Panel.
-    static func camera(scene: MapScene, focus: String?, stage: MapStage, legend: Bool) -> MapCamera {
+    static func camera(scene: MapScene, focus: String?, stage: MapStage) -> MapCamera {
         let visible = stage.visible
-        let overview = overviewCamera(scene: scene, stage: stage, legend: legend)
+        let overview = overviewCamera(scene: scene, stage: stage)
         if let focus, let bubble = scene.layout.bubble(focus) {
             let area = visible.insetBy(dx: 22, dy: 18)
             let width = 2 * bubble.outerRadius
@@ -212,56 +184,16 @@ struct ThoughtMapView: View {
         return overview
     }
 
-    private static func overviewCamera(scene: MapScene, stage: MapStage, legend: Bool) -> MapCamera {
+    /// Ganze Karte im sichtbaren Bereich über dem Band unten
+    static func overviewCamera(scene: MapScene, stage: MapStage) -> MapCamera {
         let bounds = scene.layout.bounds
         guard bounds.width > 0, bounds.height > 0 else { return .identity }
         var area = stage.visible.insetBy(dx: 18, dy: 12)
-        if legend { area.size.height -= 28 }
-        area.size.height = max(40, area.height)
+        area.size.height = max(40, area.height - (band - 12))
         let zoom = max(0.05, min(1.8, area.width / bounds.width, area.height / bounds.height))
         let anchor = stage.anchor
         return MapCamera(zoom: zoom, center: CGPoint(x: bounds.midX - (area.midX - anchor.x) / zoom,
                                                      y: bounds.midY - (area.midY - anchor.y) / zoom))
-    }
-
-    // MARK: Tippen
-
-    private func select(_ id: String) {
-        taps &+= 1
-        if focusedTopic != id { focusedTopic = id }
-    }
-
-    /// Reihenfolge: Titel → Punkte des Themas im Fokus → Kreise → Namen → andere Punkte → freie Fläche.
-    /// Treffbereiche ≥ 44 pt; bei dicht liegenden Punkten gewinnt der nächste.
-    private func handleTap(_ location: CGPoint, scene: MapScene) {
-        let hits = hitBox.snapshot
-        let focus = validFocus(scene)
-        func distance(_ p: CGPoint) -> CGFloat { hypot(p.x - location.x, p.y - location.y) }
-
-        let titles = hits.titles.filter { $0.rect.insetBy(dx: -6, dy: -4).contains(location) }
-        if let title = titles.min(by: { distance(CGPoint(x: $0.rect.midX, y: $0.rect.midY)) < distance(CGPoint(x: $1.rect.midX, y: $1.rect.midY)) }) {
-            onOpenThought(title.id)
-            return
-        }
-        if let focus, let dot = hits.dots.filter({ $0.topicID == focus && distance($0.center) <= 26 }).min(by: { distance($0.center) < distance($1.center) }) {
-            onOpenThought(dot.id)
-            return
-        }
-        let circles = hits.topics.filter { distance($0.center) <= max($0.radius + 8, 24) }
-        if let topic = circles.min(by: { distance($0.center) - $0.radius < distance($1.center) - $1.radius }) {
-            select(topic.id)
-            return
-        }
-        if let topic = hits.topics.first(where: { $0.label?.insetBy(dx: -8, dy: -8).contains(location) == true }) {
-            select(topic.id)
-            return
-        }
-        if let dot = hits.dots.filter({ distance($0.center) <= 22 }).min(by: { distance($0.center) < distance($1.center) }) {
-            // eindeutig (Punkte weit genug auseinander) → öffnen, sonst erst das Thema zeigen
-            if focus == nil, dot.spacing >= 28 { onOpenThought(dot.id) } else { select(dot.topicID) }
-            return
-        }
-        if focusedTopic != nil { focusedTopic = nil }
     }
 }
 
@@ -290,7 +222,7 @@ final class MapStageMemory {
 }
 
 /// Kamera und Fokus: weiche Feder; bei reduzierter Bewegung ohne Flug, nur Überblenden.
-private struct CameraMotion: ViewModifier {
+struct CameraMotion: ViewModifier {
     let focus: String?
     let version: Int
     let reduceMotion: Bool

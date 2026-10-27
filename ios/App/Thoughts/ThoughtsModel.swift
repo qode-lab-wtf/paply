@@ -137,11 +137,17 @@ final class ThoughtsModel {
             }
     }
 
-    func doneTasks(days: Int) -> [(task: ThoughtTask, thought: Thought)] {
-        let limit = Date().addingTimeInterval(-Double(days) * 86_400)
+    /// Erledigte der letzten `days` Tage (nil = alle), neueste zuerst
+    func doneTasks(days: Int?) -> [(task: ThoughtTask, thought: Thought)] {
+        let limit = days.map { Date().addingTimeInterval(-Double($0) * 86_400) } ?? .distantPast
         return thoughts
             .flatMap { thought in thought.tasks.filter { $0.done && ($0.doneAt ?? .distantPast) >= limit }.map { (task: $0, thought: thought) } }
             .sorted { ($0.task.doneAt ?? .distantPast) > ($1.task.doneAt ?? .distantPast) }
+    }
+
+    /// Reiter „Aufgaben“: alle Aufgaben, gegliedert nach Fälligkeit (`TaskAgenda`, ohne Obergrenze)
+    func taskAgenda(now: Date = Date()) -> TaskAgenda {
+        TaskAgenda(thoughts: thoughts, now: now)
     }
 
     /// Lokal, sofort: ohne Groß/Klein und Akzente, UND, Wortanfänge; Ausschnitt mit Fundstellen.
@@ -270,6 +276,8 @@ final class ThoughtsModel {
         }
         changeTopics { $0.removeAll { removed.contains($0.id) } }
         setSuggestions(suggestions.filter { !removed.contains($0.a) && !removed.contains($0.b) })
+        // Bild weg (ausdrücklich – auch beim letzten Thema, das das Aufräumen über die Liste nicht erfasst)
+        TopicImages.shared.topicsDeleted(removed, persistent: backend != nil, from: self)
     }
 
     /// Vorläufiges Thema übernehmen („Behalten“ macht es aktiv)
@@ -303,8 +311,20 @@ final class ThoughtsModel {
         }
     }
 
-    func deleteTask(_ thoughtID: String, _ taskID: String) {
+    /// Löschen; widerrufbar (kommt an ihre alte Stelle zurück)
+    @discardableResult
+    func deleteTask(_ thoughtID: String, _ taskID: String) -> UndoToken? {
+        guard let index = byID[thoughtID]?.tasks.firstIndex(where: { $0.id == taskID }),
+              let removed = byID[thoughtID]?.tasks[index] else { return nil }
         change(thoughtID) { $0.tasks.removeAll { $0.id == taskID } }
+        let token = UndoToken()
+        undoActions[token] = { [weak self] in
+            self?.change(thoughtID) { thought in
+                guard !thought.tasks.contains(where: { $0.id == removed.id }) else { return }
+                thought.tasks.insert(removed, at: min(index, thought.tasks.count))
+            }
+        }
+        return token
     }
 
     /// Selbst verknüpfen. Gespeichert wird nur im neueren der beiden Gedanken (§6.9).
@@ -401,6 +421,7 @@ final class ThoughtsModel {
         replaceAll(all, topics: storedTopics)
         suggestions = pending
         isLoaded = true
+        TopicImages.shared.update(topics: allTopics, persistent: true, loaded: true, from: self)
         for id in changedWhileLoading { await refresh(id) }
         changedWhileLoading = []
         refreshUsage()
@@ -499,6 +520,7 @@ final class ThoughtsModel {
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         TopicPalette.register(stored, persistent: backend != nil) // Themenfarben (Oberfläche)
+        TopicImages.shared.update(topics: stored, persistent: backend != nil, loaded: backend == nil || isLoaded, from: self)
         recomputeDerived()
     }
 
@@ -507,6 +529,7 @@ final class ThoughtsModel {
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         TopicPalette.register(stored, persistent: backend != nil)
+        TopicImages.shared.update(topics: stored, persistent: backend != nil, loaded: backend == nil || isLoaded, from: self)
         recomputeDerived()
         guard !renamed.isEmpty else { return }
         for thought in thoughts where renamed.contains(thought.topicId ?? "") || renamed.contains(resolvedTopic(thought.topicId)?.id ?? "") {

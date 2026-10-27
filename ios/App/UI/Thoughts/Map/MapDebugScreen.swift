@@ -11,9 +11,17 @@ import UIKit
 //   -PaplyMapGrow         nach 2 s: ein gelöschter Gedanke kehrt zurück (Einblenden), ein anderer wechselt das Thema
 //   -PaplyMapCrowd        2 000 Gedanken: 500 einzelne vorläufige KI-Themen, 1 500 ohne Thema (Sammelkreis);
 //                         mit -PaplyPreviewData starten, damit die Anker nur im Speicher liegen
+//   -PaplyMapPending <n>  die n neuesten Gedanken werden gerade geordnet (Kugel des Eingangs)
+//   -PaplyMapWaiting <z>  … stattdessen in diesem Zustand (waitingNetwork, waitingKey, needsAttention …)
+//   -PaplyMapLand <s>     nach s Sekunden sind alle fertig: der erste in ein neues Thema „Aram“, der zweite ins
+//                         größte Thema, der dritte ohne Thema, die übrigen in ihr altes Thema (Flüge)
+//   -PaplyMapCamera <z>,<dx>,<dy>  Übersicht verschoben/gezoomt starten (z × Übersicht, Versatz in Kartenpunkten)
+//   -PaplyMapTestImage    Testbilder (Logo, Person) für zwei Themen
 // Mit -PaplyCount <n> (1, 5, 300 …), -PaplyPreviewData (60), -PaplyMany (2 000) oder -PaplyEmpty kombinieren.
 struct MapDebugScreen: View {
     @State var model: ThoughtsModel
+    /// fertige Fassung der Gedanken, die gerade geordnet werden (`-PaplyMapPending`)
+    var finished: [Thought] = []
     @State private var focus: String?
     @State private var opened: String?
 
@@ -53,6 +61,10 @@ struct MapDebugScreen: View {
         }
         .environment(model)
         .task {
+            if let after = Self.value(after: "-PaplyMapLand").flatMap(Double.init), !finished.isEmpty {
+                try? await Task.sleep(for: .seconds(after))
+                land()
+            }
             if Self.args.contains("-PaplyMapGrow") {
                 try? await Task.sleep(for: .seconds(2))
                 if let gone = model.deleted.first { model.restore(gone.id) }
@@ -72,6 +84,27 @@ struct MapDebugScreen: View {
         }
     }
 
+    /// Alle laufenden Gedanken sind fertig (neues Modell, wie nach dem Ordnen)
+    private func land() {
+        let aram = Topic(title: "Aram", icon: .users, owner: .ai)
+        let biggest = model.topics.max { model.count(of: $0.id) < model.count(of: $1.id) }?.id
+        let ids = Set(finished.map(\.id))
+        var thoughts = model.thoughts.filter { !ids.contains($0.id) }
+        for (i, original) in finished.enumerated() {
+            var thought = original
+            switch i {
+            case 0: thought.topicId = aram.id
+            case 1: thought.topicId = biggest
+            case 2: thought.topicId = nil
+            default: break
+            }
+            thoughts.append(thought)
+        }
+        let next = ThoughtsModel(thoughts: thoughts + model.deleted, topics: model.topics + [aram])
+        TopicPalette.register(next.topics)
+        model = next
+    }
+
     private static func value(after flag: String) -> String? {
         guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
         return args[i + 1]
@@ -82,7 +115,7 @@ struct MapDebugScreen: View {
     }
 
     private var header: some View {
-        let topics = Set(model.thoughts.filter { !$0.isProcessing }.map { model.topic($0.topicId)?.id ?? "" }).count
+        let topics = Set(model.thoughts.filter { !$0.isInMapInbox }.map { model.topic($0.topicId)?.id ?? "" }).count
         return VStack(alignment: .leading, spacing: 2) {
             Text("Gedanken")
                 .font(.paplyTitle(.largeTitle))
@@ -104,13 +137,15 @@ struct MapDebugScreen: View {
         var body: some View {
             let topic = model.topic(topicID)
             let thoughts = topicID == ThoughtMapView.moreID ? model.mapCollectedThoughts()
-                : model.thoughts.filter { (model.topic($0.topicId)?.id ?? ThoughtMapView.noTopicID) == topicID && !$0.isProcessing }
+                : topicID == ThoughtsHome.pendingID ? model.thoughts.filter(\.isInMapInbox)
+                : model.thoughts.filter { (model.topic($0.topicId)?.id ?? ThoughtMapView.noTopicID) == topicID && !$0.isInMapInbox }
             VStack(alignment: .leading, spacing: 12) {
                 Capsule().fill(.secondary.opacity(0.5)).frame(width: 36, height: 5).frame(maxWidth: .infinity)
                 HStack(spacing: 12) {
                     TopicTintBadge(topicID: topicID, icon: topic?.icon, size: 40)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(topic?.title ?? (topicID == ThoughtMapView.moreID ? "Weitere Themen" : "Ohne Thema")).font(.title3.weight(.bold))
+                        Text(topic?.title ?? (topicID == ThoughtMapView.moreID ? "Weitere Themen"
+                                : topicID == ThoughtsHome.pendingID ? "Noch nicht geordnet" : "Ohne Thema")).font(.title3.weight(.bold))
                         Text("\(thoughts.count) \(thoughts.count == 1 ? "Gedanke" : "Gedanken")")
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
@@ -137,16 +172,96 @@ struct MapDebugScreen: View {
 
     @MainActor
     static func present(model original: ThoughtsModel) {
-        let model = args.contains("-PaplyMapCrowd") ? crowd(from: original) : original
+        var model = args.contains("-PaplyMapCrowd") ? crowd(from: original) : original
+        var finished: [Thought] = []
+        if let n = value(after: "-PaplyMapPending").flatMap(Int.init), n > 0 {
+            let state = value(after: "-PaplyMapWaiting").flatMap(ThoughtState.init(rawValue:)) ?? .structuring
+            (model, finished) = pending(n, state: state, from: model)
+        }
         // Farben für genau dieses Modell (Debug-Daten haben ein eigenes Register im Speicher)
         TopicPalette.register(model.topics)
-        let host = UIHostingController(rootView: MapDebugScreen(model: model))
+        if args.contains("-PaplyMapTestImage") { setTestImages(model) }
+        let host = UIHostingController(rootView: MapDebugScreen(model: model, finished: finished))
         host.modalPresentationStyle = .fullScreen
         host.overrideUserInterfaceStyle = args.contains("-PaplyLight") ? .light : .dark
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
               var top = scene.keyWindow?.rootViewController else { return }
         while let next = top.presentedViewController { top = next }
         top.present(host, animated: false)
+    }
+
+    /// n frisch aufgenommene Gedanken, die gerade geordnet werden (Kopien fertiger Gedanken, neue Kennungen). Gibt
+    /// das Modell und die fertige Fassung zurück.
+    @MainActor
+    private static func pending(_ n: Int, state: ThoughtState, from base: ThoughtsModel) -> (ThoughtsModel, [Thought]) {
+        let samples = base.thoughts.filter { $0.state == .done && !$0.textIsRaw }
+        guard !samples.isEmpty else { return (base, []) }
+        let now = Date()
+        var finished: [Thought] = []
+        var running: [Thought] = []
+        for i in 0..<n {
+            var done = samples[i % samples.count]
+            done.id = ThoughtIDs.thought()
+            done.createdAt = now.addingTimeInterval(-20 - Double(i) * 35)
+            done.updatedAt = done.createdAt
+            done.tasks = []
+            done.links = []
+            finished.append(done)
+            var open = done
+            open.state = state
+            open.title = nil
+            open.text = nil
+            open.topicId = nil
+            open.ai = nil
+            open.status = Thought.Status()
+            running.append(open)
+        }
+        return (ThoughtsModel(thoughts: base.thoughts + running + base.deleted, topics: base.topics), finished)
+    }
+
+    /// Testbilder wie ein Firmenlogo und ein Porträt (nur im Speicher, `TopicImages` mit Beispieldaten)
+    @MainActor
+    private static func setTestImages(_ model: ThoughtsModel) {
+        let ranked = model.topics.sorted { model.count(of: $0.id) > model.count(of: $1.id) }
+        guard let first = ranked.first else { return }
+        let second = ranked.first { $0.icon == .users && $0.id != first.id } ?? ranked.dropFirst().first
+        let size = CGSize(width: 512, height: 512)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let logo = renderer.image { ctx in
+            let cg = ctx.cgContext
+            let colors = [UIColor(hex: 0x1B2A6B).cgColor, UIColor(hex: 0x2F7DE1).cgColor] as CFArray
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+            cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 512, y: 512), options: [])
+            UIColor.white.setFill()
+            // Bildmarke: zwei verschränkte Bögen und ein Punkt
+            cg.setStrokeColor(UIColor.white.cgColor)
+            cg.setLineWidth(46)
+            cg.setLineCap(.round)
+            cg.addArc(center: CGPoint(x: 220, y: 270), radius: 110, startAngle: .pi * 0.75, endAngle: .pi * 1.9, clockwise: false)
+            cg.strokePath()
+            cg.setStrokeColor(UIColor(hex: 0x8FD3FF).cgColor)
+            cg.addArc(center: CGPoint(x: 300, y: 250), radius: 110, startAngle: -.pi * 0.25, endAngle: .pi * 0.9, clockwise: false)
+            cg.strokePath()
+            cg.fillEllipse(in: CGRect(x: 236, y: 236, width: 40, height: 40))
+        }
+        let person = renderer.image { ctx in
+            let cg = ctx.cgContext
+            let colors = [UIColor(hex: 0xF3D9B8).cgColor, UIColor(hex: 0xC9906A).cgColor] as CFArray
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+            cg.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: 512), options: [])
+            UIColor(hex: 0x5B3A29).setFill()
+            cg.fillEllipse(in: CGRect(x: 168, y: 92, width: 176, height: 196)) // Haare
+            UIColor(hex: 0xE8B48F).setFill()
+            cg.fillEllipse(in: CGRect(x: 184, y: 128, width: 144, height: 168)) // Gesicht
+            UIColor(hex: 0x2E5E4E).setFill()
+            cg.fillEllipse(in: CGRect(x: 76, y: 318, width: 360, height: 300)) // Schultern
+            UIColor(hex: 0xE8B48F).setFill()
+            cg.fill(CGRect(x: 230, y: 280, width: 52, height: 50)) // Hals
+        }
+        if let data = logo.jpegData(compressionQuality: 0.85) { TopicImages.shared.setImage(data, for: first.id) }
+        if let second, let data = person.jpegData(compressionQuality: 0.85) { TopicImages.shared.setImage(data, for: second.id) }
     }
 
     /// 2 000 Gedanken: 500 einzelne vorläufige KI-Themen (je ein Gedanke), 1 500 ohne Thema

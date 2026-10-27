@@ -5,7 +5,8 @@
 //   paply-bench thoughts-eval run <stufe> [Optionen]          Groq-Aufrufe (Schlüssel aus PAPLY_GROQ_KEY)
 //       --cases e01,e03 · --limit N (Fälle) · --budget T (Tokens dieser Sitzung)
 //       --model large|small · --effort low|medium · --run k
-//       --set eval|described (Standard eval; described = Themen mit Beschreibung, described.json)
+//       --set eval|described|prompt4 (Standard eval; described = Themen mit Beschreibung, described.json;
+//                       prompt4 = 6 neue Fälle + 8 Regressionsfälle aus eval.jsonl, prompt4.json)
 //       --ledger <tag>  eigener Ledger `ledger-<tag>-…json` mit Tagesgrenze = --budget (vom Koordinator
 //                       freigegebenes Sonderbudget statt der 60 000 des Prüfstands)
 //       --tight 1       Budget-Wächter ab dem 2. Aufruf: Eingabe-Schätzung × größtes gemessenes Verhältnis
@@ -368,7 +369,9 @@ enum ThoughtsEval {
         func topicName(_ id: String) -> String { topics.first { $0.id == id }?.title ?? id }
     }
 
-    /// `set`: "eval" (store-a + eval.jsonl) oder "described" (store-a + Themen und Fälle aus described.json).
+    /// `set`: "eval" (store-a + eval.jsonl), "described" (store-a + Themen und Fälle aus described.json) oder
+    /// "prompt4" (store-a + neue Fälle aus prompt4.json + dort per ID genannte Fälle aus eval.jsonl, ggf. mit
+    /// zusätzlich zulässigen Aufgaben `allowTasks`).
     static func loadFixture(set: String = "eval") throws -> Fixture {
         let data = try Data(contentsOf: fixturesDir.appendingPathComponent("store-a.json"))
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -396,14 +399,31 @@ enum ThoughtsEval {
             }
             topics += try extra.map { try decoder.decode(Topic.self, from: JSONSerialization.data(withJSONObject: $0)) }
             cases = try rawCases.map { try JSONDecoder().decode(EvalCase.self, from: JSONSerialization.data(withJSONObject: $0)) }
+        } else if set == "prompt4" {
+            let data = try Data(contentsOf: fixturesDir.appendingPathComponent("prompt4.json"))
+            /// `mustNotAdd`: ersetzt die Liste des Falls (nur wenn angegeben)
+            struct Regression: Decodable { var id: String; var allowTasks: [EvalCase.TaskExpect]?; var mustNotAdd: [EvalCase.NotAdd]? }
+            struct Prompt4: Decodable { var cases: [EvalCase]; var regression: [Regression] }
+            let prompt4 = try JSONDecoder().decode(Prompt4.self, from: data)
+            let base = try evalCases()
+            cases = try prompt4.cases + prompt4.regression.map { entry in
+                guard var evalCase = base.first(where: { $0.id == entry.id }) else { throw CocoaError(.fileReadCorruptFile) }
+                evalCase.expect.tasks += entry.allowTasks ?? []
+                if let replaced = entry.mustNotAdd { evalCase.mustNotAdd = replaced }
+                return evalCase
+            }
         } else {
-            let lines = try String(contentsOf: fixturesDir.appendingPathComponent("eval.jsonl"), encoding: .utf8).split(separator: "\n")
-            cases = try lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                .map { try JSONDecoder().decode(EvalCase.self, from: Data($0.utf8)) }
+            cases = try evalCases()
         }
         return Fixture(timeZone: (root["timezone"] as? String).flatMap(TimeZone.init(identifier:)) ?? .current,
                        uiLanguage: root["uiLanguage"] as? String ?? "de",
                        vocabulary: root["vocabulary"] as? [String] ?? [], topics: topics, thoughts: thoughts, cases: cases)
+    }
+
+    static func evalCases() throws -> [EvalCase] {
+        let lines = try String(contentsOf: fixturesDir.appendingPathComponent("eval.jsonl"), encoding: .utf8).split(separator: "\n")
+        return try lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { try JSONDecoder().decode(EvalCase.self, from: Data($0.utf8)) }
     }
 
     // MARK: Eingaben wie in der App
@@ -478,7 +498,7 @@ enum ThoughtsEval {
                 case "--effort": effort = value == "medium" ? "medium" : "low"
                 case "--run": run = Int(value) ?? 1
                 case "--prompt": prompt = Int(value.drop(while: { $0 == "v" })) ?? prompt
-                case "--set": set = value == "described" ? "described" : "eval"
+                case "--set": set = ["described", "prompt4"].contains(value) ? value : "eval"
                 case "--ledger": ledgerTag = value.isEmpty ? nil : value
                 case "--tight": tight = value == "1" || value == "true"
                 default: fail("Unbekannte Option \(flag)")
@@ -640,6 +660,10 @@ enum ThoughtsEval {
         /// Zuordnung nur über `match`-Stämme (Opus bestätigt)
         var matchOnly: Bool
         var notTaskViolation: String?
+        /// Form nach Prompt v4 (`formIssues`), leer = gut
+        var form: [String] = []
+        /// `mustNotAdd`-Muster im Aufgabentext → falsch (zählt als Präzisionsfehler, nie für den Recall)
+        var forbidden: String?
     }
 
     struct CaseResult: Codable {
@@ -682,6 +706,38 @@ enum ThoughtsEval {
         var rawContent: [String]
         var failedGeneration: String?
         var notes: [String]
+        /// Aufgabentexte der Rohantwort mit Form-Befunden (vor `TaskText`): „Text → Befunde“
+        var rawTaskForm: [String] = []
+        var rawTaskFormOK: Int = 0
+    }
+
+    // MARK: Form des Aufgabentexts (Prompt v4)
+
+    static let formFillers: Set<String> = ["noch", "mal", "einmal", "eben", "halt", "nochmal", "just"]
+    static let formSelf: Set<String> = ["ich", "mein", "meine", "meinen", "meinem", "meiner", "meines", "mir", "mich", "my", "i", "me"]
+
+    /// Befunde zur Form: klein am Anfang, mehr als 6 Wörter, Füllwort, Ich-Bezug, Zeitausdruck doppelt (= `due_hint`).
+    static func formIssues(text: String, due: String?) -> [String] {
+        var issues: [String] = []
+        if let first = text.first(where: { $0.isLetter || $0.isNumber }), first.isLetter, first.isLowercase { issues.append("klein") }
+        let count = text.split(whereSeparator: \.isWhitespace).count
+        if count > 6 { issues.append("\(count) Wörter") }
+        let words = norm(text).split(separator: " ").map(String.init)
+        if let filler = words.first(where: formFillers.contains) { issues.append("Füllwort „\(filler)“") }
+        if let own = words.first(where: formSelf.contains) { issues.append("Ich-Bezug „\(own)“") }
+        if let due, !due.isEmpty, has(text, due) { issues.append("Zeit doppelt") }
+        return issues
+    }
+
+    /// Aufgaben (Text, due_hint) einer Rohantwort
+    static func rawTasks(_ content: String?) -> [(text: String, due: String?)] {
+        guard let data = content?.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tasks = object["tasks"] as? [[String: Any]] else { return [] }
+        return tasks.compactMap { task in
+            guard let text = task["text"] as? String else { return nil }
+            return (text, task["due_hint"] as? String)
+        }
     }
 
     static func score(_ stage: String, options: Options, fixture: Fixture) {
@@ -768,6 +824,11 @@ enum ThoughtsEval {
             rejections: result?.rejections ?? [], candidatesSent: sentCandidates.map { "\($0.prefix(8)) \(fixture.title(of: $0))" },
             rawContent: records.map { $0.content ?? "" }, failedGeneration: records.compactMap(\.failedGeneration).first,
             notes: [])
+        for task in records.flatMap({ rawTasks($0.content) }) {
+            let issues = formIssues(text: task.text, due: task.due)
+            outcome.rawTaskForm.append("\(task.text)\(task.due.map { " (due \($0))" } ?? "") → \(issues.isEmpty ? "✓" : issues.joined(separator: ", "))")
+            if issues.isEmpty { outcome.rawTaskFormOK += 1 }
+        }
         guard let result else {
             outcome.notes = notes
             return outcome
@@ -806,12 +867,17 @@ enum ThoughtsEval {
             outcome.topicVerdict = "falsch"
         }
 
-        // Aufgaben
+        // Aufgaben. Ein Aufgabentext mit einem `mustNotAdd`-Muster für `tasks` ist falsch, auch wenn das Zitat passt
+        // (p4 n03: „20 Fluxo Lizenzen kaufen“ = Handlung des Kunden als Aufgabe des Sprechers).
         var found = Set<Int>()
+        let forbiddenInTasks = evalCase.mustNotAdd.filter { $0.fields.contains("tasks") }
         for task in result.tasks {
             var matched: [String] = []
             var viaQuote = false
-            for (index, expected) in expect.tasks.enumerated() {
+            let forbidden = forbiddenInTasks.flatMap { rule in
+                rule.any.filter { rule.mode == "equals" ? norm(task.text) == norm($0) : has(task.text, $0) }
+            }.first
+            for (index, expected) in expect.tasks.enumerated() where forbidden == nil {
                 let quoteHit = expected.quote.contains { has(task.quote, $0) }
                 let textNorm = norm(task.text)
                 let matchHit = !expected.match.isEmpty && expected.match.allSatisfy { group in group.contains { textNorm.contains(norm($0)) } }
@@ -847,7 +913,8 @@ enum ThoughtsEval {
             }
             if matched.isEmpty { outcome.taskPrecisionErrors += 1 }
             outcome.tasks.append(TaskOutcome(text: task.text, quote: task.quote, dueHint: task.dueHint, matched: matched,
-                                             matchOnly: !matched.isEmpty && !viaQuote, notTaskViolation: violation))
+                                             matchOnly: !matched.isEmpty && !viaQuote, notTaskViolation: violation,
+                                             form: formIssues(text: task.text, due: task.dueHint), forbidden: forbidden))
             if !norm(evalCase.transcript).contains(norm(task.quote)) { notes.append("Zitat nicht wörtlich: \(task.quote)") }
         }
         outcome.tasksFound = found.count
@@ -970,7 +1037,7 @@ enum ThoughtsEval {
         lines.append("| neu statt bestehend | ≤ 5 % | \(existing.filter { $0.topicVerdict == "neu statt bestehend" }.count)/\(existing.count) |")
         lines.append("| `none` richtig | ≥ 80 % | \(none.filter { $0.topicVerdict == "richtig" }.count)/\(none.count) |")
         lines.append("| neues Thema erwartet: richtig / Name prüfen | – | \(new.filter { $0.topicVerdict == "richtig" }.count) / \(new.filter { $0.topicVerdict == "neu, Name prüfen" }.count) von \(new.count) |")
-        lines.append("| Aufgaben-Präzision | ≥ 90 % | \(modelTasks - taskErrors)/\(modelTasks) = \(percent(modelTasks - taskErrors, modelTasks)) (davon Nicht-Aufgaben: \(violations)) |")
+        lines.append("| Aufgaben-Präzision | ≥ 90 % | \(modelTasks - taskErrors)/\(modelTasks) = \(percent(modelTasks - taskErrors, modelTasks)) (davon Nicht-Aufgaben: \(violations), Text verboten: \(valid.reduce(0) { $0 + $1.tasks.filter { $0.forbidden != nil }.count })) |")
         lines.append("| Aufgaben-Recall | ≥ 85 % | \(foundTasks)/\(required) = \(percent(foundTasks, required)) |")
         lines.append("| Zitat nach Validierung wörtlich | 100 % | \(quotesNotVerbatim == 0 ? "100 %" : "\(quotesNotVerbatim) nicht wörtlich") |")
         lines.append("| `due_hint` korrekt | ≥ 90 % | \(dueCorrect)/\(dueChecked) = \(percent(dueCorrect, dueChecked)) |")
@@ -979,6 +1046,12 @@ enum ThoughtsEval {
         lines.append("| Injektion nicht befolgt | 2/2 | \(injectionOK)/\(injection.count) |")
         lines.append("| Tokens je Gedanke: Median / p95 | ≤ 4 000 / ≤ 6 500 | \(quantile(tokens, 0.5)) / \(quantile(tokens, 0.95)) (Summe \(tokens.reduce(0, +))) |")
         lines.append("| Latenz je Gedanke: Median / p95 | – | \(quantile(latencies, 0.5)) ms / \(quantile(latencies, 0.95)) ms |")
+        let shaped = valid.flatMap(\.tasks)
+        let shapedOK = shaped.filter(\.form.isEmpty).count
+        let rawCount = valid.reduce(0) { $0 + $1.rawTaskForm.count }, rawOK = valid.reduce(0) { $0 + $1.rawTaskFormOK }
+        var formCodes: [String: Int] = [:]
+        for task in shaped { for issue in task.form { formCodes[issue.components(separatedBy: " „").first ?? issue, default: 0] += 1 } }
+        lines.append("| Aufgabentext-Form v4 (groß, ≤ 6 Wörter, ohne Füllwort/Ich-Bezug, Zeit nicht doppelt): gespeichert · roh | – | \(shapedOK)/\(shaped.count) · \(rawOK)/\(rawCount)\(formCodes.isEmpty ? "" : " · Befunde: " + formCodes.sorted { $0.key < $1.key }.map { "\($0.key) ×\($0.value)" }.joined(separator: ", ")) |")
         var codes: [String: Int] = [:]
         for r in results { for code in r.rejections { codes[code, default: 0] += 1 } }
         if !codes.isEmpty {
@@ -1012,8 +1085,9 @@ enum ThoughtsEval {
             out += "- **Text\(r.textIsRaw ? " (ROHTEXT)" : ""):** \(r.cleanText ?? "–")\n"
             out += "- **Thema:** \(r.topic ?? "–") → \(r.topicVerdict ?? "–")\n"
             for t in r.tasks {
-                out += "  - Aufgabe: \(t.text) · Zitat „\(t.quote)“ · due \(t.dueHint ?? "–") → \(t.matched.isEmpty ? "✗ ohne Soll" : "✓ " + t.matched.joined(separator: ","))\(t.matchOnly ? " (nur Stämme)" : "")\(t.notTaskViolation.map { " · Nicht-Aufgabe „\($0)“" } ?? "")\n"
+                out += "  - Aufgabe: \(t.text) · Zitat „\(t.quote)“ · due \(t.dueHint ?? "–") → \(t.matched.isEmpty ? "✗ ohne Soll" : "✓ " + t.matched.joined(separator: ","))\(t.matchOnly ? " (nur Stämme)" : "")\(t.notTaskViolation.map { " · Nicht-Aufgabe „\($0)“" } ?? "")\(t.form.isEmpty ? "" : " · Form: " + t.form.joined(separator: ", "))\(t.forbidden.map { " · ✗ verboten („\($0)“)" } ?? "")\n"
             }
+            for raw in r.rawTaskForm { out += "  - roh: \(raw)\n" }
             out += "  - Pflicht-Aufgaben gefunden \(r.tasksFound)/\(r.tasksRequired) · due \(r.dueCorrect)/\(r.dueChecked) \(r.dueNotes.joined(separator: "; "))\n"
             for l in r.related { out += "  - Verwandt: \(l)\n" }
             out += "  - Pflicht-Verwandte \(r.relatedFound)/\(r.relatedRequired) (gesendet \(r.relatedRequiredSent)) · Kandidaten: \(r.candidatesSent.joined(separator: "; "))\n"

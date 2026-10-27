@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 @testable import PaplyKit
 
 /// Gemeinsame Bausteine der KI-Tests (H1).
@@ -67,5 +68,26 @@ enum AIFixture {
     static func reply(_ content: String, finish: String = "stop", total: Int = 3_400) -> MockServer.Reply {
         .json(200, ["choices": [["index": 0, "finish_reason": finish, "message": ["role": "assistant", "content": content]]],
                     "usage": ["prompt_tokens": total - 900, "completion_tokens": 900, "total_tokens": total]])
+    }
+}
+
+/// Fängt Diagnose-Ereignisse (`ThoughtTrace`) für Tests.
+final class TraceRecorder: Sendable {
+    private let state = Mutex<[(name: String, fields: ThoughtTrace.Fields)]>([])
+
+    var trace: ThoughtTrace {
+        ThoughtTrace { [self] name, fields in self.state.withLock { $0.append((name, fields)) } }
+    }
+
+    var events: [(name: String, fields: ThoughtTrace.Fields)] { state.withLock { $0 } }
+
+    func named(_ name: String) -> [ThoughtTrace.Fields] { events.filter { $0.name == name }.map(\.fields) }
+
+    /// Alle Text-Werte aller Ereignisse
+    var strings: [String] {
+        events.flatMap { $0.fields.values.compactMap { value -> String? in
+            if case .s(let text) = value { return text }
+            return nil
+        } }
     }
 }

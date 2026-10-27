@@ -279,15 +279,25 @@ final class TopicColorStore {
 
 // MARK: - Themen-Kennung in Themenfarbe
 
-/// Symbol eines Themas auf seiner Farbfläche (abgerundetes Quadrat). Ohne Thema: gestrichelter Kreis.
+/// Symbol eines Themas auf seiner Farbfläche (abgerundetes Quadrat). Hat das Thema ein Bild (`TopicImages`), steht
+/// das Bild im gleichen Quadrat, mit feinem Rand in der Themenfarbe. Ohne Thema: gestrichelter Kreis.
 struct TopicTintBadge: View {
     let topicID: String?
     let icon: TopicIcon?
     var size: CGFloat = 30
 
     var body: some View {
+        if let image = TopicImages.shared.image(for: topicID) {
+            TopicImageTile(image: image, topicID: topicID, size: size, cornerRatio: 0.3)
+                .accessibilityHidden(true)
+        } else {
+            symbol
+        }
+    }
+
+    private var symbol: some View {
         let tint = TopicPalette.tint(for: topicID)
-        Group {
+        return Group {
             if let icon {
                 TopicGlyph(key: icon.rawValue, size: size * 0.54, stroke: size > 40 ? 1.8 : 2, scales: false)
             } else {

@@ -281,3 +281,124 @@ der Treffer ist offline geprüft.
 - Themen ohne Beschreibung senden dieselben Felder wie in v2.
 
 Dateien: `/tmp/paply-thoughts-eval/d1.jsonl`, `d1-p3-r1-120b-low-results.json`, `d1-p3-r1-120b-low-review.md`.
+
+## Prompt v4 (Befunde vom iPhone), 27.10.: Lauf p4
+
+**Anlass:** Auf Allans iPhone (Prompt v3, 120b `low`) kamen Aufgaben fast wörtlich und klein („bei meiner Firma … noch die
+neuesten … einmal bearbeiten“), der Zeitausdruck stand doppelt in Text und `due_hint` („morgen einkaufen gehen“ + „morgen“),
+einmalige Besorgungen wurden eigene Themen („… Einkauf“, „<Person> Schrank“), und ein fester Termin des Sprechers (Kunde
+kommt um 10 Uhr) ergab keine Aufgabe.
+
+**Prompt v4** (KONZEPT §6.4): genau drei neue Sätze, sonst unverändert. Systemprompt 6 723 → 7 230 Bytes (+507 ≈ +169
+Tokens nach Bytes/3), Zeichen 6 668 → 7 174; Kurzprompt der Folgeteile +307 Bytes.
+
+1. TASKS, `text`: „Keep it to the core, about 2 to 6 words: leave out particles ("noch", "mal", "eben", "just"),
+   self-references ("ich", "mein", "my") and the time expression, which belongs in due_hint.“
+2. TASKS: „A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task
+   with due_hint.“ Die Liste der Nicht-Aufgaben (Ideen, Möglichkeiten, Handlungen anderer) bleibt.
+3. TOPIC, `new`: „A one-off errand, purchase or appointment is not a topic: name the ongoing area instead (person,
+   project, place, area of life), e.g. "Tilda", not "Tilda Schrank"; "Einkäufe", not "Baumarkt Einkauf".“
+
+**Im Code** (`Thoughts/AI/TaskText.swift`, im Validator vor den Prüfungen; nur Weglassen am Rand und Großschreiben):
+
+- Erster Buchstabe groß („übergabe …“ → „Übergabe …“); Ziffern am Anfang bleiben, „iPhone“/„eBay-Konto“ bleiben.
+- Zeitausdruck, der wörtlich `due_hint` ist, fällt am Anfang oder Ende weg; nicht, wenn er eine Verneinung enthält.
+- „noch“/„mal“/„eben“ am Anfang nur vor großgeschriebenem Wort oder bestimmtem Artikel, am Ende nur nach einem
+  kleingeschriebenen Infinitiv. „noch nicht …“, „noch einen …“, „noch mal …“, „erst mal“, „nächstes Mal“ bleiben.
+- `due_hint` darf aus ≤ 3 Stücken des Zitats in Reihenfolge innerhalb von ≤ 20 Wörtern bestehen („morgen vormittags“,
+  „morgen um 10 Uhr“ aus zwei Satzteilen); wörtlich gilt jetzt an Wortgrenzen („morgen“ steckt nicht in „übermorgen“).
+- `beim`, `vom`, `ins`, `ans` gelten wie `zum`/`im`/`am` als kleine Wörter ohne Beleg.
+- „Nur Wörter des Sprechers“ bleibt vereinbar: Der Kern ist eine Teilmenge der Wörter des Zitats; Infinitiv und
+  Reihenfolge deckt der Abgleich über Lemma/Wortanfang, und ein freies Wort („empfangen“, „nutzen“) war schon erlaubt.
+
+**Offline nachbewertet** (gespeicherte Antworten, keine neuen Aufrufe): E1 Tag 1 (v1, 18 Fälle) und d1 (v3, 7 Fälle)
+ergeben dieselben Kennzahlen wie zuvor (Präzision, Recall, `due_hint`, Thema, Prüfer-Codes). Geändert haben sich nur
+Aufgabentexte, alle zum Besseren: 7 Texte großgeschrieben, 6 ohne doppelten Zeitausdruck, z. B. „morgen früh Termin beim
+Bürgeramt … buchen“ → „Termin beim Bürgeramt in Bonn für Ummeldung buchen“, „Donnerstag vor Ort anschauen“ → „Vor Ort
+anschauen“ (due „Donnerstag“). Form der gespeicherten Aufgaben in E1: 12/15 ohne Befund (roh 5/15).
+
+**Diagnose:** Die Verarbeitung schreibt jetzt ins Diagnoseprotokoll (KONZEPT §6.8, `ThoughtTrace`): Beginn/Ende von
+Umschrift und Ordnung mit Dauer, je Groq-Aufruf Modell, Tokens, Status und nächster Schritt, Wartegründe. Nie Text.
+
+**Plan des Laufs p4 (so gelaufen):**
+
+- Satz `Tests/Fixtures/Thoughts/prompt4.json` (README §11): 6 neue Fälle n01–n06 und 6 Regressionsfälle e03, e06, e07,
+  e10, e18, e26 – zusammen 12 Aufrufe, kein Teile-Modus.
+- Nur `openai/gpt-oss-120b`, `low`; eigener Ledger `prompt4` mit hartem Budget 45 000 Tokens, `--tight 1`, Abbruch beim
+  ersten 429.
+- Obere Grenze laut `plan`: 64 897 Tokens (Eingabe/3 + `max_completion_tokens` + 256); erwartet nach E1/d1 ≈ 3 000–3 300
+  je Aufruf, also ≈ 37 000–40 000. Reicht das Budget nicht, entfallen die letzten Regressionsfälle (die neuen Fälle laufen
+  zuerst).
+- Dauer: Minutenfenster 7 600 Tokens → etwa 2 Aufrufe pro Minute, ≈ 7–8 Minuten.
+- Befehl: `/tmp/paply-thoughts-eval/run-p4.sh` (baut den Prüfstand, liest den Schlüssel nur in die Umgebung, `run p4`,
+  danach offline `score p4`; Ausgabe in `/tmp/paply-thoughts-eval/p4.log`, `p4-p4-r1-120b-low-results.json`, `…-review.md`).
+
+### Ergebnis p4 (27.10. abends, 120b `low`, Prompt v4)
+
+12 Aufrufe, **37 293 Tokens** (Median 3 140, p95 3 330; Schätzung des Ledgers ≈ 5 400 je Aufruf), kein 429, etwa 7 Minuten.
+Dateien: `/tmp/paply-thoughts-eval/p4-run.out`, `p4-p4-r1-120b-low-review.md`; offline mit dem Stand v4.1 (Code und Prüfstand,
+siehe unten) nachbewertet: `p4r-p4-r1-120b-low-review.md`.
+
+| Kriterium | wie gelaufen | nachbewertet (v4.1-Code und -Prüfstand) |
+| --- | --- | --- |
+| gültig · Text übersteht das Netz · `mustKeep` | 12/12 · 12/12 · 36/36 | gleich |
+| Thema `existing` korrekt · neu statt bestehend · `none` richtig | 7/8 · 1/8 (e26) · 2/3 (n05) | gleich |
+| `mustNotAdd`-Treffer | 1 (n05 Thema „Reisepass“) | 2 (dazu n03 Aufgabentext „kaufen“) |
+| Aufgaben-Präzision | 9/9 (Prüfstand zu nachsichtig) | **8/9** – n03 falsch |
+| Aufgaben-Recall | 8/11 | **7/11** |
+| `due_hint` korrekt | 8/8 | 7/7 |
+| Form der Aufgabentexte, gespeichert · roh | 8/9 · 9/11 | 9/9 · 9/11 |
+
+**Je Fall:**
+
+- **Besser:** n01 „Briefe vom Steuerbüro durchlesen“ (statt fast wörtlich mit „noch … einmal“), n02 „Einkaufen gehen“ mit
+  due „morgen am besten vormittags“ (aus der Rohantwort „einkaufen gehen“ macht der Code den Großbuchstaben) und „Jana
+  Einkaufsliste schicken lassen“, Thema Familie; e07 „Priya updated deck senden“; n04 „Laufrad kaufen“, Thema „Patenkind“
+  (die Person, kein „Laufrad“).
+- **n03 (Termin) – falsch:** Aufgabe „20 Fluxo Lizenzen kaufen“, due „morgen um 10 Uhr“. Das ist die Handlung des Kunden als
+  To-do des Sprechers, irreführender als keine Aufgabe. Der Prüfstand hatte sie über das Zitat als ✓ gezählt; jetzt
+  machen `mustNotAdd`-Muster im Aufgabentext (`kaufen`, `kauft`, `vorbeikommen`, `kommt vorbei`) sie zu einem
+  Präzisionsfehler, der nie für den Recall zählt.
+- **n05:** neues Thema „Reisepass“ (einmaliger Behördengang, `mustNotAdd`); Text „Reisepass bis Ende November verlängern“
+  mit due „bis Ende November“ – die Zeit stand doppelt in der Mitte (der v4-Code nahm sie nur am Rand weg).
+- **e26:** neues Thema „Milas Schwimmkurs“ statt Familie (stand im Index an erster Stelle); „Schwimmsachen durchsehen“
+  fehlt (Recall 1/2).
+- **n06** (`task:negation`: „Bescheid sagen beim Fitnessstudio Hantelhaus“ ohne das „nicht verlängern“ des Zitats) und
+  **e06** (`task:quote`: das Zitat „ich muss bis Mittwoch den Keller freiräumen“ löst die Selbstkorrektur auf) hat der
+  Prüfer verworfen. Bekannt und streng, bewusst noch nicht angegangen.
+- e03, e10 ohne Aufgabe und mit richtigem Thema; e18 neues Thema „Bambini-Training“ (richtig); kein Termin-Fehlalarm bei
+  e07 (Priyas Meeting), e10 und e26 („samstags um zehn“).
+
+### Prompt v5 („v4.1“) und Code, nach p4
+
+`ThoughtPrompt.version = 5`: Jeder neue Wortlaut bekommt eine eigene Nummer, damit gespeicherte Ergebnisse
+(`ai.promptVersion`, Prüfstand `--prompt`) eindeutig bleiben. Die zwei Sätze aus v4 sind umformuliert, keiner ist dazugekommen.
+Systemprompt 7 230 → 7 461 Bytes (+231 ≈ +77 Tokens), Zeichen 7 174 → 7 403.
+
+1. Termin: „A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task with
+   due_hint; its text names the speaker's part ("Termin mit Frau Roth", "Frau Roth empfangen"), never what the other person
+   does.“
+2. Thema: „A one-off errand, purchase or appointment is not a topic, and whatever a listed topic covers belongs there (a
+   child's dentist appointment → the family topic); only if none fits, name the ongoing area (person, project, place, area
+   of life), e.g. "Tilda", not "Tilda Schrank"; "Einkäufe", not "Baumarkt Einkauf".“ Das Beispiel ist bewusst kein Kurs,
+   damit e26 die Verallgemeinerung misst.
+
+**Code:** `due_hint` fällt jetzt auch in der **Mitte** des Aufgabentexts weg, wenn er dort wörtlich und zusammenhängend steht,
+keine Verneinung enthält, danach ≥ 2 Wörter bleiben und das Wort davor ihn nicht regiert („Anna wegen Freitag anrufen“, „Kuchen
+backen für morgen“ bleiben; das gilt jetzt auch am Ende). „Reisepass bis Ende November verlängern“ → „Reisepass verlängern“.
+
+**Deterministischer Themen-Schutz – geprüft, nicht gebaut:** Ein neuer Name, dessen Kandidaten einem vorhandenen Thema
+angehören, auf dieses umzuleiten, wäre in p4 dreimal falsch gewesen (e26 → Auto/Fitness, n05 → Freunde, e18 → Auto). Auch
+„erstes Thema des Index“ hätte n05 auf Freunde gelegt. Nicht eindeutig sicher, also weggelassen.
+
+**Prüfstand:** `mustNotAdd` mit `tasks` macht eine Aufgabe falsch (Präzisionsfehler, nie Recall), auch wenn ihr Zitat passt.
+In `prompt4.json` hat n03 diese Muster; e06 verzichtet auf die due-Regel „Donnerstag“ (die Keller-Frist prüft schon
+„`due_hint` korrekt“, und die zulässige Besichtigungs-Aufgabe darf „am Donnerstag um neun“ tragen).
+
+### Nachlauf p4b (vorbereitet, wartet auf Freigabe)
+
+- 6 Fälle: n03, n05, e26, n02, n04, e06 (in dieser Reihenfolge), Prompt v5, nur `openai/gpt-oss-120b` `low`.
+- Eigener Ledger `prompt4b`, hartes Budget 22 000 Tokens, `--tight 1`, Abbruch beim ersten 429.
+- Erwartet nach p4 ≈ 3 000–3 350 je Aufruf, zusammen ≈ 19 000; etwa 3 Minuten (2 Aufrufe pro Minute).
+- Befehl: `/tmp/paply-thoughts-eval/run-p4b.sh` (Ausgabe `p4b.log`, `p4b-p5-r1-120b-low-results.json`, `…-review.md`).
+

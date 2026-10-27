@@ -131,7 +131,7 @@ struct ThoughtRow: View {
             HStack(spacing: 10) {
                 if showTopic, let topic {
                     HStack(spacing: 5) {
-                        TopicGlyph(key: topic.icon.rawValue, size: 13, stroke: 1.9, relativeTo: .caption)
+                        TopicMark(topicID: topic.id, icon: topic.icon, size: 13, stroke: 1.9, relativeTo: .caption)
                         Text(topic.title)
                     }
                     .foregroundStyle(TopicPalette.tint(for: topic.id).ink)

@@ -2,11 +2,12 @@ import PaplyKit
 import SwiftUI
 import UIKit
 
-// Tab „Gedanken“: Die Startseite ist eine Landkarte der Themen (Entwurf „Landkarte“). Oben nur die Leiste
-// „Offen“ mit der nächsten Aufgabe; der Überblick („320 Gedanken · 8 Themen“) steht auf iOS 26 als
-// Untertitel unter „Gedanken“, auf iOS 18 in der unteren Leiste (wie in Notizen). Thema antippen → die Karte
-// zoomt hinein, das Panel mit den Karten des Themas gleitet hoch (Raststufen wie Apple Karten). Kompakter
-// Kopf: Suche als Lupe (eigene Seite), Aufnahme-Knopf in der unteren Werkzeugleiste.
+// Tab „Gedanken“: Die Startseite ist eine Landkarte der Themen (Entwurf „Landkarte“). Darüber nur, was gerade
+// zählt: die Einrichtung (ThoughtsHomeHeader) – die Aufgaben haben einen eigenen Reiter. Der
+// Überblick („320 Gedanken · 8 Themen“) steht auf iOS 26 als Untertitel unter „Gedanken“, auf iOS 18 in der
+// unteren Leiste (wie in Notizen). Thema antippen → die Karte zoomt hinein, das Panel mit den Karten des Themas
+// gleitet hoch (Raststufen wie Apple Karten). Kompakter Kopf: Suche als Lupe (eigene Seite), Aufnahme-Knopf in der
+// unteren Werkzeugleiste.
 
 /// Die Landkarte der Themen (Map/ThoughtMapView.swift)
 typealias ThoughtMap = ThoughtMapView
@@ -14,7 +15,6 @@ typealias ThoughtMap = ThoughtMapView
 struct ThoughtsTab: View {
     @Environment(ThoughtsNav.self) private var nav
     @Environment(\.captureZoom) private var zoom
-    @State private var checkoff = TaskCheckoff()
 
     var body: some View {
         @Bindable var nav = nav
@@ -25,8 +25,6 @@ struct ThoughtsTab: View {
                     case .thought(let id, let task, let source):
                         ThoughtDetailView(id: id, focusTask: task)
                             .detailZoom(source, in: zoom)
-                    case .tasks:
-                        TasksPage()
                     case .search:
                         ThoughtsSearchView()
                     case .topics:
@@ -38,12 +36,9 @@ struct ThoughtsTab: View {
                     }
                 }
         }
-        .sheet(item: $nav.topicPicker) { item in
-            TopicPickerSheet(thoughtID: item.id)
-        }
+        .environment(\.thoughtsStack, .thoughts)
         .overlay(alignment: .bottom) { ThoughtsToastHost() }
         .modifier(CaptureInsetBarModifier())
-        .environment(checkoff)
     }
 }
 
@@ -59,7 +54,7 @@ struct ThoughtsHome: View {
     @Environment(\.accessibilityReduceMotion) private var reduce
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @State private var topicAction: TopicAction?
-    /// Höhe des Kopfs über der Karte (Überblick, Einrichten, „Offen“)
+    /// Höhe des Kopfs über der Karte (Einrichten); 0 ohne Kopf
     @State private var headerHeight: CGFloat = 0
 
     var body: some View {
@@ -90,7 +85,21 @@ struct ThoughtsHome: View {
                 // alles geordnet bzw. alle Gedanken woandershin verschoben → Panel schließen
                 if empty { withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) } }
             }
+            #if DEBUG
+            .task { await debugTopicAction() }
+            #endif
     }
+
+    #if DEBUG
+    /// `-PaplyScreen topic-edit`: Bearbeiten-Blatt des Themas mit den meisten Gedanken
+    private func debugTopicAction() async {
+        guard ThoughtsDebug.screen == "topic-edit" else { return }
+        try? await Task.sleep(for: .seconds(1.4))
+        if let topic = model.topics.max(by: { model.count(of: $0.id) < model.count(of: $1.id) }) {
+            topicAction = .icon(topic)
+        }
+    }
+    #endif
 
     // MARK: Inhalt
 
@@ -114,6 +123,7 @@ struct ThoughtsHome: View {
                                        medium: max(min(full * 0.5, full - 200), 96 + bottom + 120),
                                        large: full - 4)
             let panelID = resolvedFocus
+            let showsHeader = panelID == nil && ThoughtsHomeHeader.isVisible(model)
             ZStack(alignment: .bottom) {
                 // Karte über die volle Höhe (ihr Hintergrund läuft unter dem Kopf durch); ihr Inhalt
                 // beginnt unter dem Kopf. Im Thema gehört der Platz der Karte und dem Panel – höchstens
@@ -122,10 +132,10 @@ struct ThoughtsHome: View {
                 ThoughtMap(focusedTopic: mapFocus,
                            bottomInset: panelID != nil ? min(heights[nav.panelDetent], heights.medium) : bottom,
                            onOpenThought: { nav.path.append(.thought($0)) })
-                    .safeAreaPadding(.top, panelID == nil ? headerHeight : 0)
+                    .safeAreaPadding(.top, showsHeader ? headerHeight : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if panelID == nil {
-                    header
+                if showsHeader {
+                    ThoughtsHomeHeader()
                         .padding(.horizontal, 16)
                         .padding(.top, 4)
                         .padding(.bottom, 6)
@@ -144,23 +154,8 @@ struct ThoughtsHome: View {
             }
             .ignoresSafeArea(.container, edges: .bottom)
             .animation(PaplyMotion.smooth(reduce), value: panelID == nil)
+            .animation(PaplyMotion.smooth(reduce), value: showsHeader)
         }
-    }
-
-    /// Kopf über der Karte: nur was gerade zählt – ggf. die Pille für Ungeordnetes, Einrichten, „Offen“
-    private var header: some View {
-        let pending = PendingThoughtsPill.count(model)
-        return VStack(alignment: .leading, spacing: 10) {
-            if pending > 0 {
-                PendingThoughtsPill()
-                    .transition(.scale(scale: 0.85, anchor: .leading).combined(with: .opacity))
-            }
-            if SetupGuide.shared.isVisible(model: model) {
-                SetupBanner()
-            }
-            OpenTasksBar()
-        }
-        .animation(PaplyMotion.bouncy(reduce), value: pending > 0)
     }
 
     /// Gewähltes Thema, aufgelöst (ein Alias zeigt sein Ziel) – Karte, Panel und Farbe nutzen dieselbe ID
@@ -170,13 +165,13 @@ struct ThoughtsHome: View {
         return model.topic(id)?.id ?? id
     }
 
-    /// Fokus der Karte: Thema bzw. „Ohne Thema“; „Noch nicht geordnet“ lässt die Karte in der Übersicht
+    /// Fokus der Karte: Thema, „Ohne Thema“ oder „Noch nicht geordnet“ (dann tritt die Kugel „Eingang“ zurück).
+    /// Freie Kartenfläche antippen schließt jedes Panel, auch „Noch nicht geordnet“.
     private var mapFocus: Binding<String?> {
         Binding(
-            get: { nav.focusedTopic == Self.pendingID ? nil : resolvedFocus },
+            get: { resolvedFocus },
             set: { new in
                 guard new != nav.focusedTopic else { return }
-                if new == nil, nav.focusedTopic == Self.pendingID { return }
                 nav.focus(new)
             }
         )
@@ -194,9 +189,6 @@ struct ThoughtsHome: View {
             }
             .accessibilityLabel("Suchen")
             Menu {
-                Button { nav.path.append(.tasks) } label: {
-                    Label("Aufgaben", systemImage: "checklist")
-                }
                 Button { nav.path.append(.topics) } label: {
                     Label("Themen bearbeiten", systemImage: "square.grid.2x2")
                 }
@@ -261,6 +253,8 @@ private struct SummarySubtitle: ViewModifier {
 
 /// Aufnahme-Knopf der unteren Leiste: p-Kopf auf Grün (iOS 26: grün getöntes Glas).
 struct CaptureToolbarButton: View {
+    /// Zoom-Quelle (je Reiter eine eigene Kennung)
+    var source: String = CaptureFlow.fabSource
     let action: () -> Void
     @Environment(\.captureZoom) private var zoom
 
@@ -283,7 +277,7 @@ struct CaptureToolbarButton: View {
                 classic
             }
         }
-        .captureZoomSource(CaptureFlow.fabSource, in: zoom)
+        .captureZoomSource(source, in: zoom)
         .accessibilityLabel("Gedanke aufnehmen")
         .accessibilityHint("Öffnet die Aufnahme. Paply ordnet den Gedanken danach.")
     }
@@ -403,7 +397,7 @@ struct ThoughtsSearchView: View {
                         ForEach(topicHits.prefix(3)) { topic in
                             Button { open(topic) } label: {
                                 HStack(spacing: 10) {
-                                    TopicGlyph(key: topic.icon.rawValue, size: 17)
+                                    TopicMark(topicID: topic.id, icon: topic.icon, size: 17, stroke: 1.6)
                                         .foregroundStyle(TopicPalette.tint(for: topic.id).ink)
                                     Text("Thema: \(topic.title)").foregroundStyle(Color.paplyText)
                                 }

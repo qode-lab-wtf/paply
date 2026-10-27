@@ -1,13 +1,12 @@
 import PaplyKit
 import SwiftUI
 
-// Aufgaben-Sicht (KONZEPT §3.3): schlanke Liste über alle Gedanken. Abschnitte „Offen“ und
-// „Erledigt“ (zugeklappt, letzte 30 Tage). Kein Aufgabenmanager: keine Erinnerungen, keine Prioritäten.
-// Abhaken überall gleich (TaskCheckoff): Kreis füllt sich sofort, nach 1,2 s gleitet die Aufgabe aus den
-// offenen Listen. Erneutes Tippen in der Zeit macht es rückgängig – auch im Detail.
+// Bausteine der Aufgaben (KONZEPT §3.3): Abhaken überall gleich (TaskCheckoff) – Kreis füllt sich sofort, nach
+// 1,2 s gleitet die Aufgabe aus den offenen Listen. Erneutes Tippen in der Zeit macht es rückgängig – auch im
+// Detail. Die Sammelsicht ist der Reiter „Aufgaben“ (TasksTab.swift).
 
-/// Abgehakt, aber noch nicht übernommen – geteilt von Leiste „Offen“, Karten, Panel, Aufgabenliste und Detail,
-/// damit dieselbe Aufgabe überall gleich aussieht und sich überall gleich verhält.
+/// Abgehakt, aber noch nicht übernommen – geteilt von Reiter „Aufgaben“, Karten, Panel und Detail (eine Instanz für
+/// die ganze App, `RootView`), damit dieselbe Aufgabe überall gleich aussieht und sich überall gleich verhält.
 @MainActor
 @Observable
 final class TaskCheckoff {
@@ -49,6 +48,19 @@ final class TaskCheckoff {
             withAnimation(smooth) {
                 if let still, !still.done { model.toggleTask(thoughtID, key) }
                 _ = self.pending.remove(key)
+            }
+        }
+    }
+
+    /// Sofort erledigt (Wischen nach rechts) bzw. sofort wieder offen – ohne Wartezeit; eine laufende endet.
+    func set(_ task: ThoughtTask, done: Bool, thoughtID: String, model: ThoughtsModel, reduceMotion: Bool) {
+        let key = task.id
+        let smooth = PaplyMotion.smooth(reduceMotion)
+        timers.removeValue(forKey: key)?.cancel()
+        withAnimation(smooth) {
+            _ = pending.remove(key)
+            if let current = Self.task(key, in: thoughtID, model: model), current.done != done {
+                model.toggleTask(thoughtID, key)
             }
         }
     }
@@ -117,30 +129,13 @@ struct TaskCheckButton: View {
     }
 }
 
-/// Eigene Seite „Aufgaben“ (aus „Alle n“ der Leiste „Offen“ und dem Link `thoughts/tasks`)
-struct TasksPage: View {
-    var body: some View {
-        List {
-            TaskSections()
-        }
-        .listStyle(.insetGrouped)
-        .listSectionSpacing(14)
-        .contentMargins(.top, 4, for: .scrollContent)
-        .scrollContentBackground(.hidden)
-        .background(PaplyBackground())
-        .navigationTitle("Aufgaben")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-/// Eine Aufgabe: Kreis · Text · darunter klein Thema + Gedanke · rechts Zeitpunkt im Wortlaut
+/// Eine Aufgabe im Detail: Kreis · Text · rechts der Zeitpunkt (Wortlaut am Tag der Aufnahme, danach der Tag –
+/// wie im Reiter Aufgaben)
 struct TaskLine: View {
     let task: ThoughtTask
-    /// Themen-Symbol + Titel des Gedankens (nur in der Sammelsicht)
-    var subtitle: (icon: TopicIcon?, text: String)?
-    /// Farbe des Themen-Symbols (Themenfarbe)
-    var subtitleTint: Color = ThoughtTint.mint
-    /// sichtbar erledigt, aber noch nicht übernommen (1,2 s in der Aufgaben-Sicht)
+    /// Aufnahme des Gedankens (ab dann gilt der Wortlaut „morgen“ usw.)
+    let recordedAt: Date
+    /// sichtbar erledigt, aber noch nicht übernommen (1,2 s)
     var pendingDone = false
     let onToggle: () -> Void
 
@@ -148,6 +143,7 @@ struct TaskLine: View {
 
     private var shownDone: Bool { task.done || pendingDone }
     private var overdue: Bool { !shownDone && (task.dueAt.map { $0 < Calendar.current.startOfDay(for: Date()) } ?? false) }
+    private var due: String? { TaskDueLabel.make(task: task, recordedAt: recordedAt).map { TaskDueText.text($0) } }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -170,22 +166,10 @@ struct TaskLine: View {
                     .foregroundStyle(shownDone ? Color.paplySecondaryText : Color.paplyText)
                     .strikethrough(shownDone, color: Color.paplySecondaryText)
                     .animation(PaplyMotion.smooth(reduce), value: shownDone)
-                if let subtitle {
-                    HStack(spacing: 4) {
-                        if let icon = subtitle.icon {
-                            TopicGlyph(key: icon.rawValue, size: 12, stroke: 1.9, relativeTo: .caption)
-                                .foregroundStyle(subtitleTint)
-                        }
-                        Text(subtitle.text)
-                            .lineLimit(1)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(Color.paplySecondaryText)
-                }
             }
             Spacer(minLength: 8)
-            if let hint = task.dueHint, !hint.isEmpty {
-                Text(hint)
+            if let due {
+                Text(due)
                     .font(.subheadline)
                     .foregroundStyle(overdue ? Color.paplyBeak : Color.paplySecondaryText)
                     .lineLimit(1)
@@ -195,147 +179,5 @@ struct TaskLine: View {
         // Haptik (§4): abhaken leicht, wieder öffnen Auswahl
         .sensoryFeedback(trigger: shownDone) { _, new in new ? .impact(weight: .light) : .selection }
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Inhalt der Liste, wenn der Chip „Aufgaben“ gewählt ist
-struct TaskSections: View {
-    @Environment(ThoughtsModel.self) private var model
-    @Environment(ThoughtsNav.self) private var nav
-    @Environment(TaskCheckoff.self) private var checkoff
-    @Environment(\.accessibilityReduceMotion) private var reduce
-    @State private var showDone = false
-    @State private var editing: (thoughtID: String, task: ThoughtTask)?
-    @State private var editDraft = ""
-
-    var body: some View {
-        let open = model.openTasks(topicID: nil)
-        let done = model.doneTasks(days: 30)
-        let topics = Dictionary(model.topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-
-        if open.isEmpty {
-            Section {
-                ContentUnavailableView {
-                    Label {
-                        Text("Keine offenen Aufgaben")
-                    } icon: {
-                        LucideImage(.listChecks, size: 44, stroke: 1.6, relativeTo: .largeTitle)
-                    }
-                } description: {
-                    Text("Paply erkennt sie, wenn du sagst: „Ich muss …“ oder „Nicht vergessen …“.")
-                }
-                .foregroundStyle(Color.paplyText)
-                .listRowBackground(Color.clear)
-            }
-        } else {
-            Section {
-                ForEach(open, id: \.task.id) { item in
-                    row(item, topic: topics[item.thought.topicId ?? ""])
-                }
-            } header: {
-                header("Offen", count: open.count)
-            }
-            .alert("Aufgabe bearbeiten", isPresented: editAlert) { editAlertActions }
-        }
-
-        if !done.isEmpty {
-            Section {
-                if showDone {
-                    ForEach(done, id: \.task.id) { item in
-                        row(item, topic: topics[item.thought.topicId ?? ""])
-                    }
-                }
-            } header: {
-                Button {
-                    withAnimation(PaplyMotion.smooth(reduce)) { showDone.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Erledigt")
-                        Text("\(done.count)").foregroundStyle(Color.paplyTertiaryText).monospacedDigit()
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .rotationEffect(.degrees(showDone ? 90 : 0))
-                            .foregroundStyle(Color.paplyTertiaryText)
-                        Spacer()
-                    }
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.paplyText)
-                    .textCase(nil)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityValue(showDone ? "aufgeklappt" : "zugeklappt")
-            } footer: {
-                if showDone {
-                    Text("Erledigte Aufgaben der letzten 30 Tage.")
-                }
-            }
-        }
-    }
-
-    private var editAlert: Binding<Bool> {
-        Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })
-    }
-
-    @ViewBuilder
-    private var editAlertActions: some View {
-        TextField("Aufgabe", text: $editDraft)
-        Button("Abbrechen", role: .cancel) {}
-        Button("Sichern") {
-            let text = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let editing, !text.isEmpty {
-                model.editTask(editing.thoughtID, editing.task.id, text: text)
-            }
-        }
-    }
-
-    private func header(_ title: String, count: Int) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-            Text("\(count)").foregroundStyle(Color.paplyTertiaryText).monospacedDigit()
-        }
-        .font(.title3.weight(.bold))
-        .foregroundStyle(Color.paplyText)
-        .textCase(nil)
-        .accessibilityAddTraits(.isHeader)
-    }
-
-    private func row(_ item: (task: ThoughtTask, thought: Thought), topic: Topic?) -> some View {
-        TaskLine(task: item.task, subtitle: (topic?.icon, item.thought.displayTitle),
-                 subtitleTint: TopicPalette.tint(for: topic?.id).ink,
-                 pendingDone: checkoff.pending.contains(item.task.id)) {
-            checkoff.toggle(item.task, thoughtID: item.thought.id, model: model, reduceMotion: reduce)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { nav.path.append(.thought(item.thought.id, task: item.task.id)) }
-        .listRowBackground(Color.paplyRow)
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(item.thought.id, item.task.id) }
-            } label: {
-                Label("Löschen", systemImage: "trash")
-            }
-        }
-        .contextMenu {
-            ShareLink(item: item.task.text) { Label("Teilen", systemImage: "square.and.arrow.up") }
-            Button {
-                editDraft = item.task.text
-                editing = (item.thought.id, item.task)
-            } label: {
-                Label("Bearbeiten", systemImage: "pencil")
-            }
-            Button {
-                nav.path.append(.thought(item.thought.id, task: item.task.id))
-            } label: {
-                Label("Gedanken öffnen", systemImage: "text.bubble")
-            }
-            Divider()
-            Button(role: .destructive) {
-                withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTask(item.thought.id, item.task.id) }
-            } label: {
-                Label("Löschen", systemImage: "trash")
-            }
-        }
     }
 }

@@ -76,7 +76,8 @@ struct Harness {
     static func make(structurer: MockStructurer = MockStructurer(), transcriber: MockTranscriber = MockTranscriber(),
                      configure: (inout ThoughtProcessor.Options) -> Void = { _ in },
                      onSleep: (@Sendable () -> Void)? = nil,
-                     onSettings: (@Sendable () async -> Void)? = nil, name: String = #function) throws -> Harness {
+                     onSettings: (@Sendable () async -> Void)? = nil, trace: ThoughtTrace = .off,
+                     name: String = #function) throws -> Harness {
         let root = StoreSupport.temporaryRoot(name)
         let clock = TestClock()
         let store = try ThoughtStore(root: root, now: clock.function)
@@ -96,7 +97,7 @@ struct Harness {
                                          now: clock.function, sleep: { [sleeps] seconds in
                                              sleeps.update { $0.append(seconds) }
                                              onSleep?()
-                                         })
+                                         }, trace: trace)
         return Harness(root: root, store: store, structurer: structurer, transcriber: transcriber, flags: flags, clock: clock,
                        processor: processor, sleeps: sleeps)
     }

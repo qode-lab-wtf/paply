@@ -618,7 +618,7 @@ bewertete Grundlage (EVAL.md, Prompt v3: 6 von 7, die Umleitung griff dort nie).
 
 Nicht mit: Rohtexte anderer Gedanken, Aufgaben, Ton, Datum der Aufnahme (Zeitangaben löst Paply lokal auf).
 
-### 6.4 Systemprompt (exakt, Version 3)
+### 6.4 Systemprompt (exakt, Version 5)
 
 `ThoughtPrompt.system`, Anweisungssprache Englisch. Die Ausgabe ist in der gesprochenen Sprache. Den Grund für
 Englisch nennt `PolishPrompt.swift`: Es bevorzugt keine Diktatsprache.
@@ -637,6 +637,28 @@ Version 3 („Themen mit Beschreibung“, Leitplanke Allan: Prompt schlank, Code
 - Alles andere macht der Code: Treffer-Erkennung (`TopicMentions`), Treffer-Themen sicher im Index und in jeder
   Kürzungsstufe (§6.2, §6.3). Umgeleitet wird ein neues Thema nur, wenn sein Name dem Titel eines vorhandenen Themas
   ohne Zweifel gleich ist (§6.7); Namen aus Beschreibungen bleiben Hinweise.
+
+Version 4 (Befunde von Allans iPhone, gleiche Leitplanke): genau drei neue Sätze, sonst unverändert. Systemprompt
+6 723 → 7 230 Bytes (+507 ≈ +169 Tokens nach Bytes/3); Kurzprompt der Folgeteile +307 Bytes (nur der TASKS-Teil).
+- TASKS, `text`: „Keep it to the core, about 2 to 6 words“ – ohne Partikeln („noch“, „mal“, „eben“, „just“), ohne
+  Ich-Bezug („ich“, „mein“, „my“) und ohne Zeitausdruck, der gehört in `due_hint`. Weglassen und die Reihenfolge ändern
+  bleiben mit der Prüfung „nur Wörter des Zitats + höchstens 1 weiteres“ (§6.7) vereinbar.
+- TASKS: Ein fester Termin, den der Sprecher selbst wahrnehmen muss (Treffen, Besuch bei jemandem oder von jemandem),
+  ist eine Aufgabe mit `due_hint`. Ideen, Möglichkeiten und Handlungen anderer bleiben keine Aufgaben.
+- TOPIC, `new`: Eine einmalige Besorgung, ein Kauf oder Termin ist kein Thema; ein neues Thema benennt den laufenden
+  Bereich (Person, Projekt, Ort, Lebensbereich), nicht die einzelne Sache.
+- Was der Code sicher kann, macht der Code (`TaskText`, §6.7): erster Buchstabe groß, Zeitausdruck nicht doppelt,
+  Füllwort am Rand weg.
+
+Version 5 („v4.1“, nach dem Lauf p4, EVAL.md): die zwei Sätze aus v4 umformuliert, keiner angehängt. Systemprompt
+7 230 → 7 461 Bytes (+231 ≈ +77 Tokens; gegenüber v3 +738 ≈ +246), Kurzprompt der Folgeteile +117 Bytes.
+- Termin: Der Aufgabentext nennt den Anteil des Sprechers („Termin mit …“, „… empfangen“), nie die Handlung der anderen
+  Person (p4 n03: „20 Fluxo Lizenzen kaufen“ war die Handlung des Kunden).
+- Thema: Was ein gelistetes Thema abdeckt, gehört dorthin (Termin eines Kindes → Familien-Thema); nur wenn keins passt,
+  wird der laufende Bereich neu benannt (p4 e26: „Milas Schwimmkurs“ statt Familie, n05: „Reisepass“).
+- Geprüft und verworfen: eine Code-Umleitung eines neuen Themas auf das Thema der Kandidaten oder auf das erste Thema
+  des Index. In p4 hätte sie e26 auf Auto/Fitness, n05 auf Freunde und e18 auf Auto gelegt – nicht sicher.
+- Code: Der Zeitausdruck fällt jetzt auch in der Mitte des Aufgabentexts weg (§6.7).
 
 `ThoughtPrompt.version` wird mit jedem Ergebnis gespeichert (`ai.promptVersion`).
 
@@ -667,14 +689,15 @@ A topic is an ongoing area of the user's life or work that they will come back t
 about is the user's own description of a topic; if the main matter fits it, choose that topic, even when none of its names is spoken. mentioned: true means a name from that topic occurs in the transcript – a strong hint, but a name mentioned only in passing does not decide the topic.
 Decide in this order:
 1. existing – the main matter of the thought belongs to a listed topic, even if the fit is broad. Choose the topic under which the user would look for this thought. n is the number of thoughts in that topic; if two fit equally, take the one with the higher n.
-2. new – only if no listed topic fits AND the main matter is a concrete ongoing project, plan, person, place or activity that will probably come up again. new_name: 1 to 3 words, at most 24 characters, a noun or name in ui_language, no date. Never a generic name such as Ideen, Gedanken, Notizen, Sonstiges, Allgemein, Aufgaben, Wichtig, Privat, Arbeit, Ideas, Notes, Misc, Todo. Never a variant of a listed topic (other wording, singular/plural, other language) – choose that topic instead. If topics_full is true, new is not allowed.
+2. new – only if no listed topic fits AND the main matter is a concrete ongoing project, plan, person, place or activity that will probably come up again. A one-off errand, purchase or appointment is not a topic, and whatever a listed topic covers belongs there (a child's dentist appointment → the family topic); only if none fits, name the ongoing area (person, project, place, area of life), e.g. "Tilda", not "Tilda Schrank"; "Einkäufe", not "Baumarkt Einkauf". new_name: 1 to 3 words, at most 24 characters, a noun or name in ui_language, no date. Never a generic name such as Ideen, Gedanken, Notizen, Sonstiges, Allgemein, Aufgaben, Wichtig, Privat, Arbeit, Ideas, Notes, Misc, Todo. Never a variant of a listed topic (other wording, singular/plural, other language) – choose that topic instead. If topics_full is true, new is not allowed.
 3. none – a stray remark without an ongoing matter. none is better than a weak new topic.
 If several matters are mentioned, decide by the main matter (most of the content). If the thought continues a candidate, that candidate's topic is usually right. symbol: the best fitting value of the enum; it is only used for a new topic.
 
 TASKS
 Only actions the speaker explicitly intends to do or explicitly wants to be reminded of, such as "ich muss …", "ich will morgen …", "nicht vergessen …", "erinner mich …", "I need to …", "remind me to …", "to do: …".
 Not tasks: ideas, wishes and possibilities ("man könnte", "wäre schön", "vielleicht"), open questions, things other people will do, things already done, intentions not to do something ("ich kaufe keinen neuen Laptop", "no meetings on Friday"), and requests the speaker takes back or calls a joke or a test.
-- text: a short to-do in the language of its quote, made only of the speaker's words from quote, e.g. "Milch kaufen", "Anna wegen Freitag anrufen", "call the bank". Never translate or mix languages. Keep names, numbers and any negation that belongs to the action. At most 80 characters.
+A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task with due_hint; its text names the speaker's part ("Termin mit Frau Roth", "Frau Roth empfangen"), never what the other person does.
+- text: a short to-do in the language of its quote, made only of the speaker's words from quote, e.g. "Milch kaufen", "Anna wegen Freitag anrufen", "call the bank". Keep it to the core, about 2 to 6 words: leave out particles ("noch", "mal", "eben", "just"), self-references ("ich", "mein", "my") and the time expression, which belongs in due_hint. Never translate or mix languages. Keep names, numbers and any negation that belongs to the action. At most 80 characters.
 - quote: the words from the transcript that state the task, copied exactly as one passage without omissions, at most one sentence.
 - due_hint: the time expression exactly as spoken in quote ("bis Freitag", "morgen früh", "next week"), otherwise null. Do not calculate dates.
 - At most 5, in spoken order. None → [].
@@ -805,7 +828,7 @@ beide leer sind.
 | `topic.existing` | Alias im gesendeten Index → echte ID | wie `none` |
 | `topic.new` | Name 2–24 Zeichen, ≤ 3 Wörter, nicht auf der Sperrliste (Prompt-Liste + Varianten), nicht nur Ziffern. **Doppel-Schranke** (`TopicHygiene.matchExisting`, für alle Themen, beschrieben oder nicht): Umgeleitet wird nur, wenn der Name dem **Titel** eines vorhandenen Themas ohne Zweifel gleich ist – (1) gleich bis auf Groß/Klein, Umlaut ä = ae, Leer-, Binde- und Satzzeichen („Paply-App“ = „paply app“, „Mueller-Bau“ = „Müller Bau“); (2) Wort für Wort gleich bis auf Plural/Genitiv mit den geprüften Endungen aus §6.3 (-s ab 4 Zeichen Stamm, -es ab 4, -e und -en ab 5, -n nach -e/-el/-er ab 4; kein -er): „Wohnungen“ → „Wohnung“, „Lissabon-Reisen“ → „Lissabon-Reise“; (3) Tippfehler nur in langen Namen (beide ≥ 8 Zeichen): zwei Nachbarbuchstaben vertauscht oder ein Buchstabe innen fehlt bzw. ist zu viel – nie am Anfang oder Ende, nie eine Ziffer, nie ein „e“ nach a/o/u. Nicht sicher und daher **keine** Umleitung: ä = a („Gärten“/„Garten“, „Umzüge“/„Umzug“, „Küchen“/„Kuchen“), ß = ss, andere Akzente, Wortanfänge („Reisen“/„Reis“, „Umzugsplanung“/„Umzug“), -er („Fisch“/„Fischer“), andere Sprachen („Lisbon“) und Namen aus Beschreibungen („Müller Bau“ in „… Kunden Müller Bau …“, „Kowalski“, „Köln“/„Koeln“, „Home Office“) – das bleibt ein neues Thema; die KI hatte den Hinweis (`mentioned`, `about`), und unscharf Nahes kann später die Themenpflege als Vorschlag bringen (§6.10). Passen mehrere Themen gleich gut (zwei Titel, die nach (1) gleich sind): keine Umleitung und kein weiteres gleichnamiges Thema → `none` (Code `topic:ambiguous`). Geprüft wird im Validator gegen den gesendeten Index (`topic:duplicate`), im Prozessor gegen alle lebenden Themen und beim Übernehmen noch einmal im selben Schritt im Speicher (`ThoughtStore.update(_:topic:_:)`), sodass parallele Läufe oder ein gleichzeitig vom Nutzer angelegtes Thema nie zwei gleichnamige ergeben. `topics_full` → `none` (die Umleitung auf einen gleichen Titel gilt trotzdem). | `none` |
 | Thema vom Nutzer gesetzt | Die KI-Wahl wird ignoriert | – |
-| `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). `due_hint` muss im Zitat stehen, sonst `null`. Doppelte (normalisiert) fallen weg. | Aufgabe fällt weg |
+| `tasks` | ≤ 5. `quote` normalisiert (klein, ohne Akzente/Satzzeichen, Leerraum zusammengefasst) als Teil des Transkripts gefunden, sonst unscharf (Token-LCS ≥ 0,9) und durch die echte Stelle ersetzt. `due_hint` muss im Zitat stehen – wörtlich an Wortgrenzen oder (ab v4) aus ≤ 3 Stücken des Zitats in Reihenfolge innerhalb von ≤ 20 Wörtern („morgen, am besten vormittags“ → „morgen vormittags“) –, sonst `null`. **Form (ab v4, `TaskText`, nur Weglassen):** Zeitausdruck gleich `due_hint` (wörtlich, zusammenhängend) fällt weg – am Anfang, am Ende oder (ab v5) in der Mitte, wenn ≥ 2 Wörter bleiben; nicht mit Verneinung und nicht nach einem Wort, das ihn regiert („wegen Freitag“, „für morgen“); „noch“/„mal“/„eben“ am Anfang nur vor einem großgeschriebenen Wort oder bestimmten Artikel, am Ende nur kleingeschrieben nach einem Infinitiv („noch nicht …“, „noch einen …“, „noch mal …“, „erst mal“ bleiben); erster Buchstabe groß, außer bei „iPhone“-Schreibung, Ziffern bleiben. Danach: `text` 2–80 Zeichen; Inhaltswörter ⊆ Lemmata des Zitats + höchstens 1 weiteres; Ziffern ⊆ Ziffern des Zitats; Verneinung des Zitats bleibt erhalten, außer Erinnerungsfloskeln („nicht vergessen“, „vergiss nicht“, „don’t forget“). Doppelte (normalisiert) fallen weg. | Aufgabe fällt weg |
 | `related` | ≤ 3; `ref` ∈ gesendete Kandidaten; kein Selbstbezug; `reason` ≤ 60 Zeichen, nur Ziffern aus einem der beiden Texte. **Annahme:** `high` → ja; `medium` → nur bei lokalem Wert ≥ 0,75; `low` → nein. | Verbindung fällt weg |
 
 Zusätzlich:
@@ -835,6 +858,13 @@ Zusätzlich:
 | > 24 h ohne Erfolg (außer Schlüssel/Budget) | `needsAttention` (Mac) |
 | „Erneut ordnen“ | bewusst neue Anfrage, alter `ai-result.json` verworfen (Mac N11) |
 | Zeitlimit | **Keins für die Antwort.** Nur Leerlauf-Timeouts gegen tote Verbindungen (60 s ohne Byte), wie beim Polieren. |
+
+**Diagnose** (`ThoughtTrace` → `Diag.log`, verdrahtet in `ThoughtsEnvironment`): je Gedanke `thought.transcribe.begin/end`
+und `thought.structure.begin/end` mit Dauer in ms, je Groq-Aufruf `thought.groq` (Modell, Aufwand, Status wie `http-429`,
+Tokens, Dauer, nächster Schritt `done`/`retry`/`fallback`/`medium`/`wait`/`raw`), Ledger-Absagen `thought.groq.ledger`,
+Wartegründe `thought.wait` (Zustand, Wartezeit; auch `partGap`) und `thought.wait.dictation`, dazu `thought.attention`
+und `thought.empty`. Nur Kurz-IDs, Längen, Zeiten, Modelle und feste Codes – nie Text, Titel, Themennamen oder Aufgaben
+(Test `ThoughtTraceTests`).
 
 Auslöser der Warteschlange: Aufnahme beendet, App im Vordergrund, Netz zurück, `retryAt` erreicht (Timer, solange
 die App lebt), App-Start (`recover()`), `BGProcessingTask` `com.paply.ios.thoughts` (Netz nötig, geplant,

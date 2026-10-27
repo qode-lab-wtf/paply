@@ -101,10 +101,8 @@ struct TopicsEditView: View {
         }
         .sheet(item: $editing) { topic in
             NavigationStack {
-                TopicEditor(mode: .edit(topic)) { title, icon, note in
-                    if title != topic.title { model.renameTopic(topic.id, title: title) }
-                    if icon != topic.icon { model.setTopicIcon(topic.id, icon) }
-                    if note != topic.describedNote { model.setTopicNote(topic.id, note) }
+                TopicEditor(mode: .edit(topic)) { result in
+                    TopicEditing.apply(result, to: topic, model: model)
                 }
             }
             .presentationDetents([.medium, .large])
@@ -144,7 +142,7 @@ struct TopicsEditView: View {
         let count = model.count(of: topic.id)
         let note = topic.describedNote
         return HStack(spacing: 12) {
-            TopicBadge(icon: topic.icon, size: 32)
+            TopicBadge(icon: topic.icon, size: 32, topicID: topic.id)
             VStack(alignment: .leading, spacing: 2) {
                 Text(topic.title)
                     .foregroundStyle(Color.paplyText)
@@ -283,7 +281,7 @@ private struct MergeNameSheet: View {
                             chosen = topic.id
                         } label: {
                             HStack(spacing: 12) {
-                                TopicBadge(icon: topic.icon, size: 30)
+                                TopicBadge(icon: topic.icon, size: 30, topicID: topic.id)
                                 Text(topic.title).foregroundStyle(Color.paplyText)
                                 Spacer()
                                 Text("\(model.count(of: topic.id))")

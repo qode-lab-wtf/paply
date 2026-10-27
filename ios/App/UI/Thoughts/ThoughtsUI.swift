@@ -163,17 +163,25 @@ extension TopicIcon {
     }
 }
 
-/// Themen-Kennung: Symbol auf Mint-Gold, abgerundetes Quadrat.
+/// Themen-Kennung: Symbol auf Mint-Gold, abgerundetes Quadrat. Hat das Thema ein Bild (`topicID`), steht das Bild
+/// im gleichen Quadrat.
 struct TopicBadge: View {
     let icon: TopicIcon
     var size: CGFloat = 44
+    /// Thema, dessen Bild statt des Symbols erscheint (nil = immer das Symbol)
+    var topicID: String?
 
     var body: some View {
-        TopicGlyph(key: icon.rawValue, size: size * 0.52, stroke: 2, scales: false)
-            .foregroundStyle(Color.paplyForest)
-            .frame(width: size, height: size)
-            .background(RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).fill(ThoughtTint.fill))
-            .accessibilityHidden(true)
+        if let image = TopicImages.shared.image(for: topicID) {
+            TopicImageTile(image: image, topicID: topicID, size: size, cornerRatio: 0.27)
+                .accessibilityHidden(true)
+        } else {
+            TopicGlyph(key: icon.rawValue, size: size * 0.52, stroke: 2, scales: false)
+                .foregroundStyle(Color.paplyForest)
+                .frame(width: size, height: size)
+                .background(RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).fill(ThoughtTint.fill))
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -520,12 +528,12 @@ enum ThoughtSections {
 
 // MARK: - Navigation und Hinweise
 
-enum RootTab: Hashable { case thoughts, dictation }
+/// Reiter: Gedanken | Aufgaben | Diktat
+enum RootTab: Hashable { case thoughts, tasks, dictation }
 
 enum ThoughtsRoute: Hashable {
-    /// `zoom`: Kennung der Karte, aus der das Detail heraus-zoomt (nil = normal schieben)
+    /// `zoom`: Kennung der Karte bzw. Zeile, aus der das Detail heraus-zoomt (nil = normal schieben)
     case thought(String, task: String? = nil, zoom: String? = nil)
-    case tasks
     case search
     case topics
     case deleted
@@ -533,10 +541,9 @@ enum ThoughtsRoute: Hashable {
 }
 
 /// Was die Startseite zeigt: Übersicht der Karte oder ein Thema (Karte hineingezoomt, Panel offen).
-/// `.tasks` wird nicht mehr gesetzt – die Aufgabenliste ist die Seite `ThoughtsRoute.tasks`.
+/// Die Aufgaben sind ein eigener Reiter (`RootTab.tasks`).
 enum ThoughtsFilter: Hashable {
     case all
-    case tasks
     case topic(String)
 }
 
@@ -562,8 +569,14 @@ struct ThoughtsToast: Identifiable, Equatable {
 @MainActor
 @Observable
 final class ThoughtsNav {
+    /// Navigationsstapel, in dem eine Ansicht steht (Detail aus dem Reiter Gedanken oder Aufgaben)
+    enum Stack: Hashable { case thoughts, tasks }
+
     var tab: RootTab = .thoughts
+    /// Stapel des Reiters Gedanken
     var path: [ThoughtsRoute] = []
+    /// Stapel des Reiters Aufgaben
+    var tasksPath: [ThoughtsRoute] = []
     var filter: ThoughtsFilter = .all {
         didSet {
             // Ein Thema aus der Übersicht öffnet das Panel in mittlerer Höhe
@@ -584,6 +597,20 @@ final class ThoughtsNav {
     func open(_ id: String, task: String? = nil) {
         tab = .thoughts
         path = [.thought(id, task: task)]
+    }
+
+    /// Im Stapel, in dem die Ansicht steht, eine Seite weiter (z. B. „Verwandt“ im Detail)
+    func push(_ route: ThoughtsRoute, on stack: Stack) {
+        switch stack {
+        case .thoughts: path.append(route)
+        case .tasks: tasksPath.append(route)
+        }
+    }
+
+    /// Reiter Aufgaben, an seinem Anfang
+    func showTasks() {
+        tab = .tasks
+        tasksPath = []
     }
 
     /// Thema im Panel zeigen (Karte zoomt hinein)
@@ -616,6 +643,8 @@ final class ThoughtsNav {
 extension EnvironmentValues {
     /// Namensraum für den Zoom-Übergang Aufnahme-Knopf/Leiste/Zeile ↔ große Aufnahme-Ansicht
     @Entry var captureZoom: Namespace.ID?
+    /// Stapel, in dem die Ansicht steht (Reiter Gedanken oder Aufgaben)
+    @Entry var thoughtsStack: ThoughtsNav.Stack = .thoughts
 }
 
 extension View {

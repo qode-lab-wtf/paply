@@ -1,15 +1,17 @@
 import PaplyKit
 import SwiftUI
+import UIKit
 
 // Zeichnet die Karte mit `Canvas` (Metal über `drawingGroup`): Punktraster, Linien, leuchtende Kreise mit
-// Lucide-Symbol, Punkte, Beschriftungen. Kamera, verdeckte Höhe unten und Fokus sind animierbar (SwiftUI
-// interpoliert sie Bild für Bild); Datenwechsel laufen zeitgesteuert über `MapMotion`.
-// Was gezeichnet wurde, landet in `MapHitBox` – Tipps treffen genau das Sichtbare.
+// Lucide-Symbol oder Themenbild, Punkte, Beschriftungen, Flüge aus dem Eingang. Kamera, verdeckte Höhe unten und
+// Fokus sind animierbar (SwiftUI interpoliert sie Bild für Bild); Datenwechsel und Flüge laufen zeitgesteuert über
+// `MapMotion`. Was gezeichnet wurde, landet in `MapHitBox` – Tipps treffen genau das Sichtbare.
 //
 // Ruhe in der Übersicht: Punkte erst ab Maßstab 1 (darunter ein feiner Bogen, wo sie im Fokus liegen), wenige
 // zarte Themen-Linien in einer Mischfarbe. „Ohne Thema“ ist ein hohler, gestrichelter Ring ohne Schein, der
 // Sammelkreis „Weitere Themen“ ein feiner Ring mit drei kleinen Kreisen. Schrift trägt einen Hof in der
-// Grundfarbe, Linien laufen darunter; im Fokus Titel nur für die drei neuesten Gedanken und offene Aufgaben.
+// Grundfarbe, Linien laufen darunter. Titel an den Punkten: im Fokus die drei neuesten und offene Aufgaben, beim
+// Hineinzoomen abgestuft mehr (neueste zuerst, `titleZoom`). Schrift wächst nie mit dem Zoom – sie bleibt lesbar.
 
 /// Bildschirmbereich der Karte: ganze Fläche, oben verdeckt (Statusleiste, Kopf), unten verdeckt (Panel).
 struct MapStage: Equatable {
@@ -24,12 +26,32 @@ struct MapStage: Equatable {
     var anchor: CGPoint { CGPoint(x: visible.midX, y: visible.midY) }
 }
 
-/// Weltpunkt `center` liegt am Ankerpunkt der Bühne, `zoom` Bildschirmpunkte je Kartenpunkt.
-struct MapCamera: Equatable {
-    var zoom: CGFloat
-    var center: CGPoint
+/// Themenbilder, einmal für die Zeichenfläche aufgelöst und wiederverwendet. Behalten wird nur, was zuletzt
+/// gezeichnet wurde.
+final class MapImageCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [ObjectIdentifier: (image: UIImage, resolved: GraphicsContext.ResolvedImage)] = [:]
+    private var used: Set<ObjectIdentifier> = []
 
-    static let identity = MapCamera(zoom: 1, center: .zero)
+    func resolved(_ image: UIImage, in context: GraphicsContext) -> GraphicsContext.ResolvedImage {
+        let key = ObjectIdentifier(image)
+        lock.lock()
+        defer { lock.unlock() }
+        used.insert(key)
+        if let entry = entries[key] { return entry.resolved }
+        let resolved = context.resolve(Image(uiImage: image))
+        // das Bild bleibt gehalten, solange es im Speicher steht – so kann keine andere Adresse den Schlüssel erben
+        entries[key] = (image, resolved)
+        return resolved
+    }
+
+    /// nach jedem Bild: nicht Gezeichnetes vergessen
+    func sweep() {
+        lock.lock()
+        if entries.count != used.count { entries = entries.filter { used.contains($0.key) } }
+        used.removeAll(keepingCapacity: true)
+        lock.unlock()
+    }
 }
 
 /// Zuletzt Gezeichnetes in Bildschirmpunkten (für Tipps). Wird beim Zeichnen geschrieben.
@@ -97,6 +119,20 @@ struct MapFrame {
         var titleLines: Int = 0
         /// Übersicht unter Maßstab 1: statt der Punkte ein feiner Bogen, wo sie im Fokus liegen
         var arc: Arc?
+        /// Nachleuchten nach einer Landung (0 … 1)
+        var glow: CGFloat?
+    }
+
+    /// Punkt auf dem Weg von der Kugel zu seinem Kreis
+    struct Flight {
+        var id: String
+        var from: CGPoint
+        var to: CGPoint
+        /// 0 … 1 in der Luft, danach kurz nachleuchtend (bis `flightAfterglow`)
+        var progress: CGFloat
+        var color: Color
+        /// Größe des Punkts am Ziel
+        var endRadius: CGFloat
     }
 
     struct Arc {
@@ -119,6 +155,8 @@ struct MapFrame {
         var color: Color
         var focused: Bool
         var spacing: CGFloat
+        /// Titel daneben (0 = keiner, sonst Deckkraft): im Fokus die neuesten, beim Zoomen abgestuft mehr
+        var title: CGFloat = 0
     }
 
     struct Line {
@@ -134,6 +172,7 @@ struct MapFrame {
     var bubbles: [Bubble] = []
     var dots: [Dot] = []
     var lines: [Line] = []
+    var flights: [Flight] = []
     var few = false
     var labelAlpha: CGFloat = 1
     var focusLevel: CGFloat = 0
@@ -155,6 +194,14 @@ struct MapCanvas: View, @preconcurrency Animatable {
     var style: MapStyle
     var reduceMotion: Bool
     var hitBox: MapHitBox
+    var images: MapImageCache
+    /// Punkte in der Luft (von `orb` aus) und was noch nicht gelandet ist
+    var flights: [MapMotion.Flight] = []
+    var unlanded: (ids: Set<String>, perTopic: [String: Int]) = ([], [:])
+    /// Nachleuchten der Kreise nach einer Landung
+    var glows: [String: CGFloat] = [:]
+    /// Mittelpunkt der Kugel (Bildschirm), Start der Flüge
+    var orb: CGPoint?
     var onTopic: (String) -> Void
     var onThought: (String) -> Void
 
@@ -178,10 +225,12 @@ struct MapCanvas: View, @preconcurrency Animatable {
         let visible = stage.visible
         let grid = gridShading()
         let hitBox = hitBox
+        let images = images
         let style = style
         ZStack {
             Canvas { context, _ in
-                MapPainter(frame: frame, size: size, visible: visible, style: style, grid: grid, reduceMotion: reduceMotion)
+                MapPainter(frame: frame, size: size, visible: visible, style: style, grid: grid, reduceMotion: reduceMotion,
+                           images: images)
                     .draw(&context, hitBox: hitBox)
             } symbols: {
                 symbols(frame)
@@ -253,10 +302,11 @@ struct MapCanvas: View, @preconcurrency Animatable {
                 b.center = lerp(old.center, bubble.center, move)
                 b.radius = lerp(old.radius, bubble.radius, move)
                 b.outerRadius = lerp(old.outerRadius, bubble.outerRadius, move)
-            } else if previous != nil, oldBubbles[bubble.id] == nil {
+            } else if previous != nil || appear["topic:" + bubble.id] != nil, oldBubbles[bubble.id] == nil {
                 if let a = appear["topic:" + bubble.id] {
-                    scale = reduceMotion ? 1 : 0.55 + 0.45 * Self.backOut(a)
-                    alpha = min(1, a * 2.5)
+                    // neuer Kreis: wächst an seinem Anker aus dem Nichts (weiche Feder), nichts sonst bewegt sich
+                    scale = reduceMotion ? 1 : Self.grow(a)
+                    alpha = reduceMotion ? min(1, a * 3) : min(1, a * 5)
                 } else {
                     alpha = p
                 }
@@ -269,11 +319,17 @@ struct MapCanvas: View, @preconcurrency Animatable {
                 arc = MapFrame.Arc(radius: (b.radius + config.firstRing) * zoom, from: span.from, to: span.to,
                                    alpha: hidden * (style.dark ? 0.22 : 0.2))
             }
+            var info = scene.topics[bubble.id]
+            if let waiting = unlanded.perTopic[bubble.id], waiting > 0, let shown = info?.count {
+                // die Zahl am Kreis steigt erst mit der Landung
+                info?.count = max(1, shown - waiting)
+            }
             frame.bubbles.append(MapFrame.Bubble(
                 id: b.id, center: screen(b.center), radius: b.radius * zoom,
                 labelTop: screen(CGPoint(x: b.center.x, y: b.center.y + b.radius + 8)).y,
                 alpha: alpha, scale: scale, dim: dim, focused: bubble.id == focus,
-                info: scene.topics[bubble.id], style: styleOf(bubble.id), titleLines: bubble.titleLines, arc: arc))
+                info: info, style: styleOf(bubble.id), titleLines: bubble.titleLines, arc: arc,
+                glow: reduceMotion ? nil : glows[bubble.id]))
         }
         if let previous, p < 1 {
             let current = Set(scene.layout.bubbles.map(\.id))
@@ -299,24 +355,41 @@ struct MapCanvas: View, @preconcurrency Animatable {
             }
         }
         let oldDots = Dictionary((previous?.layout.dots ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Ziele der Flüge (Punkte, die noch nicht gelandet sind, werden nicht gezeichnet)
+        var targets: [String: (point: CGPoint, radius: CGFloat)] = [:]
+        let flying = Set(flights.map(\.id))
+        let onScreen = CGRect(origin: .zero, size: stage.size).insetBy(dx: -40, dy: -40)
+        let focusTitle = min(1, max(0, (focusLevel - 0.35) / 0.65))
         for dot in scene.layout.dots {
             var position = dot.position
             var alpha: CGFloat = 1
             var appearing: CGFloat?
             if let old = oldDots[dot.id], move < 1 {
                 position = lerp(old.position, dot.position, move)
-            } else if previous != nil, oldDots[dot.id] == nil {
+            } else if previous != nil || appear[dot.id] != nil, oldDots[dot.id] == nil {
                 if let a = appear[dot.id] { appearing = a } else { alpha = p }
             }
             let isFocus = dot.topicID == focus
             let dim = focus != nil && !isFocus ? focusLevel : 0
             let radius = isFocus ? lerp(overviewDot, focusDot, focusLevel) : overviewDot
             let shown = isFocus ? max(dotsShown, focusLevel) : dotsShown
+            if flying.contains(dot.id) || unlanded.ids.contains(dot.id) {
+                targets[dot.id] = (position, shown > 0.5 ? radius : 2.4)
+                if unlanded.ids.contains(dot.id) { continue }
+            }
             guard shown > 0.01 else { continue }
+            let center = screen(position)
+            let info = scene.dots[dot.id]
+            // Titel: im Fokus die drei neuesten und offene Aufgaben; beim Hineinzoomen abgestuft mehr
+            var title: CGFloat = 0
+            if onScreen.contains(center), info != nil {
+                if !scene.few { title = Self.titleAlpha(rank: dot.rank, zoom: zoom) * shown * (1 - dim) }
+                if isFocus, dot.rank < 3 || info?.hasOpenTask == true { title = max(title, focusTitle) }
+            }
             frame.dots.append(MapFrame.Dot(
-                id: dot.id, topicID: dot.topicID, center: screen(position), radius: radius, angle: dot.angle, rank: dot.rank,
-                alpha: alpha * shown * (1 - 0.82 * dim), appear: appearing, info: scene.dots[dot.id], color: styleOf(dot.topicID).dot,
-                focused: isFocus, spacing: spacing[dot.topicID] ?? .infinity))
+                id: dot.id, topicID: dot.topicID, center: center, radius: radius, angle: dot.angle, rank: dot.rank,
+                alpha: alpha * shown * (1 - 0.82 * dim), appear: appearing, info: info, color: styleOf(dot.topicID).dot,
+                focused: isFocus, spacing: spacing[dot.topicID] ?? .infinity, title: title))
         }
         if let previous, p < 1, dotsShown > 0.01 || focusLevel > 0.01 {
             let current = Set(scene.layout.dots.map(\.id))
@@ -326,6 +399,25 @@ struct MapCanvas: View, @preconcurrency Animatable {
                     id: old.id, topicID: old.topicID, center: screen(old.position), radius: overviewDot, angle: old.angle,
                     rank: old.rank, alpha: (1 - p) * shown, appear: nil, info: previous.dots[old.id], color: styleOf(old.topicID).dot,
                     focused: false, spacing: .infinity))
+            }
+        }
+
+        // Flüge von der Kugel: zum Punkt des Gedankens – steckt er im Kreis (kein eigener Punkt), oben an den Kreis
+        if let orb, !reduceMotion {
+            for flight in flights {
+                let target: (point: CGPoint, radius: CGFloat)
+                if let t = targets[flight.id] {
+                    target = t
+                } else if let b = worldBubble[flight.topicID] {
+                    target = (CGPoint(x: b.center.x, y: b.center.y - b.radius), 2.4)
+                } else {
+                    continue
+                }
+                frame.flights.append(MapFrame.Flight(
+                    id: flight.id, from: orb, to: screen(target.point), progress: flight.progress,
+                    color: flight.topicID == ThoughtMapView.noTopicID || flight.topicID == ThoughtMapView.moreID
+                        ? style.flightNeutral : styleOf(flight.topicID).dot,
+                    endRadius: target.radius))
             }
         }
 
@@ -389,11 +481,35 @@ struct MapCanvas: View, @preconcurrency Animatable {
         return t * t * (3 - 2 * t)
     }
 
-    /// leichtes Überschwingen (Einblenden)
-    static func backOut(_ t: CGFloat) -> CGFloat {
-        let c1: CGFloat = 1.4, c3 = c1 + 1
-        let x = t - 1
-        return 1 + c3 * x * x * x + c1 * x * x
+    /// Wachsen aus dem Nichts: weiche Feder mit kaum merklichem Überschwingen (≈ 4 %), `t` über `appearDuration`
+    static func grow(_ t: CGFloat) -> CGFloat {
+        guard t > 0 else { return 0 }
+        let time = t * CGFloat(MapMotion.appearDuration), zeta: CGFloat = 0.72, omega: CGFloat = 10
+        let wd = omega * (1 - zeta * zeta).squareRoot()
+        return 1 - exp(-zeta * omega * time) * (cos(wd * time) + zeta * omega / wd * sin(wd * time))
+    }
+
+    /// Ab welchem Maßstab ein Punkt in der Übersicht seinen Titel zeigt – neueste zuerst, abgestuft
+    static func titleZoom(rank: Int) -> CGFloat {
+        switch rank {
+        case 0: 1.5
+        case 1...2: 1.95
+        case 3...5: 2.45
+        case 6...11: 3.1
+        default: 3.8
+        }
+    }
+
+    /// Deckkraft des Titels beim Zoomen (blendet über einen kleinen Bereich ein, damit nichts ploppt)
+    static func titleAlpha(rank: Int, zoom: CGFloat) -> CGFloat {
+        min(1, max(0, (zoom - titleZoom(rank: rank)) / 0.18))
+    }
+
+    /// Weg eines Flugs über die Zeit: hebt weich ab, legt den Großteil früh zurück und setzt sanft auf
+    /// (kritisch gedämpfte Feder, auf 0 … 1 normiert)
+    nonisolated static func flightEase(_ p: CGFloat) -> CGFloat {
+        let w: CGFloat = 6.5, t = min(1, max(0, p))
+        return (1 - (1 + w * t) * exp(-w * t)) / (1 - (1 + w) * exp(-w))
     }
 
     // MARK: Schrift als Symbole (einmal gesetzt, beim Zeichnen nur platziert)
@@ -421,20 +537,18 @@ struct MapCanvas: View, @preconcurrency Animatable {
                 }
             }
         }
-        if frame.focusLevel > 0.01 {
-            // Titel nur für die drei neuesten und die mit offener Aufgabe – mit Hof in der Grundfarbe, damit
-            // Linien darunter die Schrift nicht kreuzen
-            ForEach(frame.dots.filter { $0.focused && ($0.rank < 3 || $0.info?.hasOpenTask == true) }, id: \.id) { dot in
-                if let info = dot.info {
-                    Text(MapText.short(info.title, 24))
-                        .font(.caption)
-                        .foregroundStyle(style.ink.opacity(0.86))
-                        .lineLimit(1)
-                        .fixedSize()
-                        .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                        .modifier(MapHalo(color: style.ground))
-                        .tag("F:" + dot.id)
-                }
+        // Titel an den Punkten (im Fokus die neuesten, beim Zoomen mehr) – mit Hof in der Grundfarbe, damit Linien
+        // darunter die Schrift nicht kreuzen. Nur für Punkte im Bild.
+        ForEach(frame.dots.filter { $0.title > 0.01 }, id: \.id) { dot in
+            if let info = dot.info {
+                Text(MapText.short(info.title, 24))
+                    .font(.caption)
+                    .foregroundStyle(style.ink.opacity(0.86))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                    .modifier(MapHalo(color: style.ground))
+                    .tag("F:" + dot.id)
             }
         }
     }
@@ -556,6 +670,7 @@ private struct MapPainter {
     let style: MapStyle
     let grid: Grid
     let reduceMotion: Bool
+    let images: MapImageCache
 
     func draw(_ context: inout GraphicsContext, hitBox: MapHitBox) {
         var hits = MapHitBox.Snapshot()
@@ -564,9 +679,11 @@ private struct MapPainter {
         for bubble in frame.bubbles.sorted(by: { ($0.focused ? 1 : 0, $0.radius) < ($1.focused ? 1 : 0, $1.radius) }) {
             drawBubble(&context, bubble)
         }
+        images.sweep()
         drawDots(&context)
         let labels = drawLabels(&context)
-        hits.titles = labels.titles + drawFocusTitles(&context)
+        hits.titles = labels.titles + drawDotTitles(&context, avoid: Array(labels.rects.values) + labels.titles.map(\.rect))
+        drawFlights(&context)
         hits.topics = frame.bubbles.filter { $0.alpha > 0.5 && $0.info != nil }.map {
             MapHitBox.Topic(id: $0.id, center: $0.center, radius: $0.radius * $0.scale, label: labels.rects[$0.id])
         }
@@ -630,6 +747,15 @@ private struct MapPainter {
             ctx.stroke(path, with: .color(s.dot.opacity(arc.alpha)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
         }
 
+        // Landung: ein Ring öffnet sich sanft um den Kreis
+        if let glow = bubble.glow {
+            let e = easeOut(glow)
+            let rr = r + 3 + 18 * e
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: 2 * rr, height: 2 * rr)),
+                       with: .color((kind == .topic ? s.glow : style.neutralRing).opacity(0.6 * (1 - glow))),
+                       lineWidth: 1.6 - 0.8 * glow)
+        }
+
         switch kind {
         case .none:
             // „Ohne Thema“: hohler, gestrichelter Ring – kein Schein, keine Kugel
@@ -654,10 +780,12 @@ private struct MapPainter {
             break
         }
 
-        // Schein
+        // Schein (leuchtet nach einer Landung kurz auf)
         if r > 4 {
             let glowR = r * (style.dark ? 2.15 : 1.8)
-            let strength = s.glowStrength * (bubble.focused ? 1.25 : 1)
+            let fade: Double = bubble.glow.map { Double(1 - $0) } ?? 0
+            let flash: Double = 1 + 0.9 * fade * fade
+            let strength: Double = min(0.9, s.glowStrength * (bubble.focused ? 1.25 : 1) * flash)
             ctx.fill(Path(ellipseIn: CGRect(x: c.x - glowR, y: c.y - glowR, width: 2 * glowR, height: 2 * glowR)),
                      with: .radialGradient(Gradient(stops: [
                         .init(color: s.glow.opacity(strength), location: 0.36),
@@ -674,6 +802,12 @@ private struct MapPainter {
             }
         }
 
+        // Themenbild: rund zugeschnitten, feiner Rand in der Themenfarbe statt Farbfüllung und Symbol
+        if let image = bubble.info?.image {
+            drawImage(&ctx, image, center: c, radius: r, style: s)
+            return
+        }
+
         // Kugel
         let body = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
         ctx.fill(body, with: .radialGradient(Gradient(stops: s.body), center: CGPoint(x: c.x - 0.36 * r, y: c.y - 0.48 * r),
@@ -688,6 +822,37 @@ private struct MapPainter {
             let stroke = (r > 40 ? 1.6 : 1.85) * k
             ctx.stroke(path, with: .color(s.glyph), style: StrokeStyle(lineWidth: max(1, stroke), lineCap: .round, lineJoin: .round))
         }
+    }
+
+    /// Bild im Kreis: füllt ihn (Seitenverhältnis bleibt), ein zarter Lichtpunkt oben links und etwas Tiefe zum Rand
+    /// geben ihm die Wölbung der anderen Kreise; der Rand leuchtet fein in der Themenfarbe.
+    private func drawImage(_ ctx: inout GraphicsContext, _ image: UIImage, center c: CGPoint, radius r: CGFloat,
+                           style s: MapStyle.Bubble) {
+        let rect = CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
+        let circle = Path(ellipseIn: rect)
+        var clip = ctx
+        clip.clip(to: circle)
+        // Grund in der Themenfarbe (durchscheinende Logos, Ränder beim Einpassen)
+        clip.fill(circle, with: .color(s.glow.opacity(0.35)))
+        let resolved = images.resolved(image, in: ctx)
+        let size = resolved.size
+        let k = max(rect.width / max(size.width, 1), rect.height / max(size.height, 1))
+        let w = size.width * k, h = size.height * k
+        clip.draw(resolved, in: CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h))
+        clip.fill(circle, with: .radialGradient(Gradient(stops: [
+            .init(color: .white.opacity(style.dark ? 0.22 : 0.28), location: 0),
+            .init(color: .white.opacity(0), location: 0.6),
+        ]), center: CGPoint(x: c.x - 0.42 * r, y: c.y - 0.52 * r), startRadius: 0, endRadius: 1.2 * r))
+        clip.fill(circle, with: .radialGradient(Gradient(stops: [
+            .init(color: .black.opacity(0), location: 0.64),
+            .init(color: .black.opacity(style.dark ? 0.3 : 0.14), location: 1),
+        ]), center: c, startRadius: 0, endRadius: r))
+        // Rand: innen kräftig, außen ein Hauch Leuchten
+        let rim = max(1.2, min(2.6, r * 0.055))
+        ctx.stroke(Path(ellipseIn: rect.insetBy(dx: rim / 2, dy: rim / 2)), with: .color(s.ring.opacity(style.dark ? 0.95 : 0.9)),
+                   lineWidth: rim)
+        let halo = rect.insetBy(dx: -1.4, dy: -1.4)
+        ctx.stroke(Path(ellipseIn: halo), with: .color(s.glow.opacity(style.dark ? 0.4 : 0.3)), lineWidth: 1.2)
     }
 
     // MARK: Punkte
@@ -770,7 +935,10 @@ private struct MapPainter {
             var found: CGRect?
             for offset in offsets {
                 var rect = CGRect(x: bubble.center.x - w / 2 + offset.x, y: bubble.labelTop + offset.y, width: w, height: h)
-                rect.origin.x = min(max(rect.minX, 8), size.width - 8 - w)
+                // am Rand ins Bild rücken – aber nur so weit, wie der Kreis reicht (beim Zoomen bleibt der Name eines
+                // Kreises außerhalb des Bildes bei seinem Kreis)
+                let inside = min(max(rect.minX, 8), size.width - 8 - w)
+                if abs(inside - rect.minX) <= r + 6 { rect.origin.x = inside }
                 guard rect.minY < size.height, rect.maxY > 0 else { break }
                 if !placed.contains(where: { $0.insetBy(dx: -4, dy: -1).intersects(rect) }), !circleHits(rect, except: bubble.id) {
                     found = rect
@@ -779,7 +947,9 @@ private struct MapPainter {
             }
             guard let rect = found else { continue }
             var ctx = context
-            ctx.opacity = frame.labelAlpha * bubble.alpha * (1 - 0.7 * bubble.dim)
+            // ein wachsender Kreis bekommt seinen Namen erst, wenn er fast da ist
+            let grown = min(1, max(0, (bubble.scale - 0.55) / 0.4))
+            ctx.opacity = frame.labelAlpha * bubble.alpha * grown * (1 - 0.7 * bubble.dim)
             ctx.draw(symbol, in: rect)
             placed.append(rect)
             rects[bubble.id] = rect
@@ -791,7 +961,8 @@ private struct MapPainter {
                 guard let title = context.resolveSymbol(id: "T:" + dot.id) else { continue }
                 let tw = title.size.width, th = title.size.height
                 var tr = CGRect(x: bubble.center.x - tw / 2, y: y, width: tw, height: th)
-                tr.origin.x = min(max(tr.minX, 8), size.width - 8 - tw)
+                let inside = min(max(tr.minX, 8), size.width - 8 - tw)
+                if abs(inside - tr.minX) <= r + 6 { tr.origin.x = inside }
                 guard !placed.contains(where: { $0.intersects(tr) }), !circleHits(tr, except: bubble.id) else { break }
                 ctx.draw(title, in: tr)
                 placed.append(tr)
@@ -802,16 +973,22 @@ private struct MapPainter {
         return (rects, titles)
     }
 
-    /// Im Fokus: kurze Titel neben den Punkten, wo Platz ist (neueste zuerst)
-    private func drawFocusTitles(_ context: inout GraphicsContext) -> [MapHitBox.Title] {
-        guard frame.focusLevel > 0.05, let focus = frame.focusID,
-              let bubble = frame.bubbles.first(where: { $0.id == focus }) else { return [] }
-        let dots = frame.dots.filter(\.focused).sorted { $0.rank < $1.rank }
+    /// Kurze Titel neben den Punkten, wo Platz ist: im Fokus die neuesten und offene Aufgaben, beim Zoomen abgestuft
+    /// mehr. Thema im Fokus zuerst, dann neueste zuerst. Weicht Beschriftungen, Kreisen und Punkten aus.
+    private func drawDotTitles(_ context: inout GraphicsContext, avoid: [CGRect]) -> [MapHitBox.Title] {
+        let candidates = frame.dots.filter { $0.title > 0.01 }
+            .sorted { ($0.focused ? 0 : 1, $0.rank, $0.id) < ($1.focused ? 0 : 1, $1.rank, $1.id) }
+        guard !candidates.isEmpty else { return [] }
+        var bubbles: [String: MapFrame.Bubble] = [:]
+        for bubble in frame.bubbles where bubble.info != nil { bubbles[bubble.id] = bubble }
+        let topics = Set(candidates.map(\.topicID))
+        var neighbours: [String: [MapFrame.Dot]] = [:]
+        for dot in frame.dots where topics.contains(dot.topicID) { neighbours[dot.topicID, default: []].append(dot) }
         let area = visible.insetBy(dx: 8, dy: 6)
-        var placed: [CGRect] = []
+        var placed = avoid
         var titles: [MapHitBox.Title] = []
-        for dot in dots {
-            guard let symbol = context.resolveSymbol(id: "F:" + dot.id) else { continue }
+        for dot in candidates {
+            guard let bubble = bubbles[dot.topicID], let symbol = context.resolveSymbol(id: "F:" + dot.id) else { continue }
             let w = symbol.size.width, h = symbol.size.height
             let c = dot.center, gap = dot.radius + 7
             let cosine = cos(dot.angle)
@@ -825,20 +1002,75 @@ private struct MapPainter {
             }
             guard area.contains(rect) else { continue }
             guard !placed.contains(where: { $0.insetBy(dx: -3, dy: -2).intersects(rect) }) else { continue }
-            let hitsDot = dots.contains { other in
+            let hitsDot = (neighbours[dot.topicID] ?? []).contains { other in
                 let qx = min(max(other.center.x, rect.minX), rect.maxX), qy = min(max(other.center.y, rect.minY), rect.maxY)
                 return hypot(other.center.x - qx, other.center.y - qy) < other.radius + 3
             }
             guard !hitsDot else { continue }
             let qx = min(max(bubble.center.x, rect.minX), rect.maxX), qy = min(max(bubble.center.y, rect.minY), rect.maxY)
-            guard hypot(bubble.center.x - qx, bubble.center.y - qy) > bubble.radius + 4 else { continue }
+            guard hypot(bubble.center.x - qx, bubble.center.y - qy) > bubble.radius + 4, !circleHits(rect, except: bubble.id) else { continue }
             var ctx = context
-            ctx.opacity = min(1, max(0, (frame.focusLevel - 0.35) / 0.65)) * dot.alpha
+            ctx.opacity = dot.title * dot.alpha
             ctx.draw(symbol, in: rect)
             placed.append(rect)
-            titles.append(MapHitBox.Title(id: dot.id, rect: rect))
+            if dot.title * dot.alpha > 0.6 { titles.append(MapHitBox.Title(id: dot.id, rect: rect)) }
         }
-        return frame.focusLevel > 0.6 ? titles : []
+        return titles
+    }
+
+    // MARK: Flüge
+
+    /// Punkt von der Kugel zu seinem Kreis: ein weicher Bogen, hebt klein ab, fliegt mit zartem Schweif und färbt sich
+    /// unterwegs von Paply-Grün in die Themenfarbe. Nach der Landung glüht er kurz nach, während der Punkt am Ziel
+    /// aufploppt.
+    private func drawFlights(_ context: inout GraphicsContext) {
+        for flight in frame.flights {
+            let s = flight.from, e = flight.to
+            let dist = hypot(e.x - s.x, e.y - s.y)
+            let p = flight.progress
+            if p >= 1 {
+                // Nachglühen am Ziel
+                let k = min(1, (p - 1) * CGFloat(MapLandings.duration / MapMotion.afterglow))
+                let rr = max(flight.endRadius, 2) * (1.6 + 3 * easeOut(k))
+                context.fill(Path(ellipseIn: CGRect(x: e.x - rr, y: e.y - rr, width: 2 * rr, height: 2 * rr)),
+                             with: .radialGradient(Gradient(colors: [flight.color.opacity(0.55 * (1 - k)), flight.color.opacity(0)]),
+                                                   center: e, startRadius: 0, endRadius: rr))
+                continue
+            }
+            // Bogen: steigt von der Kugel auf und setzt von oben auf den Kreis
+            let lift = min(140, 0.24 * dist)
+            let control = CGPoint(x: s.x + (e.x - s.x) * 0.2, y: min(s.y, e.y) - lift)
+            func point(_ t: CGFloat) -> CGPoint {
+                let u = 1 - t
+                return CGPoint(x: u * u * s.x + 2 * u * t * control.x + t * t * e.x,
+                               y: u * u * s.y + 2 * u * t * control.y + t * t * e.y)
+            }
+            let u = MapCanvas.flightEase(p)
+            let rise = easeOut(min(1, p / 0.2))
+            let land = easeInOut(max(0, (p - 0.72) / 0.28))
+            let r = (1.8 + 3.8 * rise) * (1 - land) + max(flight.endRadius, 2.4) * 1.2 * land
+            let color = style.inbox.mix(with: flight.color, by: Double(min(1, u * 1.25)))
+            // Schweif
+            for k in stride(from: 6, through: 1, by: -1) {
+                let q = max(0, u - CGFloat(k) * 0.032 * (1 - land))
+                let tp = point(q)
+                let tr = r * (1 - 0.12 * CGFloat(k))
+                context.fill(Path(ellipseIn: CGRect(x: tp.x - tr, y: tp.y - tr, width: 2 * tr, height: 2 * tr)),
+                             with: .color(color.opacity(0.36 * (1 - CGFloat(k) / 7) * rise)))
+            }
+            let c = point(u)
+            let h = r * 3.8
+            context.fill(Path(ellipseIn: CGRect(x: c.x - h, y: c.y - h, width: 2 * h, height: 2 * h)),
+                         with: .radialGradient(Gradient(stops: [
+                            .init(color: color.opacity(0.6), location: r / h),
+                            .init(color: color.opacity(0.18), location: (r / h + 1) / 2),
+                            .init(color: color.opacity(0), location: 1),
+                         ]), center: c, startRadius: 0, endRadius: h))
+            context.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)), with: .color(color))
+            let core = r * 0.45
+            context.fill(Path(ellipseIn: CGRect(x: c.x - core, y: c.y - core, width: 2 * core, height: 2 * core)),
+                         with: .color(.white.opacity(0.5 * (1 - land))))
+        }
     }
 
     private func easeOut(_ t: CGFloat) -> CGFloat { 1 - pow(1 - min(1, max(0, t)), 3) }

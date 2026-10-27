@@ -18,13 +18,16 @@ enum Route: Hashable {
     case entry(String)
 }
 
-/// Zwei gleichrangige Bereiche (KONZEPT §2): „Gedanken“ (Start) und „Diktat“. Einstellungen als
+/// Drei Reiter: „Gedanken“ (Start), „Aufgaben“ (alle Aufgaben aus den Gedanken) und „Diktat“. Einstellungen als
 /// Blatt hinter dem Zahnrad. Über allem: Aufnahme-Leiste, große Aufnahme-Ansicht, FlashView.
 struct RootView: View {
     @State private var model: ThoughtsModel
     @State private var nav = ThoughtsNav()
     @State private var flow: CaptureFlow
+    /// Abhaken mit Wartezeit – eine für alle Reiter, damit dieselbe Aufgabe überall gleich aussieht
+    @State private var checkoff = TaskCheckoff()
     @Namespace private var zoom
+    @Environment(\.scenePhase) private var scenePhase
     private let session = SessionController.shared
 
     init() {
@@ -41,6 +44,10 @@ struct RootView: View {
             Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
                 ThoughtsTab()
             }
+            Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
+                TasksTab()
+            }
+            .badge(TasksBadge.count(model))
             Tab("Diktat", systemImage: "globe", value: RootTab.dictation) {
                 DictationTab()
             }
@@ -53,6 +60,10 @@ struct RootView: View {
         }
         .sheet(isPresented: $nav.showSettings) {
             SettingsSheet()
+        }
+        // Themenwahl aus dem Detail – in beiden Reitern (Gedanken, Aufgaben)
+        .sheet(item: $nav.topicPicker) { item in
+            TopicPickerSheet(thoughtID: item.id)
         }
         .overlay {
             if let flash = session.flash {
@@ -69,8 +80,13 @@ struct RootView: View {
         .environment(model)
         .environment(nav)
         .environment(flow)
+        .environment(checkoff)
         .environment(\.captureZoom, zoom)
         .onOpenURL(perform: open)
+        .task { TopicImages.shared.prepare() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { TaskDay.shared.refresh() }
+        }
         .preferredColorScheme(.dark)
         #if DEBUG
         .task { await ThoughtsDebug.apply(nav: nav, flow: flow, model: model) }
@@ -78,7 +94,7 @@ struct RootView: View {
     }
 
     /// Deep Links (§2): `thought/current?id=…` (Live Activity), `thought/new` (Rückfall des Sperrbildschirm-
-    /// Widgets: Aufnahme in der App), `thought/<id>`, `thoughts/tasks`.
+    /// Widgets: Aufnahme in der App), `thought/<id>`, `thoughts/tasks` (Reiter Aufgaben).
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
         guard url.scheme == PaplyURL.scheme else { return }
@@ -101,9 +117,10 @@ struct RootView: View {
                 nav.open(path)
             }
         case "thoughts":
-            nav.tab = .thoughts
             if path == "tasks" {
-                nav.path = [.tasks]
+                nav.showTasks()
+            } else {
+                nav.tab = .thoughts
             }
         default:
             break

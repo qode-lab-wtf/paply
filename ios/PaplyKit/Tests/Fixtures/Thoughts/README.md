@@ -15,6 +15,7 @@ Kindern Mila (7) und Ben (3) und hat einen Bruder Felix. Keine echten Personenda
 | `eval.jsonl` | 36 Fälle, je Zeile ein JSON-Objekt, jeder Fall einzeln gegen die unveränderte `store-a` |
 | `coldstart.jsonl` | 12 Gedanken in Reihenfolge ab leerer Ablage, je Zeile ein Schritt |
 | `described.json` | Themen mit Beschreibung: 4 beschriebene Nutzer-Themen (zusätzlich zu store-a) und 8 Fälle (§10) |
+| `prompt4.json` | Prompt v4: 6 neue kurze Fälle und 6 Regressionsfälle aus `eval.jsonl` per ID (§11) |
 
 ---
 
@@ -382,3 +383,32 @@ Logistik“, Verein „Ruderclub“ und Person „Oma Ilse“. Alle Namen sind e
 - `mustNotAdd`: kein neues Thema mit einem Namen aus den Beschreibungen.
 - Erzeugt mit einem kleinen Python-Skript (`python3 -I`, nicht im Repo), IDs = `t_` + md5 des Namens.
 
+## 11. `prompt4.json` (Prompt v4: Aufgabentext, Termine, einmalige Besorgungen)
+
+`{ cases: [6 Fälle im Format von eval.jsonl], regression: [{ id, why, allowTasks? }] }`. Alle Fälle laufen gegen die
+unveränderte store-a (`paply-bench thoughts-eval … --set prompt4`). Die neuen Fälle folgen dem Muster echter Befunde vom
+iPhone, mit **erfundenen** Personen und Firmen (Steuerbüro Hartwig, Biomarkt Sonnenkorn, Herr Brandl vom Familienzentrum
+Lindenhof, Patenkind Noah, Fitnessstudio Hantelhaus); keine echten Personendaten.
+
+| Fall | Muster | erwartet |
+| --- | --- | --- |
+| n01 | Füllwörter und Ich-Bezug („bei meiner Firma … noch … einmal“) | Aufgabe im Kern, Thema Fluxo (auch Finanzen) |
+| n02 | einmalige Besorgung, Zeitausdruck in zwei Stücken, zwei Aufgaben | due „morgen (…) vormittags“, nicht doppelt im Text; Thema none (auch Familie oder ein Bereich wie „Einkäufe“), nie „Sonnenkorn …“ |
+| n03 | fester Termin des Sprechers (Kunde kommt um 10 Uhr ins Büro) | Erinnerung mit dem Anteil des Sprechers („Herrn Brandl empfangen“), due „morgen um 10 Uhr“; Thema Fluxo. Ein Aufgabentext mit der Handlung des Kunden („… kaufen“, „vorbeikommen“) ist falsch (`mustNotAdd` für `tasks`) |
+| n04 | Person + Sache (Laufrad für das Patenkind) | Thema Familie, „Noah“ oder none, nie „Laufrad“/„Geburtstag“ |
+| n05 | Zeitausdruck am Ende, Possessiv | „Reisepass verlängern lassen“, due „bis Ende November“; kein Thema „Reisepass“ |
+| n06 | Verneinung bleibt | Aufgabe mit „nicht verlängern“; Thema Fitness |
+
+- Regression (unverändert aus `eval.jsonl`): e03 (none, keine Aufgabe), e06 (Aufgabe mit Frist; die Besichtigung beim
+  Sprecher „am Donnerstag um neun“ ist nach v4 als Termin-Aufgabe **zulässig**, `allowTasks`; `mustNotAdd: []` ersetzt die
+  due-Regel „Donnerstag“, die Keller-Frist prüft „`due_hint` korrekt“), e07 (Termin einer anderen
+  Person bleibt keine Aufgabe), e10 (Handlung Dritter mit Zeitangabe), e18 (neues Thema), e26 (zwei Aufgaben, „samstags um
+  zehn“ ist kein Termin des Sprechers).
+- `mustNotAdd` mit `tasks` macht im Prüfstand eine Aufgabe **falsch** (Präzisionsfehler, nie Recall), auch wenn ihr Zitat
+  passt (gilt für alle Sätze).
+- Zusätzlich bewertet der Prüfstand die **Form** jedes Aufgabentexts (groß, ≤ 6 Wörter, ohne Füllwort und Ich-Bezug,
+  Zeitausdruck nicht doppelt) – für die gespeicherte Aufgabe und für die Rohantwort der KI getrennt.
+- `swift test` prüft offline (`AIPrompt4FixtureTests`): Jede erwartete Aufgabe hat schon die Form, die der Code herstellt,
+  besteht die Prüfung „nur Wörter des Sprechers“, Ziffern und Verneinung; jede erwartete Fälligkeit steht (auch in Stücken)
+  im Transkript; die Regressions-IDs gibt es.
+- Erzeugt mit einem kleinen Python-Skript (`python3 -I`, nicht im Repo).

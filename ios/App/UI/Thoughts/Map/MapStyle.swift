@@ -24,6 +24,10 @@ struct MapStyle {
     var neutralRing: Color { dark ? Color.paplyText.opacity(0.44) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.42) }
     var neutralFill: Color { dark ? Color.white.opacity(0.04) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.04) }
     var neutralGlyph: Color { dark ? Color.paplyText.opacity(0.42) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.36) }
+    /// Flug zu „Ohne Thema“ bzw. zum Sammelkreis
+    var flightNeutral: Color { dark ? Color.paplyText.opacity(0.85) : Color(uiColor: UIColor(hex: 0x2B342F)).opacity(0.7) }
+    /// Paply-Grün der Kugel (Start der Flüge)
+    var inbox: Color { dark ? .paplyGreenBright : Color(uiColor: Brand.green) }
 
     @ViewBuilder
     var background: some View {
@@ -48,6 +52,8 @@ struct MapStyle {
         /// Verlauf im Kreis: Lichtpunkt oben links → Rand
         var body: [Gradient.Stop]
         var rim: Color
+        /// Rand um ein Themenbild (Themenfarbe, leuchtend)
+        var ring: Color
         var glyph: Color
         /// Punkte und Linien
         var dot: Color
@@ -60,14 +66,15 @@ struct MapStyle {
             return Bubble(glow: tint.base, glowStrength: 0.46,
                           body: [.init(color: tint.light, location: 0), .init(color: tint.base, location: 0.52),
                                  .init(color: tint.deep, location: 1)],
-                          rim: Color.white.opacity(0.16), glyph: Color.white.opacity(0.96),
+                          rim: Color.white.opacity(0.16), ring: tint.light.mix(with: tint.base, by: 0.35),
+                          glyph: Color.white.opacity(0.96),
                           dot: tint.light.mix(with: tint.base, by: 0.45), line: tint.base)
         }
         return Bubble(glow: tint.base, glowStrength: 0.2,
                       body: [.init(color: Color.white.mix(with: tint.light, by: 0.08), location: 0),
                              .init(color: Color.white.mix(with: tint.light, by: 0.5), location: 0.55),
                              .init(color: tint.light, location: 1)],
-                      rim: tint.deep.opacity(0.2), glyph: tint.ink, dot: tint.base, line: tint.base)
+                      rim: tint.deep.opacity(0.2), ring: tint.base, glyph: tint.ink, dot: tint.base, line: tint.base)
     }
 
     // MARK: Punktraster

@@ -10,9 +10,14 @@ public enum ThoughtPrompt {
     /// v3: eine Zeile zu Themen mit Beschreibung (`about`: Vorrang bei inhaltlicher Passung; `mentioned`: starkes
     /// Indiz ohne Zwang). Der Code leitet ein neues Thema nur um, wenn sein Name dem Titel eines vorhandenen Themas
     /// ohne Zweifel gleich ist (`TopicHygiene.matchExisting`); Namen aus Beschreibungen bleiben Hinweise.
-    public static let version = 3
+    /// v4 (Befunde vom iPhone): drei Sätze – Aufgabentext auf den Kern (ohne Füllwörter, Ich-Bezug und Zeitausdruck),
+    /// fester Termin des Sprechers ist eine Aufgabe, eine einmalige Besorgung ist kein Thema. Großschreibung, doppelter
+    /// Zeitausdruck und Füllwörter am Rand regelt danach der Code (`TaskText`).
+    /// v5 („v4.1“, nach dem Lauf p4): dieselben zwei Sätze schärfer – ein Termin nennt den Anteil des Sprechers, nie die
+    /// Handlung des anderen; was ein gelistetes Thema abdeckt, gehört dorthin, erst sonst ein neuer Bereich.
+    public static let version = 5
 
-    // MARK: Systemprompt v3 (§6.4, wörtlich)
+    // MARK: Systemprompt v5 (§6.4, wörtlich)
 
     static let intro = """
     You organise one spoken thought for the user's private notes app. The user pressed a button and spoke freely, often on the move. You get the speech-to-text transcript, the local time, the user's existing topics and possibly a few earlier thoughts that a local search found similar. Reply only with JSON that matches the schema.
@@ -49,7 +54,7 @@ public enum ThoughtPrompt {
     about is the user's own description of a topic; if the main matter fits it, choose that topic, even when none of its names is spoken. mentioned: true means a name from that topic occurs in the transcript – a strong hint, but a name mentioned only in passing does not decide the topic.
     Decide in this order:
     1. existing – the main matter of the thought belongs to a listed topic, even if the fit is broad. Choose the topic under which the user would look for this thought. n is the number of thoughts in that topic; if two fit equally, take the one with the higher n.
-    2. new – only if no listed topic fits AND the main matter is a concrete ongoing project, plan, person, place or activity that will probably come up again. new_name: 1 to 3 words, at most 24 characters, a noun or name in ui_language, no date. Never a generic name such as Ideen, Gedanken, Notizen, Sonstiges, Allgemein, Aufgaben, Wichtig, Privat, Arbeit, Ideas, Notes, Misc, Todo. Never a variant of a listed topic (other wording, singular/plural, other language) – choose that topic instead. If topics_full is true, new is not allowed.
+    2. new – only if no listed topic fits AND the main matter is a concrete ongoing project, plan, person, place or activity that will probably come up again. A one-off errand, purchase or appointment is not a topic, and whatever a listed topic covers belongs there (a child's dentist appointment → the family topic); only if none fits, name the ongoing area (person, project, place, area of life), e.g. "Tilda", not "Tilda Schrank"; "Einkäufe", not "Baumarkt Einkauf". new_name: 1 to 3 words, at most 24 characters, a noun or name in ui_language, no date. Never a generic name such as Ideen, Gedanken, Notizen, Sonstiges, Allgemein, Aufgaben, Wichtig, Privat, Arbeit, Ideas, Notes, Misc, Todo. Never a variant of a listed topic (other wording, singular/plural, other language) – choose that topic instead. If topics_full is true, new is not allowed.
     3. none – a stray remark without an ongoing matter. none is better than a weak new topic.
     If several matters are mentioned, decide by the main matter (most of the content). If the thought continues a candidate, that candidate's topic is usually right. symbol: the best fitting value of the enum; it is only used for a new topic.
     """
@@ -58,7 +63,8 @@ public enum ThoughtPrompt {
     TASKS
     Only actions the speaker explicitly intends to do or explicitly wants to be reminded of, such as "ich muss …", "ich will morgen …", "nicht vergessen …", "erinner mich …", "I need to …", "remind me to …", "to do: …".
     Not tasks: ideas, wishes and possibilities ("man könnte", "wäre schön", "vielleicht"), open questions, things other people will do, things already done, intentions not to do something ("ich kaufe keinen neuen Laptop", "no meetings on Friday"), and requests the speaker takes back or calls a joke or a test.
-    - text: a short to-do in the language of its quote, made only of the speaker's words from quote, e.g. "Milch kaufen", "Anna wegen Freitag anrufen", "call the bank". Never translate or mix languages. Keep names, numbers and any negation that belongs to the action. At most 80 characters.
+    A fixed appointment the speaker must attend at a set time (a meeting, a visit to or from someone) is a task with due_hint; its text names the speaker's part ("Termin mit Frau Roth", "Frau Roth empfangen"), never what the other person does.
+    - text: a short to-do in the language of its quote, made only of the speaker's words from quote, e.g. "Milch kaufen", "Anna wegen Freitag anrufen", "call the bank". Keep it to the core, about 2 to 6 words: leave out particles ("noch", "mal", "eben", "just"), self-references ("ich", "mein", "my") and the time expression, which belongs in due_hint. Never translate or mix languages. Keep names, numbers and any negation that belongs to the action. At most 80 characters.
     - quote: the words from the transcript that state the task, copied exactly as one passage without omissions, at most one sentence.
     - due_hint: the time expression exactly as spoken in quote ("bis Freitag", "morgen früh", "next week"), otherwise null. Do not calculate dates.
     - At most 5, in spoken order. None → [].

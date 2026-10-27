@@ -167,7 +167,7 @@ struct CaptureBarContent: View {
                 if let topic {
                     Text("·").foregroundStyle(Color.paplyTertiaryText)
                     HStack(spacing: 5) {
-                        TopicGlyph(key: topic.icon.rawValue, size: 15, relativeTo: .subheadline)
+                        TopicMark(topicID: topic.id, icon: topic.icon, size: 15, stroke: 1.6, relativeTo: .subheadline)
                         Text(topic.title).lineLimit(1)
                     }
                     .foregroundStyle(ThoughtTint.mint)

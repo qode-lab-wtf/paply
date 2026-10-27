@@ -2,11 +2,44 @@ import CoreGraphics
 import Foundation
 import Observation
 import PaplyKit
+import UIKit
 
 // Was die Karte zeichnet: Anordnung (`MapLayout`, PaplyKit) plus Anzeige-Angaben aus dem Modell.
 // `MapEngine` baut die Eingabe aus `ThoughtsModel` (billig, MainActor) und rechnet die Anordnung im
 // Hintergrund; veraltete Ergebnisse werden verworfen, bis dahin bleibt die letzte Karte stehen.
-// `MapMotion` merkt sich den vorigen Stand für weiche Übergänge und neu dazugekommene Punkte.
+// `MapMotion` merkt sich den vorigen Stand für weiche Übergänge, neu dazugekommene Punkte und die Flüge aus dem
+// Eingang (`MapLandings`).
+//
+// Eingang: Gedanken, die gerade geordnet werden oder warten (`isInMapInbox`), stehen auf keinem Kreis – auch nicht
+// unter „Ohne Thema“. Sie zählen an der Kugel (`MapInboxOrb`) und fliegen fertig zu ihrem Kreis.
+
+extension Thought {
+    /// Wird geordnet oder wartet: steht noch auf keinem Kreis, zählt an der Kugel (wie das Panel „Noch nicht
+    /// geordnet“, `ThoughtsHome.pendingID`)
+    var isInMapInbox: Bool { isProcessing || isWaiting }
+}
+
+/// Eingang der Karte: wer gerade geordnet wird oder wartet, und was die Kugel dazu sagt
+struct MapInbox: Equatable {
+    var ids: Set<String> = []
+    var status: MapInboxStatus?
+
+    static let empty = MapInbox()
+
+    @MainActor
+    init(model: ThoughtsModel) {
+        var ids = Set<String>()
+        var states: [ThoughtState] = []
+        for thought in model.thoughts where thought.isInMapInbox {
+            ids.insert(thought.id)
+            states.append(thought.state)
+        }
+        self.ids = ids
+        status = MapInboxStatus.of(states)
+    }
+
+    private init() {}
+}
 
 struct MapTopicInfo: Equatable {
     enum Kind: Equatable {
@@ -22,6 +55,8 @@ struct MapTopicInfo: Equatable {
     var count: Int
     var open: Int
     var kind: Kind = .topic
+    /// Bild statt Symbol (`TopicImages`, quadratisch)
+    var image: UIImage?
 }
 
 struct MapDotInfo: Equatable {
@@ -74,6 +109,8 @@ final class MapEngine {
     private(set) var layout: MapLayout?
     /// steigt, sobald sich die Anordnung ändert
     private(set) var version = 0
+    /// Gedanke → Kreis in `layout` (gesammelte Themen: `MapLayout.moreID`) – wohin ein fertiger Gedanke fliegt
+    @ObservationIgnored private(set) var placed: [String: String] = [:]
 
     /// Eingabe, zu der `layout` gehört – mit den eigenen Ankern der Anordnung (rechnet man damit erneut,
     /// kommt genau `layout` heraus; das muss nicht noch einmal gerechnet werden)
@@ -83,22 +120,26 @@ final class MapEngine {
     @ObservationIgnored private var generation = 0
 
     /// Stand der zuletzt gezeigten Karte: Eine neu erzeugte Ansicht beginnt damit statt leer
-    private static var last: (layout: MapLayout, version: Int, settled: MapLayoutInput)?
+    private static var last: (layout: MapLayout, version: Int, settled: MapLayoutInput, placed: [String: String])?
 
     init() {
         if let last = Self.last {
             layout = last.layout
             version = last.version
             settled = last.settled
+            placed = last.placed
         }
     }
 
+    /// Kreis eines Gedankens in der aktuellen Anordnung (nil = steht nicht auf der Karte)
+    func bubble(ofThought id: String) -> String? { placed[id] }
+
     // MARK: Eingabe
 
-    /// Eingabe aus dem Modell. Gedanken, die gerade geordnet werden, erscheinen erst fertig an ihrem Kreis.
-    /// `anchorRevision`: Stand von `anchors` (`MapAnchors.revision`).
+    /// Eingabe aus dem Modell. Gedanken im Eingang (werden geordnet oder warten) erscheinen erst fertig an ihrem
+    /// Kreis – nie unter „Ohne Thema“. `anchorRevision`: Stand von `anchors` (`MapAnchors.revision`).
     static func makeRequest(model: ThoughtsModel, anchors: [String: MapAnchor], anchorRevision: Int = 0) -> MapRequest {
-        let visible = model.thoughts.filter { !$0.isProcessing }
+        let visible = model.thoughts.filter { !$0.isInMapInbox }
         var topicOf: [String: String] = [:]
         var counts: [String: Int] = [:]
         var last: [String: Date] = [:]
@@ -159,7 +200,14 @@ final class MapEngine {
         var settled = input
         settled.anchors = layout.anchors
         self.settled = settled
-        Self.last = (layout, version, settled)
+        let collected = Set(layout.collected)
+        var placed: [String: String] = [:]
+        placed.reserveCapacity(input.thoughts.count)
+        for thought in input.thoughts {
+            placed[thought.id] = collected.contains(thought.topicID) ? MapLayout.moreID : thought.topicID
+        }
+        self.placed = placed
+        Self.last = (layout, version, settled, placed)
         // erst mit geladenem Modell – sonst sähen alle Themen gelöscht aus; gerechnet mit einem älteren Stand der
         // Anker (vor dem Nachladen) merkt `MapAnchors` nichts
         if persist { MapAnchors.shared.remember(layout.anchors, revision: anchorRevision) }
@@ -172,7 +220,7 @@ final class MapEngine {
         guard let layout else { return nil }
         let collected = Set(layout.collected)
         var open: [String: Int] = [:]
-        for thought in model.thoughts where !thought.isProcessing && thought.openTaskCount > 0 {
+        for thought in model.thoughts where !thought.isInMapInbox && thought.openTaskCount > 0 {
             let topic = model.topic(thought.topicId)?.id ?? ThoughtMapView.noTopicID
             let key = collected.contains(topic) ? ThoughtMapView.moreID : topic
             open[key, default: 0] += thought.openTaskCount
@@ -189,7 +237,7 @@ final class MapEngine {
             default:
                 if let topic = model.topic(bubble.id) {
                     topicInfo[bubble.id] = MapTopicInfo(title: topic.title, icon: topic.icon.lucide, count: bubble.count,
-                                                        open: open[bubble.id] ?? 0)
+                                                        open: open[bubble.id] ?? 0, image: TopicImages.shared.image(for: topic.id))
                 }
             }
         }
@@ -217,54 +265,88 @@ extension ThoughtsModel {
     func mapCollectedThoughts() -> [Thought] {
         let ids = mapCollectedTopicIDs()
         guard !ids.isEmpty else { return [] }
-        return thoughts.filter { thought in topic(thought.topicId).map { ids.contains($0.id) } ?? false }
+        return thoughts.filter { thought in !thought.isInMapInbox && (topic(thought.topicId).map { ids.contains($0.id) } ?? false) }
     }
 }
 
-/// Übergänge zwischen zwei Ständen der Karte (zeitgesteuert, damit der erste Bild nie springt) und das
-/// Einblenden neuer Punkte. Wird im `body` fortgeschrieben – reine Buchführung, löst nichts aus.
+/// Übergänge zwischen zwei Ständen der Karte (zeitgesteuert, damit das erste Bild nie springt), das Einblenden neuer
+/// Punkte und Kreise und die Flüge aus dem Eingang (`MapLandings`). Wird im `body` fortgeschrieben – reine
+/// Buchführung, löst nichts aus. Wann wieder etwas zu tun ist, sagt `nextWake`.
 @MainActor
 final class MapMotion {
     /// Feder für Datenwechsel (kritisch gedämpft, ≈ 0,6 s)
     static let settle: TimeInterval = 0.65
-    static let appearDuration: TimeInterval = 1.1
+    nonisolated static let appearDuration: TimeInterval = 1.1
     /// mehr neue Punkte auf einmal: kein Einblenden (nichts Teures)
     static let appearLimit = 6
+    /// Ein neuer Kreis beginnt so lange vor der Landung seines ersten Punkts aus dem Nichts zu wachsen
+    static let growLead: TimeInterval = 0.3
+    /// so lange glüht ein gelandeter Punkt am Ziel nach (liegt im Nachleuchten von `MapLandings`)
+    nonisolated static let afterglow: TimeInterval = 0.24
+
+    struct Flight {
+        var id: String
+        var topicID: String
+        /// 0 … 1
+        var progress: CGFloat
+    }
 
     private(set) var current: MapScene?
     private(set) var previous: MapScene?
     private(set) var start = Date.distantPast
     private(set) var appear: [String: Date] = [:]
+    private(set) var landings = MapLandings()
+    /// steigt, sobald etwas Neues geplant ist (weckt die Zeitleiste)
+    private(set) var generation = 0
     private var knownDots: Set<String> = []
     private var knownTopics: Set<String> = []
 
-    /// Neuen Stand übernehmen. Gibt true zurück, wenn ab jetzt etwas läuft.
-    @discardableResult
-    func update(_ scene: MapScene, now: Date) -> Bool {
-        defer { current = scene }
-        guard let current, current.version != scene.version else {
-            if self.current == nil {
-                knownDots = Set(scene.layout.dots.map(\.id))
-                knownTopics = Set(scene.layout.bubbles.map(\.id))
+    /// Neuen Stand übernehmen. `inbox`: Gedanken im Eingang. `flights`: Flüge erlaubt (Kugel sichtbar, Bewegung an).
+    /// `bubbleOf`: Kreis eines Gedankens in `scene` (nil = noch nicht auf der Karte).
+    func update(_ scene: MapScene, inbox: Set<String>, flights: Bool, bubbleOf: (String) -> String?, now: Date) {
+        landings.observe(pending: inbox, now: now)
+        var born: Set<String> = []
+        if let current, current.version != scene.version {
+            previous = current
+            start = now
+            generation &+= 1
+            let dots = Set(scene.layout.dots.map(\.id)), topics = Set(scene.layout.bubbles.map(\.id))
+            let newDots = dots.subtracting(knownDots), newTopics = topics.subtracting(knownTopics)
+            appear = appear.filter { now.timeIntervalSince($0.value) < Self.appearDuration }
+            // erster Stand nach dem Laden: nur weich einblenden, nichts ploppt
+            let firstContent = current.layout.bubbles.isEmpty
+            if !firstContent, newDots.count <= Self.appearLimit {
+                for id in newDots { appear[id] = now }
             }
-            return false
+            if !firstContent, newTopics.count <= 3 {
+                for id in newTopics { appear["topic:" + id] = now }
+            }
+            born = newTopics
+            knownDots = dots
+            knownTopics = topics
+        } else if current == nil {
+            knownDots = Set(scene.layout.dots.map(\.id))
+            knownTopics = Set(scene.layout.bubbles.map(\.id))
         }
-        previous = current
-        start = now
-        let dots = Set(scene.layout.dots.map(\.id)), topics = Set(scene.layout.bubbles.map(\.id))
-        let newDots = dots.subtracting(knownDots), newTopics = topics.subtracting(knownTopics)
-        appear = appear.filter { now.timeIntervalSince($0.value) < Self.appearDuration }
-        // erster Stand nach dem Laden: nur weich einblenden, nichts ploppt
-        let firstContent = current.layout.bubbles.isEmpty
-        if !firstContent, newDots.count <= Self.appearLimit {
-            for id in newDots { appear[id] = now }
+        current = scene
+
+        // Fertige Gedanken, die jetzt auf der Karte stehen: Flug von der Kugel. Ihr Punkt erscheint erst mit der
+        // Landung; ein neuer Kreis wächst, während sein erster Punkt anfliegt.
+        guard !landings.awaiting.isEmpty else { return }
+        let added = landings.place(animate: flights, now: now) { id in
+            guard let bubble = bubbleOf(id), scene.layout.bubble(bubble) != nil else { return nil }
+            return bubble
         }
-        if !firstContent, newTopics.count <= 3 {
-            for id in newTopics { appear["topic:" + id] = now }
+        guard !added.isEmpty else { return }
+        generation &+= 1
+        for flight in added {
+            appear[flight.id] = flight.land
+            guard born.contains(flight.topicID) else { continue }
+            let key = "topic:" + flight.topicID
+            let grow = flight.land.addingTimeInterval(-Self.growLead)
+            if let begin = appear[key], begin > now, begin <= grow { continue } // schon für einen früheren Punkt
+            appear[key] = grow
         }
-        knownDots = dots
-        knownTopics = topics
-        return true
     }
 
     /// 0 … 1, kritisch gedämpfte Feder
@@ -278,21 +360,67 @@ final class MapMotion {
 
     func isRunning(at now: Date) -> Bool {
         if previous != nil, now.timeIntervalSince(start) < Self.settle { return true }
-        return appear.values.contains { now.timeIntervalSince($0) < Self.appearDuration }
+        if appear.values.contains(where: { now.timeIntervalSince($0) < Self.appearDuration }) { return true }
+        return landings.isRunning(at: now)
     }
 
-    /// Fortschritt des Einblendens (nil = kein Einblenden)
+    /// Fortschritt des Einblendens (nil = kein Einblenden; 0, solange es noch nicht begonnen hat)
     func appearance(_ key: String, at now: Date) -> CGFloat? {
         guard let begin = appear[key] else { return nil }
         let t = now.timeIntervalSince(begin) / Self.appearDuration
         return t < 1 ? CGFloat(max(0, t)) : nil
     }
 
-    /// längste noch laufende Zeit (für das Abschalten der Zeitleiste)
-    func remaining(at now: Date) -> TimeInterval {
-        var rest: TimeInterval = 0
-        if previous != nil { rest = max(rest, Self.settle - now.timeIntervalSince(start)) }
-        for begin in appear.values { rest = max(rest, Self.appearDuration - now.timeIntervalSince(begin)) }
-        return max(0, rest)
+    /// Nächster Zeitpunkt, an dem sich etwas ändert (Ende eines Übergangs, Abflug, Landung, Ende des Nachleuchtens);
+    /// nil = Ruhe
+    func nextWake(after now: Date) -> Date? {
+        var best: Date?
+        func consider(_ t: Date) {
+            guard t > now else { return }
+            if best.map({ t < $0 }) ?? true { best = t }
+        }
+        if previous != nil { consider(start.addingTimeInterval(Self.settle)) }
+        for begin in appear.values { consider(begin.addingTimeInterval(Self.appearDuration)) }
+        if let t = landings.nextEvent(after: now) { consider(t) }
+        return best
+    }
+
+    // MARK: Eingang und Flüge
+
+    /// Zahl an der Kugel
+    func inboxCount(at now: Date) -> Int { landings.count(at: now) }
+
+    /// schon abgeflogene Punkte (die Kugel stößt bei jedem kurz nach)
+    func launched(at now: Date) -> Int { landings.launched(at: now) }
+
+    /// Punkte in der Luft – und kurz nach der Landung (Fortschritt über 1: Nachglühen am Ziel)
+    func flights(at now: Date) -> [Flight] {
+        landings.flights.compactMap { flight in
+            let t = now.timeIntervalSince(flight.launch)
+            guard t >= 0, t < flight.duration + Self.afterglow else { return nil }
+            return Flight(id: flight.id, topicID: flight.topicID, progress: CGFloat(t / flight.duration))
+        }
+    }
+
+    /// Noch nicht gelandet (geplant oder in der Luft): Punkt verborgen, der Kreis zählt ihn noch nicht
+    func unlanded(at now: Date) -> (ids: Set<String>, perTopic: [String: Int]) {
+        var ids = Set<String>()
+        var perTopic: [String: Int] = [:]
+        for flight in landings.unlanded(at: now) {
+            ids.insert(flight.id)
+            perTopic[flight.topicID, default: 0] += 1
+        }
+        return (ids, perTopic)
+    }
+
+    /// Nachleuchten der Kreise nach einer Landung (0 … 1, frischeste zählt)
+    func glows(at now: Date) -> [String: CGFloat] {
+        var result: [String: CGFloat] = [:]
+        for flight in landings.flights {
+            let t = now.timeIntervalSince(flight.land)
+            guard t >= 0, t < MapLandings.glow else { continue }
+            result[flight.topicID] = min(result[flight.topicID] ?? 1, CGFloat(t / MapLandings.glow))
+        }
+        return result
     }
 }

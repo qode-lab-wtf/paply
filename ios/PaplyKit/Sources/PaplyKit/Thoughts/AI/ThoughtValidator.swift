@@ -229,23 +229,43 @@ public enum ThoughtValidator {
         var seen = Set<String>()
         for task in raw.prefix(maxTasks) {
             guard let quote = locateQuote(task.quote, in: transcript) else { rejections.append("task:quote"); continue }
-            let text = task.text.trimmed.replacingOccurrences(of: "\n", with: " ")
+            let hint = task.due_hint?.trimmed ?? ""
+            let due = hint.isEmpty || !dueHintInQuote(hint, quote: quote) ? nil : hint
+            // Form nach v4 (TaskText): Zeitausdruck nicht doppelt, Füllwort am Rand weg, groß – nur Weglassen
+            let text = TaskText.tidy(task.text.replacingOccurrences(of: "\n", with: " "), dueHint: due)
             guard (2...maxTaskLength).contains(text.count) else { rejections.append("task:text"); continue }
             guard taskWordsGrounded(text, quote: quote) else { rejections.append("task:words"); continue }
             guard digitsContained(text, in: quote) else { rejections.append("task:digits"); continue }
             guard effectiveNegations(text) == effectiveNegations(quote) else { rejections.append("task:negation"); continue }
-            var due: String?
-            if let hint = task.due_hint?.trimmed, !hint.isEmpty {
-                if normalizedForMatch(quote).contains(normalizedForMatch(hint)), !normalizedForMatch(hint).isEmpty {
-                    due = hint
-                } else {
-                    rejections.append("task:due")
-                }
-            }
+            if !hint.isEmpty, due == nil { rejections.append("task:due") }
             guard seen.insert(normalizedForMatch(text)).inserted else { rejections.append("task:duplicate"); continue }
             result.append(TaskDraft(text: text, quote: quote, dueHint: due))
         }
         return result
+    }
+
+    /// Höchstens so viele Wörter zwischen erstem und letztem Wort eines `due_hint` aus Stücken (inklusive).
+    static let maxDueSpan = 20
+
+    /// `due_hint` steht im Zitat: wörtlich (normalisiert, an Wortgrenzen) – oder aus höchstens 3 Stücken des Zitats in
+    /// Reihenfolge, zusammen in einem Fenster von ≤ 20 Wörtern („morgen, am besten vormittags“ → „morgen vormittags“;
+    /// „Morgen … kaufen, um 10 Uhr will er kommen“ → „morgen um 10 Uhr“). Jedes Wort stammt so aus dem Gesprochenen;
+    /// Whisper setzt oft keine Satzzeichen, ein Satz mit Termin ist leicht 15–20 Wörter lang.
+    static func dueHintInQuote(_ hint: String, quote: String) -> Bool {
+        let due = tokens(hint).map(\.word)
+        guard !due.isEmpty else { return false }
+        let words = tokens(quote).map(\.word)
+        if (" " + words.joined(separator: " ") + " ").contains(" " + due.joined(separator: " ") + " ") { return true }
+        for start in words.indices where words[start] == due[0] {
+            var position = start, pieces = 1, matched = true
+            for word in due.dropFirst() {
+                guard let next = words[(position + 1)...].firstIndex(of: word) else { matched = false; break }
+                if next != position + 1 { pieces += 1 }
+                position = next
+            }
+            if matched, pieces <= 3, position - start + 1 <= maxDueSpan { return true }
+        }
+        return false
     }
 
     /// Erinnerungsfloskeln: Ihre Verneinung gehört nicht zur Handlung („nicht vergessen, Milch …“).
@@ -262,10 +282,13 @@ public enum ThoughtValidator {
         return max(0, TextAnalysis.negationCount(text) - reminders)
     }
 
-    /// Kleine Füllwörter, die ein Aufgabentext ohne Beleg enthalten darf.
+    /// Kleine Füllwörter, die ein Aufgabentext ohne Beleg enthalten darf. Ab v4 auch die Verschmelzungen „beim“,
+    /// „vom“, „ins“, „ans“ (wie schon „zum“, „im“, „am“): Der Kern einer Aufgabe stellt die Präposition oft um
+    /// („bei meiner Firma Brenner“ → „beim Brenner“).
     static let taskStopwords: Set<String> = Set([
         "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "und", "oder", "für", "mit",
-        "von", "zu", "zum", "zur", "im", "in", "an", "am", "auf", "bei", "wegen", "noch", "the", "a", "an", "and", "or",
+        "von", "vom", "zu", "zum", "zur", "im", "in", "ins", "an", "am", "ans", "auf", "bei", "beim", "wegen", "noch",
+        "the", "a", "an", "and", "or",
         "for", "with", "to", "of", "in", "on", "at", "le", "la", "les", "un", "une", "de", "du", "des", "et", "pour",
         "el", "los", "las", "y", "para", "con", "il", "lo", "gli", "e", "per", "o", "os", "as", "um", "uma", "het", "een",
         "en", "voor", "met",

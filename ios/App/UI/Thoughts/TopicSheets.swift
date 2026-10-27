@@ -1,7 +1,9 @@
 import PaplyKit
+import PhotosUI
 import SwiftUI
+import UIKit
 
-// Themenwahl, neues Thema, Symbolraster und die Themen-Aktionen (KONZEPT §3.1, §3.2, §3.8).
+// Themenwahl, neues Thema, Symbolraster, Bild statt Symbol und die Themen-Aktionen (KONZEPT §3.1, §3.2, §3.8).
 
 // MARK: - Themenwahl (mittlere Höhe)
 
@@ -31,7 +33,7 @@ struct TopicPickerSheet: View {
                     ForEach(filtered) { topic in
                         Button { choose(topic.id) } label: {
                             pickRow(title: topic.title, count: model.count(of: topic.id),
-                                    selected: current == topic.id, icon: topic.icon)
+                                    selected: current == topic.id, icon: topic.icon, topicID: topic.id)
                         }
                     }
                     Button {
@@ -58,8 +60,9 @@ struct TopicPickerSheet: View {
                 }
             }
             .navigationDestination(isPresented: $creating) {
-                TopicEditor(mode: .create(prefill: query)) { title, icon, note in
-                    let topic = model.createTopic(title: title, icon: icon, note: note)
+                TopicEditor(mode: .create(prefill: query)) { result in
+                    let topic = model.createTopic(title: result.title, icon: result.icon, note: result.note)
+                    TopicImages.shared.apply(result.image, to: topic.id)
                     choose(topic.id)
                 }
             }
@@ -77,10 +80,10 @@ struct TopicPickerSheet: View {
         return sorted.filter { $0.title.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
-    private func pickRow(title: String, count: Int?, selected: Bool, icon: TopicIcon?) -> some View {
+    private func pickRow(title: String, count: Int?, selected: Bool, icon: TopicIcon?, topicID: String? = nil) -> some View {
         HStack(spacing: 12) {
             if let icon {
-                TopicBadge(icon: icon, size: 30)
+                TopicBadge(icon: icon, size: 30, topicID: topicID)
             } else {
                 LucideImage(.circleDashed, size: 17, stroke: 1.9, scales: false)
                     .foregroundStyle(Color.paplySecondaryText)
@@ -115,7 +118,7 @@ struct TopicPickerSheet: View {
     }
 }
 
-// MARK: - Thema anlegen / bearbeiten (Name, Beschreibung, Symbolraster)
+// MARK: - Thema anlegen / bearbeiten (Name, Beschreibung, Bild oder Symbol)
 
 struct TopicEditor: View {
     enum Mode {
@@ -123,16 +126,31 @@ struct TopicEditor: View {
         case edit(Topic)
     }
 
+    /// Was beim Sichern übernommen wird
+    struct Result {
+        let title: String
+        let icon: TopicIcon
+        /// „Worum geht's?“; nil = keine
+        let note: String?
+        let image: TopicImageChange
+    }
+
     let mode: Mode
-    /// Name, Symbol, Beschreibung („Worum geht's?“; nil = keine)
-    let onDone: (String, TopicIcon, String?) -> Void
+    let onDone: (Result) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduce
     @State private var name: String
     @State private var icon: TopicIcon
     @State private var note: String
+    @State private var image: TopicImageChange = .unchanged
+    /// Vorschau des neu gewählten Bilds
+    @State private var preview: UIImage?
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var loadingImage = false
+    @State private var imageFailed = false
     @FocusState private var nameFocused: Bool
 
-    init(mode: Mode, onDone: @escaping (String, TopicIcon, String?) -> Void) {
+    init(mode: Mode, onDone: @escaping (Result) -> Void) {
         self.mode = mode
         self.onDone = onDone
         switch mode {
@@ -149,12 +167,25 @@ struct TopicEditor: View {
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    private var topicID: String? {
+        if case .edit(let topic) = mode { return topic.id }
+        return nil
+    }
+
+    /// Bild, das nach dem Sichern gilt (neu gewählt, bisheriges oder keins)
+    private var shownImage: UIImage? {
+        switch image {
+        case .set: preview
+        case .remove: nil
+        case .unchanged: TopicImages.shared.image(for: topicID)
+        }
+    }
+
     var body: some View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    TopicBadge(icon: icon, size: 44)
-                        .animation(.paplyBouncy, value: icon)
+                    badge
                     TextField("Name", text: $name)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(Color.paplyText)
@@ -182,10 +213,37 @@ struct TopicEditor: View {
             }
             .listRowBackground(Color.paplyRow)
             Section {
+                PhotosPicker(selection: $pickerItem, matching: .images, preferredItemEncoding: .current) {
+                    Label("Bild wählen …", systemImage: "photo.on.rectangle")
+                        .foregroundStyle(Color.paplyGreenBright)
+                }
+                .disabled(loadingImage)
+                if shownImage != nil {
+                    Button(role: .destructive) {
+                        withAnimation(PaplyMotion.smooth(reduce)) {
+                            image = .remove
+                            preview = nil
+                        }
+                    } label: {
+                        Label("Bild entfernen", systemImage: "trash")
+                            .foregroundStyle(Color.paplyDanger)
+                    }
+                }
+            } header: {
+                Text("Bild")
+            } footer: {
+                Text("Ein Foto, z. B. ein Logo, ersetzt das Symbol. Es bleibt auf diesem iPhone und geht nie an die KI.")
+            }
+            .listRowBackground(Color.paplyRow)
+            Section {
                 TopicIconGrid(selection: $icon)
                     .padding(.vertical, 6)
             } header: {
                 Text("Symbol")
+            } footer: {
+                if shownImage != nil {
+                    Text("Erscheint, wo kein Bild Platz hat, z. B. auf dem Sperrbildschirm.")
+                }
             }
             .listRowBackground(Color.paplyRow)
         }
@@ -196,10 +254,63 @@ struct TopicEditor: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button(isCreate ? "Anlegen" : "Sichern", action: save)
                     .fontWeight(.semibold)
-                    .disabled(trimmed.isEmpty)
+                    .disabled(trimmed.isEmpty || loadingImage)
             }
         }
         .onAppear { if isCreate { nameFocused = true } }
+        .onChange(of: pickerItem) { _, item in
+            guard let item else { return }
+            load(item)
+        }
+        .alert("Bild ließ sich nicht öffnen", isPresented: $imageFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Bitte ein anderes Foto wählen.")
+        }
+        .sensoryFeedback(.selection, trigger: preview)
+    }
+
+    /// Kennung oben: Bild (rund abgerundet, Rand in Themenfarbe) oder Symbol auf Mint-Gold; beim Laden ein Kreisel
+    private var badge: some View {
+        ZStack {
+            if let shownImage {
+                TopicImageTile(image: shownImage, topicID: topicID, size: 44, cornerRatio: 0.27)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+            } else {
+                TopicBadge(icon: icon, size: 44)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+            }
+            if loadingImage {
+                RoundedRectangle(cornerRadius: 44 * 0.27, style: .continuous)
+                    .fill(Color.black.opacity(0.45))
+                    .frame(width: 44, height: 44)
+                ProgressView()
+                    .tint(Color.paplyText)
+            }
+        }
+        .animation(.paplyBouncy, value: icon)
+        .animation(PaplyMotion.smooth(reduce), value: shownImage != nil)
+        .accessibilityHidden(true)
+    }
+
+    private func load(_ item: PhotosPickerItem) {
+        loadingImage = true
+        Task {
+            var jpeg: Data?
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                jpeg = await TopicImages.process(data)
+            }
+            loadingImage = false
+            pickerItem = nil
+            guard let jpeg, let picked = UIImage(data: jpeg) else {
+                imageFailed = true
+                return
+            }
+            withAnimation(PaplyMotion.smooth(reduce)) {
+                image = .set(jpeg)
+                preview = picked
+            }
+        }
     }
 
     private var isCreate: Bool {
@@ -208,8 +319,8 @@ struct TopicEditor: View {
     }
 
     private func save() {
-        guard !trimmed.isEmpty else { return }
-        onDone(trimmed, icon, Topic.normalizedNote(note))
+        guard !trimmed.isEmpty, !loadingImage else { return }
+        onDone(Result(title: trimmed, icon: icon, note: Topic.normalizedNote(note), image: image))
         if !isCreate { dismiss() }
     }
 }
@@ -265,7 +376,7 @@ struct TopicMergeSheet: View {
                             dismiss()
                         } label: {
                             HStack(spacing: 12) {
-                                TopicBadge(icon: topic.icon, size: 30)
+                                TopicBadge(icon: topic.icon, size: 30, topicID: topic.id)
                                 Text(topic.title).foregroundStyle(Color.paplyText)
                                 Spacer()
                                 Text("\(model.count(of: topic.id))")
@@ -295,7 +406,7 @@ struct TopicMergeSheet: View {
 
 // MARK: - Themen-Aktionen an einer Stelle
 
-/// Umbenennen (Hinweisfenster mit Feld), Symbol (Blatt), Zusammenführen (Blatt), Löschen (Rückfrage).
+/// Umbenennen (Hinweisfenster mit Feld), Bild oder Symbol (Blatt), Zusammenführen (Blatt), Löschen (Rückfrage).
 struct TopicActionsModifier: ViewModifier {
     @Binding var action: TopicAction?
     @Environment(ThoughtsModel.self) private var model
@@ -345,10 +456,8 @@ struct TopicActionsModifier: ViewModifier {
             .sheet(item: iconSheet) { item in
                 if let topic = model.topic(item.id) {
                     NavigationStack {
-                        TopicEditor(mode: .edit(topic)) { title, icon, note in
-                            if title != topic.title { model.renameTopic(topic.id, title: title) }
-                            if icon != topic.icon { model.setTopicIcon(topic.id, icon) }
-                            if note != topic.describedNote { model.setTopicNote(topic.id, note) }
+                        TopicEditor(mode: .edit(topic)) { result in
+                            TopicEditing.apply(result, to: topic, model: model)
                         }
                     }
                     .presentationDetents([.medium, .large])
@@ -387,6 +496,17 @@ struct TopicActionsModifier: ViewModifier {
         guard let token else { return }
         nav.show(ThoughtsToast(text: "Zusammengeführt", undo: token, seconds: 5), reduceMotion: reduce)
         ThoughtsUndo.register(undoManager, name: "Zusammenführen", model: model, token: token)
+    }
+}
+
+/// Ergebnis des Bearbeiten-Blatts auf ein bestehendes Thema anwenden (nur, was sich geändert hat)
+enum TopicEditing {
+    @MainActor
+    static func apply(_ result: TopicEditor.Result, to topic: Topic, model: ThoughtsModel) {
+        if result.title != topic.title { model.renameTopic(topic.id, title: result.title) }
+        if result.icon != topic.icon { model.setTopicIcon(topic.id, result.icon) }
+        if result.note != topic.describedNote { model.setTopicNote(topic.id, result.note) }
+        TopicImages.shared.apply(result.image, to: topic.id)
     }
 }
 
