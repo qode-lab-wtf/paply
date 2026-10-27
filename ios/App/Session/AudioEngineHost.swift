@@ -142,6 +142,44 @@ final class AudioEngineHost: @unchecked Sendable {
         await onQueue { host in host.applyBuiltInMic() }
     }
 
+    // MARK: Experiment „Mikro im Leerlauf pausieren“ (Sitzung bleibt aktiv, kein setActive(false))
+
+    /// Engine anhalten. `.pause`: `engine.pause()` – IO-Einheit bleibt eingerichtet, Tap bleibt;
+    /// das hat die besten Chancen, im Hintergrund wieder anzulaufen (kein Neuaufbau, kein
+    /// Formatwechsel). `.stop`: `engine.stop()` und Tap entfernen – gibt alles frei, der
+    /// Wiederanlauf baut neu auf. Der Vorlauf wird geleert (er wäre beim nächsten Diktat alt).
+    func pauseInput(_ mode: IdlePauseMode) async {
+        await onQueue { host in
+            switch mode {
+            case .off: return
+            case .pause: host.engine.pause()
+            case .stop: host.stopEngine()
+            }
+            host.processor.reset()
+        }
+    }
+
+    /// Engine nach dem Anhalten wieder starten – ohne die Sitzung neu zu aktivieren.
+    func resumeInput() async -> Outcome {
+        await onQueue { host in
+            do throws(StartError) {
+                if host.tapInstalled {
+                    host.engine.prepare()
+                    do {
+                        try host.engine.start()
+                    } catch {
+                        throw .engine(error as NSError)
+                    }
+                } else {
+                    try host.startEngine()
+                }
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
     /// Nur den Schnappschuss auffrischen (z. B. nach einer Unterbrechung).
     func refresh() async {
         await onQueue { _ in }

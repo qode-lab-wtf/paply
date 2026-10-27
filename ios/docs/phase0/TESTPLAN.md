@@ -339,6 +339,30 @@ Telefonqualität. Das prüfen wir:
 Messwerte: `audio.route` – `in` sollte `MicrophoneBuiltIn` sein, `out` bei AirPods `BluetoothA2DPOutput`.
 `session.start` – `otherAudio=true`, wenn Musik lief.
 
+### Experiment: Mikro im Leerlauf pausieren
+
+Hintergrund: Ist eine andere App vorne, zeigt iOS bei laufender Aufnahme in der Dynamic Island ein
+breites Mikro-Symbol, nicht nur den Punkt. Das Experiment hält die Aufnahme im Leerlauf an (die
+Sitzung bleibt aktiv) und startet sie erst beim nächsten 🌐 wieder – dann ohne Vorlauf.
+
+1. Zahnrad → Labor → **„Mikro im Leerlauf pausieren (Experiment)“** an. Art zuerst **engine.pause()**.
+2. Sitzung starten, dann zu Notizen wechseln (Paply geht in den Hintergrund).
+   **Beobachten:** Verschwindet das Mikro-Symbol in der Dynamic Island? Bleibt der orange Punkt?
+   (Ein paar Sekunden warten.)
+3. Nach 1 Minute in Notizen 🌐 → Paply. **Klappt die Aufnahme?** Wie lange, bis die Zeit läuft?
+   Sofort einen Satz sagen – fehlt der Anfang?
+4. Nach 5 Minuten und nach 30 Minuten Leerlauf wiederholen (ob die App inzwischen ausgesetzt wurde).
+5. Dasselbe mit Art **engine.stop()**.
+6. Danach den Schalter wieder **aus**.
+
+Erwartbar: Ohne laufende Aufnahme setzt iOS die App nach einiger Zeit aus. Dann antwortet sie nicht
+auf 🌐, und die Tastatur öffnet Paply wie ohne Sitzung (Variante A). Genau das soll der Test zeigen.
+
+Protokoll: `session.idlePause` (`mode`, `reason`), `session.resumeFromPause` (`ok`, `startMs` = Engine
+läuft, `firstSampleMs` = erstes Audio, bei Fehler `code`/`fourCC`), `kb.recording`
+(`appearToRecordingMs`), `kb.ack.missing` (App antwortete nicht), `app.wasSuspended` (`gapS` = wie
+lange die App ausgesetzt war).
+
 ### Tastaturtöne und Haptik der Apple-Tastatur
 Während die Sitzung läuft: Spürst du beim Tippen auf der Apple-Tastatur weiter die Haptik bzw. hörst
 du die Klicks?
@@ -373,6 +397,8 @@ du die Klicks?
 | 1 App-Datenschutzbericht | | | |
 | 6 Rückgängig | | | |
 | 6 Musik / AirPods | | | |
+| 6 Leerlauf pausieren: Mikro-Symbol weg? (pause / stop) | | | |
+| 6 Leerlauf pausieren: Aufnahme nach 1 / 5 / 30 Min? | | | |
 | 0.3 Schlüsselprüfung (auch Flugmodus) | | | |
 | 3a Gemischte Sprachen (Englisch bleibt?) | | | |
 | 0.5 Erstes Diktat: „poliert“, kein Polier-Fehler | | | |

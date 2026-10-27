@@ -31,6 +31,8 @@ final class SessionController {
     private(set) var detail: String?
     private(set) var active: ActiveInfo?
     private(set) var processingCount = 0
+    /// Experiment: Engine im Leerlauf angehalten (Sitzung bleibt aktiv)
+    private(set) var idlePaused = false
     /// Kurzer Hinweis nach Start per URL („zurück zur vorherigen App“)
     var flash: Flash?
 
@@ -62,6 +64,8 @@ final class SessionController {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var bootstrapped = false
     @ObservationIgnored private var startTask: Task<Bool, Never>?
+    @ObservationIgnored private var pauseTask: Task<Void, Never>?
+    @ObservationIgnored private var lastHousekeepingTick = Date()
     /// Wann die App zuletzt aktiv wurde (für den Aufblitz-Bildschirm nach Start per URL)
     @ObservationIgnored var lastActivatedAt: Date?
 
@@ -130,6 +134,7 @@ final class SessionController {
         lastActivityAt = Date()
         status = .ready
         detail = nil
+        idlePaused = false
         publish()
         startHousekeeping()
         monitor.start()
@@ -157,6 +162,8 @@ final class SessionController {
     func stopSession(reason: String) {
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
+        pauseTask?.cancel()
+        idlePaused = false
         audio.stop()
         let duration = startedAt.map { Date().timeIntervalSince($0) } ?? 0
         status = .off
@@ -183,7 +190,7 @@ final class SessionController {
 
     @discardableResult
     func beginDictation(id: String, source: DictationSource, commandLatencyMs: Double? = nil) -> BeginResult {
-        guard status == .ready || status == .recording, audio.isRunning else {
+        guard status == .ready || status == .recording, audio.isRunning || idlePaused else {
             reportDictationError(id: id, source: source, code: status == .interrupted ? .interrupted : .sessionNotReady)
             return .notReady
         }
@@ -225,6 +232,10 @@ final class SessionController {
 
         if levelChannel == nil { levelChannel = LevelChannel.openWriter() }
         let prerollSamples = audio.processor.attach(owner: id, sink: { continuation.yield($0) }, levels: levelChannel)
+        // Experiment: Engine war angehalten → im Hintergrund wieder starten (ohne Vorlauf).
+        // Die Tastatur zeigt schon „Aufnahme“; bis zum ersten Sample kommt einfach nichts an.
+        let resuming = idlePaused
+        if resuming { resumeFromIdlePause(id: id) }
 
         status = .recording
         lastActivityAt = Date()
@@ -239,6 +250,7 @@ final class SessionController {
             "cmdLatencyMs": .opt(commandLatencyMs),
             "app": .s(Self.appState),
             "levels": .b(levelChannel != nil),
+            "fromIdlePause": .b(resuming),
         ])
         return .started
     }
@@ -292,6 +304,7 @@ final class SessionController {
                 if status == .recording { status = .ready }
                 stopWatchdog()
                 publish()
+                schedulePauseIfIdle(reason: "dictation-end")
             }
             await entry.feedTask.value
             let outcome = await entry.pipeline.finish()
@@ -313,6 +326,7 @@ final class SessionController {
         if shared.dictation?.id == entry.id { shared.dictation?.phase = .cancelled }
         stopWatchdog()
         publish()
+        schedulePauseIfIdle(reason: "dictation-cancel")
         Diag.log("dictation.cancel", [
             "id": .s(entry.shortID),
             "source": .s(entry.source.rawValue),
@@ -433,6 +447,72 @@ final class SessionController {
         ]
         fields.merge(audio.tapFields) { a, _ in a }
         Diag.log("dictation.result", fields)
+    }
+
+    // MARK: Experiment: Mikro im Leerlauf pausieren
+
+    /// Engine anhalten, wenn das Experiment an ist, nichts aufnimmt und die App nicht vorne
+    /// ist. Läuft eine Runde später, damit ein direkt folgendes Diktat (z. B. nach
+    /// „superseded“) nicht erst angehalten und gleich wieder gestartet wird.
+    func schedulePauseIfIdle(reason: String) {
+        let mode = AppSettings.shared.idlePause
+        guard mode != .off else { return }
+        pauseTask?.cancel()
+        pauseTask = Task {
+            await Task.yield()
+            guard !Task.isCancelled, status == .ready, dictation == nil, !idlePaused,
+                  UIApplication.shared.applicationState != .active
+            else { return }
+            idlePaused = true
+            let begin = MonoClock.now()
+            await audio.pauseInput(mode)
+            Diag.log("session.idlePause", [
+                "mode": .s(mode.rawValue), "reason": .s(reason), "ms": .ms(MonoClock.msSince(begin)),
+                "engine": .b(audio.isRunning), "app": .s(Self.appState),
+            ])
+        }
+    }
+
+    /// Diktat startet bei angehaltener Engine: im Hintergrund wieder anwerfen. Gemessen wird
+    /// die Dauer bis die Engine läuft und bis das erste Sample ankommt. Scheitert es, gilt
+    /// „Mikro aus“ wie bei einer Unterbrechung (Tastatur zeigt es bzw. öffnet die App).
+    private func resumeFromIdlePause(id: String) {
+        pauseTask?.cancel()
+        idlePaused = false
+        let mode = AppSettings.shared.idlePause
+        Task {
+            let begin = MonoClock.now()
+            let outcome = await audio.resumeInput()
+            let startMs = MonoClock.msSince(begin)
+            switch outcome {
+            case .success:
+                // erstes Sample abwarten (max. 2 s)
+                while audio.processor.lastArrivalNs < begin, MonoClock.msSince(begin) < 2_000 {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                let gotSample = audio.processor.lastArrivalNs >= begin
+                Diag.log("session.resumeFromPause", [
+                    "ok": .b(gotSample), "mode": .s(mode.rawValue), "startMs": .ms(startMs),
+                    "firstSampleMs": gotSample ? .ms(MonoClock.ms(from: begin, to: audio.processor.lastArrivalNs)) : .null,
+                    "id": .s(String(id.prefix(8))), "app": .s(Self.appState),
+                ])
+                if !gotSample { failResume(id: id, reason: "no-samples") }
+            case .failure(let error):
+                Diag.log("session.resumeFromPause", [
+                    "ok": .b(false), "mode": .s(mode.rawValue), "startMs": .ms(startMs),
+                    "stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC),
+                    "id": .s(String(id.prefix(8))), "app": .s(Self.appState),
+                ])
+                failResume(id: id, reason: "start-failed")
+            }
+        }
+    }
+
+    private func failResume(id: String, reason: String) {
+        // Erst „unterbrochen“ setzen, dann verwerfen: Die Tastatur sieht beides in einem Stand
+        status = .interrupted
+        detail = "Mikro aus – Paply einmal öffnen"
+        if dictation?.id == id { cancelDictation(reason: "resume-\(reason)") } else { publish() }
     }
 
     // MARK: Erneut versuchen
@@ -689,18 +769,25 @@ final class SessionController {
 
     private func startHousekeeping() {
         housekeepingTask?.cancel()
+        lastHousekeepingTick = Date()
         housekeepingTask = Task {
             var ticks = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 ticks += 1
+                // War der Prozess ausgesetzt (z. B. ohne laufende Engine), kommt der Takt verspätet
+                let gap = Date().timeIntervalSince(lastHousekeepingTick)
+                lastHousekeepingTick = Date()
+                if gap > 120 {
+                    Diag.log("app.wasSuspended", ["gapS": .d(gap.rounded()), "idlePaused": .b(idlePaused)])
+                }
                 SharedIO.async { Self.removeStalePending() }
                 if let until = holdUntil, Date() >= until, dictation == nil, processingCount == 0, status != .off {
                     stopSession(reason: "hold-expired")
                     return
                 }
-                if status == .ready || status == .recording {
+                if status == .ready || status == .recording, !idlePaused {
                     await audio.refresh()
                     if !audio.isRunning {
                         Diag.log("engine.notRunning", ["status": .s(status.rawValue), "app": .s(Self.appState)])
@@ -790,9 +877,11 @@ final class SessionController {
             case .success:
                 status = dictation == nil ? .ready : .recording
                 detail = nil
+                idlePaused = false
                 lastActivityAt = Date()
                 publish()
                 Diag.log("audio.resume.ok", ["trigger": .s(trigger), "attempt": .i(attempt), "app": .s(Self.appState), "ms": .ms(MonoClock.msSince(begin))])
+                schedulePauseIfIdle(reason: "after-resume")
             case .failure(let error):
                 Diag.log("audio.resume.failed", [
                     "trigger": .s(trigger), "attempt": .i(attempt), "stage": .s(error.stage),
@@ -837,7 +926,9 @@ final class SessionController {
             case .success:
                 status = .ready
                 detail = nil
+                idlePaused = false
                 Diag.log("audio.mediaServicesReset.recovered")
+                schedulePauseIfIdle(reason: "after-reset")
             case .failure(let error):
                 status = .interrupted
                 detail = "Mikro aus – Paply einmal öffnen"
@@ -853,7 +944,7 @@ final class SessionController {
             var fields: DiagFields = ["status": .s(status.rawValue), "engine": .b(audio.isRunning), "app": .s(Self.appState)]
             fields.merge(audio.routeFields) { a, _ in a }
             Diag.log("audio.engineConfigChange", fields)
-            guard status == .ready || status == .recording, !audio.isRunning else { return }
+            guard status == .ready || status == .recording, !audio.isRunning, !idlePaused else { return }
             switch await audio.restartEngine() {
             case .success:
                 Diag.log("audio.engineRestart.ok")
@@ -874,6 +965,7 @@ final class SessionController {
             MainActor.assumeIsolated {
                 let session = SessionController.shared
                 Diag.log("app.background", ["status": .s(session.status.rawValue), "engine": .b(session.audio.isRunning)])
+                session.schedulePauseIfIdle(reason: "background")
             }
         })
         observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in

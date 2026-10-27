@@ -269,6 +269,7 @@ private struct SessionCard: View {
                 parts.append(settings.holdDuration.label)
             }
             if let battery = session.monitor.batteryPercent { parts.append("Akku \(battery) %") }
+            if session.idlePaused { parts.append("im Leerlauf angehalten (Experiment)") }
             if session.processingCount > 0 { parts.append("poliert …") }
         }
         return parts.joined(separator: " · ")

@@ -109,6 +109,16 @@ struct SettingsView: View {
             Section {
                 Toggle("App automatisch öffnen", isOn: $settings.autoOpenApp)
                 Toggle("Host-App protokollieren", isOn: $settings.logHostBundleID)
+                Toggle("Mikro im Leerlauf pausieren (Experiment)", isOn: Binding(
+                    get: { settings.idlePause != .off },
+                    set: { settings.idlePause = $0 ? .pause : .off }
+                ))
+                if settings.idlePause != .off {
+                    Picker("Art", selection: $settings.idlePause) {
+                        Text("engine.pause()").tag(IdlePauseMode.pause)
+                        Text("engine.stop()").tag(IdlePauseMode.stop)
+                    }
+                }
                 NavigationLink(value: Route.testVariants) {
                     HStack {
                         Text("Testvarianten der Pipeline")
@@ -127,7 +137,7 @@ struct SettingsView: View {
             } header: {
                 Text("Labor (Phase 0)")
             } footer: {
-                Text("Ohne Sitzung öffnet die Tastatur Paply automatisch (Variante A) oder zeigt „Paply starten“ (Variante B). „Host-App protokollieren“ ist experimentell: Die Tastatur liest dann über private Felder, welche App sie zeigt, und schreibt das nur ins Protokoll.")
+                Text("Ohne Sitzung öffnet die Tastatur Paply automatisch (Variante A) oder zeigt „Paply starten“ (Variante B). „Host-App protokollieren“ ist experimentell: Die Tastatur liest dann über private Felder, welche App sie zeigt, und schreibt das nur ins Protokoll. „Mikro im Leerlauf pausieren“ hält die Aufnahme an, sobald Paply im Hintergrund nichts zu tun hat (Sitzung bleibt aktiv), und startet sie erst beim nächsten 🌐 – ohne Vorlauf. Klappt das nicht, gilt „Mikro aus“.")
             }
 
             Section("Info") {
@@ -151,6 +161,9 @@ struct SettingsView: View {
         }
         .onChange(of: settings.autoOpenApp) { _, value in
             Diag.log("settings.autoOpen", ["on": .b(value)])
+        }
+        .onChange(of: settings.idlePause) { _, value in
+            Diag.log("settings.idlePause", ["mode": .s(value.rawValue)])
         }
     }
 

@@ -389,7 +389,7 @@ final class KeyboardViewController: UIInputViewController {
         let waiting = state == .connecting || state == .opening
         guard let id = dictationID, let dictation = session.dictation, dictation.id == id else {
             if session.status == .interrupted, state == .connecting || isRecording {
-                show(.failure(.interrupted))
+                noSession(interrupted: true) // Variante A öffnet die App, B zeigt „Mikro aus“
             }
             return
         }
@@ -420,7 +420,14 @@ final class KeyboardViewController: UIInputViewController {
                 startKeepAlive()
             }
         case .cancelled:
-            if isRecording { show(.failure(session.status == .interrupted ? .interrupted : .notResponding)) }
+            // z. B. Wiederanlauf aus dem Leerlauf gescheitert → „Mikro aus“ wie bei Unterbrechung
+            if isRecording {
+                if session.status == .interrupted {
+                    noSession(interrupted: true)
+                } else {
+                    show(.failure(.notResponding))
+                }
+            }
         default:
             break
         }

@@ -44,6 +44,25 @@ struct PipelineTestOptions: Codable, Equatable, Sendable {
     }
 }
 
+/// Experiment: Mikro im Leerlauf anhalten, damit iOS in anderen Apps kein Mikro-Symbol zeigt.
+/// Die AVAudioSession bleibt aktiv; nur die Engine hält an.
+enum IdlePauseMode: String, CaseIterable, Codable, Sendable {
+    /// aus (Standard): Engine läuft durch
+    case off
+    /// `engine.pause()`: Hardware bleibt eingerichtet, Tap bleibt – schnellster Wiederanlauf
+    case pause
+    /// `engine.stop()` + Tap entfernen: gibt alles frei, Wiederanlauf richtet neu ein
+    case stop
+
+    var label: String {
+        switch self {
+        case .off: "aus"
+        case .pause: "pause()"
+        case .stop: "stop()"
+        }
+    }
+}
+
 /// Einstellungen der App. PaplySettings liegen nur in der App (die Tastatur braucht sie nicht),
 /// Sitzungs- und Testschalter in der App Group (SharedSettings).
 @MainActor
@@ -64,6 +83,7 @@ final class AppSettings {
         static let testOptions = "pipelineTestOptions"
         static let spokenAuto = "spokenLanguagesAuto"
         static let spokenDetected = "spokenLanguagesDetected"
+        static let idlePause = "idlePauseMode"
     }
 
     var paply: PaplySettings {
@@ -80,6 +100,10 @@ final class AppSettings {
 
     var logHostBundleID: Bool {
         didSet { SharedSettings.logHostBundleID = logHostBundleID }
+    }
+
+    var idlePause: IdlePauseMode {
+        didSet { UserDefaults.standard.set(idlePause.rawValue, forKey: Key.idlePause) }
     }
 
     var testOptions: PipelineTestOptions {
@@ -121,6 +145,7 @@ final class AppSettings {
             testOptions = PipelineTestOptions()
         }
         spokenLanguagesAuto = UserDefaults.standard.object(forKey: Key.spokenAuto) as? Bool ?? true
+        idlePause = IdlePauseMode(rawValue: UserDefaults.standard.string(forKey: Key.idlePause) ?? "") ?? .off
         detectedSpokenLanguages = UserDefaults.standard.stringArray(forKey: Key.spokenDetected) ?? []
         let key = Keychain.readAPIKey()
         cachedAPIKey = key
