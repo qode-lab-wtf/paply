@@ -39,6 +39,17 @@ struct SettingsRow: View {
     }
 }
 
+/// Symbol des Gedanken-Knopfs: p-Kopf auf Mint-Gold (wie das Steuerelement im Sperrbildschirm)
+struct ThoughtSettingsIcon: View {
+    var body: some View {
+        PaplyMark(monochrome: .paplyForest)
+            .frame(width: 15, height: 16)
+            .frame(width: 29, height: 29)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(ThoughtTint.fill))
+            .accessibilityHidden(true)
+    }
+}
+
 private extension View {
     /// Zeilen-Hintergrund passend zum Waldgrün
     func paplyRows() -> some View {
@@ -65,6 +76,20 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                #if DEBUG
+                .task {
+                    // Bildschirmfotos: direkt zum Abschnitt „Gedanken“
+                    guard ProcessInfo.processInfo.arguments.contains("-PaplySettingsThoughts") else { return }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    proxy.scrollTo("thoughts", anchor: .top)
+                }
+                #endif
+        }
+    }
+
+    private var form: some View {
         Form {
             keySection
 
@@ -76,7 +101,9 @@ struct SettingsView: View {
                     SettingsRow(title: "Eigene Begriffe", symbol: "text.book.closed", tint: .paplyGreenDeep, value: vocabularySummary)
                 }
             } header: {
-                Text("Diktat")
+                Text("Erkennung")
+            } footer: {
+                Text("Gilt für Diktat und Gedanken.")
             }
             .paplyRows()
 
@@ -92,14 +119,26 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text("So lange nach der letzten Nutzung hört Paply sofort zu. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst.")
+                Text("So lange nach der letzten Nutzung hört Paply sofort zu. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst. Läuft das Mikro, nimmt der Gedanken-Knopf sofort auf.")
             }
             .paplyRows()
 
             Section {
-                NavigationLink(value: Route.shortcuts) {
-                    SettingsRow(title: "Schnelltasten", symbol: "hand.tap.fill", tint: .paplyBeakDeep)
+                NavigationLink(value: Route.thoughtButton) {
+                    HStack(spacing: 12) {
+                        ThoughtSettingsIcon()
+                        Text("Gedanken-Knopf").foregroundStyle(Color.paplyText)
+                    }
                 }
+            } header: {
+                Text("Gedanken")
+            } footer: {
+                Text("Ton bleibt 30 Tage, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.")
+            }
+            .paplyRows()
+            .id("thoughts")
+
+            Section {
                 if setup.needsKeyboardSetup {
                     NavigationLink(value: Route.keyboardSetup) {
                         SettingsRow(title: "Tastatur einrichten", symbol: "keyboard.fill", tint: .paplyDanger, value: "fehlt noch")
@@ -197,7 +236,7 @@ struct SettingsView: View {
         } header: {
             Text("Groq-Schlüssel")
         } footer: {
-            Text("Der Schlüssel bleibt nur auf diesem iPhone. Tipp: Am Mac kopieren, am iPhone „Einsetzen“ – die Zwischenablage wandert mit.")
+            Text("Der Schlüssel bleibt nur auf diesem iPhone. Tipp: Am Mac kopieren, am iPhone „Einsetzen“ – die Zwischenablage wandert mit. Gilt für Diktat und Gedanken.")
         }
         .paplyRows()
     }
@@ -395,56 +434,13 @@ struct VocabularyView: View {
     }
 }
 
-// MARK: - Schnelltasten
-
-/// Kurze, bebilderte Anleitung. Die Aktionstaste nur auf Geräten, die eine haben.
-struct ShortcutsGuideView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Diktat starten und stoppen, ohne die Tastatur zu öffnen. Der Text liegt danach in der Zwischenablage und wartet auf 🌐.")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.paplyText.opacity(0.7))
-                    .padding(.horizontal, 4)
-
-                GuideCard(title: "Rückseite doppelt tippen", symbol: "hand.tap.fill", steps: [
-                    "Öffne die App „Kurzbefehle“, tippe „+“ und füge die Aktion „Paply-Diktat an/aus“ hinzu.",
-                    "Einstellungen → Bedienungshilfen → Tippen → Auf Rückseite tippen → Doppeltippen → deinen Kurzbefehl wählen.",
-                    "Zweimal hinten aufs iPhone tippen: Paply hört zu. Nochmal: fertig.",
-                ], buttons: [
-                    ("Kurzbefehle öffnen", URL(string: "shortcuts://")),
-                    ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
-                ])
-
-                GuideCard(title: "Kontrollzentrum", symbol: "switch.2", steps: [
-                    "Kontrollzentrum öffnen (oben rechts nach unten wischen).",
-                    "Oben links „+“ → „Steuerelement hinzufügen“.",
-                    "„Paply-Diktat“ suchen und antippen.",
-                ], buttons: [])
-
-                if DeviceInfo.hasActionButton {
-                    GuideCard(title: "Aktionstaste", symbol: "button.programmable", steps: [
-                        "Einstellungen → Aktionstaste.",
-                        "Zu „Steuerelement“ wischen und „Paply-Diktat“ wählen.",
-                    ], buttons: [
-                        ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
-                    ])
-                }
-            }
-            .padding(16)
-        }
-        .background(PaplyBackground())
-        .navigationTitle("Schnelltasten")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 /// Karte mit Symbol, nummerierten Schritten und Knöpfen.
 struct GuideCard: View {
     let title: String
     let symbol: String
     let steps: [String]
     let buttons: [(String, URL?)]
+    var tint: AnyShapeStyle = AnyShapeStyle(Color.paplyGreenBright)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -453,7 +449,7 @@ struct GuideCard: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Color.paplyForest)
                     .frame(width: 42, height: 42)
-                    .background(Circle().fill(Color.paplyGreenBright))
+                    .background(Circle().fill(tint))
                 Text(title).font(.headline).foregroundStyle(Color.paplyText)
             }
             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
@@ -602,6 +598,8 @@ struct DeveloperView: View {
                 Text("Ohne Sitzung öffnet die Tastatur Paply automatisch (Variante A) oder zeigt „Paply starten“ (Variante B). „Host-App protokollieren“ liest über private Felder, welche App die Tastatur zeigt, und schreibt das nur ins Protokoll.")
             }
             .paplyRows()
+
+            ThoughtsDeveloperSection()
 
             Section("Werkzeuge") {
                 NavigationLink("Testseite (Höhe, Diktat)", value: Route.testPage)
