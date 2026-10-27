@@ -1,15 +1,28 @@
 # Paply — Stand
 
-**Zeitpunkt:** 27.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS Phase 0 (Branch `feat/ios-v1`) bereit zur Installation
+**Zeitpunkt:** 27.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS Version 1 vor TestFlight (Branch `feat/ios-v1`)
 
-## Paply iOS — Phase 0 (27.10.2026, Branch `feat/ios-v1`)
+## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
-- Rahmen und UX-Entscheidungen: [ENTSCHEIDUNGEN.md](ENTSCHEIDUNGEN.md) (27.10.2026). Code unter `ios/`, Anleitung `ios/README.md`.
-- Prototyp gebaut: App mit Hintergrund-Mikro-Sitzung, Paply-Tastatur (Auto-Start, Tipp = fertig, links wischen = verwerfen), Schnelltasten-Probe (App Intent, Live Activity, Kontrollzentrum), Diagnose-Protokoll. PaplyKit: Groq Whisper `large-v3` mit Stücke-Upload, mehrsprachiges Polieren ohne Zeitlimit (Stream), Sicherheitsnetz vom Mac portiert und um Zahlen-/Ersetzungs-Prüfung erweitert, Stille-/Echo-Filter.
-- Geprüft: 191 PaplyKit-Tests grün, App/Tastatur/Widgets bauen (Mac mini, ohne Signatur und ohne Asset-Katalog). Drei Opus-Reviews, alle Befunde behoben. **Auf dem Gerät noch nichts getestet**; Polier-Stream nur mit Mocks geprüft.
-- Mac-Messung (`ios/docs/phase0/latenz-mac.md`): Stücke-Upload halbiert die Wartezeit (~28 s Diktat 0,4 s statt 0,9 s); `turbo` dann nicht schneller, hält Mischsprache schlechter → `large-v3`. Recherche: `ios/docs/phase0/recherche.md`. Testplan fürs iPhone: `ios/docs/phase0/TESTPLAN.md`.
-- Nebenwirkung: Die Mac-Messung hat am 27.10. das Free-Tier-Polierkontingent (qwen, 200 000 Tokens/Tag gleitend) von Allans Groq-Schlüssel fast aufgebraucht; das Desktop-Diktat setzte bis zur Erholung Rohtext ein.
-- Offen: Signieren/Installieren auf dem MacBook (iOS-Plattform fehlt dort noch), Gerätetests nach Testplan.
+- **Phase 0 auf dem Gerät bestätigt** (iPhone 14 Pro Max, iOS 18.0): 🌐 → Paply-Tastatur → sprechen → Tipp →
+  polierter Text im Feld. Gedanken-Knopf startet das Mikro auch ohne laufende App im Hintergrund (S1,
+  `ios/docs/gedanken/S1-TEST.md`). iOS zeigt bei Hintergrund-Mikro ein Mikro-Symbol, nicht nur den Punkt.
+- **Version 1 (Scope eingefroren):** Diktat über 🌐 und „Gedanken“ (Knopf auf Sperrbildschirm/Kontrollzentrum,
+  Fertig/Verwerfen in der Live Activity, KI ordnet Titel/Thema/Aufgaben/Verknüpfungen, Reiter Gedanken),
+  Einrichtungskarte, Datenschutz-Klartext, Feedback senden. Konzept `ios/docs/gedanken/KONZEPT.md`,
+  KI-Bewertung `ios/docs/gedanken/EVAL.md`, TestFlight-Ablauf und Texte `ios/docs/TESTFLIGHT.md`.
+- Geprüft: PaplyKit 384 Tests grün, App/Tastatur/Widgets bauen Debug und Release; mehrere Opus-Reviews und ein
+  unabhängiger Sonnet-Produkttest. Der zusammengeführte Stand ist auf dem Gerät noch nicht getestet.
+- Bauen/Signieren: Mac mini entwickelt, MacBook (Xcode 26.5, iOS-Plattform installiert) signiert; Signieren nur
+  aus der Xcode-Oberfläche (Schlüsselbund über SSH gesperrt). App in App Store Connect angelegt.
+- KI-Prompt v2; Bewertung E1 Tag 1 (v1) mit 18 Fällen, weitere Läufe im Free-Tier verteilt (≤ 60 000 Tokens/Tag,
+  gpt-oss-120b, nie qwen).
+- **Nach Version 1 (Allan zugestimmt bzw. vorgeschlagen):** Widget „Offen“ (Sperrbildschirm nur Zahl, Home bis
+  3 Aufgaben abhakbar, keine Mitteilungen), Gedanken per Tastatur einsetzen, „In WhatsApp öffnen“ für erkannte
+  Nachrichten, „Frag deine Gedanken“, Spotlight/Siri, Teilen → Paply, Mehrsprachigkeit der Oberfläche,
+  Paply-Zugang ohne eigenen Groq-Schlüssel (Server).
+- Nebenwirkung 27.10.: Die Mac-Latenzmessung hat das Free-Tier-Polierkontingent (qwen) von Allans Groq-Schlüssel
+  fast aufgebraucht; das Desktop-Diktat setzte bis zur Erholung Rohtext ein.
 
 ## v1.15.0 — Notes
 
