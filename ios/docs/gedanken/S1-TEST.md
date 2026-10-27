@@ -32,3 +32,15 @@ hinzufügen → „Paply-Gedanke“). In Paply: Entwicklerbereich → Diagnose �
 
 **Entscheidet:** Fall B im Hintergrund ja/nein (sonst kurz Paply öffnen), Toggle oder Knopf im Control,
 Verhalten mit Siri.
+
+## Ergebnis (27.10.2026, iPhone 14 Pro Max, iOS 18.0, entsperrt, Kontrollzentrum)
+
+- Steuerelemente erschienen erst nach einem **Neustart des iPhones** (nach Installation über Xcode).
+- **Fall B klappt im Hintergrund:** Paply lief nach dem Neustart nicht. Der Control-Druck startete die App
+  unsichtbar (`thought.intent process: app`, `app: background`), die Sitzung per `AudioRecordingIntent`
+  (`session.start trigger: thought-intent`, 189 ms) und die Aufnahme (`thought.start case B ok`, 237 ms,
+  ohne Vorlauf). Kein Vordergrund-Rückfall nötig.
+- **Fall A** (Sitzung lief): Start in 23–30 ms, mit 500 ms Vorlauf.
+- **Beenden** über den Knopf (`reason: button`) und über „Fertig“ in der Live Activity (`reason: liveActivity`)
+  funktioniert; 3 Aufnahmen als WAV gesichert (6,6 s / 8,6 s / 14,5 s).
+- **Offen:** gesperrtes iPhone/Sperrbildschirm-Knopf, Siri, Anruf, Doppeldruck – im Gesamttest.
