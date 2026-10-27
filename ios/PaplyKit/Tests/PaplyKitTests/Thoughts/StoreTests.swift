@@ -55,6 +55,52 @@ struct StoreTests {
         #expect(await locked.topics().count == 2)
     }
 
+    /// Vierte Prüfrunde (B): Themenliste und „vollständig gelesen“ kommen aus einem Aufruf. Geschützt ist die Liste
+    /// leer und nie vollständig; nach dem Entsperren passen beide zusammen – nie „vollständig und leer“, solange
+    /// `topics.json` ein Thema trägt.
+    @Test func topicsSnapshotIsCompleteOnlyWhenRead() async throws {
+        let root = StoreSupport.temporaryRoot()
+        let first = try ThoughtStore(root: root)
+        try await first.saveTopics([Topic(id: "t_saved", title: "Garten", icon: .leaf, owner: .user)])
+        let topicsFile = root.appendingPathComponent("topics.json")
+        Self.setPermissions(0o000, [topicsFile])
+        defer {
+            Self.setPermissions(0o644, [topicsFile])
+            StoreSupport.remove(root)
+        }
+        let locked = try ThoughtStore(root: root)
+        let before = await locked.topicsSnapshot()
+        #expect(before.topics.isEmpty && !before.complete)
+        Self.setPermissions(0o644, [topicsFile])                             // erstes Entsperren
+        let after = await locked.topicsSnapshot()
+        #expect(after.topics.map(\.id) == ["t_saved"] && after.complete)
+    }
+
+    /// Vierte Prüfrunde (B): Gespeichert entfernte Themen werden gemeldet (Themenbilder löschen nur darauf) –
+    /// gelöscht, mangels Gedanken aufgeräumt; zusammengeführte (Alias) nicht.
+    @Test func removedTopicsAreReportedAfterSaving() async throws {
+        let root = StoreSupport.temporaryRoot()
+        defer { StoreSupport.remove(root) }
+        let store = try ThoughtStore(root: root)
+        var removed = store.removedTopics.makeAsyncIterator()
+        try await store.saveTopics([Topic(id: "t_a", title: "A", icon: .leaf, owner: .user),
+                                    Topic(id: "t_b", title: "B", icon: .leaf, owner: .user),
+                                    Topic(id: "t_c", title: "C", icon: .leaf, owner: .ai)])
+        // zusammenführen: kein Entfernen
+        try await store.updateTopics { topics in
+            if let i = topics.firstIndex(where: { $0.id == "t_a" }) { topics[i].mergedInto = "t_b" }
+        }
+        // löschen (samt Alias)
+        try await store.updateTopics { $0.removeAll { $0.id == "t_a" || $0.id == "t_b" } }
+        #expect(await removed.next() == ["t_a", "t_b"])
+        // letzter Gedanke endgültig gelöscht: Thema aufgeräumt
+        let last = StoreSupport.thought(topicId: "t_c")
+        try await store.save(last)
+        await store.purge(last.id)
+        #expect(await removed.next() == ["t_c"])
+        #expect(await store.topics().isEmpty)
+    }
+
     /// B1: Auch ohne ausdrücklichen Aufruf lädt der nächste Zugriff nach, sobald die Dateien lesbar sind.
     @Test func nextAccessRetriesAfterUnreadableDirectory() async throws {
         let root = StoreSupport.temporaryRoot()

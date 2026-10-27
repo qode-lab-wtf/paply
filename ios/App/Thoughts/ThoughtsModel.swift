@@ -54,9 +54,6 @@ final class ThoughtsModel {
     @ObservationIgnored private var pendingWrites: [String: Int] = [:]
     @ObservationIgnored private var writeChain: Task<Void, Never>?
     @ObservationIgnored private var changedWhileLoading: Set<String> = []
-    /// Themenliste vollständig gelesen (Speicher meldet „alles gelesen“): Erst dann heißt eine leere Liste „keine
-    /// Themen“ – vorher räumt `TopicImages` nichts auf
-    @ObservationIgnored private var topicsKnown = false
     @ObservationIgnored private var requestedSources: Set<String> = []
     @ObservationIgnored private var listeners: [Task<Void, Never>] = []
 
@@ -87,6 +84,13 @@ final class ThoughtsModel {
         listeners.append(Task { [weak self] in
             for await event in backend.processor.events {
                 if case .saved = event { self?.refreshUsage() }
+            }
+        })
+        // Themenbilder werden nur auf dieses Ereignis endgültig gelöscht: Thema gespeichert entfernt
+        listeners.append(Task { [weak self] in
+            for await ids in backend.store.removedTopics {
+                guard let self else { return }
+                TopicImages.shared.topicsRemoved(ids, from: self)
             }
         })
         // Vor dem ersten Entsperren nach einem Neustart wäre alles leer: erst danach laden
@@ -277,7 +281,8 @@ final class ThoughtsModel {
         for thought in byID.values where removed.contains(thought.topicId ?? "") {
             change(thought.id) { if let topic = $0.topicId, removed.contains(topic) { $0.topicId = nil } }
         }
-        // Bild: verschwindet sofort aus der Anzeige, die Datei parkt, bis die Liste gespeichert ist (`TopicImages`)
+        // Bild: wird nicht mehr angezeigt; die Datei geht erst, wenn der Speicher das Thema gespeichert entfernt hat
+        // (`ThoughtStore.removedTopics` → `TopicImages`) – scheitert das Speichern, ist es samt Bild wieder da
         changeTopics { $0.removeAll { removed.contains($0.id) } }
         setSuggestions(suggestions.filter { !removed.contains($0.a) && !removed.contains($0.b) })
     }
@@ -424,13 +429,13 @@ final class ThoughtsModel {
         guard let backend else { return }
         let store = backend.store
         let all = await store.all()
-        let storedTopics = await store.topics()
+        // Themen und „vollständig gelesen“ aus einem Aufruf: Vor dem ersten Entsperren ist die Liste leer
+        let snapshot = await store.topicsSnapshot()
         let pending = await store.pendingSuggestions()
-        topicsKnown = await store.reloadIfNeeded()
-        replaceAll(all, topics: storedTopics)
+        replaceAll(all, topics: snapshot.topics)
         suggestions = pending
         isLoaded = true
-        TopicImages.shared.update(topics: allTopics, persistent: true, loaded: topicsKnown, confirmed: true, from: self)
+        TopicImages.shared.reconcile(topics: snapshot.topics, complete: snapshot.complete, from: self)
         for id in changedWhileLoading { await refresh(id) }
         changedWhileLoading = []
         refreshUsage()
@@ -447,14 +452,14 @@ final class ThoughtsModel {
         if !isLoaded { changedWhileLoading.insert(id) }
         if id == ThoughtStore.topicsChangeID {
             guard (pendingWrites[id] ?? 0) == 0 else { return }
-            let known = await store.reloadIfNeeded()
-            let stored = await store.topics()
+            let snapshot = await store.topicsSnapshot()
             let pending = await store.pendingSuggestions()
             // inzwischen eine neue Änderung der Oberfläche: Deren Schreiben meldet gleich den neueren Stand
             guard (pendingWrites[id] ?? 0) == 0 else { return }
-            topicsKnown = topicsKnown || known
             suggestions = pending
-            setTopics(stored, confirmed: true)
+            setTopics(snapshot.topics, confirmed: true)
+            // erst nach dem ersten Entsperren vollständig: dann einmal abgleichen (`TopicImages`)
+            TopicImages.shared.reconcile(topics: snapshot.topics, complete: snapshot.complete, from: self)
             return
         }
         guard (pendingWrites[id] ?? 0) == 0 else { return }
@@ -538,11 +543,10 @@ final class ThoughtsModel {
         recomputeDerived()
     }
 
-    /// Themenbilder aufräumen lassen. `confirmed`: Die Liste ist gespeichert (aus dem Speicher gelesen) – sonst
-    /// parkt `TopicImages` nur, statt zu löschen.
+    /// Themenliste an `TopicImages` (Aliasse, Zusammenführen – nur Verschieben, nie Löschen). `confirmed`: Stand des
+    /// Speichers; erst dann übernimmt ein Ziel das Bild der Quelle.
     private func reportTopicImages(_ stored: [Topic], confirmed: Bool) {
-        TopicImages.shared.update(topics: stored, persistent: backend != nil, loaded: backend == nil || (isLoaded && topicsKnown),
-                                  confirmed: backend == nil || confirmed, from: self)
+        TopicImages.shared.update(topics: stored, persistent: backend != nil, saved: backend == nil || confirmed, from: self)
     }
 
     /// `confirmed`: Stand des Speichers (sonst Änderung der Oberfläche, noch nicht geschrieben)

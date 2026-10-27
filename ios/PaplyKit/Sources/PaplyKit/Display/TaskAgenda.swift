@@ -124,8 +124,9 @@ public struct TaskAgenda: Sendable {
 ///
 /// Eine Uhrzeit nur, wenn eine gesprochen wurde – auch 0:00 und 12:00 („morgen um 12 Uhr“, „um acht Uhr“, „halb drei“):
 /// - `dueHasTime` (beim Auflösen festgehalten) entscheidet;
-/// - ältere Aufgaben ohne das Feld: Der Wortlaut nennt eine Uhrzeit (`SpokenTime`), und `dueAt` liegt genau auf ihr.
-///   Ältere Daten zu „um acht Uhr“ tragen noch die Vorgabe 12:00 – dann lieber keine Uhrzeit als eine falsche.
+/// - ältere Aufgaben ohne das Feld: dieselbe Regel wie beim Auflösen (`DueDate.clock`) liest die Uhrzeit aus dem
+///   Wortlaut, und `dueAt` liegt genau auf ihr. Ältere Daten zu „um acht Uhr“ tragen noch die Vorgabe 12:00, zu „morgen
+///   um 7 Uhr früh“ 19:00 – dann lieber keine Uhrzeit als eine falsche.
 public enum TaskDueLabel: Equatable, Sendable {
     case wording(String)
     case today(time: Date?)
@@ -142,8 +143,8 @@ public enum TaskDueLabel: Equatable, Sendable {
         if let wording, calendar.isDate(recordedAt, inSameDayAs: now) { return .wording(wording) }
         let time: Date? = {
             if let spoken = task.dueHasTime { return spoken ? due : nil }
-            guard let wording, let found = SpokenTime.find(in: wording) else { return nil }
-            return SpokenTime.matches(found.clock, date: due, calendar: calendar) ? due : nil
+            guard let clock = DueDate.spokenClock(wording) else { return nil }
+            return SpokenTime.matches(clock, date: due, calendar: calendar) ? due : nil
         }()
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: due)).day ?? 0
         switch days {

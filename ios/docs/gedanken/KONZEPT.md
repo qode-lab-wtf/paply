@@ -848,11 +848,16 @@ Zusätzlich:
   inzwischen gelöscht, wird nichts übernommen.
 - Fälligkeit: `due_hint` steht als Wortlaut im UI (am Tag der Aufnahme; danach der Tag aus `dueAt`). `NSDataDetector`
   liefert den Tag, relative Angaben („morgen“, auch „morgen um 15 Uhr“) gezählt ab dem Aufnahmetag. Erkennt er nichts,
-  gibt es eben kein Datum. Die Uhrzeit liest `SpokenTime` aus dem Wortlaut, weil der Detektor Zahlwörter („um acht
-  Uhr“), „halb drei“, „Viertel nach acht“ und „Mitternacht“ übergeht (dann bliebe seine Vorgabe 12:00) und eine
-  nachgestellte Tageszeit nicht sieht („um 7 Uhr früh“ → 19:00). Ohne Tageszeit gilt seine Regel: 1–7 Uhr =
-  nachmittags. Ob eine Uhrzeit gesprochen wurde, hält `dueHasTime` fest; nur dann zeigt die Liste sie – auch 0:00 und
-  12:00. Ältere Aufgaben ohne das Feld: Uhrzeit nur, wenn der Wortlaut eine nennt und `dueAt` genau auf ihr liegt.
+  gibt es eben kein Datum. Die Uhrzeit (vierte Prüfrunde, vereinfacht): Ziffern und Englisch liest der Detektor
+  („morgen um 07:00“, „at 6 am tomorrow“, „8 pm“) – seine Uhrzeit gilt, wenn sie auf dem genannten Zifferblatt liegt,
+  sonst hat er sie übergangen („morgen gegen 8“ → 12:00) und es gibt keine. Nur deutsche Wortformen, die er übergeht
+  (Zahlwörter „um acht“, „halb drei“, „Viertel vor/nach acht“, „Mitternacht“), und eine genannte Tageszeit (früh,
+  morgens, vormittags, mittags, nachmittags, abends, nachts – „morgen um 7 Uhr früh“ läse er als 19:00) legt
+  `SpokenTime` selbst fest: Die Tageszeit gilt (12 + morgens/nachts = 0 Uhr); ohne sie gilt für Wortformen seine Regel
+  1–7 Uhr = nachmittags. Englische Wortformen („at eight“, „half past eight pm“) und Mehrdeutiges (zwei Uhrzeiten oder
+  Tageszeiten) überschreiben nichts. Ob eine Uhrzeit dasteht, hält `dueHasTime` fest; nur dann zeigt die Liste sie –
+  auch 0:00 und 12:00. Ältere Aufgaben ohne das Feld: dieselbe Regel (`DueDate.clock`) auf den Wortlaut, und `dueAt`
+  muss genau auf dieser Uhrzeit liegen.
 - Prompt-Injektion: Das Transkript steckt in einem JSON-Feld, und der Prompt erklärt es zu Daten. Weil Titel,
   Aufgaben und Verbindungen am Wortlaut geprüft werden, kann eine Injektion höchstens einen seltsamen Titel
   erzeugen, aber keine Inhalte oder Aktionen.

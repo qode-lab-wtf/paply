@@ -172,7 +172,8 @@ struct TaskAgendaTests {
         #expect(label("morgen um 15 Uhr", date(2026, 10, 27, 15), false) == .today(time: nil))
     }
 
-    /// Ältere Aufgaben ohne `dueHasTime`: Der Wortlaut nennt eine Uhrzeit, und `dueAt` liegt genau auf ihr.
+    /// Ältere Aufgaben ohne `dueHasTime`: dieselbe Regel wie beim Auflösen (`DueDate.clock`) liest die Uhrzeit, und
+    /// `dueAt` liegt genau auf ihr.
     @Test(arguments: [
         ("morgen um 12 Uhr", 12, 0, true),
         ("morgen um 0 Uhr", 0, 0, true),
@@ -180,11 +181,19 @@ struct TaskAgendaTests {
         ("morgen um acht Uhr", 8, 0, true),
         ("morgen um halb drei", 14, 30, true),
         ("morgen um Viertel nach acht", 8, 15, true),
+        ("morgen um 07:00", 7, 0, true),
+        ("morgen um 7 Uhr früh", 7, 0, true),
         ("tomorrow at 8", 8, 0, true),
-        ("tomorrow at eight", 8, 0, true),
+        ("tomorrow 8 pm", 20, 0, true),
         // alte Auflösung ohne Zahlwörter: 12:00 statt 8:00 – lieber keine Uhrzeit als eine falsche
         ("morgen um acht Uhr", 12, 0, false),
+        // alte Auflösung (Detektor) übersah „früh“: 19:00
         ("morgen um 7 Uhr früh", 19, 0, false),
+        // dritte Prüfrunde: „07:00“ wurde 19:00, „half past eight pm“ 8:30
+        ("morgen um 07:00", 19, 0, false),
+        ("tomorrow at half past eight pm", 8, 30, false),
+        // englische Wortformen liest nur der Detektor – er übergeht sie (12:00), also keine Uhrzeit
+        ("tomorrow at eight", 12, 0, false),
         // keine Uhrzeit gesprochen
         ("morgen", 12, 0, false),
         ("morgen früh", 9, 0, false),
@@ -205,39 +214,64 @@ struct TaskAgendaTests {
     }
 }
 
-/// Uhrzeit im Zeitausdruck (`SpokenTime`) und Auflösung zu `dueAt` (`DueDate`) – dritte Prüfrunde.
+/// Uhrzeit im Zeitausdruck (`SpokenTime`) und Auflösung zu `dueAt` (`DueDate`) – dritte und vierte Prüfrunde.
+///
+/// Vierte Prüfrunde: `SpokenTime` legt die Uhrzeit nur bei deutschen Wortformen oder einer genannten Tageszeit fest;
+/// Ziffern und Englisch bleiben beim Detektor.
 @Suite("Fälligkeit: gesprochene Uhrzeit")
 struct SpokenTimeTests {
+    /// Wortform oder Tageszeit: Die Erkennung legt die Uhrzeit fest
     @Test(arguments: [
-        ("morgen um 12 Uhr", 12, 0), ("um 0 Uhr", 0, 0), ("um null Uhr", 0, 0), ("um 24 Uhr", 24, 0),
-        ("Mitternacht", 24, 0), ("tomorrow at midnight", 24, 0), ("at noon", 12, 0),
-        ("um acht Uhr", 8, 0), ("um acht", 8, 0), ("gegen acht", 8, 0), ("um zwölf", 12, 0), ("um ein Uhr", 13, 0),
-        ("acht Uhr dreißig", 8, 30), ("um 8 Uhr 30", 8, 30), ("8:30", 8, 30), ("8.30 Uhr", 8, 30), ("um 8.30", 8, 30),
-        ("15:45", 15, 45), ("Freitag 10 Uhr", 10, 0),
-        ("halb drei", 14, 30), ("halb eins", 12, 30), ("halb neun", 8, 30), ("Viertel nach acht", 8, 15),
-        ("Viertel vor neun", 8, 45), ("dreiviertel neun", 8, 45), ("drei viertel neun", 8, 45), ("um zehn nach acht", 8, 10),
-        ("um fünf vor zwölf", 11, 55),
-        ("at 8", 8, 0), ("at eight", 8, 0), ("at eight thirty", 8, 30), ("8 pm", 20, 0), ("8pm", 20, 0), ("12 am", 0, 0),
-        ("12 pm", 12, 0), ("8 a.m.", 8, 0), ("8 o'clock", 8, 0), ("half past seven tonight", 19, 30), ("quarter to nine", 8, 45),
-        ("ten past eight", 8, 10),
-        // Tageszeit legt die Hälfte fest; ohne sie wie der Detektor: 1–7 Uhr = nachmittags
-        ("um 7 Uhr früh", 7, 0), ("morgen früh um halb acht", 7, 30), ("abends um 8", 20, 0), ("heute Abend um neun", 21, 0),
-        ("um 2 Uhr nachts", 2, 0), ("um 11 Uhr nachts", 23, 0), ("um 2 Uhr mittags", 14, 0), ("um 3", 15, 0), ("um 8 am Freitag", 8, 0),
+        ("um acht", 8, 0), ("um acht Uhr", 8, 0), ("gegen acht", 8, 0), ("um zwölf", 12, 0), ("um ein Uhr", 13, 0),
+        ("um null Uhr", 0, 0), ("Mitternacht", 24, 0), ("um Mitternacht", 24, 0), ("acht Uhr dreißig", 8, 30),
+        ("um 8 Uhr dreißig", 8, 30), ("halb drei", 14, 30), ("halb eins", 12, 30), ("halb neun", 8, 30), ("um halb 3", 14, 30),
+        ("Viertel nach acht", 8, 15), ("Viertel vor neun", 8, 45), ("Viertel nach 8", 8, 15), ("dreiviertel neun", 8, 45),
+        ("drei viertel neun", 8, 45), ("um zehn nach acht", 8, 10), ("um fünf vor zwölf", 11, 55), ("um 10 nach 8", 8, 10),
+        // Tageszeit genannt: sie gilt – auch bei Ziffern (der Detektor übersieht sie: „morgen um 7 Uhr früh“ → 19:00)
+        ("um zwölf Uhr mittags", 12, 0), ("um 12 Uhr mittags", 12, 0), ("um 2 Uhr mittags", 14, 0), ("um 7 Uhr früh", 7, 0),
+        ("um 6 Uhr morgens", 6, 0), ("halb acht abends", 19, 30), ("morgen früh um halb acht", 7, 30), ("abends um 8", 20, 0),
+        ("heute Abend um neun", 21, 0), ("um 2 Uhr nachts", 2, 0), ("um 11 Uhr nachts", 23, 0), ("um 9 Uhr vormittags", 9, 0),
+        ("morgen Nachmittag um 3", 15, 0), ("abends um 19:30", 19, 30),
+        // 12 + morgens/nachts = 0 Uhr
+        ("morgen um halb eins morgens", 0, 30), ("Viertel vor eins morgens", 0, 45), ("um zwölf Uhr nachts", 0, 0),
+        ("halb eins nachts", 0, 30), ("um 12 Uhr morgens", 0, 0),
     ])
-    func spokenClockIsRead(text: String, hour: Int, minute: Int) {
-        #expect(SpokenTime.find(in: text)?.clock == SpokenTime.Clock(hour: hour, minute: minute), "\(text)")
+    func wordFormsAndDayPartsAreFixed(text: String, hour: Int, minute: Int) throws {
+        let found = try #require(SpokenTime.find(in: text), "\(text)")
+        #expect(found.fixed, "\(text)")
+        #expect(found.clock == SpokenTime.Clock(hour: hour, minute: minute), "\(text)")
+    }
+
+    /// Ziffern und Englisch ohne Tageszeit: nur das Zifferblatt – die Uhrzeit setzt der Detektor
+    @Test(arguments: [
+        ("morgen um 07:00", 7, 0), ("tomorrow at 06:00", 6, 0), ("at 6 am tomorrow", 6, 0), ("morgen um 12 Uhr", 12, 0),
+        ("um 0 Uhr", 0, 0), ("um 24 Uhr", 24, 0), ("um 8 Uhr 30", 8, 30), ("8:30", 8, 30), ("8.30 Uhr", 8, 30), ("um 8.30", 8, 30),
+        ("15:45", 15, 45), ("Freitag 10 Uhr", 10, 0), ("um 3", 3, 0), ("um 7", 7, 0), ("gegen 8", 8, 0), ("um 8 am Freitag", 8, 0),
+        ("at 8", 8, 0), ("8 pm", 8, 0), ("8pm", 8, 0), ("12 am", 12, 0), ("8 a.m.", 8, 0), ("8 o'clock", 8, 0),
+        ("tomorrow at 7:30 pm", 7, 30),
+    ])
+    func digitsOnlyReadTheClockFace(text: String, hour: Int, minute: Int) throws {
+        let found = try #require(SpokenTime.find(in: text), "\(text)")
+        #expect(!found.fixed, "\(text)")
+        #expect(found.clock == SpokenTime.Clock(hour: hour, minute: minute), "\(text)")
     }
 
     @Test(arguments: ["morgen", "morgen früh", "abends", "morgen Mittag", "am 10.11.", "am 10.11.2026", "am achten",
                       "in zwei Wochen", "on the 5th", "bis Ende November", "nächste Woche", "um den 10. herum", "Viertel acht",
-                      "zweimal", "next week"])
-    func noClockWithoutOne(text: String) {
+                      "zweimal", "next week",
+                      // englische Wortformen: nur der Detektor
+                      "at eight", "tomorrow at eight", "tomorrow at half past eight pm", "quarter past eight pm",
+                      "quarter to nine", "ten past eight", "at noon", "tomorrow at midnight",
+                      // nicht eindeutig: zwei Uhrzeiten, zwei Tageszeiten
+                      "um acht oder um neun", "morgen um 8 oder um 9", "morgen früh oder abends um acht"])
+    func noClockWithoutAnUnambiguousOne(text: String) {
         #expect(SpokenTime.find(in: text) == nil, "\(text)")
     }
 
     @Test func datesBesideTheClockStayAbsolute() {
-        #expect(SpokenTime.find(in: "am 10.11. um 9") == SpokenTime.Found(clock: .init(hour: 9, minute: 0), otherDigits: true))
+        #expect(SpokenTime.find(in: "am 10.11. um 9") == SpokenTime.Found(clock: .init(hour: 9, minute: 0), fixed: false, otherDigits: true))
         #expect(SpokenTime.find(in: "morgen um 15 Uhr")?.otherDigits == false)
+        #expect(SpokenTime.find(in: "morgen um halb 3")?.otherDigits == false)
     }
 
     // MARK: Auflösung (NSDataDetector + gesprochene Uhrzeit), in der Zeitzone des Rechners wie der Detektor
@@ -253,15 +287,23 @@ struct SpokenTimeTests {
     }
 
     @Test(arguments: [
-        ("morgen um 12 Uhr", 1, 12, 0), ("morgen um 0 Uhr", 1, 0, 0), ("morgen um acht Uhr", 1, 8, 0),
-        ("morgen um halb drei", 1, 14, 30), ("morgen um Viertel nach acht", 1, 8, 15), ("tomorrow at 8", 1, 8, 0),
-        ("tomorrow at eight", 1, 8, 0), ("morgen um 7 Uhr früh", 1, 7, 0), ("morgen abend um 8", 1, 20, 0),
-        ("morgen um Mitternacht", 2, 0, 0), ("tomorrow at midnight", 2, 0, 0), ("morgen um 24 Uhr", 2, 0, 0),
-        ("übermorgen um 10 Uhr", 2, 10, 0),
+        // vierte Prüfrunde: Ziffern und Englisch bleiben beim Detektor
+        ("morgen um 07:00", 1, 7, 0), ("tomorrow at 06:00", 1, 6, 0), ("at 6 am tomorrow", 1, 6, 0), ("tomorrow at 8", 1, 8, 0),
+        ("tomorrow 8 pm", 1, 20, 0), ("8 pm", 0, 20, 0), ("tomorrow at 7:30 pm", 1, 19, 30), ("morgen um 3", 1, 15, 0),
+        ("morgen um 12 Uhr", 1, 12, 0), ("morgen um 0 Uhr", 1, 0, 0), ("morgen um 24 Uhr", 2, 0, 0), ("morgen um 8:30", 1, 8, 30),
+        ("übermorgen um 10 Uhr", 2, 10, 0), ("morgen um 8 Uhr 30", 1, 8, 30),
+        // Wortformen
+        ("morgen um acht", 1, 8, 0), ("morgen um acht Uhr", 1, 8, 0), ("morgen um halb drei", 1, 14, 30),
+        ("morgen um halb 3", 1, 14, 30), ("morgen um Viertel nach acht", 1, 8, 15), ("morgen um Mitternacht", 2, 0, 0),
+        ("morgen um zwölf Uhr mittags", 1, 12, 0), ("morgen halb acht abends", 1, 19, 30), ("morgen gegen acht", 1, 8, 0),
+        // Tageszeit genannt
+        ("morgen um halb eins morgens", 1, 0, 30), ("morgen um Viertel vor eins morgens", 1, 0, 45), ("morgen um 7 Uhr früh", 1, 7, 0),
+        ("morgen um 6 Uhr morgens", 1, 6, 0), ("morgen abend um 8", 1, 20, 0), ("morgen um 2 Uhr nachts", 1, 2, 0),
+        ("morgen um 11 Uhr nachts", 1, 23, 0),
         // aus den Läufen p4/p4b (e26, n03)
-        ("morgen um acht", 1, 8, 0), ("morgen um 10 Uhr", 1, 10, 0),
+        ("morgen um 10 Uhr", 1, 10, 0),
     ])
-    func resolverSetsTheSpokenTime(hint: String, days: Int, hour: Int, minute: Int) throws {
+    func resolverSetsTheTime(hint: String, days: Int, hour: Int, minute: Int) throws {
         let due = try #require(resolved(hint), "\(hint)")
         #expect(due.hasTime, "\(hint)")
         #expect(dayOffset(due.date) == days, "\(hint)")
@@ -269,12 +311,72 @@ struct SpokenTimeTests {
         #expect(parts.hour == hour && parts.minute == minute, "\(hint): \(parts)")
     }
 
-    @Test(arguments: ["morgen", "morgen früh", "morgen Mittag", "Freitag", "tomorrow",
-                      // aus den Läufen p4/E1 (n02, e06, e07)
-                      "morgen am besten vormittags", "bis Mittwoch", "before Thursday"])
-    func resolverWithoutSpokenTime(hint: String) throws {
+    /// Deutsches „am“ nach einer Ziffer ist kein „a.m.“ (sonst: heute 8:00 statt Freitag)
+    @Test(arguments: ["um 8 am Freitag", "bis um 8 am Freitag", "um 8.30 am Freitag"])
+    func germanAmIsNotMorning(hint: String) throws {
+        let due = try #require(resolved(hint), "\(hint)")
+        #expect(due.hasTime, "\(hint)")
+        let parts = calendar.dateComponents([.weekday, .hour], from: due.date)
+        #expect(parts.weekday == 6 && parts.hour == 8, "\(hint): \(parts)")
+        #expect(DueDate.germanAm("at 6 am tomorrow") == "at 6 am tomorrow")
+    }
+
+    /// Ohne erkannte Uhrzeit bleibt die Vorgabe des Detektors – nur zum Sortieren, nie angezeigt
+    @Test(arguments: [
+        ("morgen", 1, 12, 0), ("morgen früh", 1, 9, 0), ("morgen Mittag", 1, 12, 0), ("tomorrow", 1, 12, 0),
+        // englische Wortformen: Was der Detektor liest, bleibt; überschrieben wird nichts
+        ("tomorrow at half past eight pm", 1, 12, 0), ("quarter past eight pm", 0, 20, 0), ("tomorrow at eight", 1, 12, 0),
+        ("tomorrow at midnight", 2, 0, 0),
+        // Der Detektor übergeht „gegen“: lieber keine Uhrzeit als seine 12:00
+        ("morgen gegen 8", 1, 12, 0),
+    ])
+    func resolverWithoutTime(hint: String, days: Int, hour: Int, minute: Int) throws {
         let due = try #require(resolved(hint), "\(hint)")
         #expect(!due.hasTime, "\(hint)")
+        #expect(dayOffset(due.date) == days, "\(hint)")
+        let parts = calendar.dateComponents([.hour, .minute], from: due.date)
+        #expect(parts.hour == hour && parts.minute == minute, "\(hint): \(parts)")
+    }
+
+    /// Ohne Tag erkennt der Detektor nichts – dann gibt es kein `dueAt`
+    @Test(arguments: ["at 8", "um acht", "halb drei", "um Mitternacht"])
+    func noDateWithoutDay(hint: String) {
+        #expect(resolved(hint) == nil, "\(hint)")
+    }
+
+    /// Bloße Uhrzeiten, die der Detektor als heute liest: Uhrzeit nach derselben Regel
+    @Test(arguments: [("um 7 Uhr früh", 7, 0), ("um 6 Uhr morgens", 6, 0), ("8 pm", 20, 0)])
+    func bareTimesTheDetectorReads(hint: String, hour: Int, minute: Int) throws {
+        let due = try #require(resolved(hint), "\(hint)")
+        #expect(due.hasTime && dayOffset(due.date) == 0, "\(hint)")
+        let parts = calendar.dateComponents([.hour, .minute], from: due.date)
+        #expect(parts.hour == hour && parts.minute == minute, "\(hint): \(parts)")
+    }
+
+    /// `dueHasTime` und die Anzeige älterer Aufgaben folgen einer Regel: Wo das Auflösen eine Uhrzeit festhält, liest
+    /// `DueDate.spokenClock` aus dem Wortlaut genau die Uhrzeit von `dueAt` – und sonst keine.
+    @Test(arguments: [
+        "morgen um 07:00", "tomorrow at 06:00", "at 6 am tomorrow", "tomorrow at half past eight pm", "quarter past eight pm",
+        "morgen um halb eins morgens", "morgen um Viertel vor eins morgens", "morgen um acht", "morgen halb drei",
+        "morgen um Mitternacht", "morgen um zwölf Uhr mittags", "morgen um 7 Uhr früh", "morgen um 6 Uhr morgens",
+        "morgen halb acht abends", "tomorrow at 8", "8 pm", "morgen gegen 8", "morgen abend um 8", "morgen", "morgen früh",
+        "tomorrow at eight", "10. November um 9", "bis Freitag 10 Uhr",
+    ])
+    func hasTimeAndOlderTasksAgree(hint: String) throws {
+        let due = try #require(resolved(hint), "\(hint)")
+        let clock = DueDate.spokenClock(hint)
+        #expect(due.hasTime == (clock != nil), "\(hint)")
+        if let clock { #expect(SpokenTime.matches(clock, date: due.date, calendar: calendar), "\(hint)") }
+    }
+
+    /// Alle Zeitausdrücke der gespeicherten Läufe (p4, p4b, E1): Uhrzeit nur bei „morgen um acht“ und „morgen um 10 Uhr“
+    @Test func savedRunsKeepTheirTimes() {
+        let hints = ["Donnerstag", "am Samstag", "am zehnten", "before November third", "before Thursday", "bis Ende November",
+                     "bis Mittwoch", "bis Sonntag", "bis spätestens Freitag", "bis zum fünfundzwanzigsten", "diese Woche",
+                     "für den Sonntag danach", "im Dezember", "morgen", "morgen am besten vormittags", "morgen früh",
+                     "morgen um 10 Uhr", "morgen um acht"]
+        let timed = hints.filter { resolved($0)?.hasTime == true }
+        #expect(timed == ["morgen um 10 Uhr", "morgen um acht"])
     }
 
     /// Offline verarbeitet: „morgen um 15 Uhr“ gilt ab der Aufnahme – Tag und Uhrzeit (bisher galt der Ausdruck wegen
@@ -285,5 +387,8 @@ struct SpokenTimeTests {
         let due = try #require(DueDate.resolved("morgen um 15 Uhr", reference: recorded, now: processed, calendar: calendar))
         #expect(dayOffset(due.date, from: recorded) == 1)
         #expect(calendar.component(.hour, from: due.date) == 15 && due.hasTime)
+        let words = try #require(DueDate.resolved("morgen um halb drei", reference: recorded, now: processed, calendar: calendar))
+        #expect(dayOffset(words.date, from: recorded) == 1)
+        #expect(calendar.component(.hour, from: words.date) == 14 && words.hasTime)
     }
 }

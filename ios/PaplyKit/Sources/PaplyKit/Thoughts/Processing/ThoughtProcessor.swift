@@ -919,13 +919,14 @@ enum RawText {
     }
 }
 
-/// Fälligkeit (§6.7): `NSDataDetector` liefert den Tag, bezogen auf die Aufnahmezeit; die Uhrzeit liest `SpokenTime`
-/// aus dem Wortlaut (auch Zahlwörter, „halb drei“, „um 7 Uhr früh“). Ohne gesprochene Uhrzeit bleibt die Vorgabe des
-/// Detektors (12:00, „morgen früh“ 9:00) – nur zum Sortieren; angezeigt wird eine Uhrzeit nur mit `hasTime`.
+/// Fälligkeit (§6.7): `NSDataDetector` liefert den Tag, bezogen auf die Aufnahmezeit, und die Uhrzeit für Ziffern und
+/// Englisch. Deutsche Wortformen und eine genannte Tageszeit liest `SpokenTime` („um acht“, „halb drei“, „morgen um
+/// 7 Uhr früh“). Ohne erkannte Uhrzeit bleibt die Vorgabe des Detektors (12:00, „morgen früh“ 9:00) – nur zum
+/// Sortieren; angezeigt wird eine Uhrzeit nur mit `hasTime`.
 enum DueDate {
     struct Resolved: Equatable, Sendable {
         var date: Date
-        /// Im Wortlaut steht eine Uhrzeit, und `date` liegt genau auf ihr
+        /// Im Wortlaut steht eine Uhrzeit (`clock`), und `date` liegt genau auf ihr
         var hasTime: Bool
     }
 
@@ -935,7 +936,8 @@ enum DueDate {
         resolved(hint, reference: reference, now: now, calendar: calendar)?.date
     }
 
-    static func resolved(_ hint: String?, reference: Date, now: Date, calendar: Calendar = .current) -> Resolved? {
+    /// Erster Treffer des Detektors im Zeitausdruck (ohne führendes „bis“, „am“ …)
+    private static func detect(_ hint: String?) -> (text: String, date: Date)? {
         guard var text = hint?.trimmed, !text.isEmpty,
               let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return nil }
         let lower = text.lowercased()
@@ -943,8 +945,42 @@ enum DueDate {
             text = String(text.dropFirst(word.count + 1))
             break
         }
-        guard let detected = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.date else { return nil }
+        text = germanAm(text)
+        guard let date = detector.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.date else { return nil }
+        return (text, date)
+    }
+
+    /// Deutsches „am“ nach einer Ziffer ist nie „a.m.“: Der Detektor liest „um 8 am Freitag“ sonst als heute 8:00.
+    /// Nach „um <Ziffer>“ wird „Uhr“ eingefügt („um 8 Uhr am Freitag“ → Freitag 8:00, gemessen).
+    static func germanAm(_ text: String) -> String {
+        text.replacingOccurrences(of: #"(?i)\b(um\s+\d{1,2}(?:[:.]\d{2})?)\s+am\b"#, with: "$1 Uhr am", options: .regularExpression)
+    }
+
+    /// Die Uhrzeit eines Zeitausdrucks – eine Regel für `hasTime` beim Auflösen und für die Anzeige älterer Aufgaben:
+    /// - Wortform oder Tageszeit (`SpokenTime` legt fest): diese Uhrzeit
+    /// - Ziffern oder Englisch: die Uhrzeit des Detektors, wenn sie auf demselben Zifferblatt liegt wie die genannte
+    ///   („morgen um 07:00“ → 7:00, „8 pm“ → 20:00); sonst hat er sie nicht gelesen („morgen gegen 8“ → 12:00) → keine
+    /// - nichts Eindeutiges erkannt → keine
+    static func clock(_ spoken: SpokenTime.Found?, detected: Date) -> SpokenTime.Clock? {
+        guard let spoken else { return nil }
+        if spoken.fixed { return spoken.clock }
+        // Der Detektor rechnet in der Zeitzone des Geräts
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: detected)
+        guard let hour = parts.hour, let minute = parts.minute,
+              hour % 12 == spoken.clock.hour % 12, minute == spoken.clock.minute else { return nil }
+        return SpokenTime.Clock(hour: hour, minute: minute)
+    }
+
+    /// Uhrzeit eines Zeitausdrucks nach `clock` (für Aufgaben ohne `dueHasTime`)
+    static func spokenClock(_ hint: String?) -> SpokenTime.Clock? {
+        guard let detected = detect(hint) else { return nil }
+        return clock(SpokenTime.find(in: detected.text), detected: detected.date)
+    }
+
+    static func resolved(_ hint: String?, reference: Date, now: Date, calendar: Calendar = .current) -> Resolved? {
+        guard let (text, detected) = detect(hint) else { return nil }
         let spoken = SpokenTime.find(in: text)
+        let clock = clock(spoken, detected: detected)
         // Ein Datum mit Ziffern („am 10. November“) gilt, wie es dasteht. Relative Angaben („morgen“, auch „morgen um
         // 15 Uhr“) gelten ab der Aufnahme, nicht ab dem Verarbeiten: so viele Kalendertage nach dem Aufnahmetag.
         let absolute = spoken.map(\.otherDigits) ?? text.contains(where: \.isNumber)
@@ -957,19 +993,18 @@ enum DueDate {
             else { return nil }
             date = shifted
         }
-        if let clock = spoken?.clock {
+        // Ziffern/Englisch: Die Uhrzeit des Detektors steht schon in `date`; nur eine festgelegte wird gesetzt
+        if let clock, spoken?.fixed == true {
             if clock.hour == 24 {
-                // Mitternacht = 0:00 des Folgetags; liegt der Detektor schon dort („tomorrow at midnight“), bleibt es
-                if !SpokenTime.matches(clock, date: date, calendar: calendar) {
-                    guard let next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date)) else { return nil }
-                    date = next
-                }
+                // Mitternacht = 0:00 des Folgetags
+                guard let next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date)) else { return nil }
+                date = next
             } else {
                 guard let set = calendar.date(bySettingHour: clock.hour, minute: clock.minute, second: 0, of: date) else { return nil }
                 date = set
             }
         }
         guard date > reference.addingTimeInterval(-86_400), date < reference.addingTimeInterval(2 * 365 * 86_400) else { return nil }
-        return Resolved(date: date, hasTime: spoken != nil)
+        return Resolved(date: date, hasTime: clock != nil)
     }
 }

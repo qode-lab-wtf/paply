@@ -71,6 +71,7 @@ public actor ThoughtStore {
     private var activeCaptures: Set<String> = []
     private var reconstructed: [String] = []
     private let changeBroadcast = Broadcast<String>()
+    private let removedBroadcast = Broadcast<Set<String>>()
 
     public init(root: URL) throws {
         try self.init(root: root, now: Date.init)
@@ -85,6 +86,11 @@ public actor ThoughtStore {
 
     /// geänderte Gedanken-ID (bzw. `topicsChangeID`). Jeder Zugriff liefert einen eigenen Strom.
     public nonisolated var changes: AsyncStream<String> { changeBroadcast.stream }
+
+    /// Themen, die gespeichert entfernt wurden – gelöscht oder mangels Gedanken aufgeräumt (`pruneTopics`) –, gemeldet
+    /// nach dem Schreiben von `topics.json`. Zusammengeführte bleiben als Alias und zählen nicht. Darauf löscht die
+    /// Oberfläche Themenbilder endgültig.
+    public nonisolated var removedTopics: AsyncStream<Set<String>> { removedBroadcast.stream }
 
     // MARK: Pfade
 
@@ -589,6 +595,13 @@ public actor ThoughtStore {
         return topicsDoc.topics
     }
 
+    /// Themenliste und ob die Ablage vollständig gelesen ist – aus einem Aufruf, damit beides zusammenpasst. Vor dem
+    /// ersten Entsperren nach einem Neustart ist die Liste leer bzw. unvollständig und `complete` false.
+    public func topicsSnapshot() -> (topics: [Topic], complete: Bool) {
+        try? ensureLoaded()
+        return (topicsDoc.topics, loaded)
+    }
+
     /// `topics.json` atomar; der bisherige Stand wandert nach `topics.prev.json`.
     public func saveTopics(_ topics: [Topic]) throws {
         try ensureLoaded()
@@ -661,8 +674,10 @@ public actor ThoughtStore {
             try? FileSafety.writeAtomically(current, to: topicsPrevURL)
         }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(next), to: topicsURL)
+        let removed = Set(topicsDoc.topics.map(\.id)).subtracting(next.topics.map(\.id))
         topicsDoc = next
         changeBroadcast.yield(Self.topicsChangeID)
+        if !removed.isEmpty { removedBroadcast.yield(removed) }
     }
 
     /// Thema samt Alias-Kette (`mergedInto`) auflösen; nil, wenn es nicht (mehr) existiert.

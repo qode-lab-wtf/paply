@@ -128,103 +128,188 @@ struct TopicImageFileTests {
         #expect(scan.parked == ["t_b"])
     }
 
-    // MARK: Aufräumen
+    // MARK: Aufräumen in der Sitzung – nur Verschieben, nie Löschen (vierte Prüfrunde)
 
     private func topic(_ id: String, mergedInto: String? = nil) -> Topic {
         Topic(id: id, title: id, icon: .sparkles, owner: .user, mergedInto: mergedInto)
     }
 
-    @Test func deletedTopicsLoseTheirImageMergedOnesArePark() {
-        let topics = [topic("t_live"), topic("t_alias", mergedInto: "t_live")]
-        let plan = TopicImageFile.plan(images: ["t_live", "t_alias", "t_gone"], topics: topics, confirmed: true)
-        #expect(plan.delete == ["t_gone"])
-        #expect(plan.park == ["t_alias"])
-        #expect(plan.adopt.isEmpty) // das Ziel hat schon ein Bild
+    /// Keine Themenliste – leer, veraltet, ungespeichert oder gespeichert – löscht in der Sitzung ein Bild
+    @Test func sessionPlanNeverDeletes() {
+        let lists: [[Topic]] = [[], [topic("t_b")], [topic("t_a", mergedInto: "t_b"), topic("t_b")]]
+        for topics in lists {
+            for saved in [false, true] {
+                let plan = TopicImageFile.plan(images: ["t_a", "t_gone"], parked: ["t_x"], adopted: ["t_b": "t_a"],
+                                               topics: topics, saved: saved)
+                #expect(plan.delete.isEmpty && plan.dropParked.isEmpty, "\(topics.map(\.id)) \(saved)")
+            }
+        }
     }
 
-    @Test func unknownTopicsChangeNothing() {
-        let plan = TopicImageFile.plan(images: ["t_a", "t_b"], parked: ["t_c"], staleParked: ["t_d"], topics: nil, confirmed: true)
+    /// Vierte Prüfrunde (B): Vor dem ersten Entsperren ist die Liste leer – nichts geschieht
+    @Test func emptyListBeforeUnlockChangesNothing() {
+        #expect(TopicImageFile.plan(images: ["t_saved", "t_other"], topics: [], saved: true).isEmpty)
+        #expect(TopicImageFile.reconcile(images: ["t_saved"], parked: ["t_p"], topics: [], complete: false).isEmpty)
+        // nach dem Entsperren aus einem Aufruf: das Thema gibt es, sein Bild bleibt
+        let unlocked = TopicImageFile.reconcile(images: ["t_saved"], parked: [], topics: [topic("t_saved")], complete: true)
+        #expect(unlocked.isEmpty)
+    }
+
+    /// Gelöschtes Thema: Die Datei bleibt, bis der Speicher es gespeichert entfernt hat (Ereignis)
+    @Test func deletedTopicKeepsItsFileUntilTheEvent() {
+        let plan = TopicImageFile.plan(images: ["t_a", "t_b"], topics: [topic("t_b")], saved: false)
         #expect(plan.isEmpty)
     }
 
-    /// Das letzte Thema verschwindet (z. B. automatisch, weil es keinen Gedanken mehr trägt): vollständig gelesen
-    /// und leer ist nicht „unbekannt“ – die Bilder sind verwaist, auch nach einem Neustart
-    @Test func emptyKnownTopicListRetiresEverything() {
-        let saved = TopicImageFile.plan(images: ["t_a", "t_b"], staleParked: ["t_c"], topics: [], confirmed: true)
-        #expect(saved.delete == ["t_a", "t_b"])
-        #expect(saved.dropParked == ["t_c"])
-        // noch nicht gespeichert: nur parken
-        let unsaved = TopicImageFile.plan(images: ["t_a"], topics: [], confirmed: false)
-        #expect(unsaved.delete.isEmpty && unsaved.park == ["t_a"])
-    }
-
-    /// Thema gelöscht, aber `topics.json` noch nicht geschrieben: Das Bild parkt nur. Scheitert das Speichern,
-    /// kommt das Thema zurück – und mit ihm sein Bild. Gelingt es, ist das Bild danach endgültig weg.
-    @Test func deletionWaitsForTheSavedTopicList() {
-        // 1. Oberfläche: Thema weg, noch nicht gespeichert
-        let optimistic = TopicImageFile.plan(images: ["t_a", "t_b"], topics: [topic("t_b")], confirmed: false)
-        #expect(optimistic.park == ["t_a"])
-        #expect(optimistic.delete.isEmpty && optimistic.dropParked.isEmpty)
-        // geparkt bleibt geparkt, solange nicht gespeichert
-        let still = TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], topics: [topic("t_b")], confirmed: false)
-        #expect(still.isEmpty)
-        // 2a. Speichern gescheitert: Der Speicher liefert das Thema wieder – das Bild kommt zurück
-        let failed = TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], topics: [topic("t_a"), topic("t_b")], confirmed: true)
-        #expect(failed.restore == ["t_a"])
-        #expect(failed.delete.isEmpty && failed.dropParked.isEmpty)
-        // 2b. gespeichert: endgültig weg
-        let saved = TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], topics: [topic("t_b")], confirmed: true)
-        #expect(saved.dropParked == ["t_a"])
-        #expect(saved.restore.isEmpty)
-    }
-
-    @Test func undoneMergeRestoresParkedImage() {
-        let topics = [topic("t_a"), topic("t_b", mergedInto: "t_a")]
-        let plan = TopicImageFile.plan(images: [], parked: ["t_a", "t_b", "t_gone"], topics: topics, confirmed: true)
-        #expect(plan.restore == ["t_a"])
-        #expect(plan.dropParked == ["t_gone"]) // t_b bleibt geparkt: Widerrufen ist noch möglich
-    }
-
-    @Test func earlierSessionParkedIsRetiredOnceSaved() {
-        let topics = [topic("t_a"), topic("t_b", mergedInto: "t_a")]
-        // nur mit gespeicherter Liste; eigenständige kommen zurück (z. B. Absturz vor dem Speichern)
-        let saved = TopicImageFile.plan(images: [], staleParked: ["t_a", "t_b", "t_gone"], topics: topics, confirmed: true)
-        #expect(saved.restore == ["t_a"])
-        #expect(saved.dropParked == ["t_b", "t_gone"])
-        let unsaved = TopicImageFile.plan(images: [], staleParked: ["t_b", "t_gone"], topics: topics, confirmed: false)
-        #expect(unsaved.isEmpty)
-    }
-
-    /// A (mit Bild) geht in B (ohne Bild) auf: B übernimmt As Bild, As Bild parkt. Widerrufen: A bekommt sein Bild
-    /// zurück, B verliert das übernommene.
-    @Test func mergeIntoTopicWithoutImageAdoptsTheImage() {
+    @Test func mergeIntoTopicWithImageParksTheSource() {
         let merged = [topic("t_a", mergedInto: "t_b"), topic("t_b")]
-        let plan = TopicImageFile.plan(images: ["t_a"], topics: merged, confirmed: false)
-        #expect(plan.park == ["t_a"])
-        #expect(plan.adopt == ["t_b": "t_a"])
-        // danach (B hat jetzt ein Bild): nichts mehr zu tun
-        let after = TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], adopted: ["t_b": "t_a"], topics: merged, confirmed: true)
-        #expect(after.isEmpty)
-        // Widerrufen
-        let undone = [topic("t_a"), topic("t_b")]
-        let back = TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], adopted: ["t_b": "t_a"], topics: undone, confirmed: false)
+        // schon in der Liste der Oberfläche: Parken verliert nichts
+        let plan = TopicImageFile.plan(images: ["t_a", "t_b"], topics: merged, saved: false)
+        #expect(plan.park == ["t_a"] && plan.adopt.isEmpty)
+        // Widerrufen oder Speichern gescheitert: zurück
+        let back = TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], topics: [topic("t_a"), topic("t_b")], saved: false)
         #expect(back.restore == ["t_a"])
-        #expect(back.unadopt == ["t_b"])
-        #expect(back.delete.isEmpty && back.park.isEmpty)
+        // solange zusammengeführt: geparkt
+        #expect(TopicImageFile.plan(images: ["t_b"], parked: ["t_a"], topics: merged, saved: true).isEmpty)
+    }
+
+    /// Vierte Prüfrunde (C): A (mit Bild) geht in B (ohne Bild) auf – As Bild wird zu Bs verschoben, erst mit der
+    /// gespeicherten Liste; Widerrufen verschiebt es zurück.
+    @Test func mergeIntoTopicWithoutImageMovesTheImage() {
+        let merged = [topic("t_a", mergedInto: "t_b"), topic("t_b")]
+        // Oberfläche, noch nicht gespeichert: warten
+        #expect(TopicImageFile.plan(images: ["t_a"], topics: merged, saved: false).isEmpty)
+        // gespeichert: verschieben (kein Parken, keine Kopie)
+        let saved = TopicImageFile.plan(images: ["t_a"], topics: merged, saved: true)
+        #expect(saved.adopt == ["t_b": "t_a"])
+        #expect(saved.park.isEmpty && saved.delete.isEmpty)
+        // danach nichts mehr zu tun
+        #expect(TopicImageFile.plan(images: ["t_b"], adopted: ["t_b": "t_a"], topics: merged, saved: true).isEmpty)
+        // Widerrufen (schon in der Liste der Oberfläche): zurückverschieben
+        let undone = [topic("t_a"), topic("t_b")]
+        let back = TopicImageFile.plan(images: ["t_b"], adopted: ["t_b": "t_a"], topics: undone, saved: false)
+        #expect(back.giveBack == ["t_b": "t_a"])
+        #expect(back.delete.isEmpty && back.park.isEmpty && back.restore.isEmpty)
+        // Quelle gelöscht statt eigenständig: B behält das Bild
+        #expect(TopicImageFile.plan(images: ["t_b"], adopted: ["t_b": "t_a"], topics: [topic("t_b")], saved: true).isEmpty)
     }
 
     @Test func adoptionPicksOneSourceAndFollowsAliasChains() {
-        // zwei Quellen mit Bild: die erste der Liste; A → B → C: C übernimmt
+        // zwei Quellen mit Bild: die erste der Liste übernimmt, die zweite parkt; A → B → C: C übernimmt
         let topics = [topic("t_a", mergedInto: "t_b"), topic("t_x", mergedInto: "t_c"), topic("t_b", mergedInto: "t_c"), topic("t_c")]
-        let plan = TopicImageFile.plan(images: ["t_a", "t_x"], topics: topics, confirmed: false)
+        let plan = TopicImageFile.plan(images: ["t_a", "t_x"], topics: topics, saved: true)
         #expect(plan.adopt == ["t_c": "t_a"])
-        #expect(plan.park == ["t_a", "t_x"])
-        // Ziel hat ein Bild: keine Übernahme
-        let own = TopicImageFile.plan(images: ["t_a", "t_c"], topics: topics, confirmed: false)
-        #expect(own.adopt.isEmpty)
-        // Quelle gelöscht statt eigenständig: das Ziel behält das übernommene Bild
-        let gone = TopicImageFile.plan(images: ["t_c"], parked: ["t_a"], adopted: ["t_c": "t_a"], topics: [topic("t_c")], confirmed: true)
-        #expect(gone.unadopt.isEmpty && gone.dropParked == ["t_a"])
+        #expect(plan.park == ["t_x"])
+        // Ziel hat ein Bild: keine Übernahme, beide parken
+        let own = TopicImageFile.plan(images: ["t_a", "t_c"], topics: topics, saved: true)
+        #expect(own.adopt.isEmpty && own.park == ["t_a"])
+    }
+
+    // MARK: Abgleich beim Start
+
+    @Test func reconcileNeedsACompleteList() {
+        #expect(TopicImageFile.reconcile(images: ["t_a"], parked: ["t_b"], topics: [], complete: false).isEmpty)
+        #expect(TopicImageFile.reconcile(images: ["t_a"], parked: ["t_b"], topics: [topic("t_c")], complete: false).isEmpty)
+    }
+
+    /// Vollständig gelesen: Bilder ohne Thema sind verwaist (auch bei leerer Liste); was diese Sitzung angefasst
+    /// hat, bleibt
+    @Test func reconcileRetiresOrphans() {
+        let plan = TopicImageFile.reconcile(images: ["t_live", "t_gone", "t_new"], parked: ["t_old"], keep: ["t_new"],
+                                            topics: [topic("t_live")], complete: true)
+        #expect(plan.delete == ["t_gone"])
+        #expect(plan.dropParked == ["t_old"])
+        let empty = TopicImageFile.reconcile(images: ["t_a"], parked: ["t_b"], topics: [], complete: true)
+        #expect(empty.delete == ["t_a"] && empty.dropParked == ["t_b"])
+    }
+
+    @Test func reconcileParkedFromEarlierSessions() {
+        let topics = [topic("t_a"), topic("t_b", mergedInto: "t_a"), topic("t_c")]
+        // eigenständig ohne Bild → zurück; zusammengeführt (Widerrufen vorbei), weg oder mit neuerem Bild → weg
+        let plan = TopicImageFile.reconcile(images: ["t_c"], parked: ["t_a", "t_b", "t_c", "t_gone"], topics: topics, complete: true)
+        #expect(plan.restore == ["t_a"])
+        #expect(plan.dropParked == ["t_b", "t_c", "t_gone"])
+    }
+
+    // MARK: Abbruch-Zwischenstände (C): zu jedem Zeitpunkt mindestens eine Kopie
+
+    /// Dateien im Ordner, wie `TopicImages` sie ändert (gleiche Reihenfolge: zurück, übernehmen, parken, löschen)
+    private struct Folder: Equatable {
+        var images: Set<String>
+        var parked: Set<String> = []
+
+        mutating func apply(_ plan: TopicImageFile.Plan) {
+            for (target, source) in plan.giveBack where images.remove(target) != nil { images.insert(source) }
+            for id in plan.restore where parked.remove(id) != nil { images.insert(id) }
+            for (target, source) in plan.adopt where images.remove(source) != nil { images.insert(target) }
+            for id in plan.park where images.remove(id) != nil { parked.insert(id) }
+            images.subtract(plan.delete)
+            parked.subtract(plan.delete.union(plan.dropParked))
+        }
+
+        /// Wiederanlauf: Abgleich mit der gespeicherten Liste (frühere Sitzung geparkt)
+        func restarted(saved topics: [Topic]) -> Folder {
+            var next = self
+            next.apply(TopicImageFile.reconcile(images: images, parked: parked, topics: topics, complete: true))
+            return next
+        }
+
+        var copies: Int { images.count + parked.count }
+    }
+
+    /// Zusammenführen A → B (B ohne Bild), dann Widerrufen – Abbruch nach jedem Schritt, gespeichert oder nicht
+    @Test func mergeAndUndoNeverLoseTheImage() {
+        let apart = [topic("t_a"), topic("t_b")]
+        let merged = [topic("t_a", mergedInto: "t_b"), topic("t_b")]
+        var folder = Folder(images: ["t_a"])
+        // 1. Zusammenführen gespeichert, Bild noch nicht verschoben (Abbruch): der Start holt es nach
+        #expect(folder.restarted(saved: merged) == Folder(images: ["t_b"]))
+        // 2. gespeicherte Liste → verschieben
+        let adopt = TopicImageFile.plan(images: folder.images, topics: merged, saved: true)
+        folder.apply(adopt)
+        #expect(folder == Folder(images: ["t_b"]))
+        #expect(folder.restarted(saved: merged) == Folder(images: ["t_b"]))
+        // 3. Widerrufen: Liste der Oberfläche → zurückverschieben, bevor gespeichert ist
+        let back = TopicImageFile.plan(images: folder.images, adopted: adopt.adopt, topics: apart, saved: false)
+        #expect(back.giveBack == ["t_b": "t_a"])
+        var undone = folder
+        undone.apply(back)
+        #expect(undone == Folder(images: ["t_a"]))
+        // 3a. Abbruch, Widerrufen nicht gespeichert: Der Start folgt der gespeicherten Liste (zusammengeführt)
+        #expect(undone.restarted(saved: merged) == Folder(images: ["t_b"]))
+        // 3b. Abbruch, Widerrufen gespeichert, aber noch nicht zurückverschoben: das Bild bleibt (bei B)
+        #expect(folder.restarted(saved: apart).copies == 1)
+        // 3c. alles gespeichert
+        #expect(undone.restarted(saved: apart) == Folder(images: ["t_a"]))
+    }
+
+    /// Zusammenführen A → B (B mit Bild): As Bild parkt, erst nach dem gespeicherten Zusammenführen und einem Neustart
+    /// ist es weg; Widerrufen bringt es zurück
+    @Test func mergeIntoImageKeepsTheSourceUntilSaved() {
+        let apart = [topic("t_a"), topic("t_b")]
+        let merged = [topic("t_a", mergedInto: "t_b"), topic("t_b")]
+        var folder = Folder(images: ["t_a", "t_b"])
+        folder.apply(TopicImageFile.plan(images: folder.images, topics: merged, saved: false))
+        #expect(folder == Folder(images: ["t_b"], parked: ["t_a"]))
+        // Abbruch vor dem Speichern: A kommt samt Bild zurück
+        #expect(folder.restarted(saved: apart) == Folder(images: ["t_a", "t_b"]))
+        // gespeichert: nach dem Neustart weg
+        #expect(folder.restarted(saved: merged) == Folder(images: ["t_b"]))
+        // gespeichert, Parken noch nicht ausgeführt (Abbruch): ebenso
+        #expect(Folder(images: ["t_a", "t_b"]).restarted(saved: merged) == Folder(images: ["t_b"]))
+        // Widerrufen in der Sitzung
+        folder.apply(TopicImageFile.plan(images: folder.images, parked: folder.parked, topics: apart, saved: false))
+        #expect(folder == Folder(images: ["t_a", "t_b"]))
+    }
+
+    /// Thema gelöscht: Die Datei geht erst auf das Ereignis; Abbruch davor – gespeichert oder nicht – verliert nichts,
+    /// was noch gebraucht wird
+    @Test func deletionAbortsKeepWhatIsStillNeeded() {
+        let folder = Folder(images: ["t_a", "t_b"])
+        // nicht gespeichert: Das Thema gibt es noch, sein Bild auch
+        #expect(folder.restarted(saved: [topic("t_a"), topic("t_b")]) == folder)
+        // gespeichert, Ereignis verpasst: Der Start räumt auf
+        #expect(folder.restarted(saved: [topic("t_b")]) == Folder(images: ["t_b"]))
     }
 
     @Test func aliasesResolveToTheirTarget() {

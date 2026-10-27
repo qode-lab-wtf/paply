@@ -5,9 +5,11 @@ import ImageIO
 /// Bild statt Symbol für ein Thema: Ablage, Zuschnitt und Aufräumregeln. Die Bilder bleiben auf dem Gerät –
 /// sie gehen nie an die KI und nie ins Netz (kein Teil von Gedanken, Themen oder Anfragen).
 ///
-/// Ablage: `topic-images/<topicID>.jpg` neben den Gedanken-Daten. Ein zusammengeführtes Thema „parkt“ sein Bild
-/// bis zum nächsten Start als `.parked-<topicID>.jpg` – Widerrufen bringt es zurück, danach ist es weg. Ebenso
-/// parkt das Bild eines gelöschten Themas, bis die Themenliste gespeichert ist; erst dann ist es endgültig weg.
+/// Ablage: `topic-images/<topicID>.jpg` neben den Gedanken-Daten. Zusammenführen verschiebt das Bild der Quelle zum
+/// Ziel ohne Bild (Widerrufen verschiebt es zurück); hat das Ziel eines, „parkt“ das der Quelle bis zum nächsten Start
+/// als `.parked-<topicID>.jpg`. Jeder Schritt ist ein atomares Umbenennen – zu jedem Zeitpunkt liegt mindestens eine
+/// Kopie da. Endgültig gelöscht wird nur auf Ereignisse (Thema gespeichert entfernt, Bild entfernt) und beim Abgleich
+/// mit einer vollständig gelesenen Themenliste (`reconcile`).
 public enum TopicImageFile {
     public static let directoryName = "topic-images"
     /// längste Kante des gespeicherten Bilds
@@ -50,77 +52,101 @@ public enum TopicImageFile {
 
     // MARK: Aufräumen
 
-    /// Was mit den Bildern geschieht, wenn sich die Themenliste ändert (`plan`)
+    /// Was mit den Bildern geschieht – in der Sitzung (`plan`) nur Verschieben, beim Abgleich (`reconcile`) auch Löschen
     public struct Plan: Sendable, Equatable {
-        /// Bild endgültig löschen (samt geparktem): Thema laut gespeicherter Liste weg
-        public var delete: Set<String> = []
-        /// Bild parken: zusammengeführt (Widerrufen möglich) oder gelöscht, aber noch nicht gespeichert
-        public var park: Set<String> = []
-        /// geparktes Bild zurück: Thema wieder eigenständig (Widerrufen, Speichern gescheitert)
-        public var restore: Set<String> = []
-        /// nur das geparkte Bild endgültig löschen (Thema gespeichert weg, aus einer früheren Sitzung, überholt)
-        public var dropParked: Set<String> = []
-        /// Ziel → Quelle: Ein Ziel ohne Bild übernimmt beim Zusammenführen das Bild des aufgehenden Themas
+        /// Ziel → Quelle: Das Bild der Quelle wird das Bild des Ziels (verschoben, nicht kopiert)
         public var adopt: [String: String] = [:]
-        /// übernommene Bilder wieder entfernen (Zusammenführen widerrufen oder nicht gespeichert)
-        public var unadopt: Set<String> = []
+        /// Ziel → Quelle: übernommenes Bild zurück zur wieder eigenständigen Quelle (verschoben)
+        public var giveBack: [String: String] = [:]
+        /// Bild parken: zusammengeführt in ein Ziel mit eigenem Bild (Widerrufen bringt es zurück)
+        public var park: Set<String> = []
+        /// geparktes Bild zurück: Thema wieder eigenständig
+        public var restore: Set<String> = []
+        /// nur beim Abgleich: Bild samt geparktem endgültig löschen
+        public var delete: Set<String> = []
+        /// nur beim Abgleich: geparktes endgültig löschen
+        public var dropParked: Set<String> = []
 
         public init() {}
 
         public var isEmpty: Bool { self == Plan() }
     }
 
-    /// Aufräumplan für eine Themenliste.
+    /// Plan in der Sitzung für eine Themenliste der Oberfläche oder des Speichers. Er verschiebt nur und löscht nie –
+    /// eine veraltete, leere oder noch nicht gespeicherte Liste kann kein Bild verlieren. Ein gelöschtes Thema behält
+    /// seine Datei, bis der Speicher es gespeichert entfernt hat (`ThoughtStore.removedTopics`); angezeigt wird sie
+    /// ohnehin nicht mehr.
     ///
-    /// - `topics`: alle Themen samt Aliassen (`mergedInto`). nil = noch unbekannt (Speicher nicht gelesen) → nichts
-    ///   ändern. Eine leere Liste heißt dagegen „vollständig gelesen und leer“: Alle Bilder sind verwaist.
-    /// - `confirmed`: Die Liste ist gespeichert (aus dem Speicher gelesen). Sonst ist es der Stand der Oberfläche
-    ///   vor dem Speichern – dann wird nichts endgültig gelöscht, sondern geparkt (scheitert das Speichern, kommt
-    ///   das Thema samt Bild zurück).
-    /// - `images`: Themen mit Bild. `parked`: in dieser Sitzung geparkt (Widerrufen möglich). `staleParked`: aus
-    ///   einer früheren Sitzung geparkt (Widerrufen vorbei). `adopted`: Ziel → Quelle übernommener Bilder.
+    /// - `images`: Themen mit Bild. `parked`: in dieser Sitzung geparkt. `adopted`: Ziel → Quelle übernommener Bilder.
+    /// - `saved`: Die Liste ist der Stand des Speichers. Nur dann übernimmt ein Ziel das Bild – es liegt also nie bei
+    ///   einem Ziel, dessen Zusammenführen nicht gespeichert ist.
     ///
-    /// Zusammenführen: Das Bild der Quelle parkt (Widerrufen bringt es zurück). Hat das Ziel kein Bild, übernimmt es
-    /// das Bild der Quelle (bei mehreren die erste in der Reihenfolge der Liste); wird die Quelle wieder eigenständig,
-    /// fällt das übernommene Bild wieder weg.
-    public static func plan(images: Set<String>, parked: Set<String> = [], staleParked: Set<String> = [],
-                            adopted: [String: String] = [:], topics: [Topic]?, confirmed: Bool) -> Plan {
-        guard let topics else { return Plan() }
-        var plan = Plan()
+    /// Zusammengeführt (Quelle → Ziel): Hat das Ziel kein Bild, übernimmt es das der (ersten) Quelle; sonst parkt
+    /// es. Wieder eigenständig (Widerrufen, Speichern gescheitert): geparktes zurück, übernommenes zurück zur Quelle.
+    public static func plan(images: Set<String>, parked: Set<String> = [], adopted: [String: String] = [:],
+                            topics: [Topic], saved: Bool) -> Plan {
         let byID = Dictionary(topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         func standalone(_ id: String) -> Bool { byID[id].map { $0.mergedInto == nil } ?? false }
+        var plan = Plan()
+        for (target, source) in adopted
+        where standalone(source) && standalone(target) && images.contains(target) && !images.contains(source) {
+            plan.giveBack[target] = source
+        }
+        let returning = Set(plan.giveBack.values)
+        for id in parked where standalone(id) && !images.contains(id) && !returning.contains(id) {
+            plan.restore.insert(id)
+        }
+        mergedImages(images: images, topics: topics, byID: byID, plan: &plan) { _, free in
+            free ? (saved ? .adopt : .wait) : .park
+        }
+        return plan
+    }
 
-        // Bilder: Thema weg → löschen (gespeichert) bzw. parken; zusammengeführt → parken
-        for id in images {
-            guard let topic = byID[id] else {
-                if confirmed { plan.delete.insert(id) } else { plan.park.insert(id) }
-                continue
-            }
-            if topic.mergedInto != nil { plan.park.insert(id) }
+    /// Abgleich mit einer Themenliste aus EINEM Speicher-Aufruf (`ThoughtStore.topicsSnapshot`) – nur, wenn sie
+    /// vollständig gelesen ist (`complete`); sonst geschieht nichts, im Zweifel wird nie gelöscht. Räumt auf, was ein
+    /// Abbruch oder eine frühere Sitzung hinterlassen hat; Widerrufen ist nach einem Neustart vorbei:
+    /// - Bild eines Themas, das es nicht gibt → löschen
+    /// - Bild eines zusammengeführten Themas → das Ziel ohne Bild übernimmt es, sonst löschen
+    /// - geparktes: Thema eigenständig und ohne Bild → zurück; sonst (weg, zusammengeführt, neueres Bild) → löschen
+    ///
+    /// `images`: alle Themen mit Bild; `parked`: aus früheren Sitzungen geparkt; `keep`: in dieser Sitzung angefasst –
+    /// bleibt, wie es ist.
+    public static func reconcile(images: Set<String>, parked: Set<String>, keep: Set<String> = [], topics: [Topic],
+                                 complete: Bool) -> Plan {
+        guard complete else { return Plan() }
+        let byID = Dictionary(topics.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        func standalone(_ id: String) -> Bool { byID[id].map { $0.mergedInto == nil } ?? false }
+        var plan = Plan()
+        for id in parked where !keep.contains(id) {
+            if standalone(id), !images.contains(id) { plan.restore.insert(id) } else { plan.dropParked.insert(id) }
         }
-        // Geparkte: eigenständig → zurück (oder überholt, wenn es schon ein Bild gibt); sonst nach gespeicherter
-        // Liste weg, aus früheren Sitzungen auch zusammengeführte (Widerrufen vorbei)
-        for id in parked.union(staleParked) where !plan.delete.contains(id) {
-            if standalone(id) {
-                if images.contains(id) { plan.dropParked.insert(id) } else { plan.restore.insert(id) }
-            } else if confirmed, byID[id] == nil || staleParked.contains(id) {
-                plan.dropParked.insert(id)
-            }
+        for id in images where byID[id] == nil && !keep.contains(id) { plan.delete.insert(id) }
+        mergedImages(images: images, topics: topics, byID: byID, plan: &plan) { id, free in
+            keep.contains(id) ? .wait : free ? .adopt : .delete
         }
-        // Zusammenführen widerrufen: Was ein Ziel von einer wieder eigenständigen Quelle übernommen hat, fällt weg
-        for (target, source) in adopted where standalone(source) && standalone(target) && images.contains(target) {
-            plan.unadopt.insert(target)
-        }
-        // Zusammengeführt: Ein Ziel ohne Bild übernimmt das Bild der (ersten) Quelle
+        return plan
+    }
+
+    private enum MergedImage { case adopt, park, delete, wait }
+
+    /// Bilder zusammengeführter Themen, in der Reihenfolge der Liste: `decide(id, frei)` – frei = das Ziel ist
+    /// eigenständig, hat kein Bild und übernimmt noch keines
+    private static func mergedImages(images: Set<String>, topics: [Topic], byID: [String: Topic], plan: inout Plan,
+                                     decide: (String, Bool) -> MergedImage) {
         var aliases: [String: String] = [:]
         for topic in topics { if let target = topic.mergedInto { aliases[topic.id] = target } }
         for topic in topics where topic.mergedInto != nil && images.contains(topic.id) {
             let target = resolve(topic.id, aliases: aliases)
-            guard target != topic.id, isValidID(target), standalone(target), !images.contains(target),
-                  !plan.restore.contains(target), plan.adopt[target] == nil else { continue }
-            plan.adopt[target] = topic.id
+            let free = target != topic.id && isValidID(target) && byID[target]?.mergedInto == nil && byID[target] != nil
+                && !images.contains(target) && !plan.restore.contains(target) && plan.giveBack[target] == nil
+                && plan.adopt[target] == nil
+            switch decide(topic.id, free) {
+            case .adopt: plan.adopt[target] = topic.id
+            case .park: plan.park.insert(topic.id)
+            case .delete: plan.delete.insert(topic.id)
+            case .wait: break
+            }
         }
-        return plan
     }
 
     /// Thema samt Alias-Kette auflösen (Aliasse → Ziel)
