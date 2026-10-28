@@ -124,13 +124,10 @@ final class ThoughtsModel {
         topic.owner == .user || (isActive(topic) && count(of: topic.id) > 0)
     }
 
-    /// Gleicher Name nach Trimmen, ohne Groß/Klein und Akzente; keine unscharfe Themenpflege.
+    /// Gleicher Name wie bei der Doppel-Schranke des Speichers (`TopicHygiene.sameNamed`: „Paply-App“ = „paply app“,
+    /// aber „Küchen“ ≠ „Kuchen“).
     func existingTopic(named name: String) -> Topic? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return topics.first {
-            $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                .compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        }
+        TopicHygiene.sameNamed(name.trimmingCharacters(in: .whitespacesAndNewlines), among: topics).first
     }
 
     func count(of topicID: String) -> Int {
@@ -237,6 +234,20 @@ final class ThoughtsModel {
                           note: Topic.normalizedNote(note))
         changeTopics { $0.append(topic) }
         return topic
+    }
+
+    /// Von Hand anlegen ohne Dublette: Gibt es den Namen schon, bleibt das vorhandene Thema (`existed`). Eine neue
+    /// Beschreibung kommt dazu, wenn es noch keine hat; ein vorläufiges Thema wird behalten.
+    func createOrReuseTopic(title: String, icon: TopicIcon, note: String?) -> (topic: Topic, existed: Bool) {
+        guard let existing = existingTopic(named: title) else {
+            return (createTopic(title: title, icon: icon, note: note), false)
+        }
+        if existing.describedNote == nil, Topic.normalizedNote(note) != nil {
+            setTopicNote(existing.id, note)
+        } else if !isActive(existing) {
+            keepProvisional(existing.id)
+        }
+        return (existing, true)
     }
 
     /// Beschreibung setzen oder entfernen (nil/leer). Wer ein Thema beschreibt, behält es: owner = user wie „Behalten“.

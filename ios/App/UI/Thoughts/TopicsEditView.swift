@@ -96,7 +96,7 @@ struct TopicsEditView: View {
             if editMode.isEditing {
                 ToolbarItemGroup(placement: .bottomBar) {
                     Button("Löschen", role: .destructive) {
-                        deleting = TopicDeletion(topics: sorted.filter { selection.contains($0.id) }, multiple: true)
+                        deleting = TopicDeletion(topics: sorted.filter { selection.contains($0.id) })
                     }
                     .foregroundStyle(selection.isEmpty ? Color.paplyTertiaryText : Color.paplyDanger)
                     .disabled(selection.isEmpty)
@@ -116,12 +116,11 @@ struct TopicsEditView: View {
             NavigationStack {
                 TopicEditor(mode: .create(prefill: "")) { result in
                     withAnimation(PaplyMotion.smooth(reduce)) {
-                        if let existing = model.existingTopic(named: result.title) {
-                            model.keepProvisional(existing.id)
-                            nav.show(ThoughtsToast(text: "„\(existing.title)“ gibt es schon"), reduceMotion: reduce)
+                        let made = model.createOrReuseTopic(title: result.title, icon: result.icon, note: result.note)
+                        if made.existed {
+                            nav.show(ThoughtsToast(text: "„\(made.topic.title)“ gibt es schon"), reduceMotion: reduce)
                         } else {
-                            let topic = model.createTopic(title: result.title, icon: result.icon, note: result.note)
-                            TopicImages.shared.apply(result.image, to: topic.id)
+                            TopicImages.shared.apply(result.image, to: made.topic.id)
                         }
                     }
                     creating = false

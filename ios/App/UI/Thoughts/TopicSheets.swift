@@ -61,9 +61,9 @@ struct TopicPickerSheet: View {
             }
             .navigationDestination(isPresented: $creating) {
                 TopicEditor(mode: .create(prefill: query)) { result in
-                    let topic = model.createTopic(title: result.title, icon: result.icon, note: result.note)
-                    TopicImages.shared.apply(result.image, to: topic.id)
-                    choose(topic.id)
+                    let made = model.createOrReuseTopic(title: result.title, icon: result.icon, note: result.note)
+                    if !made.existed { TopicImages.shared.apply(result.image, to: made.topic.id) }
+                    choose(made.topic.id)
                 }
             }
         }
@@ -408,7 +408,7 @@ struct TopicMergeSheet: View {
 
 struct TopicDeletion {
     let topics: [Topic]
-    var multiple = false
+    var multiple: Bool { topics.count > 1 }
 
     var title: String {
         if multiple { return "\(topics.count) Themen löschen?" }
@@ -434,15 +434,17 @@ private struct TopicDeletionModifier: ViewModifier {
                 get: { choice != nil }, set: { if !$0 { choice = nil } }
             ), titleVisibility: .visible) {
                 if count > 0 {
+                    Button("Nur \(noun) löschen") { delete(withThoughts: false) }
                     Button("\(noun) und \(count) Gedanken löschen", role: .destructive) { delete(withThoughts: true) }
-                    Button("Nur \(noun) löschen", role: .destructive) { delete(withThoughts: false) }
                 } else {
                     Button("\(noun) löschen", role: .destructive) { delete(withThoughts: false) }
                 }
                 Button("Abbrechen", role: .cancel) {}
             } message: {
                 if count > 0 {
-                    Text("Gelöschte Gedanken liegen 30 Tage unter „Zuletzt gelöscht“. Bei „Nur \(noun) löschen“ bleiben sie ohne Thema.")
+                    Text(count == 1
+                         ? "Bei „Nur \(noun) löschen“ bleibt der Gedanke, nur ohne Thema. Sonst liegt er 30 Tage unter „Zuletzt gelöscht“."
+                         : "Bei „Nur \(noun) löschen“ bleiben die Gedanken, nur ohne Thema. Sonst liegen sie 30 Tage unter „Zuletzt gelöscht“.")
                 }
             }
             .sensoryFeedback(.success, trigger: successPulse)
