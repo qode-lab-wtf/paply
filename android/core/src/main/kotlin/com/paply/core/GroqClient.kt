@@ -2,203 +2,424 @@ package com.paply.core
 
 import java.io.File
 import java.io.IOException
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
-/** Contains only safe classifications, never remote messages, credentials or dictated text. */
-class GroqFailure(val status: Int = 0, val code: String = "network", val retryAfter: Double? = null) :
-    IOException(if (status == 0) code else "http-$status") {
-    val modelMissing get() = status == 404 || (status == 400 && code in listOf("model_decommissioned", "model_not_found"))
-    val retryable get() = status == 0 || status in listOf(408, 409, 429) || status >= 500
-    fun retryDelay(): Long? {
-        val seconds = retryAfter ?: if (status == 429) 1.0 else 0.4
-        return if (seconds <= 20) (seconds * 1000).toLong().coerceAtLeast(0) else null
-    }
+/**
+ * Safe classification only. Server messages, credentials and dictation content are never retained.
+ */
+class GroqFailure(
+    val status: Int = 0,
+    val code: String = "network",
+    val retryAfter: Double? = null,
+) : IOException(if (status == 0) code else "http-$status") {
+    val modelMissing
+        get() =
+            status == 404 ||
+                (status == 400 && code in listOf("model_decommissioned", "model_not_found"))
+
+    val retryable
+        get() =
+            if (status != 0) status in listOf(408, 409, 429) || status >= 500
+            else code != "cancelled"
+
+    val polishCode
+        get() =
+            when {
+                status == 429 -> PolishFailureCode.rateLimited
+                status == 401 || status == 403 -> PolishFailureCode.unauthorized
+                status >= 500 -> PolishFailureCode.serverError
+                status > 0 -> PolishFailureCode.requestRejected
+                code == "invalid-response" -> PolishFailureCode.invalidResponse
+                code == "cancelled" -> PolishFailureCode.cancelled
+                else -> PolishFailureCode.network
+            }
+
+    val germanMessage
+        get() =
+            when {
+                status == 401 || status == 403 ->
+                    "Ungültiger Groq-Schlüssel – bitte in den Einstellungen prüfen."
+                status == 429 -> "Groq-Limit erreicht – bitte später erneut versuchen."
+                status == 413 -> "Die Aufnahme ist zu lang für eine Übertragung."
+                status >= 500 ->
+                    "Groq ist gerade gestört (Fehler $status) – bitte erneut versuchen."
+                status > 0 -> "Transkription fehlgeschlagen (Fehler $status)."
+                code == "invalid-response" ->
+                    "Groq hat eine unlesbare Antwort geschickt – bitte erneut versuchen."
+                code == "cancelled" -> "Abgebrochen."
+                else -> "Keine Verbindung – Netzwerk prüfen und erneut versuchen."
+            }
+
+    val dictationError
+        get() =
+            when (polishCode) {
+                PolishFailureCode.rateLimited -> DictationError.rateLimited
+                PolishFailureCode.unauthorized -> DictationError.unauthorized
+                PolishFailureCode.serverError -> DictationError.serverError
+                PolishFailureCode.requestRejected -> DictationError.requestRejected
+                PolishFailureCode.invalidResponse -> DictationError.invalidResponse
+                PolishFailureCode.cancelled -> DictationError.cancelled
+                else -> DictationError.network
+            }
 }
 
-data class Segment(val text: String, val start: Double?, val end: Double?, val logprob: Double?)
-data class Transcript(val text: String, val language: String?, val segments: List<Segment>)
-data class Completion(val text: String, val finishReason: String?)
-data class DictationResult(val raw: String, val text: String, val model: String?, val fallbackReason: String?)
+/**
+ * Each request reads the current transport. Reset retires connections without cancelling in-flight
+ * calls.
+ */
+class GroqTransport(private val factory: () -> OkHttpClient = { defaultHttp() }) {
+    @Volatile private var current = factory()
 
-object GroqModels {
-    const val whisper = "whisper-large-v3"
-    const val polish = "qwen/qwen3.8-27b"
-    const val polishFallback = "openai/gpt-oss-120b"
-    fun tokenBudget(text: String) = (kotlin.math.ceil(text.length / 3.0).toInt() * 2).coerceIn(4096, 32768)
+    fun client(): OkHttpClient = current
+
+    @Synchronized
+    fun reset() {
+        val old = current
+        current = factory()
+        old.connectionPool.evictAll()
+    }
+
+    companion object {
+        val shared = GroqTransport()
+
+        fun defaultHttp() =
+            OkHttpClient.Builder()
+                .callTimeout(0, TimeUnit.MILLISECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(false)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .cookieJar(CookieJar.NO_COOKIES)
+                .cache(null)
+                .build()
+    }
 }
 
 class GroqClient(
-    private val apiKey: String,
-    private val baseUrl: HttpUrl = HttpUrl.Builder().scheme("https").host("api.groq.com").addPathSegments("openai/v1/").build(),
-    private val http: OkHttpClient = sharedHttp,
+    internal val apiKey: String,
+    internal val baseUrl: HttpUrl = defaultBaseURL,
+    private val http: OkHttpClient? = null,
     private val diagnostic: (String) -> Unit = {},
+    internal val transport: GroqTransport = GroqTransport.shared,
+    internal val clock: PaplyClock = SystemPaplyClock,
+    private val reachability: NetworkReachability = AssumeReachable,
 ) {
-    companion object {
-        // A read timeout detects a dead stream. There is deliberately no overall polish deadline.
-        private val sharedHttp = OkHttpClient.Builder().callTimeout(0, TimeUnit.MILLISECONDS)
-            .readTimeout(60, TimeUnit.SECONDS).connectTimeout(20, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(false).followRedirects(false).build()
-    }
-    private fun request(path: String) = Request.Builder().url(requireNotNull(baseUrl.resolve(path)))
-        .header("Authorization", "Bearer $apiKey")
+    var maxRetryAfterSeconds = 20.0
+    var retryDelaySeconds = 0.4
 
-    private suspend fun <T> send(request: Request, idleSeconds: Long = 60, parse: (Response) -> T): T =
-        suspendCancellableCoroutine { continuation ->
-            val call = http.newBuilder().readTimeout(idleSeconds, TimeUnit.SECONDS).build().newCall(request)
-            continuation.invokeOnCancellation { call.cancel() }
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (continuation.isActive) continuation.resumeWithException(GroqFailure())
-                }
-                override fun onResponse(call: Call, response: Response) {
-                    try {
-                        val result = response.use {
-                            if (!it.isSuccessful) {
-                                val error = runCatching { Json.parseToJsonElement(it.body!!.string()).jsonObject["error"]?.jsonObject }.getOrNull()
-                                // Error text is parsed only for retry timing and is never retained/logged.
-                                val wait = it.header("Retry-After")?.toDoubleOrNull()
-                                    ?: retrySeconds(error?.get("message")?.jsonPrimitive?.contentOrNull)
-                                throw GroqFailure(it.code, error?.get("code")?.jsonPrimitive?.contentOrNull ?: "http", wait)
-                            }
-                            parse(it)
-                        }
-                        if (continuation.isActive) continuation.resume(result)
-                    } catch (e: Exception) {
-                        if (continuation.isActive) continuation.resumeWithException(if (e is GroqFailure) e else GroqFailure(code = "invalid-response"))
+    companion object {
+        val defaultBaseURL = "https://api.groq.com/openai/v1/".toHttpUrl()
+        const val transcriptionIdleTimeout = 30.0
+        const val polishIdleTimeout = 60.0
+        const val keyCheckTimeout = 15.0
+
+        fun transcriptionTimeout(audioSeconds: Double?) =
+            maxOf(transcriptionIdleTimeout, 15 + 5 * (audioSeconds ?: 0.0) / 60)
+
+        internal fun parseTranscription(data: String): Transcription {
+            val o = parseObject(data)
+            val list = o["segments"] as? JsonArray
+            val segments =
+                list
+                    ?.takeIf { it.isNotEmpty() && it.all { item -> item is JsonObject } }
+                    ?.map { item ->
+                        val s = item.jsonObject
+                        WhisperSegment(
+                            s.string("text"),
+                            s.number("start"),
+                            s.number("end"),
+                            s.number("avg_logprob"),
+                            s.number("no_speech_prob"),
+                            s.number("compression_ratio"),
+                        )
                     }
-                }
-            })
+            return Transcription(
+                o.string("text"),
+                o.string("language"),
+                o.number("duration"),
+                segments,
+            )
         }
 
-    suspend fun models(): List<String> = send(request("models").build(), 15) { response ->
-        Json.parseToJsonElement(response.body!!.string()).jsonObject.getValue("data").jsonArray
-            .filter { it.jsonObject["active"]?.jsonPrimitive?.booleanOrNull != false }
-            .map { it.jsonObject.getValue("id").jsonPrimitive.content }
-    }
-
-    suspend fun transcribe(wav: File, durationSeconds: Double): Transcript {
-        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
-            .addFormDataPart("model", GroqModels.whisper).addFormDataPart("response_format", "verbose_json")
-            .addFormDataPart("temperature", "0")
-            // Empty vocabulary, no previous chunk: iOS WhisperPrompt.build returns nil.
-            .addFormDataPart("file", "recording.wav", wav.asRequestBody("audio/wav".toMediaType())).build()
-        val request = request("audio/transcriptions").post(body).build()
-        suspend fun attempt(): Transcript {
-            diagnostic("whisper.request")
-            return send(request, maxOf(30L, (15 + 5 * durationSeconds / 60).toLong())) {
-                val obj = Json.parseToJsonElement(it.body!!.string()).jsonObject
-                Transcript(obj.getValue("text").jsonPrimitive.content.trim(), obj["language"]?.jsonPrimitive?.contentOrNull,
-                    obj["segments"]?.jsonArray?.map { item ->
-                        val s = item.jsonObject
-                        Segment(s["text"]?.jsonPrimitive?.contentOrNull.orEmpty(), s["start"]?.jsonPrimitive?.doubleOrNull,
-                            s["end"]?.jsonPrimitive?.doubleOrNull, s["avg_logprob"]?.jsonPrimitive?.doubleOrNull)
-                    }.orEmpty())
+        fun retryAfter(value: String?, nowMillis: Long = System.currentTimeMillis()): Double? {
+            val v = value?.trimmed() ?: return null
+            v.toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it >= 0 }
+                ?.let {
+                    return it
+                }
+            return try {
+                maxOf(
+                    0.0,
+                    (ZonedDateTime.parse(v, DateTimeFormatter.RFC_1123_DATE_TIME)
+                        .toInstant()
+                        .toEpochMilli() - nowMillis) / 1000.0,
+                )
+            } catch (_: Exception) {
+                null
             }
         }
-        return try { attempt() } catch (e: GroqFailure) {
-            val wait = e.retryDelay()
-            if (!e.retryable || wait == null) throw e
-            delay(wait); attempt()
+    }
+
+    internal fun request(path: String, authenticated: Boolean = true) =
+        Request.Builder().url(requireNotNull(baseUrl.resolve(path))).apply {
+            if (authenticated) header("Authorization", "Bearer $apiKey")
+        }
+
+    internal suspend fun <T> send(
+        request: Request,
+        idleSeconds: Double = polishIdleTimeout,
+        parse: (Response) -> T,
+    ): T {
+        currentCoroutineContext().ensureActive()
+        if (!reachability.isReachable()) throw GroqFailure()
+        return suspendCancellableCoroutine { continuation ->
+            val timeout = kotlin.math.ceil(idleSeconds * 1000).toLong()
+            val connection = http ?: transport.client()
+            val call =
+                connection
+                    .newBuilder()
+                    .readTimeout(timeout, TimeUnit.MILLISECONDS)
+                    .writeTimeout(timeout, TimeUnit.MILLISECONDS)
+                    .build()
+                    .newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuation.isActive) continuation.resumeWithException(GroqFailure())
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        try {
+                            val result = response.use {
+                                if (!it.isSuccessful) {
+                                    val error =
+                                        try {
+                                            parseObject(it.body?.string().orEmpty())["error"]
+                                                as? JsonObject
+                                        } catch (_: GroqFailure) {
+                                            null
+                                        }
+                                    val wait =
+                                        retryAfter(it.header("Retry-After"), clock.nowMillis())
+                                            ?: retrySeconds(error?.string("message"))
+                                    throw GroqFailure(
+                                        it.code,
+                                        error?.string("code") ?: "http",
+                                        wait,
+                                    )
+                                }
+                                parse(it)
+                            }
+                            if (continuation.isActive) continuation.resume(result)
+                        } catch (e: Exception) {
+                            val failure =
+                                when (e) {
+                                    is GroqFailure -> e
+                                    is IOException -> GroqFailure()
+                                    else -> GroqFailure(code = "invalid-response")
+                                }
+                            if (continuation.isActive) continuation.resumeWithException(failure)
+                        }
+                    }
+                },
+            )
         }
     }
 
-    suspend fun chat(model: String, transcript: Transcript): Completion {
-        val payload = buildJsonObject {
-            put("background_do_not_edit", JsonArray(emptyList()))
-            put("current_dictation", transcript.text)
-            put("uncertain_segments", buildJsonArray {
-                transcript.segments.filter { it.logprob?.let { p -> p.isFinite() && p < -0.5 } == true }.forEach { s ->
-                    add(buildJsonObject {
-                        put("text", s.text); s.start?.let { put("start", it) }; s.end?.let { put("end", it) }
-                        put("avg_logprob", s.logprob!!)
-                    })
-                }
-            })
+    fun retryDelay(failure: GroqFailure): Double? {
+        if (failure.status == 429)
+            return (failure.retryAfter ?: 1.0).takeIf { it <= maxRetryAfterSeconds }
+        if (failure.status > 0 && failure.retryAfter != null)
+            return failure.retryAfter.takeIf { it <= maxRetryAfterSeconds }
+        return retryDelaySeconds
+    }
+
+    internal suspend fun sendWithRetry(
+        request: Request,
+        idleSeconds: Double = polishIdleTimeout,
+        onAttempt: () -> Unit = {},
+    ): String {
+        suspend fun attempt(): String {
+            onAttempt()
+            return send(request, idleSeconds) {
+                it.body?.string() ?: throw GroqFailure(code = "invalid-response")
+            }
         }
+        return try {
+            attempt()
+        } catch (e: GroqFailure) {
+            val wait = retryDelay(e)
+            if (!e.retryable || wait == null) throw e
+            clock.sleep(wait)
+            attempt()
+        }
+    }
+
+    suspend fun listModels(): List<String> =
+        send(request("models").build()) { response ->
+            val list =
+                parseObject(response.body?.string().orEmpty())["data"] as? JsonArray
+                    ?: throw GroqFailure(code = "invalid-response")
+            if (list.any { it !is JsonObject }) throw GroqFailure(code = "invalid-response")
+            list
+                .map { it.jsonObject }
+                .filter { (it["active"] as? JsonPrimitive)?.booleanOrNull != false }
+                .mapNotNull { it.string("id") }
+        }
+
+    @Deprecated("Use listModels or ModelCatalog") suspend fun models() = listModels()
+
+    suspend fun transcribe(
+        audio: AudioEncoder.Encoded,
+        model: String,
+        language: String?,
+        prompt: String?,
+        audioSeconds: Double? = null,
+        bytesSent: (Int) -> Unit = {},
+    ): Transcription {
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+        fun field(name: String, value: String) {
+            body.addFormDataPart(
+                name,
+                null,
+                value.toRequestBody("text/plain; charset=utf-8".toMediaType()),
+            )
+        }
+        field("model", model)
+        field("response_format", "verbose_json")
+        field("temperature", "0")
+        language?.trimmed()?.takeIf(String::isNotEmpty)?.let { field("language", it) }
+        prompt?.takeIf(String::isNotEmpty)?.let { field("prompt", it) }
+        body.addFormDataPart(
+            "file",
+            audio.fileName,
+            audio.data.toRequestBody(audio.mimeType.toMediaType()),
+        )
+        val request = request("audio/transcriptions").post(body.build()).build()
+        val data =
+            sendWithRetry(request, transcriptionTimeout(audioSeconds)) {
+                diagnostic("whisper.request")
+                bytesSent(audio.data.size)
+            }
+        // Decoding is outside transport retry: malformed successful JSON must not re-upload audio.
+        return parseTranscription(data)
+    }
+
+    suspend fun chat(
+        model: String,
+        messages: List<ChatMessage>,
+        maxTokens: Int,
+        temperature: Double? = 0.0,
+    ): ChatCompletion {
+        val options = GroqModels.reasoningOptions(model)
         val body = buildJsonObject {
-            put("model", model); put("max_tokens", GroqModels.tokenBudget(transcript.text)); put("temperature", 0)
+            put("model", model)
+            put("max_tokens", maxTokens)
+            temperature?.let { put("temperature", it) }
             put("stream", true)
-            if (model.startsWith("qwen/")) put("reasoning_effort", "none")
-            if (model.startsWith("openai/gpt-oss-")) { put("reasoning_format", "hidden"); put("reasoning_effort", "low") }
-            put("messages", buildJsonArray {
-                add(buildJsonObject { put("role", "system"); put("content", PolishPrompt.systemPrompt) })
-                add(buildJsonObject { put("role", "user"); put("content", payload.toString()) })
-            })
+            options.effort?.let { put("reasoning_effort", it) }
+            options.format?.let { put("reasoning_format", it) }
+            put(
+                "messages",
+                buildJsonArray {
+                    for (m in messages) add(
+                        buildJsonObject {
+                            put("role", m.role)
+                            put("content", m.content)
+                        },
+                    )
+                },
+            )
         }
         diagnostic("polish.request")
-        return send(request("chat/completions").header("Accept", "text/event-stream")
-            .post(body.toString().toRequestBody("application/json".toMediaType())).build()) { response ->
-            val source = response.body!!.source()
-            val content = StringBuilder()
-            val plain = StringBuilder()
-            var reason: String? = null
-            var event = false
-            var done = false
-            while (!source.exhausted()) {
+        return send(
+            request("chat/completions")
+                .header("Accept", "text/event-stream")
+                .post(body.toString().toRequestBody("application/json".toMediaType()))
+                .build(),
+        ) { response ->
+            val source = response.body?.source() ?: throw GroqFailure(code = "invalid-response")
+            val stream = ChatStreamParser()
+            // Okio readUtf8Line splits only LF (and strips preceding CR), preserving
+            // U+2028/U+2029/NEL.
+            while (true) {
                 val line = source.readUtf8Line() ?: break
-                if (!line.startsWith("data:")) {
-                    if (!event && !line.startsWith(":")) plain.append(line)
-                    continue
-                }
-                event = true
-                val data = line.removePrefix("data:").trim()
-                if (data == "[DONE]") { done = true; break }
-                val obj = Json.parseToJsonElement(data).jsonObject
-                if (obj["error"] != null) throw GroqFailure(code = "stream-error")
-                val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
-                choice["delta"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull?.let(content::append)
-                choice["finish_reason"]?.jsonPrimitive?.contentOrNull?.let { reason = it }
+                if (stream.consume(line) == ChatStreamParser.Step.done) break
             }
-            if (event) {
-                if (!done && reason == null) throw GroqFailure(code = "incomplete-stream")
-                Completion(content.toString(), reason)
-            } else {
-                val choice = Json.parseToJsonElement(plain.toString()).jsonObject.getValue("choices").jsonArray.first().jsonObject
-                Completion(choice["message"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull.orEmpty(),
-                    choice["finish_reason"]?.jsonPrimitive?.contentOrNull)
-            }
+            stream.completion()
         }
     }
+
+    @Deprecated("Use transcribe(Encoded, model, language, prompt, audioSeconds)")
+    suspend fun transcribe(wav: File, durationSeconds: Double): Transcript =
+        transcribe(
+                AudioEncoder.Encoded(wav.readBytes(), "audio.wav", "audio/wav"),
+                GroqModels.whisper,
+                null,
+                null,
+                durationSeconds,
+            )
+            .legacy()
+
+    @Deprecated("Use chat(model, messages, maxTokens)")
+    suspend fun chat(model: String, transcript: Transcript): Completion =
+        chat(
+                model,
+                PolishPrompt.buildMessages(
+                    transcript.text,
+                    segments = transcript.segments.map { it.core() },
+                ),
+                GroqModels.polishTokenBudget(transcript.text),
+            )
+            .let { Completion(it.content.orEmpty(), it.finishReason) }
 }
+
+internal fun parseObject(data: String): JsonObject =
+    try {
+        Json.parseToJsonElement(data) as? JsonObject ?: throw GroqFailure(code = "invalid-response")
+    } catch (e: GroqFailure) {
+        throw e
+    } catch (_: Exception) {
+        throw GroqFailure(code = "invalid-response")
+    }
 
 internal fun retrySeconds(message: String?): Double? {
-    val tail = message?.substringAfter("try again in ", "")?.takeIf { it.isNotEmpty() } ?: return null
-    val parts = Regex("([0-9]+(?:\\.[0-9]+)?)([hms])").findAll(tail).toList()
-    return parts.takeIf { it.isNotEmpty() }?.sumOf { it.groupValues[1].toDouble() * when(it.groupValues[2]) { "h" -> 3600; "m" -> 60; else -> 1 } }
-}
-
-/** Phase-0 pipeline: batch WAV -> raw transcript -> a complete polish, or a genuine error. */
-class DictationPipeline(private val client: GroqClient) {
-    suspend fun dictate(wav: File, seconds: Double): DictationResult = polish(client.transcribe(wav, seconds))
-    suspend fun polish(raw: Transcript): DictationResult {
-        if (raw.text.isBlank()) return DictationResult("", "", null, null)
-        val preferred = listOf(GroqModels.polish, GroqModels.polishFallback)
-        val available = try { client.models() } catch (e: GroqFailure) { null }
-        var model = preferred.firstOrNull { available == null || it in available }
-            ?: return DictationResult(raw.text, raw.text, null, "model-unavailable")
-        try {
-            val completion = try { client.chat(model, raw) } catch (e: GroqFailure) {
-                val fallback = preferred.firstOrNull { it != model && (available == null || it in available) }
-                val wait = e.retryDelay()
-                if ((e.modelMissing || (e.status == 429 && wait == null)) && fallback != null) {
-                    model = fallback
-                } else if (e.retryable && wait != null) { delay(wait) } else throw e
-                client.chat(model, raw)
-            }
-            if (completion.finishReason != null && completion.finishReason != "stop") throw GroqFailure(code = "truncated")
-            if (completion.text.isBlank()) throw GroqFailure(code = "empty-polish")
-            return DictationResult(raw.text, completion.text.trim(), model, null)
-        } catch (e: CancellationException) { throw e
-        } catch (e: GroqFailure) { return DictationResult(raw.text, raw.text, model, e.message) }
+    val rest =
+        message?.substringAfter("try again in ", "")?.takeIf(String::isNotEmpty) ?: return null
+    var seconds = 0.0
+    var number = ""
+    var found = false
+    for (c in rest) {
+        if (c.isDigit() || c == '.') number += c
+        else {
+            val value = number.toDoubleOrNull()
+            if (value != null && c in "hms") {
+                seconds +=
+                    value *
+                        when (c) {
+                            'h' -> 3600
+                            'm' -> 60
+                            else -> 1
+                        }
+                number = ""
+                found = true
+                if (c == 's') break
+            } else break
+        }
     }
+    return if (found) seconds else null
 }
