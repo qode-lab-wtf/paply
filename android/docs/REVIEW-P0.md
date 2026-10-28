@@ -87,3 +87,30 @@ einen Punkt schon.
 11. Auf der Einrichtungskarte gibt es für die Kachel-Erkennung unter API 29–32 „Erledigt“ als Ausweg.
 12. Die Zwischenablage wird nach dem Einsetzen des Schlüssels geleert. „Eigene Begriffe“ werden entprellt gespeichert.
     Von der Startkarte geht es wieder zum Start zurück.
+
+## Review Etappe 1 – Tastatur integriert (Sonnet, Commit `da5cc3f`): Entscheidungen
+Zwei Runden: **UI-Fix** (sofort, `history/`, `settings/`, `ui/Settings|Setup`) und **IME-Fix** (nach dem Gedanken-Dienst, weil
+der gerade `AudioCapture`/`DictationSession` umbaut).
+
+1. **Keine unbemerkte Endlos-Aufnahme in der Tastatur.** Geht der Bildschirm aus (`ACTION_SCREEN_OFF`), endet die Aufnahme:
+   mit Sprache wird fertig verarbeitet, ohne Sprache still verworfen. Nach 10 Min. wird fertig verarbeitet, mit Hinweis,
+   die gleiche Grenze wie bei Gedanken. Bewusst **kein** Stopp bei Sprechpause (Allan). Den VAD bis zur ersten Sprache
+   inkrementell statt O(N²) machen. (IME-Fix)
+2. `discard()` löscht zuerst die Datei. Die Verlaufslöschung läuft nur, wenn ein Eintrag existiert, und in `runCatching`.
+   Im Hintergrund-Launch darf es keinen Absturz geben. (IME-Fix)
+3. Verlauf: Löschen, „Alles löschen“ und das Kürzen auf 300 Einträge entfernen auch die WAVs (= E1C 9). (UI-Fix)
+4. Feldwechsel: Jedes nicht-restartende `onStartInput` während einer Sitzung gilt als Wechsel, außer im Drehfenster.
+   (IME-Fix)
+5. Verschwindet die Tastatur, bevor das Ergebnis da ist: Zwischenablage (sensibel markiert) plus eine stille
+   Benachrichtigung „Text liegt in der Zwischenablage“. Nie ein stilles Ende. (IME-Fix)
+6. Rückleseprüfung normalisiert Leerzeichen und Groß-/Kleinschreibung. Eine Abweichung heißt „unbekannt“, nicht
+   „fehlgeschlagen“. Keine doppelte Einfügung. (IME-Fix)
+7. Zwischenablage mit `EXTRA_IS_SENSITIVE`. Steht dort nach 2 Min. noch Paplys Clip, wird er geleert. (IME-Fix)
+8. `lastEntry = null` beim Start. Die Fehlerarten sind getrennt (Schlüssel, Speicher, Mikro belegt). (IME-Fix)
+9. Eigene Zustände für „Schlüssel neu eintragen“ und „Speicher voll“. (IME-Fix)
+10. `activeRecordingConfiguration` wird nur noch mit 1 Hz abgefragt, sonst gilt das Callback-Flag. (IME-Fix)
+11. Weniger Verlaufs-fsyncs auf dem Weg von Tipp zu Text: PENDING parallel zum Upload. (IME-Fix)
+12. `retry` meldet immer `completed`. Fehlt die WAV, ist der Endzustand „Audio fehlt“, und es wird der aktuelle Eintrag
+    geschrieben. (IME-Fix)
+13. Panel: `idle` nicht als „schreibt“ anzeigen. „Eingesetzt“ bekommt einen Zurück-Knopf. Wischen bricht einen Neuversuch
+    ab. (IME-Fix)
