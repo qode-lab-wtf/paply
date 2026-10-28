@@ -1,6 +1,6 @@
 # Paply — Stand
 
-**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight (Builds 1–5, Branch `feat/ios-v1`) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
+**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight (Builds 1–7, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
@@ -23,6 +23,26 @@
   - Anrufe klingelten und vibrierten in Bereitschaft nicht: `setPrefersNoInterruptionsFromSystemAlerts` stand
     dauerhaft an. Jetzt nur während einer Aufnahme. Offen: Ob Nachrichten in Bereitschaft vibrieren (Allan vermutet
     nein) – falls nicht, Mikro im Leerlauf anhalten (Experiment `idlePause`, auf dem Gerät noch ungetestet).
+- **Build 6 (28.10., nachmittags):** Absturz nach Anrufen behoben (AVAudioEngine warf beim Wiederaufnehmen eine
+  Objective-C-Ausnahme wegen eines veralteten Formats): frische Engine, Tap ohne festes Format, Ausnahmen über das
+  neue Ziel `PaplyObjC` abgefangen. Auf drei Test-iPhones per Kabel/WLAN installiert (Debug).
+- **„Alle sehen Daten von anderen“ (28.10.) – kein Datenleck:** Es gibt keinen Server und keine geteilte Datenbank,
+  alles liegt nur auf dem jeweiligen iPhone. 
+  
+- **Build 7 (28.10., abends):** Verlässt man die App, während ein Gedanke läuft, erscheint oben sofort ein Banner
+  (ohne Dynamic Island, z. B. iPhone 12 Pro) bzw. klappt die Dynamic Island auf – mit Sekundenzähler, „Fertig“
+  und „Verwerfen“, dazu eine Vibration; alle 2 Min. wieder, „noch 1 Min.“ ebenso. Grenze bleibt 10 Min. (Allan).
+  Hochgeladen und auf alle drei iPhones gespielt.
+- **TestFlight extern:** Gruppe „Testing“ mit öffentlichem Link <TestFlight-Link>
+  (bis 10 Tester). Build 5 liegt bei Apple zur ersten Prüfung (eingereicht 28.10. mittags); Apple schickt eine
+  E-Mail, wenn sie durch ist. **Danach (Allan):** neuesten Build (7) der Gruppe „Testing“ hinzufügen, Link
+  verschicken und den Prüf-Schlüssel für Apple bei Groq löschen. Neue Tester bekommen danach jeden Build ohne
+  lange Prüfung.
+- **Offen – Gerätetests:** kurze Sätze in der Hauptsprache, Anruf in Bereitschaft (klingelt/vibriert?), Diktat
+  direkt nach einem Anruf (kein Absturz), WhatsApp-Vibration in Bereitschaft, Banner und Vibration aus Build 7,
+  Experiment `idlePause` (Mikro-Symbol weg? Diktat nach 5/30 Min.?). Klappt `idlePause`, wird es Standard und
+  das Mikro wacht schon beim Erscheinen der Tastatur auf. Angeboten: Bereithalten standardmäßig „1 Stunde“.
+- Offen: Test `cancelAbortsRunningChunkUploadImmediately` wackelt unter Last (einzeln grün).
 - Geprüft: PaplyKit 384 Tests grün, App/Tastatur/Widgets bauen Debug und Release; mehrere Opus-Reviews und ein
   unabhängiger Sonnet-Produkttest. Der zusammengeführte Stand ist auf dem Gerät noch nicht getestet.
 - Bauen/Signieren: Mac mini entwickelt, MacBook (Xcode 26.5, iOS-Plattform installiert) signiert; Signieren nur
