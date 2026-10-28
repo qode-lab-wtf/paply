@@ -11,11 +11,28 @@
   und der Emulator `paply` in `~/Android`; mit `rm -rf ~/Android` ist alles wieder weg. Allan hat das am 28.10.
   freigegeben. Der Mac mini ist knapp an Platz, dort entsteht nur Quelltext; nach dem T3-Update kann das MacBook
   direkt als Umgebung verknüpft werden.
-- **Phase 0 (Machbarkeit im Emulator), läuft:** Tastatur nimmt auf und setzt polierten Text ins Feld; Gedanken-Kachel
-  startet eine Aufnahme mit sichtbarer Benachrichtigung. Vorarbeit: Plattform-Recherche
-  (`android/docs/PLATTFORM.md`) und Portierungskarte (`android/docs/PORTIERUNG.md`).
-- **Danach V1 in Etappen:** Diktat komplett → Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) →
-  Landkarte/Aufgaben/Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Echtes Gerät entscheidet Allan.
+- **Phase 0 bestanden (28.10., Emulator Android 17/API 37, `android/docs/PHASE0.md`):**
+  - Die Paply-Tastatur nimmt beim Erscheinen sofort selbst auf, ohne Bereitschafts-Mikro, und setzt polierten Text
+    (de/en) in ein fremdes Feld (Kontakte) ein. Danach geht es zurück zu Gboard, links wischen verwirft.
+  - Die Gedanken-Kachel startet eine Aufnahmekarte und einen Mikro-Vordergrunddienst. Die Benachrichtigung zeigt
+    einen Zähler sowie „Fertig“ und „Verwerfen“. Ein Live-Update-Chip mit Zähler steht in der Statusleiste.
+  - Das klappt auch bei gesperrtem Gerät. Nach 10 Min. ist automatisch Schluss.
+  - Der Mikro-Punkt erscheint nur während der Aufnahme.
+  - Groq: 8 Aufrufe.
+- **Review Phase 0** (Sonnet): 18 Funde mit Zuordnung in `android/docs/REVIEW-P0.md`. Vor Gerätetests Pflicht:
+  - Mikro-Recht vor dem Dienststart
+  - kein Auto-Start nach Drehen
+  - kein Datenverlust bei Lesefehler oder Anruf
+- **Einstieg** (`android/docs/EINSTIEG.md`): Auf Pixel mit Android 16/17 wechselt ein Tipp auf die Systemtaste unten rechts
+  direkt zur nächsten Tastatur. Das ist ein Ein-Tipp-Start wie 🌐 bei iOS (im Emulator noch zu bestätigen).
+  Samsung: Navigations-Tastaturtaste. Eine schwebende Taste wie bei Wispr Flow ist erst nach V1 eine Option
+  (Overlay + Bedienungshilfe).
+- **Etappe 1 (Diktat komplett), läuft:**
+  - A: `:core`-Port des iOS-Diktat-Kerns mit Tests (astra)
+  - C: App-Oberfläche in Compose mit Verlauf, Einstellungen, Einrichtung und Keystore-Schlüssel (sol)
+  - Danach D: Tastatur-Integration mit E2E-Tests
+- **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
+  Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
