@@ -56,3 +56,11 @@ Etappe zugeordnet: **A** = `:core`-Diktat-Port, **D** = Tastatur-Integration, **
 ## Bewusst so gelassen
 - Debug-Receiver nur im Debug-Manifest mit `DUMP`. Backup-Regeln, `exported`-Flags und PendingIntents sind korrekt
   (Review ohne Befund).
+
+## Review Kern E1A (Sonnet, Commit `fd0001a`): Restpunkte für D (Tastatur-Integration)
+- Der Kern behebt die Funde 1–7 und 9 selbst (Auftrag „E1A-Fix“).
+- Für D bleiben:
+  - instrumentierter Kurztest der `Pattern`-Helfer auf dem Gerät bzw. Emulator (ICU-Regex auf Android)
+  - FLAC-Encoder per MediaCodec als `:core`-Adapter, denn der Upload-Standard ist FLAC; ohne Adapter wird es WAV mit doppelter Größe
+  - `deviceLanguages` aus `LocaleList`
+  - Schlüssel beim Speichern mit `sanitizeApiKey()` bereinigen (KeyVault)
