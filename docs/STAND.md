@@ -1,6 +1,6 @@
 # Paply — Stand
 
-**Zeitpunkt:** 27.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight hochgeladen (Builds 1–3, Branch `feat/ios-v1`)
+**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight (Builds 1–5, Branch `feat/ios-v1`) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
@@ -12,9 +12,17 @@
   Einrichtungskarte, Datenschutz-Klartext, Feedback senden. Konzept `ios/docs/gedanken/KONZEPT.md`,
   KI-Bewertung `ios/docs/gedanken/EVAL.md`, TestFlight-Ablauf und Texte `ios/docs/TESTFLIGHT.md`.
 - **TestFlight (27.10., abends):** 0.1.0 Builds 1, 2, 3 per SSH vom MacBook hochgeladen (Ablauf in der Erinnerung
-  „TestFlight-Upload per SSH“). Build 3 ist der Kandidat für Freunde: Landkarte, Aufgaben-Reiter, Themenbilder, KI-Regeln
-  v6, Mikro startet erst bei aktiver App, Selbstheilung bei stummem Mikro. Offen bei Allan in App Store Connect: interne
-  Gruppe, externe Gruppe „Freunde“, Testinformationen, Prüf-Schlüssel für Apple.
+  „TestFlight-Upload per SSH“). Build 3: Landkarte, Aufgaben-Reiter, Themenbilder, KI-Regeln v6, Mikro startet erst bei
+  aktiver App, Selbstheilung bei stummem Mikro. Build 4 (28.10., 03:41): Aufgaben-Widgets, Erinnerung zur Uhrzeit,
+  Beta-Schalter, neue Anleitung. Offen bei Allan in App Store Connect: externe Gruppe „Freunde“, Testinformationen,
+  Prüf-Schlüssel für Apple, dann öffentlicher Link.
+- **Build 5 (28.10., Kandidat für Freunde) – zwei Gerätefunde von Allan:**
+  - Kurze Sätze („Hi, wie geht's“) kamen auf Englisch, einmal als „ru“: Whisper rät die Sprache je Anfrage. Jetzt
+    gehen Stücke mit ≤ 5 s gesprochener Zeit direkt in der Hauptsprache raus (Einstellung „Hauptsprache“, Standard
+    erste iPhone-Sprache); längere mit fremd erkannter Sprache werden einmal in der Hauptsprache wiederholt.
+  - Anrufe klingelten und vibrierten in Bereitschaft nicht: `setPrefersNoInterruptionsFromSystemAlerts` stand
+    dauerhaft an. Jetzt nur während einer Aufnahme. Offen: Ob Nachrichten in Bereitschaft vibrieren (Allan vermutet
+    nein) – falls nicht, Mikro im Leerlauf anhalten (Experiment `idlePause`, auf dem Gerät noch ungetestet).
 - Geprüft: PaplyKit 384 Tests grün, App/Tastatur/Widgets bauen Debug und Release; mehrere Opus-Reviews und ein
   unabhängiger Sonnet-Produkttest. Der zusammengeführte Stand ist auf dem Gerät noch nicht getestet.
 - Bauen/Signieren: Mac mini entwickelt, MacBook (Xcode 26.5, iOS-Plattform installiert) signiert; Signieren nur
