@@ -148,6 +148,30 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
   });
 });
 
+it('wiederholt bei langem Groq-Limit (429, Retry-After > 10 s) nicht stur', async () => {
+  const { context: c, timers } = main();
+  c.fetch.mockResolvedValue({ ok: false, status: 429, headers: { get: () => '600' }, text: async () => '{}' });
+  await expect(c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech)).rejects.toMatchObject({ status: 429 });
+  expect(c.fetch).toHaveBeenCalledOnce(); expect(timers).toHaveLength(0);
+});
+
+it('wartet bei kurzem Groq-Limit die genannte Zeit und versucht es erneut', async () => {
+  const { context: c, timers } = main();
+  c.fetch.mockResolvedValueOnce({ ok: false, status: 429, headers: { get: () => '4' }, text: async () => '{}' });
+  const work = c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech);
+  await tick(); await tick();
+  expect(timers.map(timer => timer.ms)).toEqual([4000]);
+  timers[0].fn();
+  expect(await work).toBe('Gesprochener Text'); expect(c.fetch).toHaveBeenCalledTimes(2);
+});
+
+it('gibt dem Upload je nach Dateigröße mehr Zeit', async () => {
+  const { context: c } = main();
+  const original = c.readResponse; c.readResponse = vi.fn(original);
+  await c.transcribeAudio(Buffer.alloc(640000), 'de', 0, speech);
+  expect(c.readResponse.mock.calls[0][2]).toBe(70000);
+});
+
 it('speichert bei ungültigem neuen Kürzel gar keine Einstellungen und liefert strukturierten Fehler', async () => {
   const { context: c, ipc, values } = main();
   c.changeDictationShortcut.mockReturnValueOnce(false);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDictationJobs } from '../dictation/jobs.js';
-import { completePolish, polishTokenBudget, readResponse, replaceShortcut, friendlyError, explainDictationStatus, ensureGlobeReady, sameShortcut } from '../dictation/policies.js';
+import { completePolish, polishTokenBudget, readResponse, replaceShortcut, friendlyError, explainDictationStatus, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs } from '../dictation/policies.js';
 import { deferred, tick } from './helpers/dictation-main.js';
 afterEach(() => vi.useRealTimers());
 
@@ -84,7 +84,28 @@ it.each(['spawn', 'error', 'exit', 'timeout'])('Globe-Wechsel wartet auf Helfers
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it.each(['microphone', '401', '429', 'fetch failed', 'Unknown failure'])('hält Pillenfehler kurz: %s', error => {
+it('liest Retry-After nur als Sekundenangabe und reicht sie durch', async () => {
+  expect(retryAfterMs('7')).toBe(7000); expect(retryAfterMs('0.5')).toBe(500);
+  expect([null, undefined, '', 'bald', '-1'].map(retryAfterMs)).toEqual([null, null, null, null, null]);
+  const headers = { get: name => name === 'retry-after' ? '42' : null };
+  expect(await readResponse('example', {}, 100, async () => ({ ok: false, status: 429, headers, text: async () => '' })))
+    .toMatchObject({ status: 429, retryAfter: '42' });
+  expect((await readResponse('example', {}, 100, async () => ({ ok: true, status: 200, text: async () => '' }))).retryAfter).toBeNull();
+});
+
+it('gibt langen Uploads mehr Zeit, kurzen praktisch die bisherigen 60 s', () => {
+  expect(transcriptionTimeoutMs(0)).toBe(60000);
+  expect(transcriptionTimeoutMs(256000)).toBe(64000);
+  expect(transcriptionTimeoutMs(25 * 1024 * 1024)).toBeGreaterThan(450000);
+});
+
+it('erklärt zu große Aufnahmen (413) statt „Diktat fehlgeschlagen“', () => {
+  expect(friendlyError('413')).toBe('Aufnahme zu lang');
+  expect(friendlyError('Request Entity Too Large')).toBe('Aufnahme zu lang');
+  expect(explainDictationStatus('Aufnahme zu lang')).toContain('25 MB');
+});
+
+it.each(['microphone', '401', '413', '429', 'fetch failed', 'Unknown failure'])('hält Pillenfehler kurz: %s', error => {
   expect(friendlyError(error).length).toBeLessThanOrEqual(28);
   expect(friendlyError(error)).not.toContain('Einstellungen');
 });

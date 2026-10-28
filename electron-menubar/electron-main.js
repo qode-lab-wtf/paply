@@ -51,7 +51,7 @@ const notesBridge = { dictationState() {}, meetingStarted() {} };
 protocol.registerSchemesAsPrivileged([{ scheme: 'paply-notes', privileges: { standard: true, secure: true, stream: true } }]);
 const { createDictationJobs } = require('./dictation/jobs');
 const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order');
-const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
+const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs } = require('./dictation/policies');
 const { captureMacApp, pasteMac } = require('./dictation/mac-paste');
 const { createWindowsFocus, pasteWindows } = require('./dictation/windows-paste');
 const { buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt, isVocabularyEcho } = require('./dictation/polish-prompt');
@@ -192,7 +192,10 @@ function getStore() {
         geminiApiKey: '',
         llmProvider: 'auto', // 'auto' | 'groq' | 'gemini'
       },
+      // Enthält API-Schlüssel: nur für den eigenen Benutzer lesbar (wirkt ab dem nächsten Speichern).
+      configFileMode: 0o600,
     });
+    try { if (!isWin) fs.chmodSync(store.path, 0o600); } catch { /* Datei kommt beim ersten Speichern */ }
     migrateMeetingModel(store);
   }
   return store;
@@ -500,7 +503,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
           Authorization: `Bearer ${apiKey}`,
         },
         body: formData,
-      }, 60000);
+      }, transcriptionTimeoutMs(audioBuffer.length));
 
       if (!res.ok) {
         const errText = res.body;
@@ -508,9 +511,11 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
 
         // If it's a rate limit or server error, maybe retry
         if (res.status >= 500 || res.status === 429) {
-          if (i < retries) {
+          // Nennt Groq eine lange Wartezeit (z. B. Tageslimit), nicht stur wiederholen.
+          const wait = res.status === 429 ? retryAfterMs(res.retryAfter) : null;
+          if (i < retries && !(wait > 10000)) {
             console.log(`Retrying due to status ${res.status}...`);
-            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            await new Promise(r => setTimeout(r, Math.max(wait ?? 0, 1000 * (i + 1))));
             continue;
           }
         }
@@ -1718,6 +1723,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     await job.turn;
     addToHistory({
       transcript, polished, language,
+      durationMinutes: measurement ? measurement.durationMs / 60000 : 0,
       level: measurement ? {
         speechMs: Math.round(measurement.speechMs), durationMs: Math.round(measurement.durationMs),
         peakDbfs: Math.round(measurement.peakDbfs), floorDbfs: Math.round(measurement.floorDbfs),
@@ -1758,6 +1764,9 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     if (!isRetry) {
       console.log('Backup preserved for retry');
     }
+
+    // Fehler einmal je Aufnahme zählen (Dashboard: Erfolgsquote).
+    try { if (!isRetry) updateStats(0, 0, true); } catch { /* nur Statistik */ }
 
     // Show error with retry option
     const message = friendlyError(error.status ? String(error.status) : error, process.platform);
