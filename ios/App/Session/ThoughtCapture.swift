@@ -83,6 +83,8 @@ final class ThoughtCapture {
     static let limit: TimeInterval = 10 * 60
     /// Hinweis „Noch 1 Min.“ in der Live Activity
     static let warnAfter: TimeInterval = 9 * 60
+    /// App verlassen, Gedanke läuft weiter: Hinweis oben sofort, dann alle 2 Min. (Allan, 28.10.)
+    static let nudgeEvery: TimeInterval = 2 * 60
     /// Die Live-Pipeline hält alle Samples im RAM; bei 10 Min. Grenze reicht sie bis zum Ende.
     static let livePipelineLimit: TimeInterval = 10 * 60
 
@@ -436,11 +438,13 @@ final class ThoughtCapture {
 
     // MARK: Zeitgrenzen und Sprache
 
-    /// Jede Sekunde: Sprache erkannt? 9 Min. Hinweis, 10 Min. harte Grenze (§5.4).
+    /// Jede Sekunde: Sprache erkannt? App verlassen → Hinweis oben. 9 Min. Hinweis, 10 Min. harte Grenze (§5.4).
     private func startTicker(id: String) {
         ticker?.cancel()
         ticker = Task {
             var warned = false
+            /// Nächster Hinweis, solange die App im Hintergrund ist; nil = im Vordergrund
+            var nextNudge: Date?
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let rec = recording, rec.id == id, var current = active else { return }
@@ -451,6 +455,13 @@ final class ThoughtCapture {
                     current.speechDetected = true
                     active = current
                     SessionController.shared.noteSpeechHeard()
+                }
+                if UIApplication.shared.applicationState != .background {
+                    nextNudge = nil
+                } else if !warned, Date() >= nextNudge ?? .distantPast {
+                    // Ohne Dynamic Island sieht man in anderen Apps sonst nicht, dass Paply noch zuhört
+                    nextNudge = Date().addingTimeInterval(Self.nudgeEvery)
+                    ThoughtBridge.nudge(id: id, startedAt: rec.startedAt, elapsed: elapsed)
                 }
                 if !warned, elapsed >= Self.warnAfter {
                     warned = true

@@ -1,4 +1,5 @@
 import ActivityKit
+import AudioToolbox
 import Foundation
 import PaplyKit
 import WidgetKit
@@ -184,7 +185,22 @@ enum ThoughtBridge {
         guard activityThoughtID == id else { return }
         var state = content(.recording, startedAt: startedAt)
         state.warnLimit = true
-        update(state, staleDate: startedAt.addingTimeInterval(ThoughtCapture.limit + 5 * 60))
+        alert(state, staleDate: startedAt.addingTimeInterval(ThoughtCapture.limit + 5 * 60), body: "Gedanke · noch 1 Min.")
+        AudioServicesPlayAlertSound(kSystemSoundID_Vibrate)
+        Diag.log("thought.warnLimit", ["id": .s(ThoughtCapture.short(id)), "app": .s(SessionController.appState)])
+    }
+
+    /// App verlassen, Gedanke läuft weiter: Live Activity kurz oben zeigen (ohne Dynamic Island als
+    /// Banner mit Sekundenzähler, „Fertig“ und „Verwerfen“) und einmal vibrieren.
+    static func nudge(id: String, startedAt: Date, elapsed: TimeInterval) {
+        // Vibration auch ohne Live Activity (in den Einstellungen abgeschaltet)
+        AudioServicesPlayAlertSound(kSystemSoundID_Vibrate)
+        if activityThoughtID == id {
+            let minutes = Int(elapsed / 60)
+            alert(content(.recording, startedAt: startedAt), staleDate: startedAt.addingTimeInterval(ThoughtCapture.limit + 5 * 60),
+                  body: minutes < 1 ? "Gedanke läuft" : "Gedanke läuft seit \(minutes) Min.")
+        }
+        Diag.log("thought.nudge", ["id": .s(ThoughtCapture.short(id)), "s": .i(Int(elapsed))])
     }
 
     /// Nach dem Stopp: „Wird geordnet …“. Kommt 45 s kein Ergebnis: „Gesichert · wird gleich geordnet“.
@@ -326,6 +342,16 @@ enum ThoughtBridge {
             await activity.end(content, dismissalPolicy: .immediate)
         }
         Diag.log("thought.activity.result", ["id": .s(ThoughtCapture.short(id)), "phase": .s(state.phase.rawValue)])
+    }
+
+    /// Wie `update`, aber hervorgehoben: Dynamic Island klappt kurz auf, ohne sie erscheint ein Banner oben.
+    private static func alert(_ state: ThoughtActivityAttributes.ContentState, staleDate: Date, body: String) {
+        guard let activityID else { return }
+        Task.detached {
+            guard let activity = Activity<ThoughtActivityAttributes>.activities.first(where: { $0.id == activityID }) else { return }
+            let configuration = AlertConfiguration(title: "Paply", body: LocalizedStringResource(stringLiteral: body), sound: .default)
+            await activity.update(ActivityContent(state: state, staleDate: staleDate), alertConfiguration: configuration)
+        }
     }
 
     private static func update(_ state: ThoughtActivityAttributes.ContentState, staleDate: Date) {
