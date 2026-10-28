@@ -1,5 +1,6 @@
 import AppIntents
 import Foundation
+import UserNotifications
 import WidgetKit
 
 // Abhaken im Aufgaben-Widget (Home-Bildschirm, StandBy). Liegt in App und Widget-Erweiterung.
@@ -12,6 +13,7 @@ import WidgetKit
 //    dafür im Hintergrund, wie beim Gedanken-Widget) – dann sofort, samt Speichern und neuer Momentaufnahme. Landet es
 //    doch in der Erweiterung, weckt ein Darwin-Signal die laufende App; sonst wendet sie beim nächsten Start, im
 //    Vordergrund oder im BGTask an (`TaskWidgetSync`).
+// 4. Die Erinnerung zur Uhrzeit der Aufgabe (`task/<Gedanke>/<Aufgabe>`) wird entfernt, geplant wie zugestellt.
 // Ein zweiter Tipp auf dieselbe Aufgabe hat keine Wirkung (sie steht nicht mehr in der Momentaufnahme; die App hakt sie
 // höchstens einmal ab). Widerrufen gibt es im Widget nicht – dafür ist die App da.
 //
@@ -86,6 +88,12 @@ enum TaskIntentRunner {
             "optimistic": .b(optimistic),
         ])
         guard queued else { return }
+        // Erinnerung zur Uhrzeit dieser Aufgabe (geplant, verschoben oder schon zugestellt) gleich mit entfernen – geht
+        // in der Erweiterung wie in der App. Der Abgleich der App käme sonst erst nach dem Anwenden.
+        let reminderID = TaskReminderID.identifier(thoughtID: thoughtID, taskID: taskID)
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [reminderID])
+        center.removeDeliveredNotifications(withIdentifiers: [reminderID])
         #if PAPLY_APP
         // Widget gleich mit der angepassten Momentaufnahme zeigen, dann echt anwenden (wartet notfalls, bis die
         // Gedanken nach einem Kaltstart gelesen sind)

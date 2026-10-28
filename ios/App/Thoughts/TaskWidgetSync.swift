@@ -50,9 +50,9 @@ final class TaskWidgetSync {
                 TaskWidgetSync.shared.schedule()
             }
         })
-        // neuer Tag, neue Zeitzone: „heute“ zählt neu
+        // neuer Tag, neue Zeitzone: „heute“ zählt neu – auch bei gleichem Inhalt schreiben, damit das Widget neu lädt
         observers.append(center.addObserver(forName: UIApplication.significantTimeChangeNotification, object: nil, queue: .main) { _ in
-            Task { @MainActor in TaskWidgetSync.shared.schedule() }
+            Task { @MainActor in await TaskWidgetSync.shared.write(force: true) }
         })
         // Schalter „Abhaken nur mit Face ID“ (App-Group-Defaults, im Entwicklerbereich)
         observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in

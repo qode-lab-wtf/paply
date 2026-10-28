@@ -49,6 +49,8 @@ public struct TaskReminder: Equatable, Sendable, Identifiable {
 ///   Fälligkeit dieselbe bleibt; eine neue Zeit ersetzt es.
 /// - iOS hält höchstens 64 geplante Mitteilungen: geplant werden die nächsten `limit` (50) nach Zeit.
 /// - Abgleich: nur Neues und Geändertes planen, nicht mehr Gewünschtes entfernen, Gleiches unberührt lassen.
+/// - Beta „Gedanken & Aufgaben“ aus: nichts gewünscht (alles Geplante fällt weg), zugestellte alle entfernen
+///   (`removableDelivered`).
 public enum TaskReminderPlan {
     public static let limit = 50
     public static let snoozeInterval: TimeInterval = 3_600
@@ -173,7 +175,49 @@ public enum TaskReminderPlan {
         return ids.filter { parse($0) != nil && !open.contains($0) }
     }
 
+    /// Schon zugestellte Erinnerungen, die weg sollen. Beta „Gedanken & Aufgaben“ aus (`featureOn` = false): alle
+    /// Erinnerungen (`task/…`), auch die offener Aufgaben; an: nur die veralteten (`stale`). Andere Mitteilungen der
+    /// App (z. B. `test/…`) bleiben immer.
+    public static func removableDelivered(_ ids: [String], thoughts: [Thought], featureOn: Bool) -> [String] {
+        featureOn ? stale(delivered: ids, thoughts: thoughts) : ids.filter { parse($0) != nil }
+    }
+
     // MARK: „In 1 Stunde“
+
+    /// Was die App über die Aufgabe weiß, wenn „In 1 Stunde“ kommt (vielleicht im Hintergrund, Gedanken noch nicht gelesen)
+    public struct SnoozeFacts: Equatable, Sendable {
+        /// Gedanken, sobald gelesen; nil = noch nicht geladen
+        public var thoughts: [Thought]?
+        /// schon zum Abhaken vorgemerkt (Warteschlange von Widget und Mitteilung, auch die vor dem Entsperren)
+        public var queued: Bool
+        /// steht offen in der Momentaufnahme der Widgets; nil = nicht lesbar. Fehlen heißt nichts (dort stehen nur die
+        /// nächsten fünf).
+        public var inSnapshot: Bool?
+        /// vor dem ersten Entsperren nach einem Neustart: Seit dem Planen konnte nur „Erledigt“ aus einer Mitteilung etwas
+        /// ändern – und das steht in `queued`
+        public var locked: Bool
+
+        public init(thoughts: [Thought]?, queued: Bool, inSnapshot: Bool?, locked: Bool) {
+            self.thoughts = thoughts
+            self.queued = queued
+            self.inSnapshot = inSnapshot
+            self.locked = locked
+        }
+    }
+
+    /// Darf „In 1 Stunde“ neu planen? Nur für eine offene Aufgabe: vorgemerkt, erledigt, gelöscht oder im Papierkorb →
+    /// nein. Ohne geladene Gedanken entscheidet die Momentaufnahme; im Zweifel nicht neu planen (lieber keine Mitteilung
+    /// zu einer erledigten Aufgabe). Ausnahme vor dem ersten Entsperren: Dann gilt der Stand vom Planen.
+    public static func maySnooze(thoughtID: String, taskID: String, facts: SnoozeFacts) -> Bool {
+        if facts.queued { return false }
+        if let thoughts = facts.thoughts {
+            guard let thought = thoughts.first(where: { $0.id == thoughtID }), thought.deletedAt == nil,
+                  let task = thought.tasks.first(where: { $0.id == taskID }) else { return false }
+            return !task.done
+        }
+        if facts.locked { return true }
+        return facts.inSnapshot == true
+    }
 
     /// Neuer Zeitpunkt nach „In 1 Stunde“ (auf ganze Sekunden)
     public static func snoozed(from now: Date) -> Date {

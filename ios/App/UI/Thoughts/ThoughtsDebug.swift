@@ -17,7 +17,10 @@ import SwiftUI
 //                            detail-waiting · capture · bar · bar-saved · search · settings · dictation · deleted ·
 //                            topics · guide · picker ·
 //                            map (Karte allein, MapDebugScreen; dazu -PaplyMapFocus, -PaplyLight) ·
-//                            widgets · widgets-2 (Aufgaben-Widgets, TaskWidgetPreview; mit -PaplyTasksDemo)
+//                            widgets · widgets-2 (Aufgaben-Widgets, TaskWidgetPreview; mit -PaplyTasksDemo) ·
+//                            widgets-3 (Aufgaben-Widgets bei Beta aus)
+//   -PaplyBetaOff            Beta „Gedanken & Aufgaben“ startet AUS (nur dieser Lauf, nichts gespeichert)
+//   -PaplySettingsBeta       Einstellungen rollen zum Abschnitt „Beta“ (mit -PaplyScreen settings)
 //   -PaplyClassic            iOS-18-Look (ohne Glas, Leiste als Kapsel) auf iOS 26
 //   -PaplyExpandOriginal     „Original“ im Detail aufgeklappt
 //   -PaplyHoldDone           große Ansicht bleibt nach „Fertig“ offen (Häkchen prüfen)
@@ -251,8 +254,8 @@ enum ThoughtsDebug {
             if let rich { nav.topicPicker = SheetID(id: rich.id) }
         case "map":
             MapDebugScreen.present(model: model)
-        case "widgets", "widgets-2":
-            TaskWidgetPreview.present(model: model, page: screen == "widgets-2" ? 2 : 1)
+        case "widgets", "widgets-2", "widgets-3":
+            TaskWidgetPreview.present(model: model, page: screen == "widgets-3" ? 3 : screen == "widgets-2" ? 2 : 1)
         default:
             break
         }

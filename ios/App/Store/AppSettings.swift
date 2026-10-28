@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PaplyKit
 import UIKit
+import WidgetKit
 
 /// Testschalter der Pipeline (PipelineOptions). Standard = PaplyKit-Standard.
 struct PipelineTestOptions: Codable, Equatable, Sendable {
@@ -103,6 +104,20 @@ final class AppSettings {
         didSet { save { SharedSettings.logHostBundleID = logHostBundleID } }
     }
 
+    /// Beta „Gedanken & Aufgaben“ (Einstellungen → Beta; App Group, fehlt = an – `BetaFeatures`). Umschalten: Widgets
+    /// neu laden, Erinnerungen abgleichen (aus = alle weg); aus beendet eine laufende Gedanken-Aufnahme (sie wird
+    /// gesichert und geordnet). Daten bleiben immer.
+    var betaThoughts: Bool {
+        didSet {
+            guard betaThoughts != oldValue else { return }
+            save { SharedSettings.betaThoughts = betaThoughts }
+            Diag.log("settings.beta.thoughts", ["on": .b(betaThoughts)])
+            WidgetCenter.shared.reloadAllTimelines()
+            TaskReminders.shared.scheduleReconcile("beta", delay: .zero)
+            if !betaThoughts, ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.app) }
+        }
+    }
+
     /// Versteckter Entwicklerbereich (5× auf die Version tippen)
     var developerMode: Bool {
         didSet { save { UserDefaults.standard.set(developerMode, forKey: Key.developerMode) } }
@@ -143,6 +158,7 @@ final class AppSettings {
         var holdDuration: HoldDuration
         var autoOpenApp: Bool
         var logHostBundleID: Bool
+        var betaThoughts: Bool
         var testOptions: PipelineTestOptions
         var spokenLanguagesAuto: Bool
         var idlePause: IdlePauseMode
@@ -169,6 +185,7 @@ final class AppSettings {
                 holdDuration: SharedSettings.holdDuration,
                 autoOpenApp: SharedSettings.autoOpenApp,
                 logHostBundleID: SharedSettings.logHostBundleID,
+                betaThoughts: BetaFeatures.thoughtsAtLaunch(AppGroup.defaults, arguments: ProcessInfo.processInfo.arguments),
                 testOptions: testOptions,
                 spokenLanguagesAuto: defaults.object(forKey: Key.spokenAuto) as? Bool ?? true,
                 idlePause: IdlePauseMode(rawValue: defaults.string(forKey: Key.idlePause) ?? "") ?? .off,
@@ -186,6 +203,7 @@ final class AppSettings {
         holdDuration = stored.holdDuration
         autoOpenApp = stored.autoOpenApp
         logHostBundleID = stored.logHostBundleID
+        betaThoughts = stored.betaThoughts
         testOptions = stored.testOptions
         spokenLanguagesAuto = stored.spokenLanguagesAuto
         idlePause = stored.idlePause
@@ -211,6 +229,7 @@ final class AppSettings {
         holdDuration = stored.holdDuration
         autoOpenApp = stored.autoOpenApp
         logHostBundleID = stored.logHostBundleID
+        betaThoughts = stored.betaThoughts
         testOptions = stored.testOptions
         spokenLanguagesAuto = stored.spokenLanguagesAuto
         idlePause = stored.idlePause

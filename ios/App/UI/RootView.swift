@@ -20,6 +20,7 @@ enum Route: Hashable {
 
 /// Drei Reiter: „Gedanken“ (Start), „Aufgaben“ (alle Aufgaben aus den Gedanken) und „Diktat“. Einstellungen als
 /// Blatt hinter dem Zahnrad. Über allem: Aufnahme-Leiste, große Aufnahme-Ansicht, FlashView.
+/// Beta „Gedanken & Aufgaben“ aus (`AppSettings.betaThoughts`): keine Reiter, das Diktat ist die Startseite.
 struct RootView: View {
     @State private var model: ThoughtsModel
     @State private var nav = ThoughtsNav()
@@ -29,6 +30,7 @@ struct RootView: View {
     @Namespace private var zoom
     @Environment(\.scenePhase) private var scenePhase
     private let session = SessionController.shared
+    private let settings = AppSettings.shared
 
     init() {
         PaplyNavigationBar.apply()
@@ -40,26 +42,15 @@ struct RootView: View {
     var body: some View {
         @Bindable var nav = nav
         @Bindable var flow = flow
-        TabView(selection: $nav.tab) {
-            Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
-                ThoughtsTab()
-            }
-            Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
-                TasksTab()
-            }
-            .badge(TasksBadge.count(model))
-            Tab("Diktat", systemImage: "globe", value: RootTab.dictation) {
-                DictationTab()
-            }
-        }
-        .modifier(CaptureAccessoryModifier(flow: flow))
+        content
+        .animation(.paplySmooth, value: settings.betaThoughts)
         .background { CaptureTracker(flow: flow) }
         .fullScreenCover(isPresented: $flow.showBig) {
             CaptureView()
                 .navigationTransition(.zoom(sourceID: flow.zoomSource, in: zoom))
         }
-        .sheet(isPresented: $nav.showSettings) {
-            SettingsSheet()
+        .sheet(isPresented: $nav.showSettings, onDismiss: { nav.settingsFocus = nil }) {
+            SettingsSheet(focus: nav.settingsFocus)
         }
         // Themenwahl aus dem Detail – in beiden Reitern (Gedanken, Aufgaben)
         .sheet(item: $nav.topicPicker) { item in
@@ -87,6 +78,15 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { TaskDay.shared.refresh() }
         }
+        .onChange(of: settings.betaThoughts) { _, on in
+            // Aus: Reiter weg, das Diktat bleibt (sanft eingeblendet). Wieder an: man steht im Reiter Diktat, die
+            // Gedanken sind mit allem wieder da.
+            if !on { nav.tab = .dictation }
+        }
+        .betaHintAlert {
+            nav.settingsFocus = SettingsView.betaAnchor
+            nav.showSettings = true
+        }
         .onChange(of: nav.toast) { old, new in
             // Hinweis abgelaufen oder ersetzt: Widerrufen ist vorbei (auch per Schütteln)
             guard let token = old?.undo, token != new?.undo else { return }
@@ -99,12 +99,46 @@ struct RootView: View {
         #endif
     }
 
+    /// Mit Beta: drei Reiter. Ohne: nur das Diktat (wie die Startseite vor den Gedanken).
+    @ViewBuilder
+    private var content: some View {
+        @Bindable var nav = nav
+        if settings.betaThoughts {
+            TabView(selection: $nav.tab) {
+                Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
+                    ThoughtsTab()
+                }
+                Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
+                    TasksTab()
+                }
+                .badge(TasksBadge.count(model))
+                Tab("Diktat", systemImage: "globe", value: RootTab.dictation) {
+                    DictationTab()
+                }
+            }
+            .modifier(CaptureAccessoryModifier(flow: flow))
+            .transition(.opacity)
+        } else {
+            DictationTab()
+                .transition(.opacity)
+        }
+    }
+
     /// Deep Links (§2): `thought/current?id=…` (Live Activity), `thought/new` (Rückfall des Sperrbildschirm-
     /// Widgets: Aufnahme in der App), `thought/<id>`, `thoughts/tasks` (Reiter Aufgaben),
-    /// `task/<Gedanke>/<Aufgabe>` (Aufgaben-Widget: Detail an der Aufgabe).
+    /// `task/<Gedanke>/<Aufgabe>` (Aufgaben-Widget: Detail an der Aufgabe), `beta/thoughts` (Gedanken-Knopf bei
+    /// ausgeschalteter Beta). Ist die Beta „Gedanken & Aufgaben“ aus, zeigen alle diese Links nur den Hinweis.
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
         guard url.scheme == PaplyURL.scheme else { return }
+        let host = url.host ?? ""
+        guard settings.betaThoughts else {
+            if ["thought", "thoughts", "task", "beta"].contains(host) {
+                Diag.log("thoughts.link.betaOff", ["host": .s(host)])
+                BetaHint.shared.show()
+            }
+            return
+        }
         let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         switch url.host {
         case "thought":
@@ -143,14 +177,15 @@ struct RootView: View {
     }
 }
 
-/// Einstellungen als Blatt mit eigenem Navigationsstapel
+/// Einstellungen als Blatt mit eigenem Navigationsstapel. `focus`: Abschnitt, zu dem es beim Öffnen rollt.
 private struct SettingsSheet: View {
+    var focus: String?
     @Environment(\.dismiss) private var dismiss
     @State private var path = NavigationPath()
 
     var body: some View {
         NavigationStack(path: $path) {
-            SettingsView()
+            SettingsView(focus: focus)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Fertig") { dismiss() }

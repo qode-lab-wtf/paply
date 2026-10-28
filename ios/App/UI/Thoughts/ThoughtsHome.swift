@@ -66,6 +66,7 @@ struct ThoughtsHome: View {
             .modifier(SummarySubtitle(text: model.thoughts.isEmpty ? nil : ThoughtsSummary.text(model)))
             .toolbar { toolbar }
             .toolbar { bottomBar }
+            .toolbar { BetaToolbarBadge() }
             .topicActions($topicAction)
             .onChange(of: model.topics.map(\.id)) { _, _ in
                 guard let id = nav.focusedTopic, !TopicPalette.isNeutral(id) else { return }

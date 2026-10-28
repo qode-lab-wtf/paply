@@ -9,6 +9,7 @@ import WidgetKit
 //   -PaplyScreen widgets     Sperrbildschirm entsperrt und gesperrt (Platzhalter), Home klein und mittel
 //   -PaplyScreen widgets-2   leere Zustände, „Paply öffnen“, gesperrt in StandBy, kleines Widget auf kleinem iPhone,
 //                            derselbe Stand nach Mitternacht
+//   -PaplyScreen widgets-3   Beta „Gedanken & Aufgaben“ aus (ruhiger Zustand)
 // Größen wie iPhone 14 Pro Max (rund 76, rechteckig 172 × 76, klein 170, mittel 364 × 170, Ränder 16). Der Sperr-
 // bildschirm färbt Widgets einfarbig („vibrant“); hier angenähert mit Weiß auf dunklem Hintergrund.
 struct TaskWidgetPreview: View {
@@ -19,7 +20,11 @@ struct TaskWidgetPreview: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if page == 2 { pageTwo } else { pageOne }
+                switch page {
+                case 2: pageTwo
+                case 3: pageThree
+                default: pageOne
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)
@@ -65,6 +70,16 @@ struct TaskWidgetPreview: View {
             home(TaskWidgetContent(date: now, state: .noData, requiresAuth: true), family: .systemSmall)
             home(TaskWidgetContent(date: now, state: .locked, requiresAuth: true), family: .systemSmall)
         }
+    }
+
+    @ViewBuilder
+    private var pageThree: some View {
+        let off = TaskWidgetContent(date: now, state: .betaOff, requiresAuth: true)
+        caption("Beta „Gedanken & Aufgaben“ aus · Sperrbildschirm")
+        lockScreen(off, locked: false)
+        caption("Beta aus · Home klein und mittel")
+        home(off, family: .systemSmall)
+        home(off, family: .systemMedium)
     }
 
     // MARK: Bausteine

@@ -589,6 +589,8 @@ final class ThoughtsNav {
     var panelDetent: PanelDetent = .medium
     var searchText = ""
     var showSettings = false
+    /// Abschnitt der Einstellungen, zu dem das Blatt beim Öffnen rollt (z. B. `SettingsView.betaAnchor`)
+    var settingsFocus: String?
     /// Themenwahl für diesen Gedanken
     var topicPicker: SheetID?
     private(set) var toast: ThoughtsToast?

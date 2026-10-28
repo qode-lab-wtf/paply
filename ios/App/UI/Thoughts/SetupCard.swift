@@ -4,7 +4,8 @@ import SwiftUI
 import UIKit
 
 // Einrichtung an einer Stelle: eine ruhige Karte oben in beiden Tabs mit vier Häkchen. Erledigte
-// Schritte erkennt die App selbst; sind alle erledigt, verschwindet die Karte.
+// Schritte erkennt die App selbst; sind alle erledigt, verschwindet die Karte. Ist die Beta „Gedanken & Aufgaben“
+// aus, entfällt der Schritt „Gedanken-Knopf“ (drei Häkchen).
 
 @MainActor
 @Observable
@@ -57,15 +58,20 @@ final class SetupGuide {
         }
     }
 
+    /// Schritte, die gerade zählen: ohne Beta „Gedanken & Aufgaben“ kein Gedanken-Knopf
+    var steps: [Step] {
+        AppSettings.shared.betaThoughts ? Step.allCases : Step.allCases.filter { $0 != .button }
+    }
+
     func doneCount(model: ThoughtsModel) -> Int {
-        Step.allCases.reduce(0) { $0 + (isDone($1, model: model) ? 1 : 0) }
+        steps.reduce(0) { $0 + (isDone($1, model: model) ? 1 : 0) }
     }
 
     func isVisible(model: ThoughtsModel) -> Bool {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-PaplyNoSetup") { return false }
         #endif
-        return doneCount(model: model) < Step.allCases.count
+        return doneCount(model: model) < steps.count
     }
 }
 
@@ -83,8 +89,9 @@ struct SetupCard: View {
     }
 
     var body: some View {
+        let steps = guide.steps
         let done = guide.doneCount(model: model)
-        let next = SetupGuide.Step.allCases.first { !guide.isDone($0, model: model) }
+        let next = steps.first { !guide.isDone($0, model: model) }
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Einrichten")
@@ -92,7 +99,7 @@ struct SetupCard: View {
                     .foregroundStyle(Color.paplyText)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text("\(done) von 4")
+                Text("\(done) von \(steps.count)")
                     .font(.subheadline.weight(.medium))
                     .monospacedDigit()
                     .foregroundStyle(Color.paplySecondaryText)
@@ -100,9 +107,9 @@ struct SetupCard: View {
             }
             .padding(.bottom, 6)
 
-            ForEach(SetupGuide.Step.allCases) { step in
+            ForEach(steps) { step in
                 row(step, isDone: guide.isDone(step, model: model), isNext: step == next)
-                if step != .button {
+                if step != steps.last {
                     Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 36)
                 }
             }
@@ -112,7 +119,7 @@ struct SetupCard: View {
                 LucideImage(.shieldCheck, size: 16, stroke: 1.9, relativeTo: .footnote)
                     .foregroundStyle(ThoughtTint.mint)
                     .padding(.top, 1)
-                Text("Dein Ton geht zur Erkennung an Groq, mit deinem Schlüssel – Paply behält davon nur den Text. Gedanken und Verlauf liegen nur auf diesem iPhone. Im Bereitschaftsmodus wird nichts gespeichert oder gesendet.")
+                Text("Dein Ton geht zur Erkennung an Groq, mit deinem Schlüssel – Paply behält davon nur den Text. \(AppSettings.shared.betaThoughts ? "Gedanken und Verlauf liegen" : "Der Verlauf liegt") nur auf diesem iPhone. Im Bereitschaftsmodus wird nichts gespeichert oder gesendet.")
                     .font(.footnote)
                     .foregroundStyle(Color.paplySecondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -202,7 +209,8 @@ struct SetupCard: View {
     private func detail(_ step: SetupGuide.Step) -> String {
         switch step {
         case .mic:
-            guide.mic == .denied ? "Ist aus. In den iPhone-Einstellungen bei Paply einschalten." : "Für Diktat und Gedanken."
+            guide.mic == .denied ? "Ist aus. In den iPhone-Einstellungen bei Paply einschalten."
+                : AppSettings.shared.betaThoughts ? "Für Diktat und Gedanken." : "Fürs Diktat."
         case .key:
             "Kostenlos bei Groq, in einer Minute erledigt."
         case .keyboard:

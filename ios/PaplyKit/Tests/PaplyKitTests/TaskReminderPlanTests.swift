@@ -186,6 +186,69 @@ struct TaskReminderPlanTests {
             == ["task/s_1/k_erledigt", "task/s_1/k_geloescht", "task/s_2/k_papierkorb", "task/s_weg/k_1"])
     }
 
+    // MARK: „In 1 Stunde“ nur für offene Aufgaben
+
+    @Test func snoozeOnlyForOpenTasks() {
+        let due = date(2026, 10, 28, 16)
+        let thoughts = [
+            thought("s_1", tasks: [task("k_offen", due: due), task("k_erledigt", due: due, done: true)]),
+            thought("s_weg", tasks: [task("k_papierkorb", due: due)], deleted: now),
+        ]
+        func may(_ thought: String, _ task: String, thoughts: [Thought]? = thoughts, queued: Bool = false,
+                 inSnapshot: Bool? = nil, locked: Bool = false) -> Bool {
+            TaskReminderPlan.maySnooze(thoughtID: thought, taskID: task,
+                                       facts: .init(thoughts: thoughts, queued: queued, inSnapshot: inSnapshot, locked: locked))
+        }
+        // Gedanken geladen: nur die offene Aufgabe
+        #expect(may("s_1", "k_offen"))
+        #expect(!may("s_1", "k_erledigt"))
+        #expect(!may("s_1", "k_geloescht"))
+        #expect(!may("s_weg", "k_papierkorb"))
+        #expect(!may("s_fehlt", "k_1"))
+        // schon zum Abhaken vorgemerkt (Widget, „Erledigt“) – auch wenn das Modell sie noch offen führt
+        #expect(!may("s_1", "k_offen", queued: true))
+        #expect(!may("s_1", "k_offen", thoughts: nil, queued: true, locked: true))
+        // Gedanken noch nicht geladen: Momentaufnahme entscheidet, im Zweifel nicht
+        #expect(may("s_1", "k_offen", thoughts: nil, inSnapshot: true))
+        #expect(!may("s_1", "k_offen", thoughts: nil, inSnapshot: false))
+        #expect(!may("s_1", "k_offen", thoughts: nil, inSnapshot: nil))
+        // vor dem ersten Entsperren: Stand vom Planen (nur die Warteschlange zählt)
+        #expect(may("s_1", "k_offen", thoughts: nil, inSnapshot: nil, locked: true))
+    }
+
+    // MARK: Beta „Gedanken & Aufgaben“ aus
+
+    @Test func betaOffRemovesEveryDeliveredReminderButNothingElse() {
+        let thoughts = [
+            thought("s_1", tasks: [task("k_offen", due: date(2026, 10, 28, 8)), task("k_erledigt", due: date(2026, 10, 28, 8), done: true)]),
+        ]
+        let delivered = ["task/s_1/k_offen", "task/s_1/k_erledigt", "task/s_weg/k_1", "test/s_x", "fremd", "task/kaputt"]
+        // aus: alle Erinnerungen, auch die der offenen Aufgabe – Test-Mitteilungen und Fremdes bleiben
+        #expect(TaskReminderPlan.removableDelivered(delivered, thoughts: thoughts, featureOn: false)
+            == ["task/s_1/k_offen", "task/s_1/k_erledigt", "task/s_weg/k_1"])
+        // an: wie bisher nur die veralteten
+        #expect(TaskReminderPlan.removableDelivered(delivered, thoughts: thoughts, featureOn: true)
+            == TaskReminderPlan.stale(delivered: delivered, thoughts: thoughts))
+        #expect(TaskReminderPlan.removableDelivered(delivered, thoughts: thoughts, featureOn: true)
+            == ["task/s_1/k_erledigt", "task/s_weg/k_1"])
+    }
+
+    @Test func betaOffPlansNothingAndOnRestoresAll() {
+        // So gleicht TaskReminders ab: aus → nichts gewünscht; wieder an → dieselben Erinnerungen wie vorher
+        let due = date(2026, 10, 29, 8)
+        let thoughts = [thought("s_1", tasks: [task("k_1", due: due), task("k_2", due: date(2026, 10, 30, 9))])]
+        let planned = plan(thoughts)
+        #expect(planned.count == 2)
+        let current = Dictionary(uniqueKeysWithValues: planned.map { ($0.id, $0.signature + "|normal") })
+        let off = TaskReminderPlan.changes(current: current, desired: [], salt: "|normal")
+        #expect(off.schedule.isEmpty)
+        #expect(off.remove == ["task/s_1/k_1", "task/s_1/k_2"])
+        // Daten unverändert → beim Einschalten ist alles wieder da
+        let on = TaskReminderPlan.changes(current: [:], desired: plan(thoughts), salt: "|normal")
+        #expect(on.schedule == planned)
+        #expect(on.remove.isEmpty)
+    }
+
     // MARK: Grenze
 
     @Test func plansOnlyTheNextFiftyByTime() {

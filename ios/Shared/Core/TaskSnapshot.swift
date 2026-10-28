@@ -23,6 +23,15 @@ enum TaskWidgetSettings {
     }
 }
 
+/// Kennung der Erinnerung zur Uhrzeit einer Aufgabe: `task/<Gedanke>/<Aufgabe>` – gleich
+/// `TaskReminderPlan.identifier` (PaplyKit; ein Test prüft das). Hier, damit auch die Widget-Erweiterung (ohne
+/// PaplyKit) die Erinnerung beim Abhaken entfernen kann.
+enum TaskReminderID {
+    static func identifier(thoughtID: String, taskID: String) -> String {
+        "task/" + thoughtID + "/" + taskID
+    }
+}
+
 /// `tasks-snapshot.json` – was die Widgets über die Aufgaben wissen. Kein Diagnoseprotokoll, nur App Group.
 struct TaskSnapshot: Codable, Sendable, Equatable {
     static let formatVersion = 1

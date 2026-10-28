@@ -66,6 +66,9 @@ enum PaplyURL {
     /// Reiter „Aufgaben“ (Aufgaben-Widget)
     static let tasks = URL(string: "\(scheme)://thoughts/tasks")
 
+    /// Beta „Gedanken & Aufgaben“ ist aus: App zeigt den Hinweis (Gedanken-Knopf aus dem Widget-Prozess)
+    static let betaThoughts = URL(string: "\(scheme)://beta/thoughts")
+
     /// Eine Aufgabe im Gedanken öffnen (Reiter „Aufgaben“, Detail an der Aufgabe) – aus dem Aufgaben-Widget
     static func task(thoughtID: String, taskID: String) -> URL? {
         let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))

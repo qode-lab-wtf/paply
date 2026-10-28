@@ -92,6 +92,20 @@ enum ThoughtBridge {
         }
     }
 
+    /// Beta „Gedanken & Aufgaben“: Darf der Knopf etwas tun? An – ja; aus – nur eine noch laufende Aufnahme beenden.
+    /// Liest den Stand nach dem ersten Entsperren neu (vorher gilt der Standard, die Aufnahme lehnt dann ohnehin ab).
+    static func allowsToggle() -> Bool {
+        ProtectedData.check()
+        AppSettings.shared.reloadIfNeeded()
+        return AppSettings.shared.betaThoughts || ThoughtCapture.shared.active != nil
+    }
+
+    /// Beta aus, Knopf gedrückt, Paply ist jetzt vorne: Hinweis mit dem Weg in die Einstellungen (RootView)
+    static func showBetaHint() {
+        Diag.log("thought.betaHint", ["app": .s(SessionController.appState)])
+        BetaHint.shared.show()
+    }
+
     /// Fall B gescheitert, die App ist jetzt vorne: hier klappt der Sitzungsstart.
     static func startInForeground(trigger: ThoughtTrigger) async {
         guard ThoughtCapture.shared.active == nil else { return }
@@ -107,6 +121,11 @@ enum ThoughtBridge {
         Task {
             switch command.action {
             case .toggle:
+                // Beta aus (die Erweiterung prüft das schon; hier nur zur Sicherheit): nicht aufnehmen
+                guard allowsToggle() else {
+                    Diag.log("thought.forwarded.betaOff")
+                    return
+                }
                 _ = await toggle(trigger: ThoughtTrigger(rawValue: command.trigger) ?? .unknown)
             case .finish:
                 if let id = command.thoughtID { await finishFromActivity(id: id) }

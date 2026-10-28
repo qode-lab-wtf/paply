@@ -56,7 +56,8 @@ struct CaptureInsetBarModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
-            if !CaptureBarPlacement.usesAccessory, flow.bar != .hidden {
+            // Beta „Gedanken & Aufgaben“ aus: keine Leiste (auch nicht über dem Diktat)
+            if !CaptureBarPlacement.usesAccessory, flow.bar != .hidden, AppSettings.shared.betaThoughts {
                 CaptureBarContent(flow: flow, compact: false)
                     .padding(.horizontal, 16)
                     .frame(height: 58)

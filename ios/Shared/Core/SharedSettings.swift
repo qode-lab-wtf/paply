@@ -81,6 +81,12 @@ enum SharedSettings {
         set { AppGroup.defaults?.set(newValue, forKey: Key.logHostBundleID) }
     }
 
+    /// Beta „Gedanken & Aufgaben“ (fehlt = an). App schreibt, Widgets und Tastatur lesen (`BetaFeatures`).
+    static var betaThoughts: Bool {
+        get { BetaFeatures.thoughtsEnabled(AppGroup.defaults) }
+        set { AppGroup.defaults?.set(newValue, forKey: BetaFeatures.thoughtsKey) }
+    }
+
     static var keyboardHeights: KeyboardHeights {
         get {
             guard let data = AppGroup.defaults?.data(forKey: Key.keyboardHeights),

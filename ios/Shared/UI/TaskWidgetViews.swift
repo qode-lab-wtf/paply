@@ -12,6 +12,7 @@ import WidgetKit
 // - in der Zeile: „3 fällig · nächste 15:00“.
 // Home (Stil von Apples Erinnerungen, Paply-Optik): bis zu 3 (klein) bzw. 4 (mittel) Aufgaben mit Kreis zum Abhaken
 // (`Button(intent:)`), Themenfarbe als Punkt, Fälligkeit. Texte auch hier `.privacySensitive()` (StandBy).
+// Beta „Gedanken & Aufgaben“ aus: überall ruhig „In Paply unter Beta einschalten“, keine Aufgaben, kein Abhaken.
 
 /// Was ein Aufgaben-Widget zu einem Zeitpunkt zeigt
 struct TaskWidgetContent: Sendable {
@@ -21,6 +22,8 @@ struct TaskWidgetContent: Sendable {
         case noData
         /// vor dem ersten Entsperren nach einem Neustart nicht lesbar
         case locked
+        /// Beta „Gedanken & Aufgaben“ ist aus
+        case betaOff
     }
 
     let date: Date
@@ -34,6 +37,11 @@ struct TaskWidgetContent: Sendable {
     }
 
     var counts: TaskSnapshot.Counts? { snapshot?.counts(at: date) }
+
+    var isBetaOff: Bool {
+        if case .betaOff = state { return true }
+        return false
+    }
 }
 
 // MARK: - Einstieg
@@ -137,6 +145,9 @@ enum TaskWidgetText {
         counts.urgent > 0 ? "\(counts.urgent) fällig" : "\(counts.open) offen"
     }
 
+    /// Beta „Gedanken & Aufgaben“ aus
+    static let betaOff = "In Paply unter Beta einschalten"
+
     static func doneToday(_ n: Int) -> String {
         n == 1 ? "Heute 1 erledigt" : "Heute \(n) erledigt"
     }
@@ -164,7 +175,9 @@ struct TaskWidgetCircular: View {
         .gaugeStyle(.accessoryCircularCapacity)
         .widgetAccentable()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(counts.map { $0.open == 0 ? "Aufgaben: alles erledigt" : TaskWidgetText.accessibility($0) } ?? "Aufgaben")
+        .accessibilityLabel(content.isBetaOff ? "Aufgaben: \(TaskWidgetText.betaOff)"
+            : counts.map { $0.open == 0 ? "Aufgaben: alles erledigt" : TaskWidgetText.accessibility($0) } ?? "Aufgaben")
+        .opacity(content.isBetaOff ? 0.6 : 1)
     }
 
     @ViewBuilder
@@ -210,6 +223,8 @@ struct TaskWidgetRectangular: View {
                 Text("Öffne Paply einmal").font(.subheadline).foregroundStyle(.secondary)
             case .locked:
                 Text("Nach dem Entsperren").font(.subheadline).foregroundStyle(.secondary)
+            case .betaOff:
+                Text(TaskWidgetText.betaOff).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -262,6 +277,7 @@ struct TaskWidgetInline: View {
 
     /// längste zuerst; ViewThatFits nimmt die erste, die passt
     private var variants: [String] {
+        if content.isBetaOff { return [TaskWidgetText.betaOff, "Beta in Paply einschalten", "Beta aus"] }
         guard let snapshot = content.snapshot, let counts = content.counts else { return ["Aufgaben"] }
         guard counts.open > 0 else { return ["Alles erledigt"] }
         let count = TaskWidgetText.count(counts)
@@ -292,6 +308,8 @@ struct TaskWidgetHome: View {
                 note("Öffne Paply einmal – dann stehen deine Aufgaben hier.")
             case .locked:
                 note("Nach dem ersten Entsperren wieder da.")
+            case .betaOff:
+                note(TaskWidgetText.betaOff + ".")
             }
         }
         // oben ausgerichtet ohne eigenen Spacer (der kostete einen Abstand – dann passte eine Zeile weniger)
@@ -511,7 +529,8 @@ private struct TaskWidgetCheck: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Abhaken: \(item.text)")
+        // ohne den Wortlaut: VoiceOver liest den Text der Zeile daneben (`.privacySensitive()` – gesperrt nie vorgelesen)
+        .accessibilityLabel("Aufgabe abhaken")
     }
 
     private var circle: some View {

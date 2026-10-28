@@ -10,6 +10,8 @@
 // - „Erledigt“ läuft im App-Prozess im Hintergrund: zuerst in eine kleine Warteschlange (ohne Dateischutz, nur
 //   Kennungen), dann über dasselbe Modell abgehakt und gespeichert. Vor dem ersten Entsperren bleibt es in der
 //   Warteschlange und wird danach angewendet. Idempotent.
+// - Beta „Gedanken & Aufgaben“ aus (`AppSettings.betaThoughts`): nichts geplant, Geplantes und Zugestelltes entfernt,
+//   „In 1 Stunde“ plant nicht neu. Umschalten gleicht sofort ab.
 // - Erlaubnis: nie beim Start. Karte im Reiter „Aufgaben“ (`TaskReminderPromptSection`) oder Schalter in den
 //   Einstellungen (`TaskReminderSettingsSection`).
 import Foundation
@@ -17,6 +19,7 @@ import Observation
 import PaplyKit
 import UIKit
 import UserNotifications
+import WidgetKit
 
 /// Schlüssel und Kennungen (ohne Akteur – auch der Delegate liest sie)
 enum TaskReminderKeys {
@@ -70,6 +73,8 @@ final class TaskReminders {
     @ObservationIgnored private var running: Task<Void, Never>?
     @ObservationIgnored private var reconcileAgain = false
     @ObservationIgnored private var nextReason = ""
+    /// hält die App beim Abgleich nach dem Wechsel in den Hintergrund kurz wach
+    @ObservationIgnored private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     private init() {}
 
@@ -109,6 +114,9 @@ final class TaskReminders {
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { TaskReminders.shared.foreground() }
         })
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { TaskReminders.shared.background() }
+        })
         for name in [UIApplication.significantTimeChangeNotification, Notification.Name.NSSystemTimeZoneDidChange] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { TaskReminders.shared.scheduleReconcile("time") }
@@ -135,6 +143,27 @@ final class TaskReminders {
             await moveLockedCompletions()
             scheduleReconcile("foreground", delay: .milliseconds(300))
         }
+    }
+
+    /// In den Hintergrund (z. B. kurz vor der Uhrzeit abgehakt und gleich gesperrt): sofort abgleichen statt nach der
+    /// Entprellung – sonst käme die Erinnerung der eben erledigten Aufgabe womöglich noch. Hält die App dafür kurz wach.
+    private func background() {
+        debounce?.cancel()
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "paply.reminders") {
+            MainActor.assumeIsolated { TaskReminders.shared.endBackgroundTask() }
+        }
+        let held = backgroundTask
+        Task {
+            await reconcileNow(reason: "background")
+            if backgroundTask == held { endBackgroundTask() }
+        }
+    }
+
+    private func endBackgroundTask() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
     }
 
     private func loadSettings() {
@@ -281,11 +310,15 @@ final class TaskReminders {
     private func reconcileOnce(reason: String) async {
         // Vor dem ersten Entsperren oder vor dem Laden wäre die Liste leer: dann nichts anfassen
         guard ProtectedData.isReadable, settingsLoaded else { return }
+        // Beta „Gedanken & Aufgaben“ aus: keine Erinnerungen – alles Geplante und Zugestellte weg (braucht die Gedanken
+        // nicht, also auch vor dem Laden)
+        AppSettings.shared.reloadIfNeeded()
+        let beta = AppSettings.shared.betaThoughts
         let model = ThoughtsModel.shared
-        guard model.isLoaded else { return }
+        guard model.isLoaded || !beta else { return }
         let center = UNUserNotificationCenter.current()
         await refreshAuthorization()
-        let allowed = isAllowed && enabled
+        let allowed = isAllowed && enabled && beta
         var current: [String: String] = [:]
         var snoozes: [String: TaskReminderPlan.Snooze] = [:]
         for request in await center.pendingNotificationRequests() where TaskReminderPlan.parse(request.identifier) != nil {
@@ -312,14 +345,14 @@ final class TaskReminders {
                 failed += 1
             }
         }
-        // schon zugestellte von erledigten, gelöschten oder weggeworfenen Aufgaben
+        // schon zugestellte von erledigten, gelöschten oder weggeworfenen Aufgaben (Beta aus: alle)
         let delivered = await center.deliveredNotifications().map(\.request.identifier)
-        let stale = TaskReminderPlan.stale(delivered: delivered, thoughts: thoughts)
+        let stale = TaskReminderPlan.removableDelivered(delivered, thoughts: thoughts, featureOn: beta)
         if !stale.isEmpty { center.removeDeliveredNotifications(withIdentifiers: stale) }
         plannedCount = desired.count
         guard !changes.isEmpty || !stale.isEmpty || reason != "change" else { return }
         Diag.log("reminders.reconcile", [
-            "reason": .s(reason), "allowed": .b(allowed), "planned": .i(desired.count), "added": .i(changes.schedule.count),
+            "reason": .s(reason), "allowed": .b(allowed), "beta": .b(beta), "planned": .i(desired.count), "added": .i(changes.schedule.count),
             "removed": .i(changes.remove.count), "unchanged": .i(changes.unchanged), "staleDelivered": .i(stale.count),
             "failed": .i(failed), "snoozed": .i(desired.filter(\.snoozed).count),
         ])
@@ -409,6 +442,8 @@ final class TaskReminders {
             Diag.log("reminders.done.locked")
             return
         }
+        // wie der Intent im Widget: Aufgabe sofort aus der Momentaufnahme, Widgets gleich neu laden
+        if TaskWidgetFiles.applyOptimistically(completion) { WidgetCenter.shared.reloadTimelines(ofKind: WidgetKinds.tasks) }
         // wartet, bis die Gedanken gelesen sind (Kaltstart im Hintergrund); sonst übernimmt es der Start
         await TaskWidgetSync.shared.applyQueue(reason: "reminder", wait: .seconds(15))
         scheduleReconcile("done", delay: .milliseconds(200))
@@ -432,6 +467,16 @@ final class TaskReminders {
     /// „In 1 Stunde“: dieselbe Mitteilung (gleiche Kennung) eine Stunde später. Braucht keine Daten der App – geht also
     /// auch vor dem ersten Entsperren; der Abgleich liest den Stand aus der geplanten Mitteilung.
     private func snooze(_ response: Response, thoughtID: String, taskID: String) async {
+        // Beta „Gedanken & Aufgaben“ aus: nichts neu planen (die Mitteilung kam vor dem Ausschalten)
+        guard AppSettings.shared.betaThoughts else {
+            Diag.log("reminders.snooze.skipped", ["why": .s("beta-off")])
+            return
+        }
+        // Nur für eine offene Aufgabe – keine Mitteilung zu Erledigtem
+        guard await taskStillOpen(thoughtID: thoughtID, taskID: taskID) else {
+            Diag.log("reminders.snooze.skipped", ["why": .s("not-open"), "loaded": .b(ThoughtsModel.shared.isLoaded)])
+            return
+        }
         let now = Date()
         let reminder = TaskReminder(id: response.requestID, thoughtID: thoughtID, taskID: taskID,
                                     fireAt: TaskReminderPlan.snoozed(from: now), dueAt: response.dueAt ?? now, snoozed: true,
@@ -441,6 +486,28 @@ final class TaskReminders {
         } catch {
             Diag.log("reminders.snooze.failed", ["code": .i((error as NSError).code)])
         }
+    }
+
+    /// Ist die Aufgabe noch offen (`TaskReminderPlan.maySnooze`)? Kaltstart im Hintergrund: bis zu 5 s auf die Gedanken
+    /// warten; sonst entscheiden Warteschlange und Momentaufnahme (im Zweifel nein).
+    private func taskStillOpen(thoughtID: String, taskID: String) async -> Bool {
+        ProtectedData.check() // lädt ggf. Aufgeschobenes (Modell)
+        let model = ThoughtsModel.shared
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(5)
+        while ProtectedData.isReadable, !model.isLoaded, clock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let readable = ProtectedData.isReadable
+        let matches = { (c: TaskCompletion) in c.thoughtID == thoughtID && c.taskID == taskID }
+        let queued = LockedCompletions.load().contains(where: matches)
+            || (readable && TaskWidgetFiles.pendingCompletions().contains(where: matches))
+        let inSnapshot: Bool? = readable
+            ? TaskWidgetFiles.readSnapshot().map { $0.items.contains { $0.thoughtID == thoughtID && $0.taskID == taskID } }
+            : nil
+        let facts = TaskReminderPlan.SnoozeFacts(thoughts: model.isLoaded ? model.thoughts : nil, queued: queued,
+                                                 inSnapshot: inSnapshot, locked: !readable)
+        return TaskReminderPlan.maySnooze(thoughtID: thoughtID, taskID: taskID, facts: facts)
     }
 
     /// Antippen: Gedanke an der Aufgabe öffnen – über denselben App-Link wie das Widget (RootView.onOpenURL)

@@ -13,6 +13,8 @@ import WidgetKit
 /// mit Face ID“ aus ist). Text (mittel) öffnet den Gedanken an der Aufgabe (`paply-ios://task/<Gedanke>/<Aufgabe>`),
 /// sonst öffnet das Widget den Reiter Aufgaben (klein unterstützt nur `widgetURL`).
 /// Gesperrt: `.privacySensitive()` – iOS zeigt statt der Texte Platzhalter, Zahl und Uhrzeiten bleiben.
+/// Beta „Gedanken & Aufgaben“ aus (`BetaFeatures`, App Group): ruhiger Zustand ohne Aufgaben; antippen öffnet Paply mit
+/// dem Hinweis. Die App lädt alle Widgets beim Umschalten neu.
 struct TasksWidget: Widget {
     static let kind = WidgetKinds.tasks
 
@@ -43,7 +45,8 @@ struct TasksWidgetProvider: TimelineProvider {
         let now = Date()
         if context.isPreview {
             // Widget-Galerie: Beispiel statt echter Aufgaben (auch, solange Paply noch nichts geschrieben hat)
-            completion(TasksWidgetEntry(date: now, state: .ready(.sample(now: now)), requiresAuth: true))
+            let state: TaskWidgetContent.State = Self.betaOn ? .ready(.sample(now: now)) : .betaOff
+            completion(TasksWidgetEntry(date: now, state: state, requiresAuth: true))
             return
         }
         completion(TasksWidgetEntry(date: now, state: Self.state(), requiresAuth: Self.requiresAuth))
@@ -57,8 +60,8 @@ struct TasksWidgetProvider: TimelineProvider {
         case .ready(let snapshot):
             let entries = snapshot.timelineDates(from: now).map { TasksWidgetEntry(date: $0, state: state, requiresAuth: auth) }
             completion(Timeline(entries: entries, policy: .atEnd))
-        case .noData:
-            // die App lädt neu, sobald sie zum ersten Mal schreibt
+        case .noData, .betaOff:
+            // die App lädt neu, sobald sie zum ersten Mal schreibt bzw. die Beta umgeschaltet wird
             completion(Timeline(entries: [TasksWidgetEntry(date: now, state: state, requiresAuth: auth)], policy: .never))
         case .locked:
             // vor dem ersten Entsperren: später erneut lesen
@@ -68,7 +71,8 @@ struct TasksWidgetProvider: TimelineProvider {
     }
 
     private static func state() -> TaskWidgetContent.State {
-        switch TaskWidgetFiles.loadCurrent() {
+        guard betaOn else { return .betaOff }
+        return switch TaskWidgetFiles.loadCurrent() {
         case .ready(let snapshot): .ready(snapshot)
         case .missing: .noData
         case .unreadable: .locked
@@ -76,6 +80,9 @@ struct TasksWidgetProvider: TimelineProvider {
     }
 
     private static var requiresAuth: Bool { TaskWidgetSettings.requiresAuth(AppGroup.defaults) }
+
+    /// Beta „Gedanken & Aufgaben“ (vor dem ersten Entsperren nicht lesbar → an; die Aufgaben sind dann ohnehin gesperrt)
+    private static var betaOn: Bool { BetaFeatures.thoughtsEnabled(AppGroup.defaults) }
 }
 
 struct TasksWidgetEntryView: View {

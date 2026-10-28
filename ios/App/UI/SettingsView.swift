@@ -76,6 +76,11 @@ private extension View {
 /// Nur das, was man im Alltag braucht. Alles Technische liegt im Entwicklerbereich
 /// (erscheint nach 5× Tippen auf die Version).
 struct SettingsView: View {
+    /// Abschnitt „Beta“ (Ziel für `focus`, Hinweis „Gedanken sind Beta“)
+    static let betaAnchor = "beta"
+
+    /// Abschnitt, zu dem die Seite beim Öffnen rollt
+    var focus: String?
     @Bindable private var settings = AppSettings.shared
     private let setup = SetupStatus.shared
     @State private var keyDraft = ""
@@ -92,15 +97,22 @@ struct SettingsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             form
-                #if DEBUG
                 .task {
-                    // Bildschirmfotos: direkt zum Abschnitt „Gedanken“
-                    guard ProcessInfo.processInfo.arguments.contains("-PaplySettingsThoughts") else { return }
-                    try? await Task.sleep(for: .milliseconds(500))
-                    proxy.scrollTo("thoughts", anchor: .top)
+                    guard let target = scrollTarget else { return }
+                    try? await Task.sleep(for: .milliseconds(450))
+                    withAnimation(.paplySmooth) { proxy.scrollTo(target, anchor: .top) }
                 }
-                #endif
         }
+    }
+
+    /// `focus`; im Debug für Bildschirmfotos auch `-PaplySettingsThoughts` bzw. `-PaplySettingsBeta`
+    private var scrollTarget: String? {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-PaplySettingsThoughts") { return "thoughts" }
+        if args.contains("-PaplySettingsBeta") { return Self.betaAnchor }
+        #endif
+        return focus
     }
 
     private var form: some View {
@@ -117,7 +129,7 @@ struct SettingsView: View {
             } header: {
                 Text("Erkennung")
             } footer: {
-                Text("Gilt für Diktat und Gedanken.")
+                Text(settings.betaThoughts ? "Gilt für Diktat und Gedanken." : "Gilt fürs Diktat.")
             }
             .paplyRows()
 
@@ -133,27 +145,31 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text("So lange nach der letzten Nutzung hört Paply sofort zu, wenn du in der Tastatur diktierst. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst. Der Gedanken-Knopf braucht das nicht: Er startet das Mikro selbst, auch wenn Paply nicht läuft.")
+                Text(holdFooter)
             }
             .paplyRows()
 
-            Section {
-                NavigationLink(value: Route.thoughtButton) {
-                    HStack(spacing: 12) {
-                        ThoughtSettingsIcon()
-                        Text("Gedanken-Knopf").foregroundStyle(Color.paplyText)
+            betaSection
+
+            if settings.betaThoughts {
+                Section {
+                    NavigationLink(value: Route.thoughtButton) {
+                        HStack(spacing: 12) {
+                            ThoughtSettingsIcon()
+                            Text("Gedanken-Knopf").foregroundStyle(Color.paplyText)
+                        }
                     }
+                } header: {
+                    Text("Gedanken")
+                } footer: {
+                    Text("Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.")
                 }
-            } header: {
-                Text("Gedanken")
-            } footer: {
-                Text("Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.")
-            }
-            .paplyRows()
-            .id("thoughts")
+                .paplyRows()
+                .id("thoughts")
 
-            // Erinnerungen zur Uhrzeit (TaskReminders)
-            TaskReminderSettingsSection()
+                // Erinnerungen zur Uhrzeit (TaskReminders)
+                TaskReminderSettingsSection()
+            }
 
             Section {
                 if setup.needsKeyboardSetup {
@@ -206,6 +222,33 @@ struct SettingsView: View {
             Diag.log("settings.hold", ["hold": .s(value.rawValue)])
             SessionController.shared.refreshShared()
         }
+    }
+
+    private var holdFooter: String {
+        let base = "So lange nach der letzten Nutzung hört Paply sofort zu, wenn du in der Tastatur diktierst. Den orangen Punkt bzw. das Mikro-Symbol oben zeigt iOS – Paply speichert und sendet dabei nichts, bis du sprichst."
+        guard settings.betaThoughts else { return base }
+        return base + " Der Gedanken-Knopf braucht das nicht: Er startet das Mikro selbst, auch wenn Paply nicht läuft."
+    }
+
+    // MARK: Beta
+
+    /// Beta „Gedanken & Aufgaben“ (`AppSettings.betaThoughts`). Aus: nur das Diktat; Gedanken, Aufgaben und
+    /// Erinnerungen blendet die App aus, gespeichert bleibt alles.
+    private var betaSection: some View {
+        Section {
+            Toggle(isOn: $settings.betaThoughts) {
+                HStack(spacing: 12) {
+                    SettingsIcon(glyph: .flaskConical)
+                    Text("Gedanken & Aufgaben").foregroundStyle(Color.paplyText)
+                }
+            }
+        } header: {
+            Text("Beta")
+        } footer: {
+            Text("Neue Funktionen im Test: Gedanken per Knopf festhalten, Landkarte, Aufgaben, Erinnerungen und Widgets. Aus heißt nur ausgeblendet – deine Gedanken und Aufgaben bleiben gespeichert.")
+        }
+        .paplyRows()
+        .id(Self.betaAnchor)
     }
 
     // MARK: Groq-Schlüssel

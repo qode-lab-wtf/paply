@@ -110,6 +110,7 @@ struct TasksPage: View {
         .background(PaplyBackground())
         .navigationTitle("Aufgaben")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar { BetaToolbarBadge() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

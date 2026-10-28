@@ -10,6 +10,10 @@ import PaplyKit
 // `LiveActivityIntent` lässt `perform()` im App-Prozess laufen; landet es doch in der Erweiterung,
 // leitet die Erweiterung per Darwin an die App weiter. Antworten ohne Dialog (sonst spricht Siri
 // in die Aufnahme).
+// Beta „Gedanken & Aufgaben“ aus (`BetaFeatures`): kein Gedanke. Im App-Prozess fragt iOS mit der Meldung, ob Paply
+// nach vorne kommen soll (`continueWithBetaHint`, dieselbe Mechanik wie der Ausweg bei Fall B); die App zeigt dann den
+// Hinweis. Im Widget-Prozess öffnet das Widget Paply mit dem Hinweis (`paply-ios://beta/thoughts`, ab iOS 18.2),
+// sonst bleibt der Fehlertext (Siri und Kurzbefehle zeigen ihn).
 
 /// Siri, Kurzbefehle, Aktionstaste über Kurzbefehl: Gedanke an/aus.
 struct ToggleThoughtIntent: AudioRecordingIntent, LiveActivityIntent {
@@ -23,6 +27,10 @@ struct ToggleThoughtIntent: AudioRecordingIntent, LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         let result = await ThoughtIntentRunner.toggle(trigger: "shortcut", intent: "toggle")
         #if PAPLY_APP
+        if case .betaOff = result {
+            try await continueWithBetaHint()
+            return .result()
+        }
         if case .needsForeground = result {
             try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
                 await ThoughtBridge.startInForeground(trigger: .shortcut)
@@ -48,6 +56,10 @@ struct SetThoughtRecordingIntent: SetValueIntent, AudioRecordingIntent, LiveActi
     func perform() async throws -> some IntentResult {
         let result = await ThoughtIntentRunner.toggle(trigger: "control", intent: "control")
         #if PAPLY_APP
+        if case .betaOff = result {
+            try await continueWithBetaHint()
+            return .result()
+        }
         if case .needsForeground = result {
             try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
                 await ThoughtBridge.startInForeground(trigger: .control)
@@ -72,6 +84,10 @@ struct ThoughtWidgetIntent: AudioRecordingIntent, LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         let result = await ThoughtIntentRunner.toggle(trigger: "control", intent: "widget")
         #if PAPLY_APP
+        if case .betaOff = result {
+            try await continueWithBetaHint()
+            return .result()
+        }
         if case .needsForeground = result {
             try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
                 await ThoughtBridge.startInForeground(trigger: .control)
@@ -82,9 +98,10 @@ struct ThoughtWidgetIntent: AudioRecordingIntent, LiveActivityIntent {
         // Widget-Prozess, die App hat nicht reagiert (nicht bereit oder nicht wach). Ein Fehler bliebe beim
         // Widget-Knopf unsichtbar – es passierte einfach nichts. Deshalb Paply öffnen: Die große Ansicht nimmt auf,
         // läuft schon eine Aufnahme, zeigt sie die. `result(opensIntent:)` mit gleichem Ergebnistyp gibt es ab
-        // iOS 18.2; unter 18.0/18.1 bleibt es beim Fehler.
-        if !result.isOK, #available(iOS 18.2, *), let url = PaplyURL.thoughtStart(source: "widget") {
-            Diag.log("thought.intent.widget.openApp")
+        // iOS 18.2; unter 18.0/18.1 bleibt es beim Fehler. Beta „Gedanken & Aufgaben“ aus: Paply zeigt den Hinweis.
+        if !result.isOK, #available(iOS 18.2, *),
+           let url = result.isBetaOff ? PaplyURL.betaThoughts : PaplyURL.thoughtStart(source: "widget") {
+            Diag.log("thought.intent.widget.openApp", ["betaOff": .b(result.isBetaOff)])
             return .result(opensIntent: OpenURLIntent(url))
         }
         #endif
@@ -140,6 +157,17 @@ struct DiscardThoughtIntent: LiveActivityIntent {
 extension ToggleThoughtIntent: ForegroundContinuableIntent {}
 extension SetThoughtRecordingIntent: ForegroundContinuableIntent {}
 extension ThoughtWidgetIntent: ForegroundContinuableIntent {}
+
+extension ForegroundContinuableIntent {
+    /// Beta „Gedanken & Aufgaben“ aus: nicht aufnehmen. Derselbe Weg wie beim Ausweg oben – iOS zeigt die Meldung
+    /// (Siri, Kurzbefehl, Aktionstaste) bzw. holt Paply nach vorne (Knopf, Steuerelement, Widget), und die App zeigt den
+    /// Hinweis mit dem Weg in die Einstellungen. Bricht man in iOS ab, hat man die Meldung trotzdem gesehen.
+    func continueWithBetaHint() async throws {
+        try await requestToContinueInForeground("Gedanken sind Beta – in den Einstellungen unter Beta einschalten.") {
+            ThoughtBridge.showBetaHint()
+        }
+    }
+}
 #endif
 
 enum ThoughtIntentError: Error, CustomLocalizedStringResourceConvertible {
@@ -167,10 +195,17 @@ enum ThoughtIntentRunner {
         case ok
         case refused(String)
         case needsForeground(String)
+        /// Beta „Gedanken & Aufgaben“ ist aus – nicht aufgenommen, Hinweis zeigen
+        case betaOff
 
         /// Die App hat den Knopf übernommen.
         var isOK: Bool {
             if case .ok = self { return true }
+            return false
+        }
+
+        var isBetaOff: Bool {
+            if case .betaOff = self { return true }
             return false
         }
 
@@ -180,6 +215,7 @@ enum ThoughtIntentRunner {
             case .ok: break
             case .refused(let message): throw ThoughtIntentError.refused(message)
             case .needsForeground: throw ThoughtIntentError.refused("Paply ist gerade nicht bereit. Öffne Paply einmal.")
+            case .betaOff: throw ThoughtIntentError.refused(BetaFeatures.thoughtsOffMessage)
             }
         }
     }
@@ -193,6 +229,11 @@ enum ThoughtIntentRunner {
             "sinceProcessStartMs": .ms(MonoClock.ms(from: MonoClock.processStart, to: started)),
         ])
         #if PAPLY_APP
+        // Beta aus: nicht aufnehmen (eine noch laufende Aufnahme lässt sich aber beenden)
+        guard await ThoughtBridge.allowsToggle() else {
+            Diag.log("thought.intent.betaOff", ["intent": .s(intent)])
+            return .betaOff
+        }
         switch await ThoughtBridge.toggle(trigger: ThoughtTrigger(rawValue: trigger) ?? .unknown) {
         case .started, .stopped, .ignored:
             return .ok
@@ -205,6 +246,11 @@ enum ThoughtIntentRunner {
         #else
         // Widget-Prozess: weiterleiten und kurz prüfen, ob die App reagiert (Aufnahme-Zustand wechselt)
         let before = SharedStore.read(ThoughtStateFile.self, .thoughtState)?.recording ?? false
+        // Beta aus und nichts läuft: gar nicht erst weiterleiten
+        if !before, !BetaFeatures.thoughtsEnabled(AppGroup.defaults) {
+            Diag.log("thought.intent.betaOff", ["intent": .s(intent)])
+            return .betaOff
+        }
         forward(.toggle, trigger: trigger, id: nil)
         for _ in 0..<20 {
             try? await Task.sleep(for: .milliseconds(100))
