@@ -110,14 +110,15 @@ private fun HistoryRow(entry: HistoryEntry, copy: () -> Unit, detail: () -> Unit
 fun HistoryDetailScreen(entry: HistoryEntry?, copy: (String) -> Unit, share: (String) -> Unit, onRetry: (HistoryEntry) -> Unit) {
     if (entry == null) { EmptyState("Nicht mehr im Verlauf", "Dieses Diktat wurde entfernt.", PaplyIcons.Clock); return }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        Section("Eingesetzt") { Copyable(if (entry.status == HistoryStatus.OK) entry.text else "", "nichts", copy) }
+        Section("Text") { Copyable(entry.text, "nichts", copy) }
         Section("Rohtext") { Copyable(entry.raw, "leer", copy) }
         Section("Polieren") {
             SettingsItem("Ergebnis", value = if (entry.polished.isNotEmpty()) "poliert" else "unpoliert")
             if (entry.status != HistoryStatus.OK && entry.polished.isNotEmpty()) Copyable(entry.polished, "leer", copy)
         }
         if (entry.status != HistoryStatus.OK || entry.error != null) Section(if (entry.status == HistoryStatus.FAILED) "Fehler" else "Status") {
-            Text(entry.error ?: if (entry.status == HistoryStatus.PENDING) "Wird verarbeitet …" else "Verarbeitung fehlgeschlagen.",
+            Text(entry.error ?: if (entry.status == HistoryStatus.PENDING && entry.text.isNotBlank()) "Text ist gesichert und wartet auf das Einsetzen."
+                else if (entry.status == HistoryStatus.PENDING) "Wird verarbeitet …" else "Verarbeitung fehlgeschlagen.",
                 color = if (entry.status == HistoryStatus.FAILED) C.danger else C.beak, modifier = Modifier.padding(16.dp))
             if (entry.status == HistoryStatus.FAILED) TextButton(onClick = { onRetry(entry) }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Erneut versuchen") }
         }

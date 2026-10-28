@@ -5,8 +5,9 @@ import android.app.Application
 class PaplyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        // An IME dictation belongs to its input connection; process death makes it unusable.
-        // Durable thought recordings live in files/thoughts and are deliberately retained.
+        com.paply.android.dictation.DictationRuntime.recover(this)
+        // Remove only obsolete Phase-0 cache recordings. Confirmed dictations now live in
+        // files/dictations and are recovered above; thoughts have their own durable store.
         cacheDir.listFiles()?.filter { it.name.startsWith("dictation-") && it.extension == "wav" }
             ?.forEach { it.delete() }
     }

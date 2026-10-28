@@ -10,6 +10,7 @@ android {
         applicationId = "com.paply.android"
         minSdk = 29
         targetSdk = 37
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.0.1-phase0"
     }
@@ -25,6 +26,8 @@ android {
 }
 dependencies {
     implementation(project(":core"))
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation(libs.junit)
     implementation(libs.androidx.core)
     implementation(libs.coroutines.android)
     implementation(platform(libs.compose.bom))

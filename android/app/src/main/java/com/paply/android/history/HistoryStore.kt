@@ -56,6 +56,12 @@ class HistoryStore private constructor(context: Context) {
         require(entry.id.isNotBlank() && entry.durationMs >= 0)
         change { old -> (listOf(entry) + old.filter { it.id != entry.id }).sortedByDescending { it.createdAt }.take(LIMIT) }
     }
+    /** Async work must never recreate an entry the user deleted while it was running. */
+    suspend fun updateIfPresent(entry: HistoryEntry): Boolean {
+        var updated = false
+        change { old -> old.map { if (it.id == entry.id) { updated = true; entry } else it } }
+        return updated
+    }
     suspend fun delete(ids: Set<String>) = change { list -> list.filterNot { it.id in ids } }
     suspend fun deleteAll() = change { emptyList() }
 

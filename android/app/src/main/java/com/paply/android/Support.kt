@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.util.Log
 import android.widget.*
 import androidx.core.content.edit
-import com.paply.core.GroqClient
 import com.paply.core.GroqFailure
 
 object Brand {
@@ -22,18 +21,9 @@ object Diag {
 }
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("paply-private", Context.MODE_PRIVATE)
-    // Keep the commit result: reporting a saved key requires durable success.
-    @set:android.annotation.SuppressLint("UseKtx")
-    var apiKey: String
-        get() = prefs.getString("groq", "").orEmpty()
-        set(value) { check(prefs.edit().putString("groq", value.trim()).commit()) }
     var directTile: Boolean
         get() = BuildConfig.DEBUG && prefs.getBoolean("directTile", false)
         set(value) { prefs.edit { putBoolean("directTile", BuildConfig.DEBUG && value) } }
-    fun client(): GroqClient {
-        check(apiKey.isNotBlank()) { "missing-key" }
-        return GroqClient(apiKey, diagnostic = Diag::event)
-    }
 }
 fun safeError(e: Throwable): String = when (e) {
     is SecurityException -> "Mikrofonzugriff nicht erlaubt. Bitte Paply einrichten."

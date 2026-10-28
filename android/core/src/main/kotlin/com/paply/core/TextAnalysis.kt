@@ -3,7 +3,7 @@ package com.paply.core
 import java.text.Normalizer
 import java.util.Locale
 
-internal object TextAnalysis {
+public object TextAnalysis {
     fun normalizedLower(text: String): String {
         val lower = Normalizer.normalize(text, Normalizer.Form.NFC).lowercase(Locale.ROOT)
         if ('\u0307' !in lower && '\u0131' !in lower) return lower

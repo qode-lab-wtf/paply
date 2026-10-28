@@ -25,7 +25,7 @@ class KeyVault(context: Context) {
 
     @SuppressLint("UseKtx") // A success must mean the encrypted value is durable.
     fun save(value: String) = synchronized(lock) {
-        val key = value.trim()
+        val key = com.paply.core.sanitizeApiKey(value)
         require(key.isNotEmpty())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())

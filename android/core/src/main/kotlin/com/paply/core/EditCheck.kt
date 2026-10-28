@@ -1,6 +1,6 @@
 package com.paply.core
 
-internal object EditCheck {
+public object EditCheck {
     val numberWords: Map<String, Int> = buildMap {
         fun add(value: Int, vararg words: String) {
             for (w in words) put(TextAnalysis.normalizedLower(w), value)

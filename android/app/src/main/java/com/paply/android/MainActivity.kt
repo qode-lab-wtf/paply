@@ -14,6 +14,6 @@ class MainActivity : ComponentActivity() {
         // The iOS reference deliberately uses its dark forest appearance in both system themes.
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        setContent { PaplyApp(this) }
+        setContent { PaplyApp(this, onRetry = { com.paply.android.dictation.DictationRuntime.retry(applicationContext, it) }) }
     }
 }

@@ -173,7 +173,7 @@ class GroqClient(
         }
     }
 
-    internal fun request(path: String, authenticated: Boolean = true) =
+    fun request(path: String, authenticated: Boolean = true) =
         Request.Builder().url(requireNotNull(baseUrl.resolve(path))).apply {
             if (authenticated) {
                 // Reject before OkHttp can throw an IllegalArgumentException containing the key.
@@ -183,7 +183,7 @@ class GroqClient(
             }
         }
 
-    internal suspend fun <T> send(
+    suspend fun <T> send(
         request: Request,
         idleSeconds: Double = polishIdleTimeout,
         parse: (Response) -> T,

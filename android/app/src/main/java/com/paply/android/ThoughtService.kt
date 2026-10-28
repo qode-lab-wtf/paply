@@ -76,7 +76,8 @@ class ThoughtService : Service() {
                 }
                 withContext(Dispatchers.IO) { ThoughtStore(this@ThoughtService).markReady(result) }
                 notifications.notify(NOTIFICATION, notification(ThoughtState.current.value.startedAt, true))
-                val raw = Settings(this@ThoughtService).client().transcribe(result.file, result.durationMs / 1000.0)
+                val key = withContext(Dispatchers.IO) { com.paply.android.settings.KeyVault(this@ThoughtService).read().orEmpty() }
+                val raw = com.paply.core.GroqClient(key, diagnostic = Diag::event).transcribe(result.file, result.durationMs / 1000.0)
                 if (raw.text.isBlank()) { end("Nichts verstanden. Aufnahme für Neuversuch behalten."); return@launch }
                 withContext(Dispatchers.IO) { ThoughtStore(this@ThoughtService).save(result.file, raw.text, result.durationMs) }
                 end("Gedanke gespeichert")

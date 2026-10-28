@@ -16,6 +16,7 @@ from emulator_controller_pb2_grpc import EmulatorControllerStub
 
 parser = argparse.ArgumentParser()
 parser.add_argument('wav')
+parser.add_argument('--wait', type=float, default=0, help='Wait up to this many seconds for an active recorder')
 args = parser.parse_args()
 discovery = Path.home() / 'Library/Caches/TemporaryItems/avd/running'
 configs = []
@@ -27,10 +28,15 @@ if len(configs) != 1:
     raise SystemExit('Expected one authenticated Paply emulator on port 8554.')
 # Emulator 37.2 can crash in audio_forwarder_enable if no input stream is active.
 # Do not begin injection until Android confirms Paply owns an active recorder.
-audio_state = subprocess.check_output(['adb', '-s', 'emulator-5580', 'shell', 'dumpsys', 'audio'], text=True)
-monitor = audio_state.split('## RecordActivityMonitor', 1)[-1].split('### Recording Activity', 1)[0]
-if 'active? true' not in monitor or 'pack:com.paply.android' not in monitor:
-    raise SystemExit('Paply recorder is not active; refusing injection (emulator audio-forwarder crash guard).')
+deadline = time.monotonic() + min(max(args.wait, 0), 15)
+while True:
+    audio_state = subprocess.check_output(['adb', '-s', 'emulator-5580', 'shell', 'dumpsys', 'audio'], text=True)
+    monitor = audio_state.split('## RecordActivityMonitor', 1)[-1].split('### Recording Activity', 1)[0]
+    if 'active? true' in monitor and 'pack:com.paply.android' in monitor:
+        break
+    if time.monotonic() >= deadline:
+        raise SystemExit('Paply recorder is not active; refusing injection (emulator audio-forwarder crash guard).')
+    time.sleep(.2)
 config = configs[0]
 token = config.get('grpc.token')
 if not token:

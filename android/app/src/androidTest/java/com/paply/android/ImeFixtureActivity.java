@@ -1,0 +1,52 @@
+package com.paply.android;
+
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.os.Bundle;
+import android.text.InputType;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputConnectionWrapper;
+import android.widget.*;
+
+/** Separate-process editor; Java deliberately needs no target-APK Kotlin runtime. */
+public class ImeFixtureActivity extends Activity {
+    private LinearLayout body;
+    @Override public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(24, 80, 24, 0);
+        TextView title = new TextView(this);
+        title.setText("Paply · IME-Abnahme (Test-APK)"); title.setTextSize(20);
+        body.addView(title);
+        EditText first = field(1001, "Erstes Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
+        field(1002, "Zweites Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
+        field(1003, "Passwort", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, false);
+        field(1004, "Editor lehnt Einsetzen ab", InputType.TYPE_CLASS_TEXT, true);
+        TextView clipboard = new TextView(this); clipboard.setTextSize(16);
+        Button check = new Button(this); check.setText("Zwischenablage prüfen");
+        check.setOnClickListener(v -> {
+            ClipData clip = getSystemService(ClipboardManager.class).getPrimaryClip();
+            clipboard.setText(clip == null ? "Leer" : clip.getItemAt(0).getText());
+        });
+        body.addView(check); body.addView(clipboard); setContentView(body);
+        if (savedInstanceState == null) first.requestFocus();
+    }
+    private EditText field(int id, String label, int type, boolean reject) {
+        EditText edit = new EditText(this) {
+            @Override public InputConnection onCreateInputConnection(EditorInfo info) {
+                InputConnection connection = super.onCreateInputConnection(info);
+                if (!reject || connection == null) return connection;
+                return new InputConnectionWrapper(connection, false) {
+                    @Override public boolean commitText(CharSequence text, int position) { return false; }
+                };
+            }
+        };
+        edit.setId(id); edit.setHint(label); edit.setInputType(type); edit.setTextSize(16);
+        edit.setMinLines(1); edit.setMaxLines(3);
+        body.addView(edit, new LinearLayout.LayoutParams(-1, -2));
+        return edit;
+    }
+}

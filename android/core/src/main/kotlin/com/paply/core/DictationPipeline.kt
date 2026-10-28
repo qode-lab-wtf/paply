@@ -14,7 +14,7 @@ import kotlinx.coroutines.channels.Channel
  * and recording thread: Android must dispatch UI work. Cancelling a finish waiter retains work.
  */
 class DictationPipeline
-internal constructor(
+constructor(
     settings: PaplySettings,
     private val client: GroqClient,
     private val catalog: ModelCatalog = ModelCatalog.shared,
@@ -34,10 +34,11 @@ internal constructor(
         detector: LanguageDetector = NoLanguageDetector,
         clock: PaplyClock = SystemPaplyClock,
         reachability: NetworkReachability = AssumeReachable,
+        diagnostic: (String) -> Unit = {},
         onState: (DictationStatus) -> Unit = {},
     ) : this(
         configuration.settings(),
-        GroqClient(configuration.keyProvider(), clock = clock, reachability = reachability),
+        GroqClient(configuration.keyProvider(), clock = clock, reachability = reachability, diagnostic = diagnostic),
         ModelCatalog.shared,
         options,
         recentRawDictations,

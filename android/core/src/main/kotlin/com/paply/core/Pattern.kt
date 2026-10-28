@@ -1,11 +1,19 @@
 package com.paply.core
 
 /** Unicode classes/case enabled for the ported ICU patterns; matcher ranges use UTF-16. */
-internal class Pattern(pattern: String, caseInsensitive: Boolean = false) {
+public class Pattern(pattern: String, caseInsensitive: Boolean = false) {
+    companion object {
+        // Android ICU is Unicode-aware by default and rejects Java's explicit UCC flag.
+        // Probe once without Android imports; malformed expressions must still fail.
+        private val unicodeCharacterClass = try {
+            java.util.regex.Pattern.compile("", java.util.regex.Pattern.UNICODE_CHARACTER_CLASS)
+            java.util.regex.Pattern.UNICODE_CHARACTER_CLASS
+        } catch (_: IllegalArgumentException) { 0 }
+    }
     val regex: java.util.regex.Pattern =
         java.util.regex.Pattern.compile(
             pattern,
-            java.util.regex.Pattern.UNICODE_CHARACTER_CLASS or
+            unicodeCharacterClass or
                 java.util.regex.Pattern.UNICODE_CASE or
                 if (caseInsensitive) java.util.regex.Pattern.CASE_INSENSITIVE else 0,
         )

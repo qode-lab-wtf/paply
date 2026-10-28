@@ -1,6 +1,6 @@
 package com.paply.core
 
-internal object Lexicon {
+public object Lexicon {
     val fillers =
         listOf(
                 "äh",

@@ -24,7 +24,8 @@ data class CaptureResult(val file: File, val durationMs: Long, val voicedSamples
 }
 
 /** AudioRecord ownership, reads and release stay on one worker; no read exception escapes. */
-class AudioCapture(private val context: Context, val file: File, private val maxMs: Long = 10 * 60_000L) {
+class AudioCapture(private val context: Context, val file: File, private val maxMs: Long = 10 * 60_000L,
+    private val onSamples: ((ShortArray) -> Unit)? = null) {
     private val running = AtomicBoolean(false)
     private val completed = CompletableDeferred<CaptureResult>()
     @Volatile var level = 0f; private set
@@ -64,6 +65,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
         } catch (e: Exception) {
             release()
             file.delete()
+            completed.complete(CaptureResult(file, 0, 0, false, "start-failed"))
             throw e
         }
     }
@@ -79,7 +81,11 @@ class AudioCapture(private val context: Context, val file: File, private val max
                     val count = audio.read(samples, 0, samples.size, AudioRecord.READ_NON_BLOCKING)
                     if (count < 0) { error = "read-$count"; Diag.event("audio.read.error code=$count"); break }
                     if (count == 0) { Thread.sleep(10); continue }
-                    writer.append(samples, count); frames += count
+                    // IME uses the core VAD/chunker continuously; never forward system-silenced audio.
+                    val blockSilenced = audio.activeRecordingConfiguration?.isClientSilenced == true
+                    val block = if (onSamples != null && blockSilenced) ShortArray(count) else samples.copyOf(count)
+                    writer.append(block, count); frames += count
+                    onSamples?.invoke(block)
                     var sum = 0.0
                     for (i in 0 until count) sum += samples[i].toDouble() * samples[i]
                     val rms = sqrt(sum / count)
@@ -98,7 +104,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
                     }
                 }
             }
-            if (error == null && !wasSilenced && voiced >= 1600) {
+            if (onSamples == null && error == null && !wasSilenced && voiced >= 1600) {
                 val trimmed = trimQuietEdges(file, firstVoiced, lastVoiced)
                 Diag.event("audio.trim beforeMs=${frames / 16} uploadMs=${trimmed / 16}")
             }

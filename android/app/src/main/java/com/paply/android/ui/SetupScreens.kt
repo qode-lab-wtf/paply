@@ -73,6 +73,12 @@ fun KeyboardSetupScreen(activity: Activity, status: SetupStatus) {
         }
         GuideCard("So geht’s", listOf("„Einstellungen öffnen“ tippen.", "„Paply“ in der Tastaturliste einschalten.",
             "Zurück zu Paply und „Tastatur auswählen“ tippen.", "In einem Textfeld Paply auswählen und sprechen."))
+        GuideCard("Aus Gboard zu Paply", listOf(
+            "Öffne ein Textfeld. Tippe auf den System-Tastaturwechsler unten rechts, außerhalb der Gboard-Tasten.",
+            "Bei mehreren Gboard-Sprachen kann zuerst die nächste Sprache erscheinen. Tippe dann nochmals. Du kannst die Taste auch halten und Paply direkt auswählen.",
+            "Sobald das grüne Paply-Panel erscheint, sprich. Tippen beendet das Diktat; danach geht es zurück zur vorherigen Tastatur."))
+        Text("Android bestimmt die Reihenfolge. Mit einer Gboard-Sprache reicht auf neueren Pixel-Systemen meist ein Tipp; bei älteren Systemen öffnet sich eine Auswahl. Deine Gboard-Sprachen bleiben erhalten. Paply erkennt die gesprochene Sprache unabhängig davon.",
+            color = C.secondary, style = MaterialTheme.typography.bodySmall)
         Pill("Einstellungen öffnen", { activity.openKeyboardSettings() })
         Pill("Tastatur auswählen", { activity.chooseKeyboard() }, prominent = false)
     }

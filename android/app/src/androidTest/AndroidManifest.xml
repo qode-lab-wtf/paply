@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Separate test APK: real cross-process editor, never shipped in Paply. -->
+        <activity android:name="com.paply.android.ImeFixtureActivity" android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>
