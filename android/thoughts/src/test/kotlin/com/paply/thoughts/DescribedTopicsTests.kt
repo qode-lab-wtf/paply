@@ -64,34 +64,13 @@ class DescribedTopicsTests {
     private fun redirect(name: String, topics: List<Topic>) =
         TopicHygiene.matchExisting(name, topics.map { entry(it) })?.topicID
 
-    /**
-     * Boundary fixture for Part B, not a production ranker. Only caps, membership and mention
-     * routing.
-     */
+    /** The production local ranker now exercises the Part-A mention/pinning regressions. */
     private fun index(
         topics: List<Topic>,
         thoughts: List<Thought>,
         text: String,
-    ): CandidateFinding.TopicIndex {
-        val summaries = TestTopicIndex.summaries(topics, thoughts)
-        val ranked = summaries.map { s ->
-            entry(s.topic, s.count).copy(mentioned = hits(s.topic, text).isNotEmpty())
-        }
-        val mentioned = ranked.filter { it.mentioned }.take(8)
-        val active =
-            ranked.filter { e -> summaries.first { it.topic.id == e.topicID }.isActive }.take(24)
-        val provisional =
-            ranked
-                .filter { e ->
-                    summaries
-                        .first { it.topic.id == e.topicID }
-                        .let { !it.isActive && it.count > 0 }
-                }
-                .take(8)
-        return CandidateFinding.TopicIndex(
-            (mentioned + active + provisional).distinctBy { it.topicID }.take(32),
-            summaries.count { it.isActive } >= 24,
-        )
+    ): CandidateFinding.TopicIndex = runBlocking {
+        com.paply.thoughts.local.CandidateFinder(thoughts, topics).topicIndex(text, listOf("de"))
     }
 
     @Test
