@@ -45,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Promo-Film (eigenes Repository, os_motion_video)
+/video/
