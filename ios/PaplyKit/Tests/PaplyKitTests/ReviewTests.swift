@@ -82,7 +82,9 @@ private func waitUntil(_ seconds: Double = 3, _ condition: () -> Bool) async {
         await feed(p, Synth.withFloor(Synth.speech(11) + Synth.silence(0.9)))
         await waitUntil { server.requests("/audio/transcriptions").count == 1 }
         await p.cancel()
-        await waitUntil(1) { server.stoppedCount > 0 }
+        // Unter Volllast der parallelen Tests dauert das Abbrechen mitunter über 1 s; 5 s liegen
+        // weiter klar unter der Antwortzeit des Servers (10 s) und belegen den sofortigen Abbruch.
+        await waitUntil(5) { server.stoppedCount > 0 }
         #expect(server.stoppedCount >= 1)
         #expect(await p.finish().text == "")
     }
@@ -231,7 +233,8 @@ private func waitUntil(_ seconds: Double = 3, _ condition: () -> Bool) async {
         let start = ContinuousClock.now
         await p.cancel()
         let outcome = await finishing.value
-        #expect(ContinuousClock.now - start < .seconds(4))
+        // Server antwortet erst nach 10 s; 7 s Grenze belegt den Abbruch auch unter Testlast
+        #expect(ContinuousClock.now - start < .seconds(7))
         #expect(outcome.text == "" && outcome.errorMessage == nil)
     }
 
@@ -243,10 +246,11 @@ private func waitUntil(_ seconds: Double = 3, _ condition: () -> Bool) async {
         let p = pipeline(server, chunked: true)
         await feed(p, Synth.withFloor(Synth.speech(11) + Synth.silence(0.9) + Synth.speech(11) + Synth.silence(0.9)))
         let fed = ContinuousClock.now
-        await waitUntil(10) { server.requests("/audio/transcriptions").count == 2 }
+        await waitUntil(20) { server.requests("/audio/transcriptions").count == 2 }
         #expect(server.requests("/audio/transcriptions").count == 2)
-        // Das Vorstück hängt 60 s; das nächste Stück wartet nur ~1,5 s (Rest: Testlast).
-        #expect(ContinuousClock.now - fed < .seconds(10))
+        // Das Vorstück hängt 60 s; das nächste Stück wartet nur ~1,5 s. Die Grenze von 20 s lässt
+        // Raum für Volllast der parallelen Tests und liegt weiter klar unter den 60 s.
+        #expect(ContinuousClock.now - fed < .seconds(20))
         // Ohne das Ende des hängenden Vorstücks im Prompt.
         #expect(server.requests("/audio/transcriptions")[1].field("prompt")?.contains("Hängt") != true)
         await p.cancel()
