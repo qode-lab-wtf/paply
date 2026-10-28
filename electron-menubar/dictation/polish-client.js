@@ -1,5 +1,5 @@
 const { readResponse, completePolish, polishTokenBudget } = require('./policies');
-const { GROQ_CHAT_URL, GROQ_MODELS_URL, selectPolishModel, groqReasoningOptions } = require('./groq-models');
+const { GROQ_CHAT_URL, GROQ_MODELS_URL, POLISH_MODEL, POLISH_FALLBACK_MODEL, selectPolishModel, groqReasoningOptions } = require('./groq-models');
 const { finalPolishText, polishRejection } = require('./polish');
 
 function modelMissing(response) {
@@ -42,21 +42,32 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
     if (!session || session.apiKey !== apiKey) session = { apiKey };
     const state = session;
     try {
-      const model = selectPolishModel(await modelsFor(state, deadline - now()));
+      let model = selectPolishModel(await modelsFor(state, deadline - now()));
       if (!model) { unavailable(); log('model-unavailable'); return null; }
       const timeout = deadline - now();
       if (timeout <= 0) { log('timeout'); return null; }
-      const res = await request(GROQ_CHAT_URL, {
+      const send = (id, ms) => request(GROQ_CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, max_tokens: polishTokenBudget(text), messages, ...groqReasoningOptions(model),
+        body: JSON.stringify({ model: id, max_tokens: polishTokenBudget(text), messages, ...groqReasoningOptions(id),
           ...(!custom ? { temperature: 0 } : {}) }),
-      }, timeout);
+      }, ms);
+      let res = await send(model, timeout);
+      // Limit erreicht (429, z. B. Tageskontingent im Free-Tier): einmal das andere Modell mit
+      // eigenem Kontingent versuchen (wie Paply iOS), statt sofort den Rohtext einzusetzen.
+      const alternative = res.status === 429
+        && [POLISH_MODEL, POLISH_FALLBACK_MODEL].find(id => id !== model && state.ids.includes(id));
+      const fallback = alternative && deadline - now() >= 3000;
+      if (fallback) {
+        model = alternative;
+        res = await send(model, deadline - now());
+      }
       if (!res.ok) {
         if (modelMissing(res)) {
           // Dieses Diktat bleibt roh. Das nächste nutzt ggf. das noch verfügbare Ausweichmodell.
           state.ids = state.ids.filter(id => id !== model);
-          unavailable();
+          // Fehlt nur das Ausweichmodell, ist das Hauptmodell bloß am Limit: keine Warnung.
+          if (!fallback || !selectPolishModel(state.ids)) unavailable();
         }
         log(`http-${res.status}`);
         return null;

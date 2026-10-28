@@ -1,6 +1,28 @@
 # Paply — Stand
 
-**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.1 veröffentlicht (schnelleres Polieren); Praxistest durch Allan
+**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.2 veröffentlicht (Robustheit Mac/Windows, Protokoll); Praxistest durch Allan
+
+## v1.15.2 — Robustheit Mac/Windows nach Log-Sichtung und iOS-Abgleich (28.10.2026)
+
+Allan: „dass auf macOS und Windows alles neueste Version und korrekt läuft“.
+- **Polieren:** Bei Groq-Limit (429, z. B. qwen-Tageskontingent) einmal `gpt-oss-120b` mit eigenem Kontingent
+  (wie iOS) statt still Rohtext; nur mit ≥ 3 s Restzeit, Sicherheitsnetz gilt weiter.
+- **Lange Diktate:** Upload-Zeitlimit wächst mit der Dateigröße (60 s + ~0,5 Mbit/s), alle Versuche zusammen
+  höchstens wie bisher 4 × 60 s bzw. ein Upload + 60 s; 413 → „Aufnahme zu lang“ mit Erklärung; bei 429 mit
+  Retry-After > 10 s kein sturer Neuversuch.
+- **Diagnose-Protokoll:** `<Datenordner>/logs/paply.log` (≤ 2 MB + eine alte Datei), ohne Diktattext, Schlüssel
+  geschwärzt; Tray „Protokoll anzeigen“. Damit lassen sich Fehler beim Windows-Freund nachvollziehen.
+- **Dashboard:** Aufnahmeminuten und Fehler werden gezählt (vorher immer „0 min“ / „100 %“).
+- **Sicherheit:** config.json (API-Schlüssel) nur für den eigenen Benutzer (0600, vorher rw-rw-rw-).
+  Laufzeit-Pakete semver-kompatibel aktualisiert (js-yaml, form-data, ajv, fast-uri). GitHub Actions auf
+  Node-24-Versionen, Build mit Node 22.
+- Bewusst nicht: Zahlen-Schutz beim Polieren (215 echte polierte Diktate: keine verfälschte Zahl, einziger Treffer
+  wäre harmlose Formatierung gewesen); `electron-updater` bleibt 6.6.2 (Fix ändert Windows-Update-Ablauf, Lücke
+  betrifft Paply nicht); **Electron 33 → 45+** steht aus (viele Sicherheitshinweise, eigenes Projekt mit Praxistest).
+- Geprüft: 651 automatische Tests, TypeScript, Review (keine Blocker, Befunde behoben), echter Durchlauf mit
+  Fake-Mikro + Groq (Satz → poliert in ~1 s, Stille → nichts, Protokoll ohne Text/Schlüssel, config 0600).
+- Log-Sichtung iOS (28.10.): 1 Absturz nach Anruf (Build 5) — in Build 6 behoben, auf dem iPhone noch zu prüfen;
+  Akku/Wärme in Bereitschaft ungeklärt (Mikro dauerhaft offen) → Paply-Anteil in Einstellungen › Batterie ansehen.
 
 ## v1.15.1 — Abgleich mit Paply iOS (28.10.2026)
 
