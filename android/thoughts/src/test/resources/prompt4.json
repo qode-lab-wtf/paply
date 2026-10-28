@@ -1,0 +1,708 @@
+{
+  "schemaVersion": 1,
+  "fixture": "prompt4",
+  "about": "Prompt v4 (Befunde vom iPhone): 6 neue kurze Fälle nach dem Muster der Befunde 1–4 mit erfundenen Personen und Firmen (Füllwörter, Termin, einmalige Besorgung, Person + Sache, Zeitausdruck doppelt, Verneinung bleibt), dazu 6 Regressionsfälle aus eval.jsonl (per ID, unverändert; e06 mit einer zusätzlich zulässigen Aufgabe und ohne die due-Regel zu „Donnerstag“). Alles läuft gegen store-a.",
+  "base": "store-a.json",
+  "cases": [
+    {
+      "id": "n01",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 7,
+        "words": 16,
+        "categories": [
+          "tasks",
+          "fillers"
+        ],
+        "extra": [
+          "prompt4"
+        ],
+        "rationale": "Muster Befund 1: Aufgabe voller Füllwörter („noch“, „einmal“) und Ich-Bezug („bei meiner Firma“). Gut ist der Kern: „Neueste Briefe vom Steuerbüro durchlesen“.",
+        "sets": []
+      },
+      "recordedAt": 1793106300000,
+      "recordedAtLocal": "2026-10-27T14:05:00+01:00",
+      "transcript": "ähm ich muss bei meiner Firma Fluxo noch die neuesten Briefe vom Steuerbüro Hartwig einmal durchlesen",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_74ec4c869cf42c7078032ba1c52971bd",
+          "name": "Fluxo",
+          "alsoAccept": [
+            {
+              "choice": "existing",
+              "id": "t_4ea94921c2bcdbeca766236296375504",
+              "name": "Finanzen"
+            }
+          ]
+        },
+        "tasks": [
+          {
+            "key": "a",
+            "required": true,
+            "texts": [
+              "Neueste Briefe vom Steuerbüro durchlesen",
+              "Briefe vom Steuerbüro Hartwig durchlesen"
+            ],
+            "match": [
+              [
+                "brief"
+              ],
+              [
+                "durchles",
+                "les"
+              ]
+            ],
+            "quote": [
+              "Briefe vom Steuerbüro Hartwig"
+            ],
+            "due_hint": [
+              null
+            ]
+          }
+        ],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Briefe vom Steuerbüro für Fluxo durchlesen"
+      },
+      "mustKeep": [
+        {
+          "kind": "name",
+          "any": [
+            "Hartwig"
+          ]
+        }
+      ],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Briefe",
+            "Steuerbüro",
+            "Hartwig"
+          ],
+          "why": "Einzelsache als Thema statt der Firma"
+        }
+      ]
+    },
+    {
+      "id": "n02",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 14,
+        "words": 34,
+        "categories": [
+          "tasks",
+          "errand",
+          "due_doubled"
+        ],
+        "extra": [
+          "prompt4"
+        ],
+        "rationale": "Muster Befund 2: einmalige Besorgung mit Zeitausdruck („morgen … vormittags“), der nicht zusätzlich im Aufgabentext stehen soll, und zweite Aufgabe. Kein Thema „Sonnenkorn Einkauf“; besser keins, ein laufender Bereich (Einkäufe, Haushalt) oder Familie.",
+        "sets": [],
+        "hard": "Zeitausdruck in zwei Stücken („morgen am besten vormittags“)"
+      },
+      "recordedAt": 1793110800000,
+      "recordedAtLocal": "2026-10-27T15:20:00+01:00",
+      "transcript": "ähm ich muss morgen am besten vormittags wenn die Kinder weg sind einkaufen gehen und die drei Gutscheine vom Biomarkt Sonnenkorn benutzen und dafür muss ich mir von Jana nochmal die Einkaufsliste schicken lassen",
+      "expect": {
+        "topic": {
+          "choice": "none",
+          "alsoAccept": [
+            {
+              "choice": "existing",
+              "id": "t_74078bb4106effe322cbe335a2401426",
+              "name": "Familie"
+            },
+            {
+              "choice": "new",
+              "names": [
+                "Einkäufe",
+                "Einkaufen",
+                "Einkauf",
+                "Haushalt",
+                "Lebensmittel",
+                "Besorgungen"
+              ]
+            }
+          ]
+        },
+        "tasks": [
+          {
+            "key": "a",
+            "required": true,
+            "texts": [
+              "Einkaufen gehen, Gutscheine nutzen",
+              "Bei Sonnenkorn einkaufen"
+            ],
+            "match": [
+              [
+                "einkauf"
+              ]
+            ],
+            "quote": [
+              "einkaufen gehen"
+            ],
+            "due_hint": [
+              "morgen",
+              "morgen am besten vormittags",
+              "morgen vormittags"
+            ]
+          },
+          {
+            "key": "b",
+            "required": true,
+            "texts": [
+              "Einkaufsliste von Jana schicken lassen"
+            ],
+            "match": [
+              [
+                "einkaufsliste",
+                "liste"
+              ]
+            ],
+            "quote": [
+              "die Einkaufsliste schicken lassen"
+            ],
+            "due_hint": [
+              null
+            ]
+          },
+          {
+            "key": "c",
+            "required": false,
+            "texts": [
+              "Gutscheine vom Biomarkt Sonnenkorn benutzen"
+            ],
+            "match": [
+              [
+                "gutschein"
+              ]
+            ],
+            "quote": [
+              "Gutscheine vom Biomarkt Sonnenkorn benutzen"
+            ],
+            "due_hint": [
+              null,
+              "morgen"
+            ],
+            "note": "Eigene Aufgabe für die Gutscheine ist zulässig, nicht verlangt."
+          }
+        ],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Morgen einkaufen mit den Sonnenkorn-Gutscheinen"
+      },
+      "mustKeep": [
+        {
+          "kind": "number",
+          "any": [
+            "drei",
+            "3"
+          ]
+        },
+        {
+          "kind": "name",
+          "any": [
+            "Sonnenkorn"
+          ]
+        }
+      ],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Sonnenkorn",
+            "Biomarkt",
+            "Gutschein",
+            "Gutscheine"
+          ],
+          "why": "einmalige Besorgung als Thema"
+        }
+      ]
+    },
+    {
+      "id": "n03",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 9,
+        "words": 21,
+        "categories": [
+          "appointment"
+        ],
+        "extra": [
+          "prompt4"
+        ],
+        "rationale": "Muster Befund 4: Kunde kommt um 10 Uhr ins Büro. Ab Prompt v6 (ohne Termin-Satz) ist keine Aufgabe richtig; eine Aufgabe zum Anteil des Sprechers („Herrn Brandl empfangen“, due „morgen um 10 Uhr“) ist zulässig. Die Handlung des Kunden als Aufgabe („… kaufen“) ist falsch.",
+        "sets": [],
+        "hard": "Grenzfall Termin: Handlung des Kunden, der Sprecher muss da sein; nie die Handlung des Kunden als Aufgabe"
+      },
+      "recordedAt": 1793113800000,
+      "recordedAtLocal": "2026-10-27T16:10:00+01:00",
+      "transcript": "morgen will Herr Brandl vom Familienzentrum Lindenhof bei uns im Büro 20 Fluxo Lizenzen kaufen um 10 Uhr will er vorbeikommen",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_74ec4c869cf42c7078032ba1c52971bd",
+          "name": "Fluxo",
+          "alsoAccept": []
+        },
+        "tasks": [
+          {
+            "key": "a",
+            "required": false,
+            "texts": [
+              "Herrn Brandl wegen der Lizenzen empfangen",
+              "Termin mit Herrn Brandl"
+            ],
+            "match": [
+              [
+                "brandl",
+                "lindenhof",
+                "lizenz",
+                "kunde"
+              ]
+            ],
+            "quote": [
+              "Herr Brandl",
+              "um 10 Uhr will er vorbeikommen"
+            ],
+            "due_hint": [
+              "morgen um 10 Uhr",
+              "morgen",
+              "um 10 Uhr",
+              "morgen 10 Uhr"
+            ],
+            "note": "Prompt v6: keine Aufgabe oder eine zum Anteil des Sprechers – zulässig, nicht verlangt."
+          }
+        ],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Herr Brandl kauft morgen um 10 Uhr 20 Lizenzen"
+      },
+      "mustKeep": [
+        {
+          "kind": "number",
+          "any": [
+            "20",
+            "zwanzig"
+          ]
+        },
+        {
+          "kind": "time",
+          "any": [
+            "10 Uhr",
+            "zehn Uhr"
+          ]
+        }
+      ],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Lizenz",
+            "Lizenzen",
+            "Brandl"
+          ],
+          "why": "Einzelner Kauf/Termin als Thema"
+        },
+        {
+          "where": [
+            "tasks",
+            "due_hint"
+          ],
+          "mode": "contains",
+          "any": [
+            "11 Uhr",
+            "20 Uhr"
+          ],
+          "why": "falsche Uhrzeit"
+        },
+        {
+          "where": [
+            "tasks"
+          ],
+          "mode": "contains",
+          "any": [
+            "kaufen",
+            "kauft",
+            "vorbeikommen",
+            "kommt vorbei"
+          ],
+          "why": "Handlung des Kunden als Aufgabe des Sprechers (p4: „20 Fluxo Lizenzen kaufen“) – irreführender als keine Aufgabe"
+        }
+      ]
+    },
+    {
+      "id": "n04",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 8,
+        "words": 18,
+        "categories": [
+          "tasks",
+          "person_thing"
+        ],
+        "extra": [
+          "prompt4"
+        ],
+        "rationale": "Muster Befund 3: Person + Sache. Kein Thema „Noah Laufrad“ oder „Noahs Geburtstag“; richtig ist Familie, ein Thema für die Person (Noah) oder keins.",
+        "sets": []
+      },
+      "recordedAt": 1793118900000,
+      "recordedAtLocal": "2026-10-27T17:35:00+01:00",
+      "transcript": "ähm für mein Patenkind Noah muss ich noch ein Laufrad zum Geburtstag kaufen der wird im Dezember drei",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_74078bb4106effe322cbe335a2401426",
+          "name": "Familie",
+          "alsoAccept": [
+            {
+              "choice": "none"
+            },
+            {
+              "choice": "new",
+              "names": [
+                "Noah",
+                "Patenkind",
+                "Patenkind Noah"
+              ]
+            }
+          ]
+        },
+        "tasks": [
+          {
+            "key": "a",
+            "required": true,
+            "texts": [
+              "Laufrad für Noah kaufen",
+              "Laufrad kaufen"
+            ],
+            "match": [
+              [
+                "laufrad"
+              ]
+            ],
+            "quote": [
+              "ein Laufrad zum Geburtstag kaufen"
+            ],
+            "due_hint": [
+              null,
+              "zum Geburtstag",
+              "im Dezember"
+            ]
+          }
+        ],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Laufrad für Patenkind Noah zum Geburtstag"
+      },
+      "mustKeep": [
+        {
+          "kind": "name",
+          "any": [
+            "Noah"
+          ]
+        },
+        {
+          "kind": "number",
+          "any": [
+            "drei",
+            "3"
+          ]
+        }
+      ],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Laufrad",
+            "Geburtstag"
+          ],
+          "why": "Sache statt Person als Thema"
+        }
+      ]
+    },
+    {
+      "id": "n05",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 8,
+        "words": 18,
+        "categories": [
+          "tasks",
+          "due_doubled",
+          "errand"
+        ],
+        "extra": [
+          "prompt4"
+        ],
+        "rationale": "Zeitausdruck und Ich-Bezug: gut ist „Reisepass verlängern lassen“ mit due „bis Ende November“. Ein Behördengang ist kein eigenes Thema „Reisepass“.",
+        "sets": []
+      },
+      "recordedAt": 1793127000000,
+      "recordedAtLocal": "2026-10-27T19:50:00+01:00",
+      "transcript": "erinner mich dran dass ich meinen Reisepass bis Ende November verlängern lassen muss der läuft im Januar ab",
+      "expect": {
+        "topic": {
+          "choice": "none",
+          "alsoAccept": [
+            {
+              "choice": "existing",
+              "id": "t_8ccdfe939c45d8ad350ec11ae4ede149",
+              "name": "Urlaub"
+            },
+            {
+              "choice": "new",
+              "names": [
+                "Behörden",
+                "Behördengänge",
+                "Dokumente",
+                "Papiere",
+                "Ausweise",
+                "Verwaltung",
+                "Bürokratie"
+              ]
+            }
+          ]
+        },
+        "tasks": [
+          {
+            "key": "a",
+            "required": true,
+            "texts": [
+              "Reisepass verlängern lassen"
+            ],
+            "match": [
+              [
+                "reisepass",
+                "pass"
+              ],
+              [
+                "verlang"
+              ]
+            ],
+            "quote": [
+              "Reisepass bis Ende November verlängern lassen"
+            ],
+            "due_hint": [
+              "bis Ende November",
+              "Ende November"
+            ]
+          }
+        ],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Reisepass bis Ende November verlängern"
+      },
+      "mustKeep": [
+        {
+          "kind": "time",
+          "any": [
+            "Ende November"
+          ]
+        },
+        {
+          "kind": "time",
+          "any": [
+            "Januar"
+          ]
+        }
+      ],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Reisepass",
+            "Pass"
+          ],
+          "why": "einmaliger Behördengang als Thema"
+        }
+      ]
+    },
+    {
+      "id": "n06",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 10,
+        "words": 24,
+        "categories": [
+          "tasks",
+          "numbers"
+        ],
+        "extra": [
+          "prompt4"
+        ],
+        "rationale": "Verneinung bleibt: Die Aufgabe heißt sinngemäß „Hantelhaus Bescheid sagen: Vertrag nicht verlängern“. Ohne „nicht“ kippt der Sinn; der Prüfer verwirft das.",
+        "sets": [],
+        "hard": "Aufgabe mit Verneinung; „kündigen“ wäre gleichbedeutend, fällt aber an der Verneinungsprüfung"
+      },
+      "recordedAt": 1793131800000,
+      "recordedAtLocal": "2026-10-27T21:10:00+01:00",
+      "transcript": "ähm ganz wichtig ich muss beim Fitnessstudio Hantelhaus noch Bescheid sagen dass ich den Vertrag nicht verlängere sonst läuft der automatisch ein Jahr weiter",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_cc95f53150ace35d8ceff41d8258564b",
+          "name": "Fitness",
+          "alsoAccept": []
+        },
+        "tasks": [
+          {
+            "key": "a",
+            "required": true,
+            "texts": [
+              "Hantelhaus Bescheid sagen: Vertrag nicht verlängern",
+              "Vertrag beim Hantelhaus nicht verlängern"
+            ],
+            "match": [
+              [
+                "vertrag",
+                "hantelhaus",
+                "bescheid"
+              ],
+              [
+                "nicht"
+              ]
+            ],
+            "quote": [
+              "Vertrag nicht verlängere",
+              "noch Bescheid sagen"
+            ],
+            "due_hint": [
+              null
+            ]
+          }
+        ],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Hantelhaus-Vertrag nicht verlängern"
+      },
+      "mustKeep": [
+        {
+          "kind": "negation",
+          "any": [
+            "nicht verlängere",
+            "nicht verlängern",
+            "nicht zu verlängern"
+          ]
+        }
+      ],
+      "mustNotAdd": [
+        {
+          "where": [
+            "tasks"
+          ],
+          "mode": "contains",
+          "any": [
+            "Vertrag verlängern"
+          ],
+          "why": "Verneinung verloren"
+        },
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Hantelhaus",
+            "Vertrag"
+          ],
+          "why": "Einzelsache als Thema"
+        }
+      ]
+    }
+  ],
+  "regression": [
+    {
+      "id": "e03",
+      "why": "beiläufig, keine Aufgabe, none"
+    },
+    {
+      "id": "e06",
+      "why": "Aufgabe mit Frist; Besichtigung der Umzugsfirma am Donnerstag um neun ist ein Termin beim Sprecher (Grenzfall der neuen Termin-Regel)",
+      "allowTasks": [
+        {
+          "key": "v4",
+          "required": false,
+          "texts": [
+            "Besichtigung mit Rhein Zug am Donnerstag um neun"
+          ],
+          "match": [
+            [
+              "besichtig"
+            ]
+          ],
+          "quote": [
+            "zur Besichtigung kommen"
+          ],
+          "due_hint": [
+            null,
+            "am Donnerstag um neun",
+            "Donnerstag um neun"
+          ],
+          "note": "Prompt v4: fester Termin beim Sprecher – zulässig, nicht verlangt."
+        }
+      ],
+      "mustNotAdd": [],
+      "mustNotAddWhy": "Die Regel „Donnerstag nicht in due_hint“ gilt der Keller-Frist; die prüft schon „due_hint korrekt“. Die zulässige Besichtigungs-Aufgabe darf „am Donnerstag um neun“ tragen."
+    },
+    {
+      "id": "e07",
+      "why": "Aufgabe; Termin einer anderen Person (Priyas Partner-Meeting) bleibt keine Aufgabe"
+    },
+    {
+      "id": "e10",
+      "why": "keine Aufgabe: Handlung Dritter mit Zeitangabe, verneinte Pflicht"
+    },
+    {
+      "id": "e18",
+      "why": "neues Thema (laufender Bereich), Möglichkeit „dienstags um fünf“ ist kein Termin"
+    },
+    {
+      "id": "e26",
+      "why": "zwei Aufgaben, „morgen um acht“; Kurs „samstags um zehn“ ist kein Termin des Sprechers"
+    }
+  ]
+}

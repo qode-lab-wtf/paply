@@ -1,0 +1,526 @@
+{
+  "schemaVersion": 1,
+  "fixture": "described",
+  "about": "Themen mit Beschreibung (KONZEPT §6.3, Prompt v3): vier vom Nutzer angelegte und beschriebene Themen (Firma, Kunde, Verein, Person, ohne Gedanken) kommen zu store-a hinzu. Jeder Fall läuft einzeln gegen store-a + diese Themen. Alle Namen erfunden. Bewertet wird nur das Thema; expect.mentioned = Themen mit deterministischem Namens-Treffer (TopicMentions).",
+  "base": "store-a.json",
+  "topics": [
+    {
+      "id": "t_ef8e9862ac4a34dac1221fe30efc307c",
+      "title": "Kessler Digital",
+      "icon": "briefcase",
+      "owner": "user",
+      "createdAt": 1793041200000,
+      "mergedInto": null,
+      "note": "Meine Beratungsfirma Kessler Digital UG – Kunden Brandt Logistik und Vogelsang, Buchhaltung bei Frau Okafor"
+    },
+    {
+      "id": "t_d012848eac6b9f36500888a48bfdd3c2",
+      "title": "Brandt Logistik",
+      "icon": "list",
+      "owner": "user",
+      "createdAt": 1793041200000,
+      "mergedInto": null,
+      "note": "Lagerverwaltung für Brandt Logistik in Troisdorf – Ansprechpartner Herr Wiechert"
+    },
+    {
+      "id": "t_f3f8058a16451963f0d8b1c6119ada57",
+      "title": "Ruderclub",
+      "icon": "users",
+      "owner": "user",
+      "createdAt": 1793041200000,
+      "mergedInto": null,
+      "note": "Ruderverein RV Germania Beuel – ich bin Kassenwart, Vorstand mit Henrike und Jörg"
+    },
+    {
+      "id": "t_ba06f5f430f09f913701ee07bf348b94",
+      "title": "Oma Ilse",
+      "icon": "heart",
+      "owner": "user",
+      "createdAt": 1793041200000,
+      "mergedInto": null,
+      "note": "Meine Oma Ilse in Wuppertal, 89 – Pflegedienst Sonnenhof, Arzttermine und Besuche"
+    }
+  ],
+  "cases": [
+    {
+      "id": "d01",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 8,
+        "words": 19,
+        "categories": [
+          "firma",
+          "name"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Firmenname und Buchhalterin aus der Beschreibung, Hauptinhalt Buchhaltung der Firma",
+        "sets": []
+      },
+      "recordedAt": 1793102400000,
+      "recordedAtLocal": "2026-10-27T13:00:00+01:00",
+      "transcript": "ähm für Kessler Digital muss ich noch die Umsatzsteuervoranmeldung fertig machen Frau Okafor braucht die Belege bis zum zehnten",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_ef8e9862ac4a34dac1221fe30efc307c",
+          "name": "Kessler Digital",
+          "alsoAccept": []
+        },
+        "mentioned": [
+          "Kessler Digital"
+        ],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Firmenname und Buchhalterin aus der Beschreibung, Hauptinhalt Buchhaltung der Firma"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d02",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 11,
+        "words": 26,
+        "categories": [
+          "kunde",
+          "name",
+          "inflection"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Kundenprojekt Brandt (Genitiv „Brandts“); die Firma nennt Brandt als Kunden, das eigene Kundenthema ist genauer",
+        "sets": [],
+        "hard": "zwei beschriebene Themen mit Treffer"
+      },
+      "recordedAt": 1793104200000,
+      "recordedAtLocal": "2026-10-27T13:30:00+01:00",
+      "transcript": "Herr Wiechert hat angerufen bei Brandts läuft die Inventur nächste Woche und die wollen bis dahin den Export als CSV ich soll Donnerstag nach Troisdorf kommen",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_d012848eac6b9f36500888a48bfdd3c2",
+          "name": "Brandt Logistik",
+          "alsoAccept": []
+        },
+        "mentioned": [
+          "Brandt Logistik",
+          "Kessler Digital"
+        ],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Kundenprojekt Brandt (Genitiv „Brandts“); die Firma nennt Brandt als Kunden, das eigene Kundenthema ist genauer"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d03",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 8,
+        "words": 19,
+        "categories": [
+          "verein",
+          "no_name"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Rudern ohne einen Namen aus der Beschreibung: nur der Inhalt passt zum Ruderverein",
+        "sets": []
+      },
+      "recordedAt": 1793106000000,
+      "recordedAtLocal": "2026-10-27T14:00:00+01:00",
+      "transcript": "am Samstag ist Anrudern und ich muss vorher noch die Boote aus dem Winterlager holen und die Skulls durchzählen",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_f3f8058a16451963f0d8b1c6119ada57",
+          "name": "Ruderclub",
+          "alsoAccept": []
+        },
+        "mentioned": [],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Rudern ohne einen Namen aus der Beschreibung: nur der Inhalt passt zum Ruderverein"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d04",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 10,
+        "words": 23,
+        "categories": [
+          "person",
+          "no_name"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Großmutter ohne Namen; die Beschreibung („Meine Oma Ilse“) macht es eindeutig, Familie wäre zu grob",
+        "sets": [],
+        "hard": "Konkurrenz mit dem KI-Thema Familie"
+      },
+      "recordedAt": 1793107800000,
+      "recordedAtLocal": "2026-10-27T14:30:00+01:00",
+      "transcript": "meine Großmutter klang am Telefon ziemlich durcheinander sie wusste nicht mehr dass ich Sonntag da war ich sollte mal mit ihrer Hausärztin reden",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_ba06f5f430f09f913701ee07bf348b94",
+          "name": "Oma Ilse",
+          "alsoAccept": []
+        },
+        "mentioned": [],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Großmutter ohne Namen; die Beschreibung („Meine Oma Ilse“) macht es eindeutig, Familie wäre zu grob"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d05",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 9,
+        "words": 21,
+        "categories": [
+          "verein",
+          "passing"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Beuel steht in der Vereinsbeschreibung, Hauptinhalt ist aber der Umzug",
+        "sets": [],
+        "hard": "Namens-Treffer nur beiläufig"
+      },
+      "recordedAt": 1793109600000,
+      "recordedAtLocal": "2026-10-27T15:00:00+01:00",
+      "transcript": "der Umzugswagen von Rheinzug kommt am neunzehnten Dezember um sieben ich muss in Beuel noch das Halteverbot vor dem Haus beantragen",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+          "name": "Umzug",
+          "alsoAccept": []
+        },
+        "mentioned": [
+          "Ruderclub"
+        ],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Beuel steht in der Vereinsbeschreibung, Hauptinhalt ist aber der Umzug"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d06",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 14,
+        "words": 33,
+        "categories": [
+          "firma",
+          "passing"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Firma nur nebenbei, Hauptinhalt sind die Fluxo-Kategorien",
+        "sets": [],
+        "hard": "Namens-Treffer nur beiläufig"
+      },
+      "recordedAt": 1793111400000,
+      "recordedAtLocal": "2026-10-27T15:30:00+01:00",
+      "transcript": "eigentlich wollte ich heute für Kessler Digital Rechnungen schreiben aber ich hab den ganzen Tag an Fluxo gesessen die Kategorien sind jetzt gröber zwölf statt dreißig und die Beta-Familien sehen das ab Freitag",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_74ec4c869cf42c7078032ba1c52971bd",
+          "name": "Fluxo",
+          "alsoAccept": []
+        },
+        "mentioned": [
+          "Kessler Digital"
+        ],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Firma nur nebenbei, Hauptinhalt sind die Fluxo-Kategorien"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d07",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 11,
+        "words": 25,
+        "categories": [
+          "kunde",
+          "no_name"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Lagerhalle und Handscanner ohne Namen: passt nur zur Lagerverwaltung des Kunden",
+        "sets": []
+      },
+      "recordedAt": 1793113200000,
+      "recordedAtLocal": "2026-10-27T16:00:00+01:00",
+      "transcript": "die Handscanner in der Lagerhalle verlieren ständig das WLAN wahrscheinlich ist der Access Point zu weit weg das schau ich mir Donnerstag vor Ort an",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_d012848eac6b9f36500888a48bfdd3c2",
+          "name": "Brandt Logistik",
+          "alsoAccept": [
+            {
+              "choice": "existing",
+              "id": "t_ef8e9862ac4a34dac1221fe30efc307c",
+              "name": "Kessler Digital"
+            }
+          ]
+        },
+        "mentioned": [],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Lagerhalle und Handscanner ohne Namen: passt nur zur Lagerverwaltung des Kunden"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    },
+    {
+      "id": "d08",
+      "meta": {
+        "lang": "de",
+        "spokenLanguages": [
+          "de"
+        ],
+        "length": "short",
+        "audioSeconds": 11,
+        "words": 25,
+        "categories": [
+          "person",
+          "name",
+          "new_topic_risk"
+        ],
+        "extra": [
+          "described_topics"
+        ],
+        "rationale": "Geburtstag der beschriebenen Person; kein neues Thema „Omas Geburtstag“, nicht Familie",
+        "sets": [],
+        "hard": "Versuchung eines neuen Themas"
+      },
+      "recordedAt": 1793115000000,
+      "recordedAtLocal": "2026-10-27T16:30:00+01:00",
+      "transcript": "Oma Ilse wird am dritten Dezember neunzig ich will für den Sonntag danach einen Tisch im Restaurant reservieren und Jana fragen ob die Kinder mitkommen",
+      "expect": {
+        "topic": {
+          "choice": "existing",
+          "id": "t_ba06f5f430f09f913701ee07bf348b94",
+          "name": "Oma Ilse",
+          "alsoAccept": []
+        },
+        "mentioned": [
+          "Oma Ilse"
+        ],
+        "tasks": [],
+        "notTasks": [],
+        "related": [],
+        "titleAbout": "Geburtstag der beschriebenen Person; kein neues Thema „Omas Geburtstag“, nicht Familie"
+      },
+      "mustKeep": [],
+      "mustNotAdd": [
+        {
+          "where": [
+            "topic_name"
+          ],
+          "mode": "contains",
+          "any": [
+            "Kessler",
+            "Brandt",
+            "Ilse",
+            "Oma",
+            "Ruder",
+            "Vogelsang",
+            "Wiechert",
+            "Okafor"
+          ],
+          "why": "kein neues Thema für Teile eines beschriebenen Themas"
+        }
+      ]
+    }
+  ]
+}

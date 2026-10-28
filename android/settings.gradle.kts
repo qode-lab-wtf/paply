@@ -5,3 +5,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "PaplyAndroid"
 include(":core", ":app")
+include(":thoughts")
