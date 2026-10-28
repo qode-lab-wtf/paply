@@ -1,6 +1,20 @@
 # Paply — Stand
 
-**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight (Builds 1–7, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
+**Zeitpunkt:** 28.10.2026 · **Phase:** Paply Android V1 im Aufbau (Branch `feat/android-v1`) · v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight (Builds 1–7, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
+
+## Paply Android — V1 im Aufbau (28.10.2026, Branch `feat/android-v1`, Ordner `android/`)
+
+- **Ziel:** gleiche Qualität, gleiches Design und gleiche UX wie Paply iOS V1, als APK-Testversion für Freunde.
+  Kotlin + Jetpack Compose, nativ. `ios/` ist nur Vorlage.
+- **Arbeitsteilung:** Claude (Opus 5.5) plant und entscheidet, Codex setzt um, Sonnet 5.5 prüft jedes Ergebnis.
+- **Rechner:** Der Mac mini hat nur 1,7 GB frei, dort wird nur Quelltext geschrieben, nichts gebaut. Bauen und
+  Emulator kommen aufs MacBook (M5, 32 GB, 136 GB frei). Dort ist noch nichts installiert (kein Java, kein SDK, kein
+  Homebrew). **Offen bei Allan: Freigabe für die Installation.**
+- **Phase 0 (Machbarkeit im Emulator), läuft:** Tastatur nimmt auf und setzt polierten Text ins Feld; Gedanken-Kachel
+  startet eine Aufnahme mit sichtbarer Benachrichtigung. Vorarbeit: Plattform-Recherche
+  (`android/docs/PLATTFORM.md`) und Portierungskarte (`android/docs/PORTIERUNG.md`).
+- **Danach V1 in Etappen:** Diktat komplett → Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) →
+  Landkarte/Aufgaben/Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Echtes Gerät entscheidet Allan.
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
