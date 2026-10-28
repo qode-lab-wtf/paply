@@ -64,3 +64,26 @@ Etappe zugeordnet: **A** = `:core`-Diktat-Port, **D** = Tastatur-Integration, **
   - FLAC-Encoder per MediaCodec als `:core`-Adapter, denn der Upload-Standard ist FLAC; ohne Adapter wird es WAV mit doppelter Größe
   - `deviceLanguages` aus `LocaleList`
   - Schlüssel beim Speichern mit `sanitizeApiKey()` bereinigen (KeyVault)
+
+## Review Oberfläche E1C (Sonnet, Commit `19dda22`): Entscheidungen
+Alle Punkte werden behoben, und zwar in einer Fix-Runde nach D, weil D gerade in `app/` arbeitet. Es sei denn, D erledigt
+einen Punkt schon.
+
+1. **Ein Schlüsselweg:** Tastatur und Gedanken-Dienst lesen nur noch über `KeyVault`. `Settings.apiKey` und `client()` aus
+   Phase 0 fallen weg, kein Klartext-Schreibweg mehr. (D, Kontrolle in der Fix-Runde)
+2. Keystore und `commit()` laufen nie auf dem Main-Thread. `hasKey` wird einmal berechnet und gecacht.
+3. **Beta aus** wirkt auch auf Kachel und Dienst: kein Start, eine laufende Aufnahme endet wie bei iOS. → Fix-Runde
+   für die Kachel, für den Dienst in G.
+4. **Beschädigte Dateien sperren nie:** Verlauf und Einstellungen verschieben eine kaputte Datei nach `damaged-<ms>.json`
+   und starten leer. Einträge werden einzeln dekodiert, für DataStore gibt es einen `ReplaceFileCorruptionHandler`.
+5. `ThoughtStore.entries()` löscht nichts mehr (→ G, Neubau).
+6. Die Diagnose hat auch im Release einen Speicherpuffer, nur mit freigegebenen Ereignissen. `takeLast(200)` statt `take(200)`.
+7. Ist der Keystore-Alias kaputt, wird er gelöscht und einmal neu erzeugt. Der Alt-Schlüssel wird nicht im Klartext
+   liegen gelassen.
+8. `KeyVault.save` nutzt `sanitizeApiKey()` (D).
+9. Löschen und das Kürzen auf 300 Einträge entfernen auch die zugehörigen Audiodateien, nur innerhalb von `filesDir`.
+10. Sprachen: Es zählen nur ISO-Codes, Alt-Codes werden umgesetzt (iw → he, in → id), Pseudo-Locales wie „zz“ werden
+    herausgefiltert.
+11. Auf der Einrichtungskarte gibt es für die Kachel-Erkennung unter API 29–32 „Erledigt“ als Ausweg.
+12. Die Zwischenablage wird nach dem Einsetzen des Schlüssels geleert. „Eigene Begriffe“ werden entprellt gespeichert.
+    Von der Startkarte geht es wieder zum Start zurück.
