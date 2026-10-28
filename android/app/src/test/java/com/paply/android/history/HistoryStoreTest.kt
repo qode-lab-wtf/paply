@@ -127,4 +127,34 @@ class HistoryStoreTest {
         store.delete(setOf("first")); assertTrue(audio.exists())
         store.delete(setOf("second")); assertFalse(audio.exists())
     }
+    @Test fun discardDeletesAudioBeforeFailedHistoryWriteAndDoesNotThrow() = runBlocking {
+        val file = wav("discard")
+        val store = store(); store.add(HistoryEntry("discard", 1, audioFile = file.path))
+        val folder = index.parentFile!!
+        check(folder.renameTo(File(root, "history-backup"))); folder.writeText("blocked")
+        com.paply.android.dictation.DictationSession.discardFiles(file, "discard") { store }
+        assertFalse(file.exists())
+    }
+    @Test fun discardWithoutEntryDoesNotCreateHistoryOrSync() = runBlocking {
+        val file = wav("discard")
+        val store = store()
+        com.paply.android.dictation.DictationSession.discardFiles(file, "missing") { store }
+        assertFalse(file.exists()); assertFalse(File(root, "history/history.json").exists())
+    }
+    @Test fun unchangedOrMissingUpdateDoesNotWriteAgain() = runBlocking {
+        val store = store(); val entry = HistoryEntry("same", 1)
+        store.add(entry)
+        val file = index; assertTrue(file.setLastModified(1000L))
+        assertTrue(store.updateIfPresent(entry))
+        assertEquals(1000L, file.lastModified())
+        assertFalse(store.updateIfPresent(entry.copy(id = "missing")))
+        assertEquals(1000L, file.lastModified())
+    }
+
+    @Test fun discardEvenSurvivesHistoryInitializationFailure() = runBlocking {
+        val file = wav("discard")
+        com.paply.android.dictation.DictationSession.discardFiles(file, "missing") { error("disk unavailable") }
+        assertFalse(file.exists())
+    }
+
 }

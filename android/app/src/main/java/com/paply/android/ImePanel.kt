@@ -42,7 +42,7 @@ fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
     // its 48dp navigation strip. Android draws that strip OVER the IME, so reserve it.
     val height = minOf(if (landscape) 260f else 336f, config.screenHeightDp * .68f).dp
     val live = state.phase == "recording"
-    val working = state.phase in listOf("working", "starting", "idle")
+    val working = state.phase in listOf("working", "starting")
     val green = live || working || state.phase == "inserted"
     val ink = if (green) C.recordInk else C.text
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -68,7 +68,7 @@ fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Icon(PaplyIcons.Mic, null, tint = ink, modifier = Modifier.size(19.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (live) "Paply hört zu" else "Paply schreibt …", color = ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(if (live) "Paply hört zu" else if (state.phase == "starting") "Paply wird bereit …" else "Paply schreibt …", color = ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Spacer(Modifier.weight(1f))
                     if (live) {
                         val seconds = (now - state.startedAt).coerceAtLeast(0) / 1000
@@ -93,22 +93,22 @@ fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
                         drawRoundRect(ink.copy(alpha = .83f), Offset(i * (width + gap), (size.height - h) / 2), Size(width, h), CornerRadius(2.5.dp.toPx()))
                     }
                 }
-                Text(if (live) "Tippen = fertig  ·  ← wischen = verwerfen" else if (now - state.startedAt > 6000) "Dauert etwas länger …" else "Wird poliert",
+                Text(if (state.subtitle.isNotBlank()) state.subtitle else if (live) "Tippen = fertig  ·  ← wischen = verwerfen" else if (now - state.startedAt > 6000) "Dauert etwas länger …" else "Wird poliert",
                     color = ink.copy(alpha = .65f), fontSize = 13.sp)
             } else {
                 Spacer(Modifier.weight(1f))
                 if (state.phase == "inserted") Icon(PaplyIcons.Check, null, tint = ink, modifier = Modifier.size(36.dp))
-                Text(state.title, color = ink, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(state.title.ifBlank { "Paply ist bereit" }, color = ink, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 if (state.subtitle.isNotBlank()) Text(state.subtitle, color = ink.copy(alpha = .72f), fontSize = 14.sp,
                     modifier = Modifier.padding(top = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (state.phase in listOf("setup", "error", "pending")) Button(onClick = onPrimary,
+                    if (state.phase in listOf("setup", "key", "storage", "audioMissing", "error", "pending")) Button(onClick = onPrimary,
                         colors = ButtonDefaults.buttonColors(containerColor = C.greenBright, contentColor = C.forest)) {
-                        Text(when (state.phase) { "setup" -> "Paply einrichten"; "pending" -> "Einsetzen"; else -> "Erneut versuchen" })
+                        Text(when (state.phase) { "setup", "key" -> "Paply einrichten"; "audioMissing" -> "Neu aufnehmen"; "pending" -> "Einsetzen"; else -> "Erneut versuchen" })
                     }
                     if (state.canCopy) TextButton(onClick = onCopy) { Text("In Zwischenablage", color = ink) }
                 }
-                if (state.phase != "inserted") TextButton(onClick = onBack) {
+                TextButton(onClick = onBack) {
                     Icon(PaplyIcons.Keyboard, null, Modifier.size(18.dp), tint = ink.copy(alpha = .7f))
                     Spacer(Modifier.width(8.dp)); Text("Zurück zur Tastatur", color = ink.copy(alpha = .7f))
                 }

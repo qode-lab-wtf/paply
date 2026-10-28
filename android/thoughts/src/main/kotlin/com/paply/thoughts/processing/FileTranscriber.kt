@@ -50,6 +50,7 @@ class FileTranscriber(
     private val baseURL: HttpUrl = GroqClient.defaultBaseURL,
     private val catalog: ModelCatalog = ModelCatalog.shared,
     private val decoder: (Path) -> FloatArray? = ::readSamples,
+    private val diagnostic: (String) -> Unit = {},
 ) : ThoughtTranscribing {
     override suspend fun transcribe(
         audioURL: Path,
@@ -63,9 +64,11 @@ class FileTranscriber(
         val pipeline =
             DictationPipeline(
                 settings.copy(chunkedUpload = false),
-                GroqClient(apiKey, baseUrl = baseURL, transport = transport),
+                GroqClient(apiKey, baseUrl = baseURL, transport = transport, diagnostic = {
+                    if (it == "whisper.request") diagnostic("thought.groq count=1")
+                }),
                 catalog,
-                PipelineOptions(polish = false),
+                PipelineOptions(polish = false, removeLongSilence = true),
             )
         return try {
             var start = 0
@@ -74,7 +77,9 @@ class FileTranscriber(
                 pipeline.append(samples.copyOfRange(start, end))
                 start = end
             }
-            result(pipeline.finish(), settings.transcriptionModel)
+            val outcome = pipeline.finish()
+            diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
+            result(outcome, settings.transcriptionModel)
         } catch (_: CancellationException) {
             TranscriptionResult.Failure(TranscriptionFailure.cancelled)
         } finally {

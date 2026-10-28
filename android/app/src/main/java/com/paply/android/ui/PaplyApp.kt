@@ -40,6 +40,7 @@ import com.paply.android.settings.AppPreferences
 import com.paply.android.settings.KeyVault
 import com.paply.android.settings.SettingsRepository
 import com.paply.android.ui.components.*
+import com.paply.android.ui.thoughts.*
 import com.paply.android.ui.theme.PaplyBackground
 import com.paply.android.ui.theme.PaplyColors as C
 import com.paply.android.ui.theme.PaplyTheme
@@ -69,11 +70,10 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
         var hasKey by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf(SetupStatus.read(activity, prefs)) }
         val thoughtRepository = remember { ThoughtsRepository.get(activity) }
-        val thoughts by thoughtRepository.thoughts.collectAsStateWithLifecycle()
-        val thoughtStates by thoughtRepository.status.collectAsStateWithLifecycle()
         var diagnostic by remember { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
+        val thoughtActions = remember(thoughtRepository, scope, snackbar) { ThoughtsActions(thoughtRepository, activity.applicationContext, scope, snackbar) }
         val screenState = rememberSaveableStateHolder()
         fun message(text: String) { scope.launch { snackbar.showSnackbar(text) } }
         fun refreshKey() {
@@ -150,6 +150,7 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
         LaunchedEffect(route) { if (route == "diagnostics") diagnostic = DiagnosticReader.read() }
         BackHandler(route != "home") { back() }
 
+        TopicAppearanceProvider(thoughtRepository, thoughtActions.appearanceRevision) {
         PaplyBackground {
             Scaffold(containerColor = Color.Transparent,
                 snackbarHost = { SnackbarHost(snackbar) { data ->
@@ -158,7 +159,7 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                 bottomBar = {
                     if (route == "home" && prefs.betaThoughts) NavigationBar(containerColor = C.forestDeep.copy(alpha = 0.96f), tonalElevation = 0.dp) {
                         listOf(Triple("thoughts", "Gedanken", PaplyIcons.MessageCircle), Triple("tasks", "Aufgaben", PaplyIcons.ListChecks), Triple("dictation", "Diktat", PaplyIcons.Globe)).forEach { (id, title, icon) ->
-                            NavigationBarItem(selected = tab == id, onClick = { tab = id }, icon = { Glyph(icon, tint = if (tab == id) C.thoughtMint else C.secondary) },
+                            NavigationBarItem(selected = tab == id, onClick = { tab = id }, icon = { if (id == "tasks") ThoughtsTaskTabIcon(thoughtRepository, tab == id) else Glyph(icon, tint = if (tab == id) C.thoughtMint else C.secondary) },
                                 label = { Text(title) }, colors = NavigationBarItemDefaults.colors(indicatorColor = C.thoughtMint.copy(alpha = 0.12f),
                                     selectedTextColor = C.thoughtMint, unselectedTextColor = C.secondary))
                         }
@@ -178,7 +179,7 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                         "diagnostics" -> "Diagnose"
                         else -> "Diktat"
                     }
-                    PageHeader(title, back = if (home) null else { { back() } }, settings = if (home) { { navigate("settings") } } else null,
+                    if (!(home && prefs.betaThoughts && tab != "dictation")) PageHeader(title, back = if (home) null else { { back() } }, settings = if (home) { { navigate("settings") } } else null,
                         beta = home && prefs.betaThoughts && tab != "dictation", done = if (home) null else { { navigate("home") } }, large = route != "detail")
                     if (settingsError != null) Text(settingsError!!, color = C.beak, modifier = Modifier.padding(16.dp))
                     Box(Modifier.weight(1f)) {
@@ -193,11 +194,10 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                                         deleteAll = { historyAction { history.deleteAll() } }, keyboard = {
                                             if (status.keyboardEnabled && !status.keyboardSelected) activity.chooseKeyboard() else navigate("keyboard")
                                         }, error = historyError, retryLoad = { historyAction { history.reload() } })
-                                    else if (tab == "tasks") Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                                        EmptyState("Noch keine Aufgaben", "Aufgaben entstehen aus deinen Gedanken. Sag einfach „Ich muss …“ – Paply hält sie hier fest.", PaplyIcons.ListChecks)
-                                    }
-                                    else ThoughtsScreen(thoughts, thoughtStates, thoughtStatus.message, setup,
-                                        activity.intent.getStringExtra("thoughtId"))
+                                    else ThoughtsTab(thoughtRepository, thoughtActions, tasksTab = tab == "tasks", setup = setup,
+                                        onSettings = { navigate("settings") }, onTileSetup = { navigate("tile") },
+                                        focusID = activity.intent.getStringExtra("thoughtId").takeIf { tab == "thoughts" },
+                                        setupProgress = listOf(status.microphone, status.notifications, hasKey, status.keyboardEnabled, status.keyboardSelected, status.tileAdded).count { it } to 6)
                                 }
                                 "settings" -> SettingsHome(activity, prefs, vault, hasKey, keyError, status, ::refreshKey, ::edit, ::navigate, ::message)
                                 "languages" -> LanguagesScreen(prefs, ::edit)
@@ -219,35 +219,6 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ThoughtsScreen(thoughts: List<Thought>, states: Map<String, ThoughtsRepository.Status>, status: String,
-    setup: @Composable () -> Unit, focusID: String?,
-) {
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(focusID, thoughts.size) {
-        val index = thoughts.indexOfFirst { it.id == focusID }
-        if (index >= 0) listState.scrollToItem(index + 1 + if (status.isNotEmpty()) 1 else 0)
-    }
-    LazyColumn(state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item("setup") { setup() }
-        if (status.isNotEmpty()) item("status") { Text(status, style = MaterialTheme.typography.bodySmall, color = C.secondary) }
-        if (thoughts.isEmpty()) item("empty") {
-            EmptyState("Deine Gedanken", "Drück den Paply-Knopf in den Schnelleinstellungen und sprich – wie in ein Diktiergerät. Deine Worte bleiben hier festgehalten.", PaplyIcons.Lightbulb)
-        }
-        itemsIndexed(thoughts, key = { _, thought -> thought.id }) { _, thought ->
-            PaplyCard {
-                Text(historyDate(thought.createdAt.toEpochMilli()), color = C.secondary, style = MaterialTheme.typography.bodySmall)
-                thought.title?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
-                Spacer(Modifier.height(10.dp))
-                SelectionContainer { Text(thought.text ?: states[thought.id]?.message ?: "Aufnahme gesichert · wird geordnet", style = MaterialTheme.typography.bodyLarge) }
-                if (thought.state != StoredThoughtState.done) states[thought.id]?.audioExpiresAt?.let {
-                    Text("Audio bis zum Rohtext, höchstens bis " + java.time.format.DateTimeFormatter.ofPattern("dd.MM.")
-                        .withZone(java.time.ZoneId.systemDefault()).format(it), color = C.secondary, style = MaterialTheme.typography.bodySmall)
-                }
-            }
         }
     }
 }

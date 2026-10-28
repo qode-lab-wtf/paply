@@ -85,3 +85,9 @@ fun PaplyBackground(modifier: Modifier = Modifier, content: @Composable BoxScope
             center = Offset(size.width * 0.5f, size.height * -0.05f), radius = 900.dp.toPx()))
     }, content = content)
 }
+
+/** Additional document token from iOS ThoughtDetailView (.title2, 22 pt bold). */
+object PaplyThoughtType {
+    val documentTitle = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 22.sp,
+        fontWeight = FontWeight.Bold, lineHeight = 28.sp, letterSpacing = 0.sp)
+}

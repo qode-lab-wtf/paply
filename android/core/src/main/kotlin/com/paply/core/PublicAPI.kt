@@ -74,6 +74,7 @@ data class PipelineOptions(
     val codeSwitchPrimer: Boolean = true,
     val polish: Boolean = true,
     val strictPolishCheck: Boolean = true,
+    val removeLongSilence: Boolean = false,
 ) {
     enum class UploadFormat {
         flac,

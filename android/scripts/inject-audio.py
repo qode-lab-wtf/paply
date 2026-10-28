@@ -57,6 +57,9 @@ def packets():
             time.sleep(max(0, start + frames / 16000 - time.monotonic()))
         print(f'Injected {frames} frames ({frames / 16000:.2f}s), PCM16 mono 16kHz.')
 
+with wave.open(args.wav, 'rb') as source:
+    timeout = max(45, source.getnframes() / source.getframerate() + 30)
+
 with grpc.insecure_channel('127.0.0.1:8554') as channel:
     # Loopback transport with emulator-generated bearer token; never printed or persisted here.
-    EmulatorControllerStub(channel).injectAudio(packets(), metadata=(('authorization', 'Bearer ' + token),), timeout=45)
+    EmulatorControllerStub(channel).injectAudio(packets(), metadata=(('authorization', 'Bearer ' + token),), timeout=timeout)

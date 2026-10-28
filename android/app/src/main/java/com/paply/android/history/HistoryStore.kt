@@ -17,6 +17,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** createdAt uses Unix epoch milliseconds, durationMs is audio duration, audioFile is an optional private path. */
+enum class HistoryFailure(val message: String) {
+    KEY("Schlüssel neu eintragen"), STORAGE_FULL("Speicher voll"),
+    STORAGE("Speichern nicht möglich. Bitte freien Speicher prüfen."),
+    MICROPHONE_BUSY("Mikro belegt"), MICROPHONE("Mikrofon nicht verfügbar"),
+    AUDIO_MISSING("Audio fehlt"), CANCELLED("Neuversuch abgebrochen"), PROCESSING("Verarbeitung fehlgeschlagen"),
+}
 enum class HistoryStatus { OK, FAILED, PENDING }
 data class HistoryEntry(
     val id: String,
@@ -28,6 +34,7 @@ data class HistoryEntry(
     val status: HistoryStatus = HistoryStatus.OK,
     val error: String? = null,
     val audioFile: String? = null,
+    val failure: HistoryFailure? = null,
 ) {
     val text: String get() = polished.ifEmpty { raw }
 }
@@ -102,6 +109,7 @@ class HistoryStore internal constructor(context: Context, autoLoad: Boolean = tr
             val old = entries.value + overflow
             val candidates = transform(old)
             val next = candidates.take(LIMIT)
+            if (candidates == old && overflow.isEmpty()) return@withLock
             check(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
             val output = atomic.startWrite()
             try {
@@ -148,11 +156,12 @@ class HistoryStore internal constructor(context: Context, autoLoad: Boolean = tr
             o.optString("language").takeIf { it.isNotEmpty() }, o.optLong("durationMs"),
             HistoryStatus.valueOf(o.optString("status", "OK")),
             o.optString("error").takeIf { it.isNotEmpty() }, o.optString("audioFile").takeIf { it.isNotEmpty() },
+            HistoryFailure.entries.firstOrNull { it.name == o.optString("failure") },
         )
         private fun encode(e: HistoryEntry): JSONObject = JSONObject().apply {
             put("id", e.id); put("createdAt", e.createdAt); put("polished", e.polished); put("raw", e.raw)
             put("language", e.language ?: ""); put("durationMs", e.durationMs); put("status", e.status.name)
-            put("error", e.error ?: ""); put("audioFile", e.audioFile ?: "")
+            put("error", e.error ?: ""); put("audioFile", e.audioFile ?: ""); put("failure", e.failure?.name ?: "")
         }
     }
 }

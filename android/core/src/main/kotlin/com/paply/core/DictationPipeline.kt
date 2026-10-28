@@ -65,7 +65,7 @@ constructor(
     private val deviceLanguages = deviceLanguages.toList()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val samples = PcmBuffer()
-    private var vad = VoiceActivityDetector()
+    private var vad = VoiceActivityDetector(analyzeQuietFrames = options.removeLongSilence)
     private var planner = ChunkPlanner()
 
     private data class Chunk(
@@ -148,7 +148,7 @@ constructor(
             vad.process(floating)
             notifyState()
             val pending = mutableListOf<Deferred<ChunkResult>>()
-            if (settings.chunkedUpload && vad.speechDetected && !chunkingStopped) {
+            if (settings.chunkedUpload && !options.removeLongSilence && vad.speechDetected && !chunkingStopped) {
                 while (true) {
                     val range = planner.nextCut(vad) ?: break
                     prepareChunk(range)?.let { pending += it }
@@ -165,7 +165,7 @@ constructor(
             if (finished || cancelled || chunks.isNotEmpty() || vad.speechDetected)
                 return@synchronized false
             samples.clear()
-            vad = VoiceActivityDetector()
+            vad = VoiceActivityDetector(analyzeQuietFrames = options.removeLongSilence)
             planner = ChunkPlanner()
             true
         }
@@ -544,7 +544,11 @@ constructor(
             if (chunks.isEmpty() || pendingBefore || measured.hasAnyActivity(tail))
                 addPending(tailStart, sampleCount)
         }
-        return pieces.flatMap { split(it, measured) }.toMutableList()
+        val bounded = if (options.removeLongSilence) pieces.flatMap { piece ->
+            if (piece.result != null) listOf(piece)
+            else LongSilence.ranges(measured, piece.start, piece.end).map { PlanPiece(it.first, it.last + 1) }
+        } else pieces
+        return bounded.flatMap { split(it, measured) }.toMutableList()
     }
 
     private fun split(piece: PlanPiece, measured: VoiceActivityDetector): List<PlanPiece> {

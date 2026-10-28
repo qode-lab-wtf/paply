@@ -15,6 +15,7 @@ import com.paply.core.PaplySettings
 import com.paply.thoughts.*
 import com.paply.thoughts.ai.ThoughtStructurer
 import com.paply.thoughts.budget.TokenLedger
+import com.paply.thoughts.display.TaskKey
 import com.paply.thoughts.local.CandidateFinder
 import com.paply.thoughts.local.TopicIndex
 import com.paply.thoughts.model.TopicSuggestion
@@ -77,6 +78,7 @@ class ThoughtsRepository private constructor(private val app: Context) {
         Backend(store, ledger, CandidateFinder(store, detector = AndroidLanguageDetector(app)))
     }
     init {
+        com.paply.android.reminders.TaskReminders.start(app, this)
         keyPrefs.registerOnSharedPreferenceChangeListener(keyListener)
         scope.launch {
             SettingsRepository.get(app).state.map { it.betaThoughts }.distinctUntilChanged().collect {
@@ -106,7 +108,8 @@ class ThoughtsRepository private constructor(private val app: Context) {
         b.store, ThoughtStructurer(b.ledger, trace = trace), b.finder, b.ledger,
         ProcessorEnvironment(apiKey = { KeyVault(app).read() }, isOnline = { online() },
             isDictationBusy = { dictationBusy() }, settings = { settings() }, uiLanguage = Locale.getDefault().language),
-        TopicIndex, b.finder, options = ThoughtProcessor.Options(autoRetry = false), trace = trace,
+        TopicIndex, b.finder, transcriber = com.paply.thoughts.processing.FileTranscriber(diagnostic = Diag::event),
+        options = ThoughtProcessor.Options(autoRetry = false), trace = trace,
         languageDetector = AndroidLanguageDetector(app),
     )
     fun kick(reason: String = "foreground") {
@@ -149,6 +152,25 @@ class ThoughtsRepository private constructor(private val app: Context) {
     }
     suspend fun source(id: String): ThoughtSource? = withContext(Dispatchers.IO) { backend().store.source(id) }
     suspend fun thought(id: String): Thought? = withContext(Dispatchers.IO) { backend().store.thought(id) }
+    /** Consistent reminder input, including trash; topics are resolved across merges under the store lock. */
+    data class ReminderSnapshot(val thoughts: List<Thought>, val topicsByThought: Map<String, Topic>)
+    suspend fun reminderSnapshot(): ReminderSnapshot = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            val all = store.all()
+            ReminderSnapshot(all, all.mapNotNull { thought -> store.resolveTopic(thought.topicId)?.let { thought.id to it } }.toMap())
+        }
+    }
+    private val mutableReminderDestination = MutableStateFlow<TaskKey?>(null)
+    val reminderDestination = mutableReminderDestination.asStateFlow()
+    fun openTaskFromReminder(key: TaskKey) { mutableReminderDestination.value = key }
+    fun consumeReminderDestination(key: TaskKey) { mutableReminderDestination.compareAndSet(key, null) }
+    /** Notification completion is a set, never a toggle; stale actions cannot restore a deleted thought. */
+    suspend fun completeTaskFromReminder(thoughtID: String, taskID: String) = change(thoughtID) { t ->
+        if (t.deletedAt != null) t else t.copy(tasks = t.tasks.map {
+            if (it.id == taskID && !it.done) it.copy(done = true, doneAt = Instant.now()) else it
+        })
+    }
     private suspend fun change(id: String, edit: (Thought) -> Thought) = withContext(Dispatchers.IO) {
         val b = backend(); val result = b.store.update(id, edit); publish(b.store); result
     }
@@ -183,6 +205,257 @@ class ThoughtsRepository private constructor(private val app: Context) {
         // Retain cached successful AI results on an interrupted commit; explicit reorganize is separate.
         store.update(id) { it.copy(state = if (store.hasSource(id)) ThoughtState.transcribed else ThoughtState.captured, status = Thought.Status()) }
         publish(store); kick("retry")
+    }
+    suspend fun finishRecording() { com.paply.android.ThoughtService.command(app, com.paply.android.ThoughtService.FINISH) }
+    // UI actions: additive to the service boundary; all edits use the existing core store.
+    suspend fun renameTopic(id: String, title: String) = withContext(Dispatchers.IO) {
+        require(title.isNotBlank())
+        backend().store.updateTopics { list -> list.map { if (it.id == id) it.copy(title = title.trim()) else it } }
+        publish()
+    }
+    suspend fun setTopicIcon(id: String, icon: TopicIcon) = withContext(Dispatchers.IO) {
+        backend().store.updateTopics { list -> list.map { if (it.id == id) it.copy(icon = icon) else it } }
+        publish()
+    }
+    suspend fun setTopicNote(id: String, note: String?) = withContext(Dispatchers.IO) {
+        val normalized = Topic.normalizedNote(note)
+        backend().store.updateTopics { list -> list.map {
+            if (it.id == id) it.copy(note = normalized, owner = if (normalized != null) Owner.user else it.owner) else it
+        } }
+        publish()
+    }
+    suspend fun keepProvisional(id: String) = withContext(Dispatchers.IO) {
+        backend().store.updateTopics { list -> list.map { if (it.id == id) it.copy(owner = Owner.user) else it } }
+        publish()
+    }
+    suspend fun updateTopic(id: String, title: String, icon: TopicIcon, note: String?) = withContext(Dispatchers.IO) {
+        require(title.isNotBlank())
+        val normalized = Topic.normalizedNote(note)
+        backend().store.updateTopics { list -> list.map {
+            if (it.id == id) it.copy(title = title.trim(), icon = icon, note = normalized,
+                owner = if (normalized != null) Owner.user else it.owner) else it
+        } }
+        publish()
+    }
+    /** Returns a conditional undo action; later user assignments are never blindly replaced. */
+    suspend fun mergeTopics(ids: List<String>, into: String, title: String? = null): suspend () -> Unit = withContext(Dispatchers.IO) {
+        val store = backend().store
+        val target = requireNotNull(store.resolveTopic(into)) { "topic-missing" }
+        val sources = ids.mapNotNull { store.resolveTopic(it)?.id }.filter { it != target.id }.toSet()
+        val originalTopics = store.topics().filter { it.id in sources || it.id == target.id }
+        val originalImages = topicImages()
+        val originalSlots = topicColorSlots()
+        val moved = mutableListOf<Pair<Thought, Int>>()
+        synchronized(store) {
+            val members = store.all().filter { store.resolveTopic(it.topicId)?.id in sources }
+            store.updateTopics { list -> list.map {
+                when {
+                    it.id in sources -> it.copy(mergedInto = target.id)
+                    it.id == target.id && !title.isNullOrBlank() -> it.copy(title = title.trim())
+                    else -> it
+                }
+            } }
+            for (thought in members) {
+                val result = store.update(thought.id) { it.copy(topicId = target.id) }
+                if (result != null) moved += thought to result.rev
+            }
+            val involved = sources + target.id
+            store.setPendingSuggestions(store.pendingSuggestions().filter { it.a !in involved && it.b !in involved })
+        }
+        reconcileTopicImages()
+        val adoptedImage = if (originalImages[target.id] == null) topicImages()[target.id] else null
+        publish(store)
+        val undo: suspend () -> Unit = {
+            withContext(Dispatchers.IO) {
+                synchronized(store) {
+                    store.updateTopics { list -> list.map { current ->
+                        val old = originalTopics.firstOrNull { it.id == current.id }
+                        when {
+                            old == null -> current
+                            current.id in sources && current.mergedInto == target.id -> current.copy(mergedInto = old.mergedInto)
+                            current.id == target.id && current.title == (title?.trim()?.takeIf { it.isNotEmpty() } ?: target.title) -> current.copy(title = old.title)
+                            else -> current
+                        }
+                    } }
+                    for ((old, _) in moved) store.update(old.id) {
+                        if (it.topicId == target.id && it.topicOwner == old.topicOwner) it.copy(topicId = old.topicId) else it
+                    }
+                }
+                // An adopted source picture returns with the source on undo. A newly chosen target picture stays.
+                if (adoptedImage != null && sources.any { source ->
+                        store.resolveTopic(source)?.id == source && originalImages[source]?.contentEquals(adoptedImage) == true
+                    }) {
+                    val name = com.paply.thoughts.display.TopicImageFile.fileName(target.id)!!
+                    val file = store.root.resolve(com.paply.thoughts.display.TopicImageFile.directoryName).resolve(name)
+                    if (java.nio.file.Files.exists(file) && java.nio.file.Files.readAllBytes(file).contentEquals(adoptedImage))
+                        java.nio.file.Files.delete(file)
+                }
+                reconcileTopicImages()
+                restoreTopicColorSlots(originalSlots.filterKeys { it in sources })
+                publish(store)
+            }
+        }
+        undo
+    }
+    suspend fun deleteTopic(id: String) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            val removed = store.topics().filter { it.id == id || store.resolveTopic(it.id)?.id == id }.map { it.id }.toSet()
+            for (thought in store.all().filter { it.topicId in removed }) store.update(thought.id) {
+                if (it.topicId in removed) it.copy(topicId = null, topicOwner = Owner.user) else it
+            }
+            store.updateTopics { it.filterNot { topic -> topic.id in removed } }
+            store.setPendingSuggestions(store.pendingSuggestions().filter { it.a !in removed && it.b !in removed })
+        }
+        reconcileTopicImages(); publish(store)
+    }
+    suspend fun acceptSuggestion(suggestion: TopicSuggestion): suspend () -> Unit =
+        mergeTopics(listOf(suggestion.a, suggestion.b), suggestion.a, suggestion.name)
+    suspend fun declineSuggestion(suggestion: TopicSuggestion) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        store.declineMerge(suggestion.a, suggestion.b)
+        store.setPendingSuggestions(store.pendingSuggestions().filter { it.id != suggestion.id })
+        publish(store)
+    }
+    suspend fun addTask(id: String, text: String) = change(id) { thought ->
+        require(text.isNotBlank())
+        thought.copy(tasks = thought.tasks + ThoughtTask(text = text.trim(), owner = Owner.user))
+    }
+    suspend fun editTask(id: String, taskID: String, text: String) = change(id) { thought ->
+        require(text.isNotBlank())
+        thought.copy(tasks = thought.tasks.map { if (it.id == taskID) it.copy(text = text.trim(), owner = Owner.user) else it })
+    }
+    suspend fun deleteTask(id: String, taskID: String): suspend () -> Unit {
+        var removed: ThoughtTask? = null
+        var position = 0
+        change(id) { thought ->
+            position = thought.tasks.indexOfFirst { it.id == taskID }.coerceAtLeast(0)
+            removed = thought.tasks.firstOrNull { it.id == taskID }
+            thought.copy(tasks = thought.tasks.filterNot { it.id == taskID })
+        }
+        return {
+            removed?.let { task -> change(id) { thought ->
+                if (thought.tasks.any { it.id == task.id } || thought.deletedAt != null) thought
+                else thought.copy(tasks = thought.tasks.toMutableList().apply { add(position.coerceAtMost(size), task) })
+            } }
+        }
+    }
+    suspend fun addLink(id: String, target: String) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            val a = store.thought(id); val b = store.thought(target)
+            if (a != null && b != null && a.id != b.id && a.deletedAt == null && b.deletedAt == null &&
+                a.links.none { it.target == b.id } && b.links.none { it.target == a.id }) {
+                val (owner, other) = if (a.createdAt >= b.createdAt) a to b else b to a
+                store.update(owner.id) { it.copy(links = it.links + ThoughtLink(other.id, LinkKind.sameMatter, "", Owner.user)) }
+            }
+        }
+        publish(store)
+    }
+    suspend fun removeLink(id: String, target: String) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            store.update(id) { it.copy(links = it.links.filterNot { link -> link.target == target }) }
+            store.update(target) { it.copy(links = it.links.filterNot { link -> link.target == id }) }
+        }
+        publish(store)
+    }
+    suspend fun reorganize(id: String) = withContext(Dispatchers.IO) {
+        // Worker owns processing; only reset the cached result before the existing retry path.
+        workMutex.lock()
+        try { backend().store.discardAIResult(id); retry(id) } finally { workMutex.unlock() }
+    }
+    suspend fun purgeAllDeleted() = withContext(Dispatchers.IO) {
+        val store = backend().store
+        store.purge(store.all().filter { it.deletedAt != null }.map { it.id })
+        reconcileTopicImages(); publish(store)
+    }
+    suspend fun makeSearchIndex(): com.paply.thoughts.local.ThoughtSearchIndex = withContext(Dispatchers.IO) {
+        val store = backend().store
+        val index = com.paply.thoughts.local.ThoughtSearchIndex()
+        val sources = store.allSources()
+        for (thought in store.all().filter { it.deletedAt == null && it.state != ThoughtState.empty }) {
+            index.upsert(thought, store.resolveTopic(thought.topicId)?.title, sources[thought.id]?.text)
+        }
+        index
+    }
+    suspend fun search(query: String): List<com.paply.thoughts.model.SearchHit> = withContext(Dispatchers.Default) {
+        makeSearchIndex().search(query)
+    }
+    suspend fun topicColorSlots(): Map<String, Int> = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            val file = store.root.resolve(com.paply.thoughts.display.TopicColorFile.fileName)
+            val loaded = com.paply.thoughts.display.TopicColorFile.load(file)
+            if (loaded is com.paply.thoughts.display.TopicColorFile.Loaded.Unreadable) return@synchronized emptyMap()
+            val register = (loaded as? com.paply.thoughts.display.TopicColorFile.Loaded.Register)?.register
+                ?: com.paply.thoughts.display.TopicColorRegister()
+            if (register.update(store.topics(), listOf(0, 6, 3, 7, 2, 4, 8, 5, 1, 9)))
+                com.paply.thoughts.display.TopicColorFile.save(register, file)
+            store.topics().mapNotNull { topic -> register.slot(topic.id)?.let { topic.id to it } }.toMap()
+        }
+    }
+    private suspend fun restoreTopicColorSlots(oldSlots: Map<String, Int>) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            val file = store.root.resolve(com.paply.thoughts.display.TopicColorFile.fileName)
+            val loaded = com.paply.thoughts.display.TopicColorFile.load(file)
+            if (loaded is com.paply.thoughts.display.TopicColorFile.Loaded.Unreadable) return@synchronized
+            val current = (loaded as? com.paply.thoughts.display.TopicColorFile.Loaded.Register)?.register
+                ?: com.paply.thoughts.display.TopicColorRegister()
+            val available = oldSlots.filter { (id, slot) -> store.resolveTopic(id)?.id == id && slot !in current.slots.values }
+            val register = com.paply.thoughts.display.TopicColorRegister(current.slots + available, current.last)
+            register.update(store.topics(), listOf(0, 6, 3, 7, 2, 4, 8, 5, 1, 9))
+            com.paply.thoughts.display.TopicColorFile.save(register, file)
+        }
+    }
+    suspend fun topicImages(): Map<String, ByteArray> = withContext(Dispatchers.IO) {
+        reconcileTopicImages()
+        val store = backend().store
+        store.topics().mapNotNull { topic ->
+            val name = com.paply.thoughts.display.TopicImageFile.fileName(topic.id) ?: return@mapNotNull null
+            val file = store.root.resolve(com.paply.thoughts.display.TopicImageFile.directoryName).resolve(name)
+            if (java.nio.file.Files.exists(file)) topic.id to java.nio.file.Files.readAllBytes(file) else null
+        }.toMap()
+    }
+    /** Input must already be a fresh JPEG produced by the platform codec. */
+    suspend fun setTopicImage(id: String, jpeg: ByteArray?) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        requireNotNull(store.resolveTopic(id))
+        val name = requireNotNull(com.paply.thoughts.display.TopicImageFile.fileName(id))
+        val directory = store.root.resolve(com.paply.thoughts.display.TopicImageFile.directoryName)
+        com.paply.thoughts.store.FileSafety.createDirectory(directory)
+        if (jpeg == null) java.nio.file.Files.deleteIfExists(directory.resolve(name))
+        else {
+            val clean = requireNotNull(com.paply.thoughts.display.TopicImageFile.squareJPEG(jpeg, AndroidTopicImageCodec()))
+            com.paply.thoughts.store.FileSafety.writeAtomically(clean, directory.resolve(name))
+        }
+    }
+    private suspend fun reconcileTopicImages() = withContext(Dispatchers.IO) {
+        val store = backend().store
+        synchronized(store) {
+            val directory = store.root.resolve(com.paply.thoughts.display.TopicImageFile.directoryName)
+            val names = directory.toFile().list()?.toList().orEmpty()
+            val scan = com.paply.thoughts.display.TopicImageFile.scan(names)
+            val plan = com.paply.thoughts.display.TopicImageFile.plan(scan.images, scan.parked, topics = store.topics(), saved = true)
+            fun move(from: String, to: String) {
+                val source = directory.resolve(from)
+                if (java.nio.file.Files.exists(source)) java.nio.file.Files.move(source, directory.resolve(to), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+            val files = com.paply.thoughts.display.TopicImageFile
+            for ((target, source) in plan.adopt) {
+                // Keep a parked copy for the merge undo. Both are derived, local-only JPEGs.
+                java.nio.file.Files.copy(directory.resolve(files.fileName(source)!!), directory.resolve(files.parkedFileName(source)!!), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                move(files.fileName(source)!!, files.fileName(target)!!)
+            }
+            for (id in plan.park) move(files.fileName(id)!!, files.parkedFileName(id)!!)
+            for (id in plan.restore) move(files.parkedFileName(id)!!, files.fileName(id)!!)
+            val living = store.topics().map { it.id }.toSet()
+            for (id in scan.images + scan.parked) if (id !in living) {
+                java.nio.file.Files.deleteIfExists(directory.resolve(files.fileName(id)!!))
+                java.nio.file.Files.deleteIfExists(directory.resolve(files.parkedFileName(id)!!))
+            }
+        }
     }
     internal suspend fun maintenance(now: Instant = Instant.now()) = withContext(Dispatchers.IO) {
         val store = backend().store

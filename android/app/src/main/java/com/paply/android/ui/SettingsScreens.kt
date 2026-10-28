@@ -172,6 +172,7 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
         if (prefs.betaThoughts) Section("Gedanken", "Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.") {
             SettingsItem("Gedanken-Knopf einrichten", icon = PaplyIcons.Lightbulb, value = if (status.tileAdded) "eingerichtet" else "fehlt noch", onClick = { navigate("tile") })
         }
+        if (prefs.betaThoughts) TaskReminderSettingsSection(activity, message)
         Section {
             SettingsItem("Tastatur einrichten", icon = PaplyIcons.Keyboard,
                 value = if (status.keyboardSelected) "Paply ist ausgewählt" else if (status.keyboardEnabled) "aktiviert · noch nicht ausgewählt" else "fehlt noch",
@@ -197,6 +198,29 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
                 } else if (versionTaps >= 3) devHint = "Noch ${5 - versionTaps}× tippen …"
             })
         }
+    }
+}
+
+/** Separate task-reminder section, matching iOS; exact access is an optional improvement. */
+@Composable
+private fun TaskReminderSettingsSection(activity: Activity, message: (String) -> Unit) {
+    val actions = com.paply.android.ui.reminders.rememberReminderActions(activity, message)
+    val reminders = actions.state
+    Section("Aufgaben", "Hat eine Aufgabe eine Uhrzeit – etwa „morgen um 8“ –, meldet sich Paply dann. In der Mitteilung kannst du sie abhaken oder eine Stunde später erinnern lassen. Aufgaben nur mit Tag bleiben still.") {
+        SettingsToggle("Erinnerungen zur Uhrzeit", reminders.isOn,
+            { on -> if (on) actions.enable() else actions.disable() }, icon = PaplyIcons.Bell)
+        if (!reminders.notificationsAllowed) {
+            Hairline()
+            SettingsItem("Mitteilungen erlauben", icon = PaplyIcons.Bell,
+                value = "Mitteilungen für Paply sind aus. Ohne Erlaubnis werden keine Erinnerungen geplant.", onClick = actions.notificationSettings)
+        }
+        if (!reminders.exactAllowed) {
+            Hairline()
+            Text("Für pünktliche Erinnerungen erlaube Paply „Alarme & Erinnerungen“. Sonst erinnert Paply in einem Zeitfenster um die Uhrzeit; im Energiesparmodus kann es später werden.",
+                style = MaterialTheme.typography.bodyMedium, color = C.secondary, modifier = Modifier.padding(16.dp))
+            SettingsItem("Alarme & Erinnerungen", icon = PaplyIcons.Clock, onClick = actions.exactSettings)
+        }
+        reminders.error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = C.beak, modifier = Modifier.padding(16.dp)) }
     }
 }
 

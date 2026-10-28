@@ -1,5 +1,6 @@
 package com.paply.android
 
+import com.paply.android.dictation.RecordingConfigPoll
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -47,6 +48,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
     @Volatile private var clientSilenced = false
     @Volatile private var recorder: AudioRecord? = null
     private var wasSilenced = false
+    private val configPoll = RecordingConfigPoll()
     private val callback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
             val session = recorder?.audioSessionId ?: return
@@ -121,7 +123,10 @@ class AudioCapture(private val context: Context, val file: File, private val max
                     }
                     error = "read-$count"; break
                 }
-                val silenced = clientSilenced || audio.activeRecordingConfiguration?.isClientSilenced == true ||
+                if (configPoll.due(SystemClock.elapsedRealtime())) {
+                    audio.activeRecordingConfiguration?.let { clientSilenced = it.isClientSilenced }
+                }
+                val silenced = clientSilenced ||
                     manager.isMicrophoneMute || inCall() || (BuildConfig.DEBUG && CaptureDebug.silenced)
                 setInterrupted(silenced)
                 if (count == 0) { Thread.sleep(10); continue }

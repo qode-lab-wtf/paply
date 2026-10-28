@@ -28,10 +28,12 @@ fun Glyph(icon: ImageVector, description: String? = null, tint: Color = C.text, 
 }
 
 @Composable
-fun PaplyCard(modifier: Modifier = Modifier, radius: Dp = 20.dp, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier, shape = RoundedCornerShape(radius), color = C.row,
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.12f))) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
+fun PaplyCard(modifier: Modifier = Modifier, radius: Dp = 20.dp, color: Color = C.row,
+    borderColor: Color = Color.White.copy(alpha = 0.12f), shadow: Dp = 0.dp,
+    contentPadding: PaddingValues = PaddingValues(16.dp), content: @Composable ColumnScope.() -> Unit) {
+    Surface(modifier, shape = RoundedCornerShape(radius), color = color, shadowElevation = shadow,
+        border = BorderStroke(0.5.dp, borderColor)) {
+        Column(Modifier.fillMaxWidth().padding(contentPadding), content = content)
     }
 }
 

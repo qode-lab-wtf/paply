@@ -3,7 +3,7 @@ package com.paply.core
 import kotlin.math.*
 
 /** Mathematical port of the Swift 30 ms VAD; use one owner or a snapshot for concurrent readers. */
-class VoiceActivityDetector {
+class VoiceActivityDetector(private val analyzeQuietFrames: Boolean = false) {
     companion object {
         const val sampleRate = 16_000.0
         const val frameLength = 480
@@ -35,7 +35,7 @@ class VoiceActivityDetector {
             return low
         }
 
-        fun analyze(input: FloatArray): Frame {
+        fun analyze(input: FloatArray, featureFloorDbfs: Double = -75.0): Frame {
             val n = input.size
             if (n == 0) return Frame(-120f, 0f)
             var sum = 0f
@@ -47,7 +47,7 @@ class VoiceActivityDetector {
             for (v in x) squares += v * v
             val meanSquare = squares / n
             val dbfs = max(-120.0, 10 * log10(meanSquare.toDouble()))
-            if (!dbfs.isFinite() || dbfs <= -75)
+            if (!dbfs.isFinite() || dbfs <= featureFloorDbfs)
                 return Frame(if (dbfs.isFinite()) dbfs.toFloat() else -120f, 0f, 0f)
             var crossings = 0
             for (i in 1 until n) if ((x[i - 1] < 0) != (x[i] < 0)) crossings++
@@ -122,6 +122,49 @@ class VoiceActivityDetector {
     private val floorHistory = mutableListOf<Float>()
     private var pending = FloatArray(0)
     private var latched = false
+    private var finalizedFrames = 0
+    private var stableSpeech = SpeechAccumulator()
+    internal var detectionVisits = 0L; private set
+
+    // floor(index) becomes immutable once its lookahead bucket exists. Only that bounded
+    // tail is reconsidered; minutes of silence never rescan the whole recording.
+    private data class SpeechAccumulator(
+        var voiced: Int = 0, var voicedRun: Int = 0,
+        var brightStart: Int = 0, var brightRun: Int = 0,
+        val runs: MutableList<Pair<Int, Int>> = mutableListOf(), var heard: Boolean = false,
+    ) {
+        fun duplicate() = copy(runs = runs.toMutableList())
+        fun feed(vad: VoiceActivityDetector, i: Int) {
+            if (vad.isVoiced(i)) voicedRun++ else {
+                if (voicedRun >= minRunFrames) voiced += voicedRun
+                voicedRun = 0
+            }
+            if (vad.isBrightActive(i)) {
+                if (brightRun == 0) brightStart = i
+                brightRun++
+            } else {
+                if (brightRun >= minRunFrames) runs += brightStart to brightRun
+                brightRun = 0
+            }
+            while (runs.isNotEmpty() && i + 1 - runs.first().first > whisperWindowFrames) runs.removeAt(0)
+            val current = if (brightRun >= minRunFrames) runs + (brightStart to brightRun) else runs
+            heard = heard || (voiced + if (voicedRun >= minRunFrames) voicedRun else 0) * frameMs >= voicedSpeechMs || hasSyllabicBurst(current)
+        }
+    }
+
+    private fun detectIncrementally() {
+        if (latched) return
+        val stableEnd = max(0, (floorHistory.size - floorLookaheadSteps) * floorStepFrames).coerceAtMost(frameCount)
+        while (finalizedFrames < stableEnd) {
+            stableSpeech.feed(this, finalizedFrames++); detectionVisits++
+        }
+        val tail = stableSpeech.duplicate()
+        for (i in finalizedFrames until frameCount) {
+            tail.feed(this, i); detectionVisits++
+            if (tail.heard) break
+        }
+        latched = tail.heard
+    }
     var peakDbfs = -120.0
         private set
 
@@ -143,14 +186,18 @@ class VoiceActivityDetector {
         get() = latched
 
     internal fun snapshot(): VoiceActivityDetector =
-        VoiceActivityDetector().also {
+        VoiceActivityDetector(analyzeQuietFrames).also {
             it.mutableFrames.addAll(frames)
             it.window.addAll(window)
             it.floorHistory.addAll(floorHistory)
             it.pending = pending.copyOf()
             it.latched = latched
+            it.finalizedFrames = finalizedFrames
+            it.stableSpeech = stableSpeech.duplicate()
             it.peakDbfs = peakDbfs
         }
+
+    internal val measuresQuietFeatures get() = analyzeQuietFrames
 
     fun floor(index: Int): Float =
         floorHistory.getOrNull(index / floorStepFrames + floorLookaheadSteps) ?: floorDbfs.toFloat()
@@ -184,21 +231,21 @@ class VoiceActivityDetector {
             pending += samples.copyOfRange(0, take)
             offset = take
             if (pending.size == frameLength) {
-                insert(analyze(pending))
+                insert(analyze(pending, if (analyzeQuietFrames) -100.0 else -75.0))
                 pending = FloatArray(0)
             }
         }
         while (offset + frameLength <= samples.size) {
-            insert(analyze(samples.copyOfRange(offset, offset + frameLength)))
+            insert(analyze(samples.copyOfRange(offset, offset + frameLength), if (analyzeQuietFrames) -100.0 else -75.0))
             offset += frameLength
         }
         if (offset < samples.size) pending += samples.copyOfRange(offset, samples.size)
-        if (!latched && frames.isNotEmpty()) latched = hasSpeech(0 until frames.size)
+        detectIncrementally()
     }
 
     fun appendFrame(dbfs: Float, periodicity: Float, zeroCrossings: Float = 0.5f) {
         insert(Frame(dbfs, periodicity, zeroCrossings))
-        if (!latched) latched = hasSpeech(0 until frames.size)
+        detectIncrementally()
     }
 
     private fun insert(frame: Frame) {
