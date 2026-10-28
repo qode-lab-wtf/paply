@@ -27,10 +27,18 @@
   direkt zur nächsten Tastatur. Das ist ein Ein-Tipp-Start wie 🌐 bei iOS (im Emulator noch zu bestätigen).
   Samsung: Navigations-Tastaturtaste. Eine schwebende Taste wie bei Wispr Flow ist erst nach V1 eine Option
   (Overlay + Bedienungshilfe).
-- **Etappe 1 (Diktat komplett), läuft:**
-  - A: `:core`-Port des iOS-Diktat-Kerns mit Tests (astra)
-  - C: App-Oberfläche in Compose mit Verlauf, Einstellungen, Einrichtung und Keystore-Schlüssel (sol)
-  - Danach D: Tastatur-Integration mit E2E-Tests
+- **Etappe 1 (Diktat komplett), im Emulator abgenommen (`android/docs/E1-IME.md`):**
+  - Der Diktat-Kern aus iOS ist portiert (`android/docs/E1-CORE.md`, 284 Tests).
+  - Die App-Oberfläche ist in Compose gebaut, der Schlüssel liegt im Keystore.
+  - Die Tastatur lädt Stücke schon beim Sprechen hoch (FLAC −36 bis −57 %).
+  - Tempo: Tipp → Text im Feld in 0,9 s (kurz) bzw. 1,1 s (26 s langes Diktat).
+  - Richtig erkannt: „Testname“ über die Eigenen Begriffe, „Hi, wie geht's?“ auf Deutsch, Englisch unübersetzt.
+  - Bei Stille gibt es keinen Groq-Aufruf. In Passwortfeldern nimmt Paply nicht auf.
+  - Im Flugmodus wird das Diktat als fehlgeschlagen gespeichert, „Erneut versuchen“ klappt danach.
+  - Ein Tipp auf die Systemtaste genügt, bei Gboard mit zwei Sprachen teils zwei Tipps.
+  - Offen: ein gebündeltes Review samt Korrekturrunde.
+- **Etappe 2 (Gedanken), läuft:** Der Gedanken-Kern wird als eigenes Modul `:thoughts` portiert (`android/docs/NLP.md`: BM25 +
+  Snowball statt Apple-NaturalLanguage, kein Embedding in V1, so wie der iOS-Rückfallweg mit EVAL E0 10/11).
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
