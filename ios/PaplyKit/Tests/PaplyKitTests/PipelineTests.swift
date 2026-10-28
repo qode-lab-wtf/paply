@@ -121,6 +121,10 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         // Kontext: das Ende des Vorstücks steht am Ende des Prompts.
         #expect(uploads[1].field("prompt")?.hasSuffix("Erstes Stück endet hier.") == true)
         #expect(uploads[2].field("prompt")?.hasSuffix("Zweites Stück folgt.") == true)
+        // Sprachwache: lange Stücke erkennt Whisper selbst, der kurze Rest folgt dem (englischen) Vorstück.
+        #expect(uploads[0].field("language") == nil && uploads[1].field("language") == nil)
+        #expect(uploads[2].field("language") == "en")
+        #expect(outcome.languageSources == ["auto", "auto", "short"])
     }
 
     @Test func silentTailIsNotUploaded() async {

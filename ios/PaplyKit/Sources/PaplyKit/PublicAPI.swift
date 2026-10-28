@@ -11,9 +11,13 @@ public struct PaplySettings: Sendable, Codable, Equatable {
     public var language: String?
     public var chunkedUpload: Bool
     /// Ergänzung: Sprachen, die der Nutzer spricht (ISO 639-1, z. B. ["de", "en"]).
-    /// Leer = Gerätesprachen. Dient nur dem Sprachwechsel-Beispiel im Whisper-Prompt,
-    /// die Erkennung selbst bleibt automatisch.
+    /// Leer = Gerätesprachen. Dient dem Sprachwechsel-Beispiel im Whisper-Prompt und der
+    /// Sprachwache (`LanguageGuard`: kurze Stücke, fremd erkannte Sprachen).
     public var spokenLanguages: [String]
+    /// Ergänzung: Hauptsprache (ISO 639-1). Kurze Stücke werden ohne Erkennung direkt in ihr
+    /// geschrieben, fremd erkannte Sprachen mit ihr neu transkribiert (`LanguageGuard`).
+    /// nil/leer oder nicht unter den Nutzersprachen = die erste Nutzersprache.
+    public var primaryLanguage: String?
 
     public init() {
         transcriptionModel = "whisper-large-v3"
@@ -23,10 +27,12 @@ public struct PaplySettings: Sendable, Codable, Equatable {
         language = nil
         chunkedUpload = true
         spokenLanguages = []
+        primaryLanguage = nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case transcriptionModel, polishModel, fallbackPolishModel, vocabulary, language, chunkedUpload, spokenLanguages
+        case transcriptionModel, polishModel, fallbackPolishModel, vocabulary, language, chunkedUpload, spokenLanguages,
+             primaryLanguage
     }
 
     /// Fehlende Felder (ältere gespeicherte Einstellungen) bekommen den Standardwert.
@@ -40,6 +46,7 @@ public struct PaplySettings: Sendable, Codable, Equatable {
         language = try c.decodeIfPresent(String.self, forKey: .language)
         chunkedUpload = try c.decodeIfPresent(Bool.self, forKey: .chunkedUpload) ?? chunkedUpload
         spokenLanguages = try c.decodeIfPresent([String].self, forKey: .spokenLanguages) ?? spokenLanguages
+        primaryLanguage = try c.decodeIfPresent(String.self, forKey: .primaryLanguage)
     }
 }
 
@@ -90,6 +97,9 @@ public struct DictationOutcome: Sendable, Codable {
     /// (Stille, Rauschen, nur Halluzination/Echo verworfen). Die App kann dann
     /// „Nichts verstanden“ zeigen statt still zu bleiben. Bei Fehlern false.
     public var noSpeech: Bool
+    /// Ergänzung: woher die Sprache je Teil kam (`LanguageSource.rawValue`), in Reihenfolge
+    /// der Teile – fürs Diagnoseprotokoll (Sprachwache).
+    public var languageSources: [String]
 
     public init(
         text: String = "",
@@ -101,7 +111,8 @@ public struct DictationOutcome: Sendable, Codable {
         timings: DictationTimings = DictationTimings(),
         polishError: String? = nil,
         polishModel: String? = nil,
-        noSpeech: Bool = false
+        noSpeech: Bool = false,
+        languageSources: [String] = []
     ) {
         self.text = text
         self.raw = raw
@@ -113,6 +124,7 @@ public struct DictationOutcome: Sendable, Codable {
         self.polishError = polishError
         self.polishModel = polishModel
         self.noSpeech = noSpeech
+        self.languageSources = languageSources
     }
 
     /// `polishError` als Aufzählung.
@@ -121,7 +133,8 @@ public struct DictationOutcome: Sendable, Codable {
     public var polishRejectionCode: PolishRejectionCode? { polishRejection.flatMap(PolishRejectionCode.init(rawValue:)) }
 
     private enum CodingKeys: String, CodingKey {
-        case text, raw, polished, polishRejection, errorMessage, languages, timings, polishError, polishModel, noSpeech
+        case text, raw, polished, polishRejection, errorMessage, languages, timings, polishError, polishModel, noSpeech,
+             languageSources
     }
 
     /// Fehlende (neuere) Felder bekommen ihren Standardwert.
@@ -137,7 +150,8 @@ public struct DictationOutcome: Sendable, Codable {
             timings: try c.decodeIfPresent(DictationTimings.self, forKey: .timings) ?? DictationTimings(),
             polishError: try c.decodeIfPresent(String.self, forKey: .polishError),
             polishModel: try c.decodeIfPresent(String.self, forKey: .polishModel),
-            noSpeech: try c.decodeIfPresent(Bool.self, forKey: .noSpeech) ?? false)
+            noSpeech: try c.decodeIfPresent(Bool.self, forKey: .noSpeech) ?? false,
+            languageSources: try c.decodeIfPresent([String].self, forKey: .languageSources) ?? [])
     }
 }
 
@@ -161,6 +175,20 @@ public enum PolishFailureCode: String, Sendable, Codable, CaseIterable {
     case invalidResponse = "invalid-response"
     /// Abgebrochen.
     case cancelled
+}
+
+/// Woher die Sprache eines Teils kam (Werte von `DictationOutcome.languageSources`).
+public enum LanguageSource: String, Sendable, Codable, CaseIterable {
+    /// Whisper hat selbst erkannt.
+    case auto
+    /// Kurzes Stück: Sprache direkt mitgeschickt (Vorstück oder Hauptsprache).
+    case short
+    /// Fremde Sprache erkannt, mit der Hauptsprache neu transkribiert.
+    case redo
+    /// Fremde Sprache erkannt, Neutranskription scheiterte: erstes Ergebnis behalten.
+    case redoFailed = "redo-failed"
+    /// Feste Sprache aus den Einstellungen.
+    case fixed
 }
 
 /// Stabile Gründe des Sicherheitsnetzes (Werte von `DictationOutcome.polishRejection`).

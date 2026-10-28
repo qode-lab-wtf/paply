@@ -189,6 +189,8 @@ public actor DictationPipeline {
         var failure: GroqFailure?
         /// false: wegen eines früheren Fehlers nicht gesendet.
         var sent = true
+        /// Woher die Sprache kam (Sprachwache).
+        var languageSource: LanguageSource?
 
         var succeeded: Bool { sent && failure == nil }
     }
@@ -211,12 +213,12 @@ public actor DictationPipeline {
         let vad = vad
         let task = Task.detached(priority: .userInitiated) { [weak self] () -> ChunkResult in
             // Kontext des Vorstücks: höchstens 1,5 s warten, sonst ohne dessen Ende senden.
-            var previousText: String?
-            if let previous { previousText = await awaitResult(previous, timeout: Self.previousTextWait)?.text }
+            var before: ChunkResult?
+            if let previous { before = await awaitResult(previous, timeout: Self.previousTextWait) }
             if Task.isCancelled { return ChunkResult(failure: .cancelled) }
             guard let self, await !self.isChunkingStopped else { return ChunkResult(sent: false) }
             let result = await Self.transcribe(audio[...], startSample: start, vad: vad,
-                                               previousText: previousText, context: context)
+                                               previous: before, context: context)
             await self.chunkCompleted(index, result)
             return result
         }
@@ -246,26 +248,60 @@ public actor DictationPipeline {
                 bytes: bytes, uploads: uploads)
     }
 
+    /// `previous`: Ergebnis des Vorstücks (Ende als Prompt-Kontext, Sprache für kurze Stücke).
     private static func transcribe(_ audio: ArraySlice<Int16>, startSample: Int, vad: VoiceActivityDetector,
-                                   previousText: String?, context: Context) async -> ChunkResult {
+                                   previous: ChunkResult?, context: Context) async -> ChunkResult {
         let settings = context.settings
+        let previousText = previous?.text
         let prompt = WhisperPrompt.build(vocabulary: settings.vocabulary, previousText: previousText, primer: context.primer)
         let encoded = AudioEncoder.encode(audio, preferFLAC: context.format == .flac)
-        context.uploads.add(1)
+        let seconds = Double(audio.count) / AudioEncoder.sampleRate
         let bytes = context.bytes
-        let result = await context.client.transcribe(audio: encoded, model: settings.transcriptionModel,
-                                                     language: settings.language, prompt: prompt,
-                                                     audioSeconds: Double(audio.count) / AudioEncoder.sampleRate,
-                                                     bytesSent: { bytes.add($0) })
+        func send(_ language: String?) async -> Result<Transcription, GroqFailure> {
+            context.uploads.add(1)
+            return await context.client.transcribe(audio: encoded, model: settings.transcriptionModel,
+                                                   language: language, prompt: prompt, audioSeconds: seconds,
+                                                   bytesSent: { bytes.add($0) })
+        }
+        // Sprachwache: kurze Stücke mit Sprache senden, fremd erkannte einmal neu (LanguageGuard).
+        let users = CodeSwitchPrimer.userLanguages(settings)
+        let primary = LanguageGuard.primary(settings)
+        let previousLanguage = previous.flatMap { $0.succeeded && !$0.text.isEmpty ? $0.language : nil }
+        let frameSamples = VoiceActivityDetector.frameLength
+        let firstFrame = startSample / frameSamples
+        let lastFrame = (startSample + audio.count + frameSamples - 1) / frameSamples
+        // Gesprochene Dauer (VAD-Sprachanteil), nicht die Audiolänge; ohne Messwert die Audiolänge.
+        let measured = (firstFrame..<lastFrame).clamped(to: 0..<vad.frameCount)
+        let spoken = measured.isEmpty ? seconds : vad.activity(in: measured).speechMs / 1000
+        let first = LanguageGuard.firstRequest(fixed: settings.language, primary: primary, previous: previousLanguage,
+                                               userLanguages: users, spokenSeconds: spoken)
+        var source = first.source
+        var sentLanguage = first.language
+        var result = await send(first.language)
+        if case .success(let transcription) = result, source == .auto, !Task.isCancelled,
+           let redo = LanguageGuard.redoLanguage(detected: GroqModels.languageCode(transcription.language),
+                                                 primary: primary, userLanguages: users) {
+            let detected = GroqModels.languageCode(transcription.language) ?? "-"
+            switch await send(redo) {
+            case .success(let second):
+                result = .success(second)
+                source = .redo
+                sentLanguage = redo
+                log.notice("Sprachwache: \(detected, privacy: .public) erkannt, neu mit \(redo, privacy: .public) (gesprochen \(spoken, format: .fixed(precision: 1), privacy: .public) s, Audio \(seconds, format: .fixed(precision: 1), privacy: .public) s)")
+            case .failure(let failure):
+                source = .redoFailed
+                log.notice("Sprachwache: \(detected, privacy: .public) erkannt, Neuversuch mit \(redo, privacy: .public) gescheitert: \(failure.code, privacy: .public)")
+            }
+        } else if case .success(let transcription) = result {
+            let detected = GroqModels.languageCode(transcription.language) ?? "-"
+            log.notice("Sprache: \(source.rawValue, privacy: .public), gesendet \(sentLanguage ?? "-", privacy: .public), gemeldet \(detected, privacy: .public), Hauptsprache \(primary ?? "-", privacy: .public) (gesprochen \(spoken, format: .fixed(precision: 1), privacy: .public) s, Audio \(seconds, format: .fixed(precision: 1), privacy: .public) s)")
+        }
         switch result {
         case .failure(let failure):
             log.error("Transkription fehlgeschlagen: \(failure.code, privacy: .public)")
             return ChunkResult(failure: failure)
         case .success(let transcription):
             let rate = AudioEncoder.sampleRate
-            let frameSamples = VoiceActivityDetector.frameLength
-            let firstFrame = startSample / frameSamples
-            let lastFrame = (startSample + audio.count + frameSamples - 1) / frameSamples
             let filtered = SilenceFilter.filter(text: transcription.text, segments: transcription.segments,
                                                 meta: vad.meta(frameRange: firstFrame..<lastFrame))
             let offset = Double(startSample) / rate
@@ -281,8 +317,11 @@ public actor DictationPipeline {
                 shifted.end = segment.end.map { $0 + offset }
                 return shifted
             }
+            // Von der Wache gesendete Sprache steht fest; sonst die gemeldete.
+            let guarded = source == .short || source == .redo ? sentLanguage.map(CodeSwitchPrimer.baseCode) : nil
             return ChunkResult(text: text, segments: segments,
-                               language: GroqModels.languageCode(transcription.language) ?? detectLanguage(text))
+                               language: guarded ?? GroqModels.languageCode(transcription.language) ?? detectLanguage(text),
+                               languageSource: source)
         }
     }
 
@@ -305,6 +344,7 @@ public actor DictationPipeline {
             timings.uploadedBytes = bytes.value - bytesBefore
             timings.chunkCount = uploads.value - uploadsBefore
             outcome.timings = timings
+            outcome.languageSources = (plan ?? []).compactMap { $0.result?.languageSource?.rawValue }
             if !cancelled {
                 lastFailed = failed
                 if !failed { lastOutcome = outcome }
@@ -338,9 +378,9 @@ public actor DictationPipeline {
         var failure: GroqFailure?
         for index in (plan ?? []).indices where plan?[index].result?.succeeded != true {
             guard let piece = plan?[index] else { break }
-            let previousText = plan?[..<index].last(where: { $0.result?.succeeded == true })?.result?.text
+            let previous = plan?[..<index].last(where: { $0.result?.succeeded == true })?.result
             let result = await Self.transcribe(samples[piece.start..<piece.end], startSample: piece.start, vad: vad,
-                                               previousText: previousText, context: context)
+                                               previous: previous, context: context)
             if cancelled || Task.isCancelled { return DictationOutcome() }
             if let error = result.failure { failure = error; break }
             plan?[index].result = result

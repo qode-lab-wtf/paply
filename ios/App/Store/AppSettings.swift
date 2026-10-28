@@ -265,15 +265,27 @@ final class AppSettings {
         return cachedAPIKey
     }
 
-    /// Einstellungen, mit denen ein Diktat startet (Sprachen je nach Modus eingesetzt).
+    /// Einstellungen, mit denen ein Diktat startet (Sprachen und Hauptsprache je nach Modus eingesetzt).
     var effectivePaply: PaplySettings {
         var settings = paply
         settings.spokenLanguages = effectiveSpokenLanguages
+        settings.primaryLanguage = effectivePrimaryLanguage
         return settings
     }
 
     var effectiveSpokenLanguages: [String] {
         spokenLanguagesAuto ? detectedSpokenLanguages : paply.spokenLanguages
+    }
+
+    /// Hauptsprache: die gewählte, solange sie unter den wirksamen Sprachen ist; sonst die erste
+    /// iPhone-Sprache, wenn sie darunter ist (nicht die erste Tastatur); sonst die erste.
+    var effectivePrimaryLanguage: String? {
+        let languages = effectiveSpokenLanguages
+        let device = Self.languageCodes(Array(Locale.preferredLanguages.prefix(1))).first
+        for candidate in [paply.primaryLanguage, device] {
+            if let code = candidate, languages.contains(code) { return code }
+        }
+        return languages.first
     }
 
     /// Im Vordergrund aufrufen: aktive Tastaturen + bevorzugte Sprachen → Sprachcodes.

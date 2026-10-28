@@ -447,10 +447,22 @@ struct SpokenLanguagesView: View {
                 }
                 .paplyRows()
             }
+            if !settings.effectiveSpokenLanguages.isEmpty {
+                Section {
+                    Picker("Hauptsprache", selection: primaryLanguage) {
+                        ForEach(settings.effectiveSpokenLanguages, id: \.self) { code in
+                            Text(AppSettings.languageName(code)).tag(code)
+                        }
+                    }
+                } footer: {
+                    Text("Kurze Sätze schreibt Paply direkt in der Hauptsprache, statt die Sprache zu raten.")
+                }
+                .paplyRows()
+            }
             Section {
                 EmptyView()
             } footer: {
-                Text("Paply erkennt die Sprache beim Sprechen selbst. Die Liste hilft nur, wenn du mitten im Satz wechselst – zum Beispiel ein englischer Satz in einer deutschen Nachricht.")
+                Text("Bei längeren Sätzen erkennt Paply die Sprache selbst. Die Liste hilft, wenn du mitten im Satz wechselst – zum Beispiel ein englischer Satz in einer deutschen Nachricht. Erkennt Paply eine Sprache, die nicht in der Liste steht, schreibt es in der Hauptsprache.")
             }
         }
         .paplyList()
@@ -462,6 +474,18 @@ struct SpokenLanguagesView: View {
             }
             Diag.log("settings.spokenLanguages", ["auto": .b(auto), "langs": .s(settings.effectiveSpokenLanguages.joined(separator: ","))])
         }
+    }
+
+    /// Auswahl der Hauptsprache; ohne (gültige) Wahl die erste iPhone-Sprache bzw. die erste der Liste.
+    private var primaryLanguage: Binding<String> {
+        Binding(
+            get: { settings.effectivePrimaryLanguage ?? "" },
+            set: { code in
+                guard code != settings.paply.primaryLanguage else { return }
+                settings.paply.primaryLanguage = code
+                Diag.log("settings.primaryLanguage", ["lang": .s(code), "langs": .s(settings.effectiveSpokenLanguages.joined(separator: ","))])
+            }
+        )
     }
 
     private var choices: [String] {

@@ -504,6 +504,8 @@ final class SessionController {
             "rejected": .opt(outcome.polishRejection),
             "error": .opt(outcome.errorMessage),
             "langs": .s(outcome.languages.joined(separator: ",")),
+            // Sprachwache je Teil: auto (erkannt), short (direkt mitgeschickt), redo (neu), redo-failed, fixed
+            "langGuard": .s(outcome.languageSources.joined(separator: ",")),
             "speech": .b(entry.speechDetected),
             "audioS": .d((t.audioSeconds * 10).rounded() / 10),
             "chunks": .i(t.chunkCount),
