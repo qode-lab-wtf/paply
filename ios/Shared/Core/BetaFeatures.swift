@@ -8,7 +8,8 @@ import Foundation
 /// - AN: alles wie gewohnt; die Reiter „Gedanken“ und „Aufgaben“ tragen ein ruhiges „Beta“.
 /// - AUS: nur das Diktat (keine Reiter). Gedanken-Knopf, Steuerelement, Widget „Paply-Gedanke“, Kurzbefehl und
 ///   Aktionstaste nehmen nicht auf, sondern zeigen den Hinweis; keine Erinnerungen; Aufgaben-Widgets ruhig. Daten
-///   bleiben unangetastet, schon aufgenommene Gedanken werden weiter geordnet.
+///   bleiben unangetastet, schon aufgenommene Gedanken werden weiter geordnet. Eine gerade beginnende Aufnahme bricht
+///   ab (`ThoughtStartGate`), verschobene Erinnerungen („In 1 Stunde“) bleiben gespeichert.
 enum BetaFeatures {
     static let thoughtsKey = "paply.beta.thoughts"
 
@@ -28,5 +29,27 @@ enum BetaFeatures {
         if arguments.contains(thoughtsOffArgument) { return false }
         #endif
         return thoughtsEnabled(defaults)
+    }
+}
+
+/// Prüfpunkt beim Start einer Gedanken-Aufnahme (`ThoughtCapture.toggle`): vor dem Start und nach jedem `await`
+/// (Speicher, Mikro, Warteschlange) muss Beta „Gedanken & Aufgaben“ noch an sein. Wird während des Starts
+/// ausgeschaltet (`abort`), bleibt dieser Start abgebrochen – auch wenn Beta gleich wieder an ist.
+struct ThoughtStartGate: Equatable, Sendable {
+    private(set) var aborted = false
+
+    /// Neuer Start: frischer Prüfpunkt
+    mutating func begin() {
+        aborted = false
+    }
+
+    /// Beta während des Starts ausgeschaltet
+    mutating func abort() {
+        aborted = true
+    }
+
+    /// Darf der Start weiterlaufen?
+    func allows(betaOn: Bool) -> Bool {
+        betaOn && !aborted
     }
 }

@@ -105,8 +105,9 @@ final class AppSettings {
     }
 
     /// Beta „Gedanken & Aufgaben“ (Einstellungen → Beta; App Group, fehlt = an – `BetaFeatures`). Umschalten: Widgets
-    /// neu laden, Erinnerungen abgleichen (aus = alle weg); aus beendet eine laufende Gedanken-Aufnahme (sie wird
-    /// gesichert und geordnet). Daten bleiben immer.
+    /// neu laden, Erinnerungen abgleichen (aus = alle weg, Verschobenes bleibt gespeichert); aus beendet eine laufende
+    /// Gedanken-Aufnahme (sie wird gesichert und geordnet) und bricht eine gerade beginnende ab (ohne Rest). Daten
+    /// bleiben immer.
     var betaThoughts: Bool {
         didSet {
             guard betaThoughts != oldValue else { return }
@@ -114,7 +115,7 @@ final class AppSettings {
             Diag.log("settings.beta.thoughts", ["on": .b(betaThoughts)])
             WidgetCenter.shared.reloadAllTimelines()
             TaskReminders.shared.scheduleReconcile("beta", delay: .zero)
-            if !betaThoughts, ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.app) }
+            if !betaThoughts { ThoughtCapture.shared.betaTurnedOff() }
         }
     }
 

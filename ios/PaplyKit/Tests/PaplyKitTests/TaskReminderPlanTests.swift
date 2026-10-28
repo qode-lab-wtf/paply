@@ -344,4 +344,85 @@ struct TaskReminderPlanTests {
                                  title: desired[0].title, body: desired[0].body, threadID: desired[0].threadID)
         #expect(plain.signature != desired[0].signature)
     }
+
+    // MARK: „In 1 Stunde“ dauerhaft (gespeichert, `keptSnoozes`)
+
+    @Test func snoozeSurvivesTurningOffAndOn() {
+        // So gleicht TaskReminders ab: gespeichert + geplant → aufgeräumt → gespeichert; geplant wird nur bei AN
+        let fired = date(2026, 10, 28, 15, 0)
+        let later = date(2026, 10, 28, 16, 2)
+        let thoughts = [thought("s_1", tasks: [task("k_1", due: fired)])]
+        let id = TaskReminderPlan.identifier(thoughtID: "s_1", taskID: "k_1")
+        let snooze = TaskReminderPlan.Snooze(fireAt: later, dueAt: fired)
+        // „In 1 Stunde“ vor dem ersten Entsperren: nur in der geplanten Mitteilung – der Abgleich übernimmt es
+        var stored = TaskReminderPlan.keptSnoozes(stored: [:], pending: [id: snooze], thoughts: thoughts, now: now,
+                                                  calendar: calendar)
+        #expect(stored == [id: snooze])
+        // AUS: nichts geplant, die Mitteilung ist weg – das Verschieben bleibt gespeichert (auch ohne geladene Gedanken)
+        #expect(TaskReminderPlan.changes(current: [id: plan(thoughts, snoozes: stored)[0].signature], desired: []).remove == [id])
+        stored = TaskReminderPlan.keptSnoozes(stored: stored, pending: [:], thoughts: nil, now: now.addingTimeInterval(60),
+                                              calendar: calendar)
+        stored = TaskReminderPlan.keptSnoozes(stored: stored, pending: [:], thoughts: thoughts, now: now.addingTimeInterval(120),
+                                              calendar: calendar)
+        #expect(stored == [id: snooze])
+        // wieder AN (vor dem neuen Zeitpunkt): geplant genau zum verschobenen Zeitpunkt
+        let back = plan(thoughts, snoozes: stored, now: now.addingTimeInterval(180))
+        #expect(back.count == 1)
+        #expect(back.first?.fireAt == later)
+        #expect(back.first?.snoozed == true)
+        // Codable: übersteht das Speichern
+        let data = try! JSONEncoder().encode(stored)
+        #expect(try! JSONDecoder().decode([String: TaskReminderPlan.Snooze].self, from: data) == stored)
+    }
+
+    @Test func expiredSnoozeIsCleanedUp() {
+        let fired = date(2026, 10, 28, 15, 0)
+        let later = date(2026, 10, 28, 16, 2)
+        let thoughts = [thought("s_1", tasks: [task("k_1", due: fired)])]
+        let id = TaskReminderPlan.identifier(thoughtID: "s_1", taskID: "k_1")
+        let stored = [id: TaskReminderPlan.Snooze(fireAt: later, dueAt: fired),
+                      "fremd": TaskReminderPlan.Snooze(fireAt: later, dueAt: fired)]
+        // fremde Kennungen fallen immer weg
+        #expect(TaskReminderPlan.keptSnoozes(stored: stored, thoughts: thoughts, now: now, calendar: calendar).keys.sorted() == [id])
+        // nach dem Zeitpunkt: weg – mit und ohne geladene Gedanken
+        let after = later.addingTimeInterval(1)
+        #expect(TaskReminderPlan.keptSnoozes(stored: stored, thoughts: thoughts, now: after, calendar: calendar).isEmpty)
+        #expect(TaskReminderPlan.keptSnoozes(stored: stored, thoughts: nil, now: after, calendar: calendar).isEmpty)
+        #expect(TaskReminderPlan.keptSnoozes(stored: stored, thoughts: nil, now: later, calendar: calendar).isEmpty)
+        // die Aufgabe hat eine neue Zeit: das Verschieben ist überholt
+        let moved = [thought("s_1", tasks: [task("k_1", due: date(2026, 10, 30, 9))])]
+        #expect(TaskReminderPlan.keptSnoozes(stored: stored, thoughts: moved, now: now, calendar: calendar).isEmpty)
+    }
+
+    @Test func snoozeOfDoneOrDeletedTaskIsNotPlanned() {
+        let fired = date(2026, 10, 28, 15, 0)
+        let later = date(2026, 10, 28, 16, 2)
+        let snooze = TaskReminderPlan.Snooze(fireAt: later, dueAt: fired)
+        let ids = ["task/s_1/k_erledigt", "task/s_1/k_geloescht", "task/s_weg/k_1", "task/s_fehlt/k_1", "task/s_1/k_offen"]
+        let stored = Dictionary(uniqueKeysWithValues: ids.map { ($0, snooze) })
+        let thoughts = [
+            thought("s_1", tasks: [task("k_erledigt", due: fired, done: true), task("k_offen", due: fired)]),
+            thought("s_weg", tasks: [task("k_1", due: fired)], deleted: now),
+        ]
+        let kept = TaskReminderPlan.keptSnoozes(stored: stored, thoughts: thoughts, now: now, calendar: calendar)
+        #expect(kept.keys.sorted() == ["task/s_1/k_offen"])
+        // geplant wird auch mit dem ungefilterten Speicher nur die offene Aufgabe
+        #expect(plan(thoughts, snoozes: stored).map(\.id) == ["task/s_1/k_offen"])
+        // Gedanken noch nicht geladen: nichts verwerfen, was noch gelten kann
+        #expect(TaskReminderPlan.keptSnoozes(stored: stored, thoughts: nil, now: now, calendar: calendar) == stored)
+    }
+
+    @Test func laterSnoozeWinsWhenStoredAndPlannedDiffer() {
+        let fired = date(2026, 10, 28, 15, 0)
+        let id = TaskReminderPlan.identifier(thoughtID: "s_1", taskID: "k_1")
+        let thoughts = [thought("s_1", tasks: [task("k_1", due: fired)])]
+        let first = TaskReminderPlan.Snooze(fireAt: date(2026, 10, 28, 16, 2), dueAt: fired)
+        let second = TaskReminderPlan.Snooze(fireAt: date(2026, 10, 28, 17, 5), dueAt: fired)
+        // erneut verschoben vor dem ersten Entsperren: die Mitteilung ist neuer als die Datei
+        #expect(TaskReminderPlan.keptSnoozes(stored: [id: first], pending: [id: second], thoughts: thoughts, now: now,
+                                             calendar: calendar) == [id: second])
+        // umgekehrt (Mitteilung noch alt): die Datei gilt
+        #expect(TaskReminderPlan.keptSnoozes(stored: [id: second], pending: [id: first], thoughts: thoughts, now: now,
+                                             calendar: calendar) == [id: second])
+    }
 }

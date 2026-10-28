@@ -54,4 +54,32 @@ struct BetaFeaturesTests {
             #expect(parsed?.taskID == task)
         }
     }
+
+    /// So prüft `ThoughtCapture.toggle`: vor dem Start und nach jedem `await` (Speicher, Mikro, Warteschlange)
+    @Test func startCheckAfterEveryAwait() {
+        var gate = ThoughtStartGate()
+        // AN: Start läuft durch alle Prüfpunkte
+        gate.begin()
+        #expect(gate.allows(betaOn: true)) // vor dem Start
+        #expect(gate.allows(betaOn: true)) // nach dem Speicher
+        #expect(gate.allows(betaOn: true)) // nach dem Mikro, direkt vor dem Start
+        // schon AUS beim Druck: kein Start
+        gate.begin()
+        #expect(!gate.allows(betaOn: false))
+        // während des Wartens auf das Mikro ausgeschaltet: der nächste Prüfpunkt bricht ab …
+        gate.begin()
+        #expect(gate.allows(betaOn: true))
+        gate.abort()
+        #expect(!gate.allows(betaOn: false))
+        // … und bleibt abgebrochen, auch wenn Beta inzwischen wieder an ist
+        #expect(!gate.allows(betaOn: true))
+        #expect(gate.aborted)
+        // Wert inzwischen AUS, ohne dass der Schalter-Weg lief (z. B. nach dem Entsperren neu gelesen): auch Abbruch
+        gate.begin()
+        #expect(!gate.allows(betaOn: false))
+        // der nächste Start beginnt frisch
+        gate.begin()
+        #expect(!gate.aborted)
+        #expect(gate.allows(betaOn: true))
+    }
 }

@@ -46,7 +46,8 @@ public struct TaskReminder: Equatable, Sendable, Identifiable {
 ///   Uhrzeit (`TaskDueLabel.spokenTime`: `dueHasTime`, für Altdaten dieselbe Regel wie die Liste) – genau zu dieser
 ///   Uhrzeit. Nur ein Tag: keine Mitteilung. Vergangenes wird nicht nachgeholt.
 /// - „In 1 Stunde“ verschiebt nur die Mitteilung, nicht die Aufgabe. Es gilt, solange die Aufgabe offen ist und ihre
-///   Fälligkeit dieselbe bleibt; eine neue Zeit ersetzt es.
+///   Fälligkeit dieselbe bleibt; eine neue Zeit ersetzt es. Die App speichert es dauerhaft (`keptSnoozes`): Es übersteht
+///   Beta bzw. Erinnerungen aus und wieder an.
 /// - iOS hält höchstens 64 geplante Mitteilungen: geplant werden die nächsten `limit` (50) nach Zeit.
 /// - Abgleich: nur Neues und Geändertes planen, nicht mehr Gewünschtes entfernen, Gleiches unberührt lassen.
 /// - Beta „Gedanken & Aufgaben“ aus: nichts gewünscht (alles Geplante fällt weg), zugestellte alle entfernen
@@ -57,8 +58,8 @@ public enum TaskReminderPlan {
     /// Kennung aller Erinnerungen (andere Mitteilungen der App bleiben unberührt)
     public static let prefix = "task/"
 
-    /// „In 1 Stunde“ verschoben (aus der geplanten Mitteilung gelesen)
-    public struct Snooze: Equatable, Sendable {
+    /// „In 1 Stunde“ verschoben (gespeichert; vor dem ersten Entsperren nur in der geplanten Mitteilung)
+    public struct Snooze: Codable, Equatable, Sendable {
         public let fireAt: Date
         /// Fälligkeit der Aufgabe beim Verschieben
         public let dueAt: Date
@@ -117,7 +118,7 @@ public enum TaskReminderPlan {
                 guard seen.insert(id).inserted else { continue }
                 var fireAt: Date?
                 var snoozed = false
-                if let snooze = snoozes[id], abs(snooze.dueAt.timeIntervalSince(due)) < 1, snooze.fireAt > now {
+                if let snooze = snoozes[id], applies(snooze, due: due, now: now) {
                     fireAt = snooze.fireAt
                     snoozed = true
                 } else if due > now {
@@ -222,6 +223,40 @@ public enum TaskReminderPlan {
     /// Neuer Zeitpunkt nach „In 1 Stunde“ (auf ganze Sekunden)
     public static func snoozed(from now: Date) -> Date {
         Date(timeIntervalSince1970: (now.timeIntervalSince1970 + snoozeInterval).rounded(.down))
+    }
+
+    /// Gilt das Verschieben noch? Nur für dieselbe Fälligkeit (Sekundenbruchteile vom Speichern zählen nicht) und
+    /// solange der neue Zeitpunkt in der Zukunft liegt.
+    static func applies(_ snooze: Snooze, due: Date, now: Date) -> Bool {
+        abs(snooze.dueAt.timeIntervalSince(due)) < 1 && snooze.fireAt > now
+    }
+
+    /// Verschobene Erinnerungen, die gespeichert bleiben – Eingabe für `reminders(snoozes:)`, unabhängig davon, ob
+    /// gerade geplant werden darf (Beta oder Erinnerungen aus: Sie bleiben und gelten beim Einschalten wieder).
+    /// - `stored`: gespeicherte; `pending`: aus geplanten Mitteilungen gelesene (so kommt ein „In 1 Stunde“ vor dem
+    ///   ersten Entsperren in den Speicher). Je Kennung gilt das spätere Verschieben.
+    /// - Weg fallen: abgelaufene, fremde Kennungen und – mit geladenen Gedanken (`thoughts`) – solche, deren Aufgabe
+    ///   erledigt, gelöscht oder im Papierkorb ist oder eine neue Zeit hat. `thoughts` nil (noch nicht geladen): nur
+    ///   Abgelaufenes fällt weg.
+    public static func keptSnoozes(stored: [String: Snooze], pending: [String: Snooze] = [:], thoughts: [Thought]?,
+                                   now: Date, calendar: Calendar = .current) -> [String: Snooze] {
+        var merged = stored
+        for (id, snooze) in pending where merged[id].map({ snooze.fireAt > $0.fireAt }) ?? true {
+            merged[id] = snooze
+        }
+        merged = merged.filter { parse($0.key) != nil && $0.value.fireAt > now }
+        guard let thoughts else { return merged }
+        var due: [String: Date] = [:]
+        for thought in thoughts {
+            for task in thought.tasks {
+                let id = identifier(thoughtID: thought.id, taskID: task.id)
+                // erste Fundstelle zählt (wie `reminders`)
+                guard due[id] == nil, merged[id] != nil, let time = reminderTime(of: task, in: thought, calendar: calendar)
+                else { continue }
+                due[id] = time
+            }
+        }
+        return merged.filter { id, snooze in due[id].map { applies(snooze, due: $0, now: now) } ?? false }
     }
 
     // MARK: Inhalt

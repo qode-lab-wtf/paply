@@ -106,7 +106,9 @@ enum ThoughtBridge {
         BetaHint.shared.show()
     }
 
-    /// Fall B gescheitert, die App ist jetzt vorne: hier klappt der Sitzungsstart.
+    /// Fall B gescheitert, die App ist jetzt vorne: hier klappt der Sitzungsstart. Bis hierher können Sekunden vergehen
+    /// (Rückfrage von iOS): Ist Beta „Gedanken & Aufgaben“ inzwischen aus, startet nichts – das prüft `toggle` zentral,
+    /// auch nach jedem `await` des Starts.
     static func startInForeground(trigger: ThoughtTrigger) async {
         guard ThoughtCapture.shared.active == nil else { return }
         let outcome = await ThoughtCapture.shared.toggle(trigger: trigger)

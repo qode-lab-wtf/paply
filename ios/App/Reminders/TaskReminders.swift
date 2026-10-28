@@ -4,14 +4,18 @@
 // - Welche Aufgaben, wann, Grenze 50, Abgleich alt → neu, „In 1 Stunde“: `TaskReminderPlan` (PaplyKit, getestet).
 // - Abgleich: entprellt bei jeder Änderung der Aufgaben (ThoughtsModel), beim Start, im Vordergrund, nach neuer
 //   Zeitzone und im BGTask. Nur Geändertes wird neu geplant. Erst wenn das Modell geladen ist – vorher wäre die Liste
-//   leer und alles würde entfernt.
-// - Der Stand „In 1 Stunde“ liegt in der geplanten Mitteilung selbst (userInfo), nicht in eigenen Dateien: Er gilt
-//   damit auch, wenn die Aktion vor dem ersten Entsperren kam.
+//   leer und alles würde entfernt. Abgleich und „In 1 Stunde“ laufen auf demselben seriellen Weg, nie gleichzeitig.
+// - „In 1 Stunde“ liegt dauerhaft in `verschoben.json` (`SnoozeStore`, übersteht Beta bzw. Erinnerungen aus und an)
+//   und in der geplanten Mitteilung (userInfo). Vor dem ersten Entsperren ist die Datei nicht schreibbar: Dann trägt
+//   die Mitteilung den Stand, der nächste Abgleich übernimmt ihn in die Datei. Abgelaufenes und Verschobenes
+//   erledigter oder gelöschter Aufgaben räumt der Abgleich weg (`TaskReminderPlan.keptSnoozes`).
 // - „Erledigt“ läuft im App-Prozess im Hintergrund: zuerst in eine kleine Warteschlange (ohne Dateischutz, nur
 //   Kennungen), dann über dasselbe Modell abgehakt und gespeichert. Vor dem ersten Entsperren bleibt es in der
 //   Warteschlange und wird danach angewendet. Idempotent.
 // - Beta „Gedanken & Aufgaben“ aus (`AppSettings.betaThoughts`): nichts geplant, Geplantes und Zugestelltes entfernt,
-//   „In 1 Stunde“ plant nicht neu. Umschalten gleicht sofort ab.
+//   „In 1 Stunde“ plant nicht neu. AUS gewinnt immer: geprüft vor und nach jedem Warten und nach jedem Planen (eben
+//   Geplantes wird dann wieder entfernt). Umschalten gleicht sofort ab; Verschobenes bleibt gespeichert und gilt beim
+//   Einschalten wieder.
 // - Erlaubnis: nie beim Start. Karte im Reiter „Aufgaben“ (`TaskReminderPromptSection`) oder Schalter in den
 //   Einstellungen (`TaskReminderSettingsSection`).
 import Foundation
@@ -70,9 +74,11 @@ final class TaskReminders {
     @ObservationIgnored private var settingsLoaded = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var debounce: Task<Void, Never>?
-    @ObservationIgnored private var running: Task<Void, Never>?
+    /// Serieller Weg für alles, was Erinnerungen plant (Abgleich und „In 1 Stunde“)
+    @ObservationIgnored private var worker: Task<Void, Never>?
     @ObservationIgnored private var reconcileAgain = false
     @ObservationIgnored private var nextReason = ""
+    @ObservationIgnored private var snoozeJobs: [SnoozeJob] = []
     /// hält die App beim Abgleich nach dem Wechsel in den Hintergrund kurz wach
     @ObservationIgnored private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -290,21 +296,46 @@ final class TaskReminders {
     /// der Aufrufer wartet, bis auch der fertig ist.
     func reconcileNow(reason: String) async {
         nextReason = reason
-        if let running {
-            reconcileAgain = true
-            await running.value
+        reconcileAgain = true
+        await runSerially()
+    }
+
+    /// Ein „In 1 Stunde“ aus der Mitteilung
+    private struct SnoozeJob {
+        let response: Response
+        let thoughtID: String
+        let taskID: String
+    }
+
+    /// Arbeitet „In 1 Stunde“ und Abgleich nacheinander ab. Läuft der Weg schon, kommt die Arbeit dazu, und der
+    /// Aufrufer wartet, bis auch sie erledigt ist. Nie aus `reconcileOnce`/`snoozeOnce` aufrufen (wartete auf sich).
+    private func runSerially() async {
+        if let worker {
+            await worker.value
             return
         }
         let run = Task { @MainActor [weak self] in
             guard let self else { return }
-            repeat {
-                self.reconcileAgain = false
-                await self.reconcileOnce(reason: self.nextReason)
-            } while self.reconcileAgain
-            self.running = nil // im selben Schritt wie die letzte Prüfung: kein Aufruf geht verloren
+            while true {
+                if !self.snoozeJobs.isEmpty {
+                    await self.snoozeOnce(self.snoozeJobs.removeFirst())
+                } else if self.reconcileAgain {
+                    self.reconcileAgain = false
+                    await self.reconcileOnce(reason: self.nextReason)
+                } else {
+                    break
+                }
+            }
+            self.worker = nil // im selben Schritt wie die letzte Prüfung: keine Arbeit geht verloren
         }
-        running = run
+        worker = run
         await run.value
+    }
+
+    /// Beta „Gedanken & Aufgaben“ – nach dem ersten Entsperren neu gelesen
+    private func betaOn() -> Bool {
+        AppSettings.shared.reloadIfNeeded()
+        return AppSettings.shared.betaThoughts
     }
 
     private func reconcileOnce(reason: String) async {
@@ -312,37 +343,51 @@ final class TaskReminders {
         guard ProtectedData.isReadable, settingsLoaded else { return }
         // Beta „Gedanken & Aufgaben“ aus: keine Erinnerungen – alles Geplante und Zugestellte weg (braucht die Gedanken
         // nicht, also auch vor dem Laden)
-        AppSettings.shared.reloadIfNeeded()
-        let beta = AppSettings.shared.betaThoughts
+        let beta = betaOn()
         let model = ThoughtsModel.shared
         guard model.isLoaded || !beta else { return }
         let center = UNUserNotificationCenter.current()
         await refreshAuthorization()
         let allowed = isAllowed && enabled && beta
         var current: [String: String] = [:]
-        var snoozes: [String: TaskReminderPlan.Snooze] = [:]
+        var pendingSnoozes: [String: TaskReminderPlan.Snooze] = [:]
         for request in await center.pendingNotificationRequests() where TaskReminderPlan.parse(request.identifier) != nil {
             let info = request.content.userInfo
             current[request.identifier] = info[TaskReminderKeys.stamp] as? String ?? ""
             if info[TaskReminderKeys.snoozed] as? Bool == true, let at = info[TaskReminderKeys.fireAt] as? Double,
                let due = info[TaskReminderKeys.dueAt] as? Double {
-                snoozes[request.identifier] = TaskReminderPlan.Snooze(fireAt: Date(timeIntervalSince1970: at),
-                                                                      dueAt: Date(timeIntervalSince1970: due))
+                pendingSnoozes[request.identifier] = TaskReminderPlan.Snooze(fireAt: Date(timeIntervalSince1970: at),
+                                                                             dueAt: Date(timeIntervalSince1970: due))
             }
         }
         let now = Date()
         let thoughts = model.thoughts
+        // Verschobenes: gespeichert + geplant zusammen, aufgeräumt – und gespeichert, BEVOR Geplantes entfernt wird
+        // (sonst ginge ein „In 1 Stunde“ von vor dem ersten Entsperren beim Ausschalten verloren)
+        let stored = SnoozeStore.load()
+        let snoozes = TaskReminderPlan.keptSnoozes(stored: stored, pending: pendingSnoozes,
+                                                   thoughts: model.isLoaded ? thoughts : nil, now: now)
+        if snoozes != stored { SnoozeStore.save(snoozes) }
         let desired = allowed
             ? TaskReminderPlan.reminders(thoughts: thoughts, topic: { model.topic($0.topicId) }, snoozes: snoozes, now: now)
             : []
         let changes = TaskReminderPlan.changes(current: current, desired: desired, salt: salt)
         if !changes.remove.isEmpty { center.removePendingNotificationRequests(withIdentifiers: changes.remove) }
         var failed = 0
+        var added: [String] = []
         for reminder in changes.schedule {
             do {
                 try await center.add(request(for: reminder))
+                added.append(reminder.id)
             } catch {
                 failed += 1
+            }
+            // Beta AUS gewinnt immer: während des Planens ausgeschaltet → eben Geplantes wieder weg; den Rest räumt der
+            // vom Schalter angestoßene nächste Abgleich
+            guard betaOn() else {
+                center.removePendingNotificationRequests(withIdentifiers: added)
+                Diag.log("reminders.reconcile.betaOff", ["reason": .s(reason), "withdrawn": .i(added.count)])
+                return
             }
         }
         // schon zugestellte von erledigten, gelöschten oder weggeworfenen Aufgaben (Beta aus: alle)
@@ -354,7 +399,7 @@ final class TaskReminders {
         Diag.log("reminders.reconcile", [
             "reason": .s(reason), "allowed": .b(allowed), "beta": .b(beta), "planned": .i(desired.count), "added": .i(changes.schedule.count),
             "removed": .i(changes.remove.count), "unchanged": .i(changes.unchanged), "staleDelivered": .i(stale.count),
-            "failed": .i(failed), "snoozed": .i(desired.filter(\.snoozed).count),
+            "failed": .i(failed), "snoozed": .i(desired.filter(\.snoozed).count), "snoozesKept": .i(snoozes.count),
         ])
     }
 
@@ -464,28 +509,55 @@ final class TaskReminders {
         scheduleReconcile("done", delay: .milliseconds(200))
     }
 
-    /// „In 1 Stunde“: dieselbe Mitteilung (gleiche Kennung) eine Stunde später. Braucht keine Daten der App – geht also
-    /// auch vor dem ersten Entsperren; der Abgleich liest den Stand aus der geplanten Mitteilung.
+    /// „In 1 Stunde“: dieselbe Mitteilung (gleiche Kennung) eine Stunde später. Läuft auf dem seriellen Weg des
+    /// Abgleichs (nie gleichzeitig mit ihm).
     private func snooze(_ response: Response, thoughtID: String, taskID: String) async {
+        snoozeJobs.append(SnoozeJob(response: response, thoughtID: thoughtID, taskID: taskID))
+        await runSerially()
+    }
+
+    /// Braucht keine Daten der App – geht also auch vor dem ersten Entsperren (dann nur in der Mitteilung, der Abgleich
+    /// übernimmt es nach dem Entsperren in `SnoozeStore`). Beta AUS gewinnt: geprüft vor und nach dem Warten und nach
+    /// dem Planen.
+    private func snoozeOnce(_ job: SnoozeJob) async {
         // Beta „Gedanken & Aufgaben“ aus: nichts neu planen (die Mitteilung kam vor dem Ausschalten)
-        guard AppSettings.shared.betaThoughts else {
+        guard betaOn() else {
             Diag.log("reminders.snooze.skipped", ["why": .s("beta-off")])
             return
         }
-        // Nur für eine offene Aufgabe – keine Mitteilung zu Erledigtem
-        guard await taskStillOpen(thoughtID: thoughtID, taskID: taskID) else {
+        // Nur für eine offene Aufgabe – keine Mitteilung zu Erledigtem (wartet bis zu 5 s auf die Gedanken)
+        guard await taskStillOpen(thoughtID: job.thoughtID, taskID: job.taskID) else {
             Diag.log("reminders.snooze.skipped", ["why": .s("not-open"), "loaded": .b(ThoughtsModel.shared.isLoaded)])
             return
         }
+        // Während des Wartens ausgeschaltet?
+        guard betaOn() else {
+            Diag.log("reminders.snooze.skipped", ["why": .s("beta-off-after-wait")])
+            return
+        }
         let now = Date()
-        let reminder = TaskReminder(id: response.requestID, thoughtID: thoughtID, taskID: taskID,
+        let response = job.response
+        let reminder = TaskReminder(id: response.requestID, thoughtID: job.thoughtID, taskID: job.taskID,
                                     fireAt: TaskReminderPlan.snoozed(from: now), dueAt: response.dueAt ?? now, snoozed: true,
                                     title: response.title, body: response.body, threadID: response.threadID)
+        let center = UNUserNotificationCenter.current()
         do {
-            try await UNUserNotificationCenter.current().add(request(for: reminder))
+            try await center.add(request(for: reminder))
         } catch {
             Diag.log("reminders.snooze.failed", ["code": .i((error as NSError).code)])
+            return
         }
+        // Beta AUS gewinnt immer: während des Planens ausgeschaltet → eben Geplantes wieder weg
+        guard betaOn() else {
+            center.removePendingNotificationRequests(withIdentifiers: [reminder.id])
+            Diag.log("reminders.snooze.skipped", ["why": .s("beta-off-after-add")])
+            return
+        }
+        // Dauerhaft merken (übersteht Aus- und Einschalten); vor dem ersten Entsperren trägt es nur die Mitteilung
+        guard ProtectedData.isReadable else { return }
+        var stored = SnoozeStore.load()
+        stored[reminder.id] = TaskReminderPlan.Snooze(fireAt: reminder.fireAt, dueAt: reminder.dueAt)
+        SnoozeStore.save(stored)
     }
 
     /// Ist die Aufgabe noch offen (`TaskReminderPlan.maySnooze`)? Kaltstart im Hintergrund: bis zu 5 s auf die Gedanken
@@ -554,9 +626,7 @@ enum LockedCompletions {
     /// Älteres verfällt (Aufgabe vermutlich längst anders erledigt)
     private static let maxAge: TimeInterval = 30 * 86_400
 
-    private static let url: URL = ThoughtsEnvironment.root.deletingLastPathComponent()
-        .appendingPathComponent("Erinnerungen", isDirectory: true)
-        .appendingPathComponent("erledigt-gesperrt.json")
+    private static let url: URL = ReminderFolder.url.appendingPathComponent("erledigt-gesperrt.json")
 
     static func load() -> [TaskCompletion] {
         guard let data = try? Data(contentsOf: url),
@@ -583,11 +653,53 @@ enum LockedCompletions {
 
     private static func save(_ entries: [TaskCompletion]) {
         do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-                                                    attributes: [.protectionKey: FileProtectionType.none])
+            try ReminderFolder.create()
             try JSONEncoder().encode(entries).write(to: url, options: [.atomic, .noFileProtection])
         } catch {
             Diag.log("reminders.queue.failed", ["code": .i((error as NSError).code)])
+        }
+    }
+}
+
+/// Ordner der kleinen Erinnerungs-Dateien im App-Container (`Library/Application Support/Erinnerungen`). Der Ordner
+/// selbst ohne Dateischutz: `erledigt-gesperrt.json` entsteht auch vor dem ersten Entsperren.
+@MainActor
+enum ReminderFolder {
+    static let url: URL = ThoughtsEnvironment.root.deletingLastPathComponent()
+        .appendingPathComponent("Erinnerungen", isDirectory: true)
+
+    static func create() throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true,
+                                                attributes: [.protectionKey: FileProtectionType.none])
+    }
+}
+
+/// „In 1 Stunde“ dauerhaft: `verschoben.json` (Kennung → Zeitpunkt und Fälligkeit). Die geplante Mitteilung allein
+/// ginge beim Aus- und Einschalten (Beta, Erinnerungen) verloren. Nur die App braucht es (Widgets haken ab, der Abgleich
+/// räumt auf), deshalb im App-Container. Dateischutz bis zum ersten Entsperren; davor wird weder gelesen noch
+/// geschrieben. Aufräumen: `TaskReminderPlan.keptSnoozes` im Abgleich.
+@MainActor
+enum SnoozeStore {
+    private static let url: URL = ReminderFolder.url.appendingPathComponent("verschoben.json")
+
+    /// Leer, solange nicht lesbar oder nichts gespeichert
+    static func load() -> [String: TaskReminderPlan.Snooze] {
+        guard ProtectedData.isReadable, let data = try? Data(contentsOf: url) else { return [:] }
+        return (try? JSONDecoder().decode([String: TaskReminderPlan.Snooze].self, from: data)) ?? [:]
+    }
+
+    /// Atomar; leer = Datei weg. Vor dem ersten Entsperren nichts.
+    static func save(_ snoozes: [String: TaskReminderPlan.Snooze]) {
+        guard ProtectedData.isReadable else { return }
+        do {
+            if snoozes.isEmpty {
+                if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+                return
+            }
+            try ReminderFolder.create()
+            try JSONEncoder().encode(snoozes).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        } catch {
+            Diag.log("reminders.snoozes.failed", ["code": .i((error as NSError).code)])
         }
     }
 }

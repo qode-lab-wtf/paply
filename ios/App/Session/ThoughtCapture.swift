@@ -8,6 +8,11 @@ import UIKit
 // Erfassen ist heilig: Eintrag und WAV entstehen synchron vor jedem `await`, der Ton liegt auf der
 // Platte, bevor irgendetwas ins Netz geht. Unterbrechung, Tastatur oder 10-Min.-Grenze sichern den
 // Gedanken – verworfen wird nur auf ausdrücklichen Wunsch (`discard`).
+//
+// Beta „Gedanken & Aufgaben“ (`AppSettings.betaThoughts`) prüft `toggle` zentral für jeden Weg (Knopf, Kurzbefehl,
+// Weiterleitung, Vordergrund-Rückfall): vor dem Start und nach jedem `await` des Starts (`ThoughtStartGate`). Ist sie
+// inzwischen aus, bricht der Start ohne Rest ab (kein Eintrag, keine Datei, keine Live Activity, Mikro frei). Eine
+// schon laufende Aufnahme beendet das Ausschalten dagegen normal – sie wird gesichert und geordnet.
 
 enum ThoughtToggleOutcome: Sendable, Equatable {
     case started(String)
@@ -94,6 +99,8 @@ final class ThoughtCapture {
         }
     }
     @ObservationIgnored private var pendingStop: PendingStop?
+    /// Beta „Gedanken & Aufgaben“ beim Start: geprüft vor dem Start und nach jedem `await`
+    @ObservationIgnored private var startGate = ThoughtStartGate()
 
     /// Was zur laufenden Aufnahme gehört (nur Main-Actor).
     private final class Recording {
@@ -159,6 +166,12 @@ final class ThoughtCapture {
             logStart(case: "-", ok: false, stage: "no-store", trigger: trigger, begin: begin)
             return .refused("Gedanken-Ablage nicht bereit")
         }
+        // Beta „Gedanken & Aufgaben“ aus: kein neuer Gedanke (Beenden geht oben immer)
+        startGate.begin()
+        guard startAllowed else {
+            logStart(case: "-", ok: false, stage: "beta-off", trigger: trigger, begin: begin)
+            return .refused(BetaFeatures.thoughtsOffMessage)
+        }
         starting = true
         defer {
             starting = false
@@ -179,6 +192,11 @@ final class ThoughtCapture {
         let id = placeholder.id
         startingID = id
         guard let store else { return .refused("Gedanken-Ablage nicht bereit") }
+        // Prüfpunkt nach dem Speicher: Beta inzwischen aus → Eintrag und WAV wieder weg
+        guard startAllowed else {
+            return await abandonStart(id: id, file: file, live: nil, micAttached: false, store: store, fall: "-",
+                                      trigger: trigger, begin: begin)
+        }
 
         // 2) Live Activity zuerst (AudioRecordingIntent verlangt eine laufende Activity)
         ThoughtBridge.startActivity(id: id, startedAt: startedAt)
@@ -208,7 +226,14 @@ final class ThoughtCapture {
                      code: failure?.code, fourCC: failure?.fourCC)
             // Während des Starts schon „Fertig“/„Verwerfen“ gedrückt: nicht nach vorne holen und neu starten
             if pendingStop != nil { return .stopped(id) }
+            // Beta währenddessen ausgeschaltet: ebenso wenig (der Vordergrund-Rückfall prüft ohnehin erneut)
+            guard startAllowed else { return .refused(BetaFeatures.thoughtsOffMessage) }
             return .needsForeground(failure?.fourCC.isEmpty == false ? failure!.fourCC : "Mikro ließ sich nicht starten")
+        }
+        // Prüfpunkt nach dem Mikro
+        guard startAllowed else {
+            return await abandonStart(id: id, file: file, live: live, micAttached: true, store: store, fall: fall,
+                                      trigger: trigger, begin: begin)
         }
 
         let rec = Recording(id: id, trigger: trigger, startedAt: startedAt, startedNs: begin, placeholder: placeholder, file: file)
@@ -218,6 +243,13 @@ final class ThoughtCapture {
         if live != nil { await processor?.expectLiveTranscript(id) }
         // Während des Wartens beendet (Unterbrechung, Tastatur): nicht wieder als laufend melden
         guard recording === rec, !rec.finishing else { return .stopped(id) }
+        // Prüfpunkt direkt vor dem Start (danach kein `await` mehr; ab hier beendet das Ausschalten normal)
+        guard startAllowed else {
+            rec.finishing = true
+            recording = nil
+            return await abandonStart(id: id, file: file, live: live, micAttached: true, store: store, fall: fall,
+                                      trigger: trigger, begin: begin)
+        }
         active = Active(id: id, startedAt: startedAt, speechDetected: false)
         ThoughtBridge.recordingChanged(id: id, startedAt: startedAt)
         startTicker(id: id)
@@ -233,6 +265,40 @@ final class ThoughtCapture {
             return .stopped(id)
         }
         return .started(id)
+    }
+
+    // MARK: Beta „Gedanken & Aufgaben“
+
+    /// Beta noch an und der Start nicht abgebrochen? (Stand nach dem ersten Entsperren neu gelesen)
+    private var startAllowed: Bool {
+        AppSettings.shared.reloadIfNeeded()
+        return startGate.allows(betaOn: AppSettings.shared.betaThoughts)
+    }
+
+    /// Beta ausgeschaltet (`AppSettings.betaThoughts`): Eine laufende Aufnahme endet und wird gesichert und geordnet;
+    /// eine gerade beginnende bricht am nächsten Prüfpunkt ab und hinterlässt nichts.
+    func betaTurnedOff() {
+        if active != nil {
+            finish(.app)
+        } else if starting {
+            startGate.abort()
+            Diag.log("thought.start.abortRequested", ["id": .opt(startingID.map(Self.short)), "why": .s("beta-off")])
+        }
+    }
+
+    /// Start abgebrochen, weil Beta inzwischen aus ist: sauber zurück – Mikro frei, kein Eintrag, keine Datei, keine
+    /// Live Activity. Anders als „Verwerfen“ (sichert in „Zuletzt gelöscht“): Eine Aufnahme gab es noch nicht.
+    private func abandonStart(id: String, file: CaptureFile, live: LivePipeline?, micAttached: Bool, store: ThoughtStore,
+                              fall: String, trigger: ThoughtTrigger, begin: UInt64) async -> ThoughtToggleOutcome {
+        if micAttached { SessionController.shared.detachThought(id: id) }
+        live?.cancel()
+        file.discard()
+        levelBox.set(0)
+        ThoughtBridge.endActivity(id: id, immediately: true)
+        if live != nil { await processor?.cancelLiveTranscript(id) }
+        await store.discardCapture(id)
+        logStart(case: fall, ok: false, stage: "beta-off", trigger: trigger, begin: begin)
+        return .refused(BetaFeatures.thoughtsOffMessage)
     }
 
     /// Gehört `id` zur laufenden oder gerade startenden Aufnahme? (Live Activity „Fertig“/„Verwerfen“)
