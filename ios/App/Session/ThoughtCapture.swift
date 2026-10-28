@@ -39,7 +39,14 @@ final class ThoughtCapture {
         var speechDetected: Bool
     }
 
-    private(set) var active: Active?
+    private(set) var active: Active? {
+        // Schutz vor Systemhinweisen folgt der Aufnahme (an beim Start, aus bei Fertig/Verwerfen/Unterbrechung …)
+        didSet {
+            if (oldValue == nil) != (active == nil) {
+                SessionController.shared.syncAlertShield(reason: active == nil ? "thought-end" : "thought")
+            }
+        }
+    }
 
     /// Letzter Stopp (für die Oberfläche, z. B. „Anruf – Aufnahme gesichert“)
     struct LastStop: Equatable {
@@ -439,6 +446,8 @@ final class ThoughtCapture {
                 guard !Task.isCancelled, let rec = recording, rec.id == id, var current = active else { return }
                 let elapsed = Date().timeIntervalSince(rec.startedAt)
                 if !current.speechDetected, await rec.live?.speechDetected() ?? levelBox.heardSpeech {
+                    // Während des Wartens beendet/verworfen: `active` nicht wiederbeleben (hinge sonst als „läuft“ fest)
+                    guard active?.id == id else { return }
                     current.speechDetected = true
                     active = current
                     SessionController.shared.noteSpeechHeard()

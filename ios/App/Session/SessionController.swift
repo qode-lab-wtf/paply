@@ -45,7 +45,12 @@ final class SessionController {
 
     @ObservationIgnored let audio = AudioEngineHost()
     @ObservationIgnored let monitor = DeviceMonitor()
-    @ObservationIgnored private var dictation: ActiveDictation?
+    @ObservationIgnored private var dictation: ActiveDictation? {
+        // Jeder Wechsel (Start, fertig, abgebrochen, verworfen, Unterbrechung, Sitzungsende) richtet den Schutz neu aus
+        didSet { syncAlertShield(reason: dictation.map { "dictation-\($0.source.rawValue)" } ?? "dictation-end") }
+    }
+    /// Schutz vor Systemhinweisen an (= ein Diktat oder ein Gedanke nimmt auf). Nur `syncAlertShield` setzt ihn.
+    @ObservationIgnored private var alertShieldOn = false
     /// Diktate nach „fertig“, bis das Ergebnis ausgeliefert ist
     @ObservationIgnored private var inFlight: [String: ActiveDictation] = [:]
     @ObservationIgnored private var lastPrewarmNs: UInt64 = 0
@@ -1054,6 +1059,20 @@ final class SessionController {
         publish()
     }
 
+    // MARK: Schutz vor Systemhinweisen (nur während einer Aufnahme)
+
+    /// Einzige Stelle, die den Schutz schaltet. Aufgerufen nach jedem Wechsel von `dictation` und
+    /// `ThoughtCapture.active` (je per `didSet`). An, solange ein Diktat oder ein Gedanke aufnimmt –
+    /// ein Anruf-Banner bricht die Aufnahme dann nicht ab. Sonst aus: In Bereitschaft unterbricht ein
+    /// Anruf die Sitzung normal, mit Klingelton und Vibration (Gerätefund 28.10.).
+    func syncAlertShield(reason: String) {
+        let on = dictation != nil || isThoughtActive
+        guard on != alertShieldOn else { return }
+        alertShieldOn = on
+        audio.setShieldFromAlerts(on)
+        Diag.log("audio.alertShield", ["on": .b(on), "reason": .s(reason), "app": .s(Self.appState)])
+    }
+
     // MARK: Haushalt (Bereithalte-Dauer, Messwerte)
 
     private func startHousekeeping() {
@@ -1135,10 +1154,13 @@ final class SessionController {
         default: "raw\(reason ?? 0)"
         }
         if began {
+            // Stand vor dem Beenden der Aufnahme (danach ist der Schutz schon aus)
+            let shieldWasOn = alertShieldOn
             // Gedanken-Haken: bei Unterbrechung sichern (anders als beim Diktat nie verwerfen)
             if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.interruption) }
             Diag.log("audio.interruption.began", [
                 "reason": .s(reasonName), "status": .s(status.rawValue), "app": .s(Self.appState), "engine": .b(audio.isRunning),
+                "alertShield": .b(shieldWasOn),
             ])
             if dictation != nil { cancelDictation(reason: "interruption") }
             if status != .off {

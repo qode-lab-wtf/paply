@@ -18,6 +18,11 @@ import Foundation
 /// - IO-Puffer fest ~100 ms: wenig Aufwachen im Leerlauf (Akku). Ein Wechsel beim Aufnehmen
 ///   könnte die Engine umkonfigurieren; die Pegel laufen trotzdem flüssig (Zeitstempel,
 ///   leicht verzögert gezeichnet). Wirksamer Puffer und Tap-Abstand stehen im Protokoll.
+/// - Schutz vor Systemhinweisen (`setPrefersNoInterruptionsFromSystemAlerts`) NUR während einer
+///   Aufnahme (`setShieldFromAlerts`, gesteuert vom SessionController): Ein Anruf-Banner bricht
+///   dann ein Diktat oder einen Gedanken nicht ab. In Bereitschaft bleibt er aus – sonst erschien
+///   ein Anruf nur als stummes Banner, ohne Klingelton und Vibration (Gerätefund 28.10.). Ein Anruf
+///   unterbricht die Sitzung dort normal; danach nimmt `attemptResume` sie wieder auf.
 final class AudioEngineHost: @unchecked Sendable {
     static let ioBuffer: TimeInterval = 0.1
 
@@ -27,6 +32,9 @@ final class AudioEngineHost: @unchecked Sendable {
     // Nur auf `queue` benutzt
     private var engine = AVAudioEngine()
     private var tapInstalled = false
+    /// Gewünschter Schutz vor Systemhinweisen; `configureSession()` übernimmt ihn bei jedem
+    /// Neuaufbau (ein Neustart mitten in einer Aufnahme behält ihn also).
+    private var shieldFromAlerts = false
     // Schnappschuss für den Main-Thread
     private let snapshotLock = NSLock()
     private var runningSnapshot = false
@@ -175,6 +183,16 @@ final class AudioEngineHost: @unchecked Sendable {
         await onQueue { host in host.applyBuiltInMic() }
     }
 
+    /// Schutz vor Systemhinweisen an (Aufnahme läuft) bzw. aus (Bereitschaft). Wird wie `stop()`
+    /// sofort in die Queue gestellt: Schnelle Wechsel (aus → an) kommen in Aufrufreihenfolge an.
+    /// Hat die Sitzung den Wert schon, passiert nichts.
+    func setShieldFromAlerts(_ on: Bool) {
+        queue.async { [self] in
+            shieldFromAlerts = on
+            applyShieldFromAlerts()
+        }
+    }
+
     // MARK: Experiment „Mikro im Leerlauf pausieren“ (Sitzung bleibt aktiv, kein setActive(false))
 
     /// Engine anhalten. `.pause`: `engine.pause()` – IO-Einheit bleibt eingerichtet, Tap bleibt;
@@ -241,9 +259,20 @@ final class AudioEngineHost: @unchecked Sendable {
         } catch {
             throw .session(error as NSError)
         }
-        try? session.setPrefersNoInterruptionsFromSystemAlerts(true)
+        // Vorgabe aus (iOS-Standard: Anrufe unterbrechen, klingeln und vibrieren); an nur während einer Aufnahme
+        applyShieldFromAlerts()
         try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try? session.setPreferredIOBufferDuration(Self.ioBuffer)
+    }
+
+    private func applyShieldFromAlerts() {
+        let session = AVAudioSession.sharedInstance()
+        guard session.prefersNoInterruptionsFromSystemAlerts != shieldFromAlerts else { return }
+        do {
+            try session.setPrefersNoInterruptionsFromSystemAlerts(shieldFromAlerts)
+        } catch {
+            Diag.log("audio.alertShield.failed", ["on": .b(shieldFromAlerts), "code": .i((error as NSError).code)])
+        }
     }
 
     private func activateSession() throws(StartError) {
