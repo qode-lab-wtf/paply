@@ -7,9 +7,10 @@
 - **Ziel:** gleiche Qualität, gleiches Design und gleiche UX wie Paply iOS V1, als APK-Testversion für Freunde.
   Kotlin + Jetpack Compose, nativ. `ios/` ist nur Vorlage.
 - **Arbeitsteilung:** Claude (Opus 5.5) plant und entscheidet, Codex setzt um, Sonnet 5.5 prüft jedes Ergebnis.
-- **Rechner:** Der Mac mini hat nur 1,7 GB frei, dort wird nur Quelltext geschrieben, nichts gebaut. Bauen und
-  Emulator kommen aufs MacBook (M5, 32 GB, 136 GB frei). Dort ist noch nichts installiert (kein Java, kein SDK, kein
-  Homebrew). **Offen bei Allan: Freigabe für die Installation.**
+- **Rechner:** Gebaut und getestet wird nur auf dem MacBook (M5, 32 GB, 136 GB frei). Dort liegen Java, Android-Werkzeuge
+  und der Emulator `paply` in `~/Android`; mit `rm -rf ~/Android` ist alles wieder weg. Allan hat das am 28.10.
+  freigegeben. Der Mac mini ist knapp an Platz, dort entsteht nur Quelltext; nach dem T3-Update kann das MacBook
+  direkt als Umgebung verknüpft werden.
 - **Phase 0 (Machbarkeit im Emulator), läuft:** Tastatur nimmt auf und setzt polierten Text ins Feld; Gedanken-Kachel
   startet eine Aufnahme mit sichtbarer Benachrichtigung. Vorarbeit: Plattform-Recherche
   (`android/docs/PLATTFORM.md`) und Portierungskarte (`android/docs/PORTIERUNG.md`).
