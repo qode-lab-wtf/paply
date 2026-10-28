@@ -1,4 +1,7 @@
-plugins { alias(libs.plugins.android.application) }
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+}
 android {
     namespace = "com.paply.android"
     buildToolsVersion = "37.0.0"
@@ -14,7 +17,7 @@ android {
         // All generated credentials stay in the remote work directory, never SDK/user-home.
         storeFile = rootProject.file(".local/debug.keystore")
     }
-    buildFeatures { buildConfig = true }
+    buildFeatures { buildConfig = true; compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -24,4 +27,11 @@ dependencies {
     implementation(project(":core"))
     implementation(libs.androidx.core)
     implementation(libs.coroutines.android)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.compose)
+    implementation(libs.datastore)
 }

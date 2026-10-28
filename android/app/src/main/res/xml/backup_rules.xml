@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 10/11: only D2D transports may receive user content. No keys on any transport. -->
+<full-backup-content>
+    <include domain="file" path="." requireFlags="deviceToDeviceTransfer" />
+    <include domain="sharedpref" path="." requireFlags="deviceToDeviceTransfer" />
+    <exclude domain="sharedpref" path="paply-key-vault.xml" />
+    <exclude domain="sharedpref" path="paply-private.xml" />
+    <exclude domain="file" path="debug-groq-key" />
+</full-backup-content>

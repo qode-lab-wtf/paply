@@ -1,7 +1,5 @@
 <resources>
     <string name="app_name">Paply</string>
-    <string name="debug_direct_tile">Kachel startet Dienst direkt</string>
-    <string name="saved">Gespeichert</string>
     <string name="voice_input">Paply Sprache</string>
     <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item><item name="android:colorAccent">#22B45F</item>
