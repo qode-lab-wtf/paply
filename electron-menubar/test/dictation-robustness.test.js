@@ -165,6 +165,39 @@ it('wartet bei kurzem Groq-Limit die genannte Zeit und versucht es erneut', asyn
   expect(await work).toBe('Gesprochener Text'); expect(c.fetch).toHaveBeenCalledTimes(2);
 });
 
+it('wiederholt hängende Uploads nur, solange das bisherige Gesamtbudget reicht', async () => {
+  const { context: c, timers } = main();
+  let now = 0;
+  c.Date = class extends Date { static now() { return now; } };
+  const aborted = () => Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+  c.fetch.mockImplementation(async () => { now += 239000; throw aborted(); });
+  await expect(c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech)).rejects.toMatchObject({ name: 'AbortError' });
+  expect(c.fetch).toHaveBeenCalledOnce(); expect(timers).toHaveLength(0);
+  now = 0; c.fetch.mockReset();
+  c.fetch.mockImplementationOnce(async () => { now += 60000; throw aborted(); });
+  const work = c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech);
+  await tick(); await tick();
+  expect(timers.map(timer => timer.ms)).toEqual([1000]);
+  c.fetch.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ text: 'Gesprochener Text' }) });
+  timers[0].fn();
+  expect(await work).toBe('Gesprochener Text');
+});
+
+it('zählt einen Fehler genau einmal je Aufnahme, nicht beim Wiederholen', async () => {
+  const { context: c } = main();
+  c.fetch.mockResolvedValue({ ok: false, status: 401, text: async () => '{}' });
+  await c.processAudioData(Buffer.from('audio'), false, speech);
+  expect(c.updateStats).toHaveBeenCalledExactlyOnceWith(0, 0, true);
+  await c.processAudioData(Buffer.from('audio'), true, speech);
+  expect(c.updateStats).toHaveBeenCalledOnce();
+});
+
+it('gibt dem Verlauf die gemessene Aufnahmedauer für die Minuten-Statistik mit', async () => {
+  const { context: c } = main();
+  await c.processAudioData(Buffer.from('audio'), false, speech);
+  expect(c.addToHistory).toHaveBeenCalledWith(expect.objectContaining({ durationMinutes: speech.durationMs / 60000 }));
+});
+
 it('gibt dem Upload je nach Dateigröße mehr Zeit', async () => {
   const { context: c } = main();
   const original = c.readResponse; c.readResponse = vi.fn(original);

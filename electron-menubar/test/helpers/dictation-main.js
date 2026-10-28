@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import { isBackupAtOrBefore, compareBackups } from '../../dictation/backup-order.js';
 import { vi } from 'vitest';
 import { createDictationJobs } from '../../dictation/jobs.js';
-import { readResponse, friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish, retryAfterMs, transcriptionTimeoutMs } from '../../dictation/policies.js';
+import { readResponse, friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs } from '../../dictation/policies.js';
 import { filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment } from '../../audio/silence-filter.js';
 
 export const source = fs.readFileSync(path.join(__dirname, '../../electron-main.js'), 'utf8');
@@ -24,7 +24,7 @@ export function makeMain(platform = 'darwin', settings = {}) {
     notesBridge: { dictationState: vi.fn(), meetingStarted: vi.fn() },
     process: { env: {}, platform },
     app: { getPath: () => directory }, screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) }, isMac: platform === 'darwin', isWin: platform === 'win32',
-    dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish, retryAfterMs, transcriptionTimeoutMs,
+    dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
     vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations, isVocabularyEcho,
     filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment, isBackupAtOrBefore, compareBackups,

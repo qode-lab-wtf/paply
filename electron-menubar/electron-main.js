@@ -60,7 +60,7 @@ const notesBridge = { dictationState() {}, meetingStarted() {} };
 protocol.registerSchemesAsPrivileged([{ scheme: 'paply-notes', privileges: { standard: true, secure: true, stream: true } }]);
 const { createDictationJobs } = require('./dictation/jobs');
 const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order');
-const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs } = require('./dictation/policies');
+const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs } = require('./dictation/policies');
 const { captureMacApp, pasteMac } = require('./dictation/mac-paste');
 const { createWindowsFocus, pasteWindows } = require('./dictation/windows-paste');
 const { buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt, isVocabularyEcho } = require('./dictation/polish-prompt');
@@ -492,6 +492,8 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
   if (!apiKey) {
     throw new Error('Groq API Key nicht konfiguriert');
   }
+  // Alle Versuche zusammen dauern höchstens so lange wie bisher (4 × 60 s) bzw. ein großer Upload + 60 s.
+  const budgetEnd = Date.now() + transcriptionBudgetMs(audioBuffer.length);
 
   for (let i = 0; i <= retries; i++) {
     try {
@@ -512,7 +514,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
           Authorization: `Bearer ${apiKey}`,
         },
         body: formData,
-      }, transcriptionTimeoutMs(audioBuffer.length));
+      }, Math.max(1000, Math.min(transcriptionTimeoutMs(audioBuffer.length), budgetEnd - Date.now())));
 
       if (!res.ok) {
         const errText = res.body;
@@ -581,9 +583,9 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         causeMessage.includes('ECONNRESET') ||
         error.name === 'AbortError';
 
-      if (isNetworkError && i < retries) {
-        // Exponentielles Backoff: 1s, 2s, 4s
-        const delay = Math.min(1000 * Math.pow(2, i), 8000);
+      // Exponentielles Backoff: 1s, 2s, 4s – nur solange das Gesamtbudget reicht.
+      const delay = Math.min(1000 * Math.pow(2, i), 8000);
+      if (isNetworkError && i < retries && budgetEnd - Date.now() > delay + 5000) {
         console.log(`Network error detected (${causeCode || error.name}), retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -1781,9 +1783,6 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
       console.log('Backup preserved for retry');
     }
 
-    // Fehler einmal je Aufnahme zählen (Dashboard: Erfolgsquote).
-    try { if (!isRetry) updateStats(0, 0, true); } catch { /* nur Statistik */ }
-
     // Show error with retry option
     const message = friendlyError(error.status ? String(error.status) : error, process.platform);
     updateStatus('error', message);
@@ -1796,6 +1795,8 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     });
 
     hideRecordingWindow(5000, job);
+    // Fehler einmal je Aufnahme zählen (Dashboard: Erfolgsquote), nach der Anzeige.
+    try { if (!isRetry) updateStats(0, 0, true); } catch { /* nur Statistik */ }
 
     return { success: false, error };
   } finally {

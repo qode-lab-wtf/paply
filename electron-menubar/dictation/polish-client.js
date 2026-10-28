@@ -57,7 +57,8 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
       // eigenem Kontingent versuchen (wie Paply iOS), statt sofort den Rohtext einzusetzen.
       const alternative = res.status === 429
         && [POLISH_MODEL, POLISH_FALLBACK_MODEL].find(id => id !== model && state.ids.includes(id));
-      if (alternative && deadline - now() > 0) {
+      const fallback = alternative && deadline - now() >= 3000;
+      if (fallback) {
         model = alternative;
         res = await send(model, deadline - now());
       }
@@ -65,7 +66,8 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
         if (modelMissing(res)) {
           // Dieses Diktat bleibt roh. Das nächste nutzt ggf. das noch verfügbare Ausweichmodell.
           state.ids = state.ids.filter(id => id !== model);
-          unavailable();
+          // Fehlt nur das Ausweichmodell, ist das Hauptmodell bloß am Limit: keine Warnung.
+          if (!fallback || !selectPolishModel(state.ids)) unavailable();
         }
         log(`http-${res.status}`);
         return null;

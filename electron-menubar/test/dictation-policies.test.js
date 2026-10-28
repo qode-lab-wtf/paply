@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDictationJobs } from '../dictation/jobs.js';
-import { completePolish, polishTokenBudget, readResponse, replaceShortcut, friendlyError, explainDictationStatus, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs } from '../dictation/policies.js';
+import { completePolish, polishTokenBudget, readResponse, replaceShortcut, friendlyError, explainDictationStatus, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs } from '../dictation/policies.js';
 import { deferred, tick } from './helpers/dictation-main.js';
 afterEach(() => vi.useRealTimers());
 
@@ -97,6 +97,12 @@ it('gibt langen Uploads mehr Zeit, kurzen praktisch die bisherigen 60 s', () => 
   expect(transcriptionTimeoutMs(0)).toBe(60000);
   expect(transcriptionTimeoutMs(256000)).toBe(64000);
   expect(transcriptionTimeoutMs(25 * 1024 * 1024)).toBeGreaterThan(450000);
+});
+
+it('begrenzt alle Versuche zusammen wie bisher auf 4 × 60 s, große Dateien auf einen Upload + 60 s', () => {
+  expect(transcriptionBudgetMs(0)).toBe(240000);
+  expect(transcriptionBudgetMs(256000)).toBe(240000);
+  expect(transcriptionBudgetMs(25 * 1024 * 1024)).toBe(transcriptionTimeoutMs(25 * 1024 * 1024) + 60000);
 });
 
 it('erklärt zu große Aufnahmen (413) statt „Diktat fehlgeschlagen“', () => {

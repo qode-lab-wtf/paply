@@ -146,6 +146,20 @@ describe('Polieren mit isoliertem Netzwerk', () => {
     expect(await createPolishClient({ request: both })(input())).toBeNull();
     expect(both).toHaveBeenCalledTimes(3);
   });
+  it('weicht nur mit genug Restzeit aus und warnt nicht, wenn bloß das Ausweichmodell fehlt', async () => {
+    let time = 0;
+    const late = vi.fn(async url => { if (url === GROQ_MODELS_URL) return models(POLISH_MODEL, POLISH_FALLBACK_MODEL); time = 28000; return response({}, 429); });
+    expect(await createPolishClient({ request: late, now: () => time })(input())).toBeNull();
+    expect(late).toHaveBeenCalledTimes(2);
+    const onUnavailable = vi.fn();
+    const gone = vi.fn().mockResolvedValueOnce(models(POLISH_MODEL, POLISH_FALLBACK_MODEL)).mockResolvedValueOnce(response({}, 429))
+      .mockResolvedValueOnce(response({ error: { code: 'model_not_found' } }, 404)).mockResolvedValueOnce(completion());
+    const polish = createPolishClient({ request: gone, onUnavailable });
+    expect(await polish(input())).toBeNull();
+    expect(onUnavailable).not.toHaveBeenCalled();
+    expect(await polish(input())).toBe(raw);
+    expect(JSON.parse(gone.mock.calls[3][1].body).model).toBe(POLISH_MODEL);
+  });
   it('wendet das Sicherheitsnetz auch auf das Ausweichmodell an', async () => {
     const request = vi.fn().mockResolvedValueOnce(models(POLISH_MODEL, POLISH_FALLBACK_MODEL))
       .mockResolvedValueOnce(response({}, 429)).mockResolvedValueOnce(completion('Ganz anderer erfundener Text ohne Bezug.'));

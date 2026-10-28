@@ -53,6 +53,10 @@ function retryAfterMs(value) {
 function transcriptionTimeoutMs(bytes) {
   return 60000 + Math.ceil((Number(bytes) || 0) / 64);
 }
+// Obergrenze für alle Versuche zusammen: wie bisher 4 × 60 s, bei großen Dateien ein Upload + 60 s.
+function transcriptionBudgetMs(bytes) {
+  return Math.max(240000, transcriptionTimeoutMs(bytes) + 60000);
+}
 function sameShortcut(first, second, platform = process.platform) {
   if (!first || !second) return false;
   const normalize = shortcut => {
@@ -107,4 +111,4 @@ async function ensureGlobeReady(manager, timeoutMs = 2000) {
     });
   } catch { manager.stop(); return false; }
 }
-module.exports = { polishTokenBudget, completePolish, friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs };
+module.exports = { polishTokenBudget, completePolish, friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs };
