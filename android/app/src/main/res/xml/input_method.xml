@@ -1,0 +1,3 @@
+<input-method xmlns:android="http://schemas.android.com/apk/res/android" android:settingsActivity="com.paply.android.MainActivity" android:supportsSwitchingToNextInputMethod="true">
+    <subtype android:label="@string/voice_input" android:imeSubtypeMode="voice" android:isAuxiliary="false" />
+</input-method>
