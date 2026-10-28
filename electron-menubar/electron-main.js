@@ -43,6 +43,15 @@ app.on('second-instance', () => { app.whenReady().then(() => { const win = creat
 
 const path = require('node:path');
 const fs = require('node:fs');
+// Diagnose-Protokoll so früh wie möglich: nach Sperre und (Test-)userData, vor allen Modulen.
+// Kein Diktat-/Notiztext darin (nur mit PAPLY_DEBUG_TEXT=1); Tray: „Protokoll anzeigen“.
+const diagnosticLog = require('./diagnostics/log-file').installLogFile({
+  directory: path.join(app.getPath('userData'), 'logs'), console, process,
+});
+console.log('[Start] paply', require('./package.json').version, `${process.platform}/${process.arch}`,
+  `OS ${require('node:os').release()}`, `Electron ${process.versions.electron}`);
+app.on('render-process-gone', (_event, _contents, details) => console.error('[Absturz] Fenster:', details.reason, details.exitCode));
+app.on('child-process-gone', (_event, details) => console.error('[Absturz] Hilfsprozess:', details.type, details.reason, details.exitCode));
 const { createNotes } = require('./notes');
 let notesApp = null;
 // Native macOS updater closes windows before app.before-quit.
@@ -1168,12 +1177,19 @@ function updateTrayMenu() {
     { type: 'separator' },
     { label: 'Einstellungen...', click: createSettingsWindow },
     { label: 'Nach Updates suchen...', click: () => checkForUpdates(false) },
+    { label: 'Protokoll anzeigen', click: showDiagnosticLog },
     { label: 'Über paply', click: showAboutDialog },
     { type: 'separator' },
     { label: 'Beenden', accelerator: getQuitAccelerator(), click: () => app.quit() },
   ];
 
   tray.setContextMenu(Menu.buildFromTemplate(template));
+}
+
+// Markiert paply.log im Finder/Explorer, damit man sie direkt weiterschicken kann.
+function showDiagnosticLog() {
+  if (fs.existsSync(diagnosticLog.path)) shell.showItemInFolder(diagnosticLog.path);
+  else shell.openPath(path.dirname(diagnosticLog.path));
 }
 
 function setupTray() {
