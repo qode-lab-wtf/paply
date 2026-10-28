@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+import PaplyKit
 
 /// AVAudioSession + AVAudioEngine mit dauerhaftem Input-Tap.
 ///
@@ -45,10 +46,14 @@ final class AudioEngineHost: @unchecked Sendable {
         case noInput
         case session(NSError)
         case engine(NSError)
+        /// AVAudioEngine warf eine Objective-C-Ausnahme (Name), z. B. Tap-Format passt nach
+        /// einem Anruf nicht zur Hardware. Abgefangen statt Absturz; der Aufrufer versucht es später.
+        case exception(String)
 
         var code: Int {
             switch self {
             case .noInput: -1
+            case .exception: -2
             case .session(let e), .engine(let e): e.code
             }
         }
@@ -65,6 +70,7 @@ final class AudioEngineHost: @unchecked Sendable {
             case .noInput: "input"
             case .session: "session"
             case .engine: "engine"
+            case .exception(let name): "exception:\(name)"
             }
         }
     }
@@ -131,7 +137,13 @@ final class AudioEngineHost: @unchecked Sendable {
         await onQueue { host in
             do throws(StartError) {
                 try host.activateSession()
-                if !host.engine.isRunning { try host.startEngine(reason: "resume") }
+                if !host.engine.isRunning {
+                    // Frische Engine: Nach einem Anruf hielte die alte das Hardwareformat von vor
+                    // dem Anruf fest, und der Tap passte nicht mehr (Absturz Build 5, 28.10.).
+                    host.stopEngine()
+                    host.engine = AVAudioEngine()
+                    try host.startEngine(reason: "resume")
+                }
                 return .success(())
             } catch {
                 return .failure(error)
@@ -301,17 +313,28 @@ final class AudioEngineHost: @unchecked Sendable {
             input.removeTap(onBus: 0)
             tapInstalled = false
         }
+        // Kurz nach einem Anruf kann der Eingang noch fehlen (0 Hz) – dann später erneut
+        let hardware = input.inputFormat(forBus: 0)
         let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else { throw .noInput }
+        guard hardware.sampleRate > 0, hardware.channelCount > 0, format.sampleRate > 0, format.channelCount > 0
+        else { throw .noInput }
         processor.reset()
-        Self.installTap(on: input, format: format, processor: processor)
+        // Passt das Format nicht zur Hardware, wirft AVAudioEngine eine Objective-C-Ausnahme, die
+        // Swift nicht fangen kann – ohne den Umweg beendete iOS die App (nach Anrufen, Build 5).
+        let processor = processor
+        if let exception = ObjCException.catching({ Self.installTap(on: input, processor: processor) }) {
+            throw .exception(exception.name.rawValue)
+        }
         tapInstalled = true
         engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            throw .engine(error as NSError)
+        var startError: NSError?
+        let engine = engine
+        if let exception = ObjCException.catching({
+            do { try engine.start() } catch { startError = error as NSError }
+        }) {
+            throw .exception(exception.name.rawValue)
         }
+        if let startError { throw .engine(startError) }
         reportStart(reason: reason)
     }
 
@@ -333,8 +356,10 @@ final class AudioEngineHost: @unchecked Sendable {
 
     /// Der Tap-Block läuft auf einem Audio-Thread; er entsteht hier in nicht isoliertem
     /// Kontext und greift nur auf den thread-sicheren Prozessor zu.
-    private static func installTap(on node: AVAudioInputNode, format: AVAudioFormat, processor: AudioTapProcessor) {
-        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+    /// Ohne festes Format (`nil`): Der Tap übernimmt das aktuelle Format des Knotens; der
+    /// Prozessor wandelt jedes Format selbst auf 16 kHz mono.
+    private static func installTap(on node: AVAudioInputNode, processor: AudioTapProcessor) {
+        node.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
             processor.process(buffer, arrivalNs: MonoClock.now())
         }
     }

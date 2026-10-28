@@ -9,7 +9,9 @@ let package = Package(
         .executable(name: "paply-bench", targets: ["paply-bench"]),
     ],
     targets: [
-        .target(name: "PaplyKit"),
+        // Objective-C-Ausnahmen (z. B. von AVAudioEngine) abfangen – geht nur in Objective-C
+        .target(name: "PaplyObjC"),
+        .target(name: "PaplyKit", dependencies: ["PaplyObjC"]),
         .executableTarget(name: "paply-bench", dependencies: ["PaplyKit"]),
         .testTarget(name: "PaplyKitTests", dependencies: ["PaplyKit"]),
     ]
