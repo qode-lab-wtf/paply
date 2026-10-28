@@ -16,7 +16,7 @@ DEVELOPMENT_TEAM =
 CODE_SIGN_STYLE = Automatic
 
 // Version für App und Erweiterungen (müssen gleich sein). Für jeden TestFlight-Upload
-// PAPLY_BUILD erhöhen – hier oder per Befehlszeile: xcodebuild … PAPLY_BUILD=7
+// PAPLY_BUILD erhöhen – hier oder per Befehlszeile: xcodebuild … PAPLY_BUILD=8
 MARKETING_VERSION = 0.1.0
-PAPLY_BUILD = 7
+PAPLY_BUILD = 8
 CURRENT_PROJECT_VERSION = $(PAPLY_BUILD)

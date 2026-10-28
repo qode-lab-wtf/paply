@@ -406,6 +406,61 @@ struct TopicMergeSheet: View {
 
 // MARK: - Themen-Aktionen an einer Stelle
 
+struct TopicDeletion {
+    let topics: [Topic]
+    var multiple = false
+
+    var title: String {
+        if multiple { return "\(topics.count) Themen löschen?" }
+        return topics.first.map { "„\($0.title)“ löschen?" } ?? "Thema löschen?"
+    }
+}
+
+/// Dieselbe Rückfrage für Themen-Chips, Wischen und Mehrfachauswahl.
+private struct TopicDeletionModifier: ViewModifier {
+    @Binding var choice: TopicDeletion?
+    var onDeleted: () -> Void
+    @Environment(ThoughtsModel.self) private var model
+    @Environment(ThoughtsNav.self) private var nav
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    @State private var successPulse = 0
+
+    private var count: Int { choice?.topics.reduce(0) { $0 + model.count(of: $1.id) } ?? 0 }
+    private var noun: String { choice?.multiple == true ? "Themen" : "Thema" }
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(choice?.title ?? "Thema löschen?", isPresented: Binding(
+                get: { choice != nil }, set: { if !$0 { choice = nil } }
+            ), titleVisibility: .visible) {
+                if count > 0 {
+                    Button("\(noun) und \(count) Gedanken löschen", role: .destructive) { delete(withThoughts: true) }
+                    Button("Nur \(noun) löschen", role: .destructive) { delete(withThoughts: false) }
+                } else {
+                    Button("\(noun) löschen", role: .destructive) { delete(withThoughts: false) }
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: {
+                if count > 0 {
+                    Text("Gelöschte Gedanken liegen 30 Tage unter „Zuletzt gelöscht“. Bei „Nur \(noun) löschen“ bleiben sie ohne Thema.")
+                }
+            }
+            .sensoryFeedback(.success, trigger: successPulse)
+    }
+
+    private func delete(withThoughts: Bool) {
+        guard let choice else { return }
+        let ids = Set(choice.topics.map(\.id))
+        let focused = nav.focusedTopic.flatMap { model.topic($0)?.id }
+        withAnimation(PaplyMotion.smooth(reduce)) {
+            if let focused, ids.contains(focused) { nav.focus(nil) }
+            model.deleteTopics(ids, withThoughts: withThoughts)
+            onDeleted()
+        }
+        successPulse += 1
+    }
+}
+
 /// Umbenennen (Hinweisfenster mit Feld), Bild oder Symbol (Blatt), Zusammenführen (Blatt), Löschen (Rückfrage).
 struct TopicActionsModifier: ViewModifier {
     @Binding var action: TopicAction?
@@ -420,8 +475,10 @@ struct TopicActionsModifier: ViewModifier {
         Binding(get: { if case .rename = action { true } else { false } }, set: { if !$0 { action = nil } })
     }
 
-    private var deleting: Binding<Bool> {
-        Binding(get: { if case .delete = action { true } else { false } }, set: { if !$0 { action = nil } })
+    private var deleting: Binding<TopicDeletion?> {
+        Binding(get: {
+            if case .delete(let topic) = action { TopicDeletion(topics: [topic]) } else { nil }
+        }, set: { if $0 == nil { action = nil } })
     }
 
     private var iconSheet: Binding<SheetID?> {
@@ -442,17 +499,7 @@ struct TopicActionsModifier: ViewModifier {
                     if case .rename(let topic) = action, !name.isEmpty { model.renameTopic(topic.id, title: name) }
                 }
             }
-            .confirmationDialog(deleteTitle, isPresented: deleting, titleVisibility: .visible) {
-                Button("Thema löschen", role: .destructive) {
-                    if case .delete(let topic) = action {
-                        if nav.filter == .topic(topic.id) { nav.filter = .all }
-                        withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTopic(topic.id) }
-                    }
-                }
-                Button("Abbrechen", role: .cancel) {}
-            } message: {
-                Text(deleteMessage)
-            }
+            .topicDeletion(deleting)
             .sheet(item: iconSheet) { item in
                 if let topic = model.topic(item.id) {
                     NavigationStack {
@@ -473,17 +520,6 @@ struct TopicActionsModifier: ViewModifier {
                 if case .rename(let topic) = action { renameDraft = topic.title }
             }
             .sensoryFeedback(.success, trigger: successPulse)
-    }
-
-    private var deleteTitle: String {
-        if case .delete(let topic) = action { return "„\(topic.title)“ löschen?" }
-        return "Thema löschen?"
-    }
-
-    private var deleteMessage: String {
-        guard case .delete(let topic) = action else { return "" }
-        let n = model.count(of: topic.id)
-        return n == 1 ? "1 Gedanke bleibt, nur ohne Thema." : "\(n) Gedanken bleiben, nur ohne Thema."
     }
 
     private func merge(_ source: Topic, into target: Topic) {
@@ -511,6 +547,10 @@ enum TopicEditing {
 }
 
 extension View {
+    func topicDeletion(_ choice: Binding<TopicDeletion?>, onDeleted: @escaping () -> Void = {}) -> some View {
+        modifier(TopicDeletionModifier(choice: choice, onDeleted: onDeleted))
+    }
+
     func topicActions(_ action: Binding<TopicAction?>) -> some View {
         modifier(TopicActionsModifier(action: action))
     }

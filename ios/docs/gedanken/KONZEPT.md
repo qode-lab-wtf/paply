@@ -345,9 +345,13 @@ Weitere Meldungen (Live Activity bzw. Intent-Fehler):
 2 **Vorschlagskarten**: „Vorschlag: ‚Wohnung‘ und ‚Umzug‘ zusammenführen?“, darunter der Grund in einer Zeile,
 dazu [Zusammenführen] [Nein]. Zeile tippen: Blatt mit Name, „Worum geht's?“ (optionale Beschreibung, ≤ 200 Zeichen,
 Platzhalter „Namen, Firmen, Personen – damit Paply Gedanken richtig zuordnet“) und Symbolraster; dasselbe Blatt
-beim Anlegen. Eine vorhandene Beschreibung steht einzeilig unter dem Namen. Wer ein Thema beschreibt, behält es
-(owner = user, wie „Behalten“). Wischen: „Löschen“ mit
-Rückfrage „Thema löschen? 7 Gedanken bleiben, nur ohne Thema.“ Im Bearbeiten-Modus Mehrfachauswahl →
+beim Anlegen über **+** (außerhalb von „Auswählen“). Eigene Themen bleiben auch leer und erscheinen sofort als Chip;
+„Worum geht's?“ hilft Paply bei künftigen Zuordnungen. Gleiche Namen (getrimmt, ohne Groß/Klein und Akzente)
+behalten das vorhandene Thema statt eines Duplikats. Eine vorhandene Beschreibung steht einzeilig unter dem Namen.
+Wer ein Thema beschreibt, behält es (owner = user, wie „Behalten“). Wischen oder Chip gedrückt halten → „Löschen“:
+wahlweise **Thema und N Gedanken löschen** (30 Tage unter „Zuletzt gelöscht“, ohne Thema wiederherstellbar) oder
+**Nur Thema löschen** (Gedanken bleiben ohne Thema); bei leeren Themen nur „Thema löschen“.
+Im Auswählen-Modus lassen sich mehrere Themen genauso auf einmal löschen. Alternativ:
 „Zusammenführen“ → Namen wählen (Vorauswahl: Thema mit mehr Gedanken). Danach Hinweis
 „Zusammengeführt · Widerrufen“ (5 s, zusätzlich Schütteln = Widerrufen).
 Vorläufige Themen (1 Gedanke) stehen in einem eigenen Abschnitt „Neu“ und lassen sich hier umbenennen,
@@ -357,8 +361,8 @@ Themen verschwinden mit ihren Gedanken: Wird ein Gedanke endgültig gelöscht (e
 Papierkorb) – egal ob KI- oder Nutzer-Thema, samt Aliassen, abgelehnten Paaren und Vorschlägen. Ein von Hand
 angelegtes Thema, das noch nie einen Gedanken hatte, bleibt, ein beschriebenes Thema immer. Wählt ein laufender
 KI-Lauf gerade ein so entferntes Thema, legt das Übernehmen es mit Name und Symbol von damals wieder an (atomar mit
-der Zuweisung im Speicher). Als Chip erscheint ein Thema nur mit mindestens
-einem Gedanken außerhalb von „Zuletzt gelöscht“.
+der Zuweisung im Speicher). Nutzer-Themen erscheinen auch mit 0 Gedanken als Chip (über der Landkarte),
+KI-Themen unverändert erst ab zwei Gedanken. Ein leeres eigenes Themen-Panel lädt zum Sprechen darüber ein.
 
 **Zuletzt gelöscht:** Liste wie in der Übersicht. Wischen: „Wiederherstellen“ bzw. „Endgültig löschen“.
 Fußzeile: „Gelöschte Gedanken werden nach 30 Tagen endgültig entfernt.“ Oben rechts: „Alle löschen“ (mit Rückfrage).

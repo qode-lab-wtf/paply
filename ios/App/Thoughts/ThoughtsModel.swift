@@ -22,7 +22,7 @@ struct ThoughtsBackend {
 final class ThoughtsModel {
     static let shared = ThoughtsModel(backend: ThoughtsEnvironment.backend)
 
-    /// 60 Beispiel-Gedanken, 8 Themen, alle Zustände (für SwiftUI-Previews und den Oberflächenbau).
+    /// 60 Beispiel-Gedanken, aktive, vorläufige und leere eigene Themen, alle Zustände (für Vorschauen).
     static var preview: ThoughtsModel { ThoughtsPreviewData.make() }
 
     /// ohne gelöschte, neueste zuerst
@@ -119,10 +119,18 @@ final class ThoughtsModel {
         topic.owner == .user || count(of: topic.id) >= 2
     }
 
-    /// Als Chip (und Schnellweg in der Suche) nur mit mindestens einem Gedanken außerhalb von „Zuletzt
-    /// gelöscht“ – auch Nutzer-Themen; liegen alle im Papierkorb, führte der Chip ins Leere.
+    /// Eigene Themen sofort als Chip und Such-Schnellweg; KI-Themen erst ab zwei Gedanken.
     func showsAsChip(_ topic: Topic) -> Bool {
-        isActive(topic) && count(of: topic.id) > 0
+        topic.owner == .user || (isActive(topic) && count(of: topic.id) > 0)
+    }
+
+    /// Gleicher Name nach Trimmen, ohne Groß/Klein und Akzente; keine unscharfe Themenpflege.
+    func existingTopic(named name: String) -> Topic? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return topics.first {
+            $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                .compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
     }
 
     func count(of topicID: String) -> Int {
@@ -277,9 +285,20 @@ final class ThoughtsModel {
 
     /// „Thema löschen? Gedanken bleiben, nur ohne Thema.“ Aliasse auf das Thema fallen mit weg.
     func deleteTopic(_ id: String) {
-        let removed = Set(allTopics.filter { $0.id == id || resolvedTopic($0.id)?.id == id }.map(\.id))
+        deleteTopics([id], withThoughts: false)
+    }
+
+    /// Aliasse mit entfernen; auf Wunsch gezählte Gedanken für 30 Tage nach „Zuletzt gelöscht“ verschieben.
+    func deleteTopics(_ ids: Set<String>, withThoughts: Bool) {
+        let targets = Set(ids.map { resolvedTopic($0)?.id ?? $0 })
+        let removed = Set(allTopics.filter { targets.contains($0.id) || targets.contains(resolvedTopic($0.id)?.id ?? "") }.map(\.id))
+        let now = Date()
         for thought in byID.values where removed.contains(thought.topicId ?? "") {
-            change(thought.id) { if let topic = $0.topicId, removed.contains(topic) { $0.topicId = nil } }
+            change(thought.id) {
+                guard let topic = $0.topicId, removed.contains(topic) else { return }
+                if withThoughts, $0.deletedAt == nil, $0.state != .recording { $0.deletedAt = now }
+                $0.topicId = nil
+            }
         }
         // Bild: wird nicht mehr angezeigt; die Datei geht erst, wenn der Speicher das Thema gespeichert entfernt hat
         // (`ThoughtStore.removedTopics` → `TopicImages`) – scheitert das Speichern, ist es samt Bild wieder da
@@ -781,7 +800,9 @@ private enum ThoughtsPreviewData {
             )
         }
         let suggestions = [TopicSuggestion(a: topics[1].id, b: topics[4].id, name: nil, reason: "Beide drehen sich um Miete und Kosten")]
-        return ThoughtsModel(thoughts: thoughts, topics: topics + [provisional], sources: sources, suggestions: suggestions)
+        let empty = Topic(title: "RA Solartechnik", icon: .lightbulb, owner: .user,
+                          note: "Solaranlagen und Projekte für RA Solartechnik")
+        return ThoughtsModel(thoughts: thoughts, topics: topics + [provisional, empty], sources: sources, suggestions: suggestions)
     }
 
     private static func statusMessage(_ state: ThoughtState) -> String? {

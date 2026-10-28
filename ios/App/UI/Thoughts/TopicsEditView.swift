@@ -2,7 +2,7 @@ import PaplyKit
 import SwiftUI
 
 // Themen bearbeiten (KONZEPT §3.8): Vorschläge zum Zusammenführen, Themen nach Name, vorläufige
-// Themen im Abschnitt „Neu“. Bearbeiten-Modus: mehrere wählen → „Zusammenführen“.
+// Themen im Abschnitt „Neu“. Eigene Themen mit +, Mehrfachauswahl zum Zusammenführen oder Löschen.
 
 struct TopicsEditView: View {
     @Environment(ThoughtsModel.self) private var model
@@ -12,7 +12,8 @@ struct TopicsEditView: View {
     @State private var editMode: EditMode = .inactive
     @State private var selection = Set<String>()
     @State private var editing: Topic?
-    @State private var deleting: Topic?
+    @State private var creating = false
+    @State private var deleting: TopicDeletion?
     @State private var mergeChoice: MergeChoice?
     @State private var successPulse = 0
 
@@ -53,9 +54,7 @@ struct TopicsEditView: View {
             } header: {
                 header("Themen")
             } footer: {
-                if active.isEmpty {
-                    Text("Themen entstehen von selbst, sobald zwei Gedanken zusammenpassen.")
-                }
+                Text("Eigene Themen legst du mit + an. Mit einer kurzen Beschreibung unter „Worum geht's?“ ordnet Paply besser zu.")
             }
 
             if !provisional.isEmpty {
@@ -78,6 +77,13 @@ struct TopicsEditView: View {
         .navigationTitle("Themen")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if !editMode.isEditing {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { creating = true } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("Neues Thema")
+                        .accessibilityHint("Legt ein eigenes Thema für künftige Gedanken an")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(editMode.isEditing ? "Fertig" : "Auswählen") {
                     withAnimation(PaplyMotion.smooth(reduce)) {
@@ -88,7 +94,14 @@ struct TopicsEditView: View {
                 .fontWeight(editMode.isEditing ? .semibold : .regular)
             }
             if editMode.isEditing {
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button("Löschen", role: .destructive) {
+                        deleting = TopicDeletion(topics: sorted.filter { selection.contains($0.id) }, multiple: true)
+                    }
+                    .foregroundStyle(selection.isEmpty ? Color.paplyTertiaryText : Color.paplyDanger)
+                    .disabled(selection.isEmpty)
+                    .accessibilityHint("Löscht die ausgewählten Themen, auf Wunsch samt Gedanken")
+                    Spacer()
                     Button {
                         mergeChoice = MergeChoice(topics: sorted.filter { selection.contains($0.id) })
                     } label: {
@@ -98,6 +111,25 @@ struct TopicsEditView: View {
                     .disabled(selection.count < 2)
                 }
             }
+        }
+        .sheet(isPresented: $creating) {
+            NavigationStack {
+                TopicEditor(mode: .create(prefill: "")) { result in
+                    withAnimation(PaplyMotion.smooth(reduce)) {
+                        if let existing = model.existingTopic(named: result.title) {
+                            model.keepProvisional(existing.id)
+                            nav.show(ThoughtsToast(text: "„\(existing.title)“ gibt es schon"), reduceMotion: reduce)
+                        } else {
+                            let topic = model.createTopic(title: result.title, icon: result.icon, note: result.note)
+                            TopicImages.shared.apply(result.image, to: topic.id)
+                        }
+                    }
+                    creating = false
+                    successPulse += 1
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .preferredColorScheme(.dark)
         }
         .sheet(item: $editing) { topic in
             NavigationStack {
@@ -113,19 +145,9 @@ struct TopicsEditView: View {
                 merge(choice.topics.map(\.id), into: target)
             }
         }
-        .confirmationDialog(deleting.map { "„\($0.title)“ löschen?" } ?? "", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Thema löschen", role: .destructive) {
-                if let topic = deleting {
-                    if nav.filter == .topic(topic.id) { nav.filter = .all }
-                    withAnimation(PaplyMotion.smooth(reduce)) { model.deleteTopic(topic.id) }
-                }
-            }
-            Button("Abbrechen", role: .cancel) {}
-        } message: {
-            if let topic = deleting {
-                let n = model.count(of: topic.id)
-                Text(n == 1 ? "1 Gedanke bleibt, nur ohne Thema." : "\(n) Gedanken bleiben, nur ohne Thema.")
-            }
+        .topicDeletion($deleting) {
+            editMode = .inactive
+            selection.removeAll()
         }
         .sensoryFeedback(.success, trigger: successPulse)
     }
@@ -184,7 +206,7 @@ struct TopicsEditView: View {
         .listRowBackground(Color.paplyRow)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
-                deleting = topic
+                deleting = TopicDeletion(topics: [topic])
             } label: {
                 Label(provisional ? "Auflösen" : "Löschen", systemImage: "trash")
             }

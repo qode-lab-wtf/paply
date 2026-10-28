@@ -33,6 +33,8 @@
   (ohne Dynamic Island, z. B. iPhone 12 Pro) bzw. klappt die Dynamic Island auf – mit Sekundenzähler, „Fertig“
   und „Verwerfen“, dazu eine Vibration; alle 2 Min. wieder, „noch 1 Min.“ ebenso. Grenze bleibt 10 Min. (Allan).
   Hochgeladen und auf alle drei iPhones gespielt.
+- **Build 8 (28.10., lokal):** Eigene Themen mit + vorab anlegen (auch leer als Chip); einzelne oder mehrere
+  Themen wahlweise samt Gedanken nach „Zuletzt gelöscht“ verschieben. Noch nicht auf dem Gerät getestet oder hochgeladen.
 - **TestFlight extern:** Gruppe „Testing“ mit öffentlichem Link <TestFlight-Link>
   (bis 10 Tester). Build 5 liegt bei Apple zur ersten Prüfung (eingereicht 28.10. mittags); Apple schickt eine
   E-Mail, wenn sie durch ist. **Danach (Allan):** neuesten Build (7) der Gruppe „Testing“ hinzufügen, Link

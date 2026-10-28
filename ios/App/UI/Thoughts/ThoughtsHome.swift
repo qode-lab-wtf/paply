@@ -59,6 +59,7 @@ struct ThoughtsHome: View {
 
     var body: some View {
         content
+            .safeAreaInset(edge: .top, spacing: 0) { emptyTopicChips }
             .background(PaplyBackground())
             .navigationTitle("Gedanken")
             // Karte statt Liste: kompakter Kopf wie in Karten/Wo ist?, damit die Karte Platz hat
@@ -83,8 +84,10 @@ struct ThoughtsHome: View {
                 if new != nil, voiceOver { nav.panelDetent = .large }
             }
             .onChange(of: nav.focusedTopic.map { model.panelThoughts($0).isEmpty } ?? false) { _, empty in
-                // alles geordnet bzw. alle Gedanken woandershin verschoben → Panel schließen
-                if empty { withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) } }
+                // Eigene Themen bleiben auch leer offen; Eingang und KI-Themen schließen sich wie bisher.
+                if empty, model.topic(nav.focusedTopic)?.owner != .user {
+                    withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(nil) }
+                }
             }
             #if DEBUG
             .task { await debugTopicAction() }
@@ -106,13 +109,51 @@ struct ThoughtsHome: View {
 
     @ViewBuilder
     private var content: some View {
-        if model.thoughts.isEmpty {
+        if model.thoughts.isEmpty, !model.topics.contains(where: { model.showsAsChip($0) }) {
             ThoughtsEmptyState(
                 setup: { nav.path.append(.buttonGuide) },
                 tryIt: { flow.openBig() }
             )
         } else {
             board
+        }
+    }
+
+    /// Die Landkarte zeichnet nur Themen mit Gedanken. Leere eigene Themen sind sofort als Chip erreichbar.
+    @ViewBuilder
+    private var emptyTopicChips: some View {
+        let topics = model.topics.filter { model.showsAsChip($0) && model.count(of: $0.id) == 0 }
+        if !topics.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(topics) { topic in
+                        Button {
+                            withAnimation(PaplyMotion.smooth(reduce)) { nav.focus(topic.id) }
+                        } label: {
+                            HStack(spacing: 7) {
+                                TopicBadge(icon: topic.icon, size: 24, topicID: topic.id)
+                                Text(topic.title).font(.subheadline.weight(.semibold))
+                                Text("0").font(.subheadline).foregroundStyle(Color.paplySecondaryText)
+                            }
+                            .foregroundStyle(Color.paplyText)
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                            .paplyGlass(interactive: true)
+                        }
+                        .buttonStyle(PressScaleStyle())
+                        .contextMenu {
+                            Button { topicAction = .icon(topic) } label: { Label("Bearbeiten", systemImage: "pencil") }
+                            Button(role: .destructive) { topicAction = .delete(topic) } label: { Label("Löschen", systemImage: "trash") }
+                        }
+                        .accessibilityLabel("\(topic.title), 0 Gedanken")
+                        .accessibilityHint("Öffnet das Thema")
+                        .accessibilityAddTraits(nav.focusedTopic == topic.id ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .scrollIndicators(.hidden)
         }
     }
 

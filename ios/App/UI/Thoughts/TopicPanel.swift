@@ -331,7 +331,8 @@ struct TopicPanelBody: View {
                 PanelTaskGroup(items: open)
             }
             if items.isEmpty {
-                Text("Keine Gedanken mehr in diesem Thema.")
+                Text(model.topic(topicID).map { "Noch keine Gedanken zu „\($0.title)“. Sprich einfach darüber – Paply ordnet sie hier ein." }
+                     ?? "Keine Gedanken mehr in diesem Thema.")
                     .font(.subheadline)
                     .foregroundStyle(Color.paplySecondaryText)
                     .padding(.horizontal, 6)
