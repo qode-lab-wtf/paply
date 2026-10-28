@@ -66,7 +66,7 @@ struct ThoughtsEmptyState: View {
     }
 }
 
-/// Sperrbildschirm unten links mit Paply-Knopf statt Taschenlampe (nur SwiftUI-Formen, kein Bild).
+/// Sperrbildschirm mit Paply-Widget in der Reihe unter der Uhr (nur SwiftUI-Formen, kein Bild).
 struct LockScreenIllustration: View {
     @Environment(\.accessibilityReduceMotion) private var reduce
     @State private var press = false
@@ -98,9 +98,16 @@ struct LockScreenIllustration: View {
                         .font(.system(size: width * 0.27, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.92))
                         .monospacedDigit()
+                    // Widget-Reihe unter der Uhr: zwei fremde Widgets, dann Paply
+                    HStack(spacing: width * 0.07) {
+                        widgetDot(width)
+                        widgetDot(width)
+                        paplyButton(width)
+                    }
+                    .padding(.top, width * 0.03)
                     Spacer()
                     HStack {
-                        paplyButton(width)
+                        cornerButton(width, symbol: "flashlight.off.fill")
                         Spacer()
                         cornerButton(width, symbol: "camera.fill")
                     }
@@ -116,12 +123,19 @@ struct LockScreenIllustration: View {
             .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Sperrbildschirm mit Paply-Knopf unten links statt der Taschenlampe")
+        .accessibilityLabel("Sperrbildschirm mit Paply-Widget in der Reihe unter der Uhr")
         .onAppear { press = true }
     }
 
+    /// Platzhalter für fremde Widgets in der Reihe (z. B. WhatsApp, ChatGPT)
+    private func widgetDot(_ width: CGFloat) -> some View {
+        Circle()
+            .fill(Color.white.opacity(0.16))
+            .frame(width: width * 0.17, height: width * 0.17)
+    }
+
     private func paplyButton(_ width: CGFloat) -> some View {
-        let size = width * 0.24
+        let size = width * 0.17
         return ZStack {
             Circle()
                 .fill(AngularGradient(colors: ThoughtTint.aura, center: .center))
@@ -166,18 +180,24 @@ struct ThoughtButtonGuideView: View {
                     .foregroundStyle(Color.paplyText.opacity(0.75))
                     .padding(.horizontal, 4)
 
-                GuideCard(title: "Sperrbildschirm", symbol: "lock.fill", glyph: .lock, steps: [
-                    "iPhone mit Face ID entsperren, aber nicht hochwischen.",
-                    "Auf eine freie Stelle lange drücken, bis das Bild kleiner wird → „Anpassen“ → „Sperrbildschirm“.",
-                    "Unten bei der Taschenlampe „–“ tippen, dann „+“ → „Paply“ → „Paply-Gedanke“.",
+                GuideCard(title: "Unter der Uhr", symbol: "clock", glyph: .clock, steps: [
+                    "iPhone sperren und wieder aufwecken. Kurz draufschauen, bis oben das Schloss aufgeht – nicht hochwischen.",
+                    "Auf den Sperrbildschirm lange drücken, bis er kleiner wird → „Anpassen“ → „Sperrbildschirm“.",
+                    "Auf die Widget-Reihe unter der Uhr tippen. Ist sie voll, bei einem Widget erst auf „–“ tippen.",
+                    "In der Liste nach unten bis „Paply“ scrollen → „Paply-Gedanke“ antippen.",
+                    "Liste schließen, oben rechts „Fertig“. Ein Tipp aufs Widget nimmt auf, nochmal tippen beendet.",
+                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+
+                GuideCard(title: "Oder unten statt Taschenlampe", symbol: "lock.fill", glyph: .lock, steps: [
+                    "Wie oben bis „Sperrbildschirm“.",
+                    "Bei der Taschenlampe auf „–“ tippen, dann an derselben Stelle auf „+“ → „Paply-Gedanke“.",
                     "Oben rechts „Fertig“.",
                 ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
 
-                GuideCard(title: "Oder unter der Uhr", symbol: "clock", glyph: .clock, steps: [
-                    "Wie oben bis „Sperrbildschirm“.",
-                    "Die Widget-Reihe unter der Uhr antippen → „Paply“ → „Paply-Gedanke“ antippen.",
-                    "Liste schließen, oben rechts „Fertig“. Ein Tipp aufs Widget nimmt auf, nochmal tippen beendet.",
-                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+                Text("Taucht Paply in der Liste nicht auf: Paply einmal öffnen und das iPhone neu starten – iOS zeigt neue Widgets manchmal erst danach.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.paplyText.opacity(0.6))
+                    .padding(.horizontal, 4)
 
                 GuideCard(title: "Kontrollzentrum", symbol: "switch.2", glyph: .toggleRight, steps: [
                     "Kontrollzentrum öffnen → oben links „+“ → „Steuerelement hinzufügen“.",

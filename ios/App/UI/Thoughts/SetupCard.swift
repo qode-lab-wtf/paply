@@ -208,7 +208,7 @@ struct SetupCard: View {
         case .keyboard:
             "Vollzugriff braucht die Tastatur nur, um mit der App zu sprechen. Danach Paply in der Tastaturliste direkt hinter deine Haupttastatur ziehen."
         case .button:
-            "Auf den Sperrbildschirm statt der Taschenlampe oder unter die Uhr – ein Tipp, und du sprichst."
+            "Als Widget unter die Uhr auf den Sperrbildschirm – ein Tipp, und du sprichst."
         }
     }
 
