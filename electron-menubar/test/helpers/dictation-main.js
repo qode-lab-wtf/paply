@@ -37,7 +37,7 @@ export function makeMain(platform = 'darwin', settings = {}) {
     positionRecordingWindow: vi.fn(), recordingWindow: win, mainWindow: win, createRecordingWindow: () => win,
     dialog: { showMessageBox: vi.fn() },
     savePreviousApp: vi.fn(async () => platform === 'darwin' ? 'Editor' : '123'),
-    polishText: vi.fn(async text => text), addToHistory: vi.fn(),
+    polishText: vi.fn(async text => text), runPolish: { prefetch: vi.fn() }, addToHistory: vi.fn(),
     autopasteText: vi.fn(async () => true), clipboard: { writeText: vi.fn() },
     ipcMain: { on: (name, fn) => { ipc[name] = fn; }, handle: (name, fn) => { ipc[name] = fn; } },
     changeDictationShortcut: vi.fn(() => true), updateTrayMenu: vi.fn(),

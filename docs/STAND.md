@@ -1,6 +1,19 @@
 # Paply — Stand
 
-**Zeitpunkt:** 26.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan
+**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.1 veröffentlicht (schnelleres Polieren); Praxistest durch Allan
+
+## v1.15.1 — Abgleich mit Paply iOS (28.10.2026)
+
+- Allans Auftrag: Diktat auf Mac/Windows so flüssig wie Paply iOS, nur Eindeutiges reparieren.
+- Abgleich: Die iOS-„Sprachwache“ (≤ 5 s gesprochen → Hauptsprache) betrifft nur automatische Spracherkennung;
+  der Desktop schickt immer die feste Sprache (de/en) → dort kein Problem. Stille-Filter (Ursprung des iOS-Filters)
+  wirkt: in Allans MacBook-Verlauf 21 reine „Vielen Dank“ vor v1.14.0, 0 in 200 Diktaten danach.
+- **Behoben:** Die Modellliste fürs Polieren wurde erst nach dem Stopp seriell geholt, sobald die letzte Prüfung
+  > 5 min her war (≥ 37 % von Allans Diktaten). Jetzt wird sie bei Aufnahmestart vorgeladen (wie iOS), nach dem
+  Aufnahmestart und ohne Einfluss auf ihn. Echt gemessen: Stopp → polierter Text ~500 → ~200 ms. Text unverändert.
+- 623 automatische Tests und TypeScript grün.
+- Bewusst nicht übernommen (eigenes Projekt, nur auf Wunsch): Stücke-Upload während des Sprechens (iOS) — spart bei
+  Diktaten > 30 s (27 % bei Allan, Median 16 s) ~0,5–1 s, ist aber ein Umbau im Diktat-Kern.
 
 ## v1.15.0 — Notes
 

@@ -32,6 +32,25 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     ]);
   });
 
+  it('lädt die Polier-Modellliste erst nach dem Aufnahmestart vor, nur mit Polieren', async () => {
+    const { context: c, win, values } = main(platform);
+    c.runPolish.prefetch.mockImplementationOnce(() => {
+      expect(win.webContents.send).toHaveBeenCalledWith('recording:start', expect.anything());
+    });
+    await c.beginRecording();
+    expect(c.runPolish.prefetch).toHaveBeenCalledExactlyOnceWith('test-placeholder');
+    c.stopRecording(); values.enablePolish = false;
+    await c.beginRecording();
+    expect(c.runPolish.prefetch).toHaveBeenCalledOnce();
+  });
+
+  it('startet die Aufnahme auch, wenn das Vorladen scheitert', async () => {
+    const { context: c, state } = main(platform);
+    c.runPolish.prefetch.mockImplementationOnce(() => { throw new Error('kaputt'); });
+    await c.beginRecording();
+    expect(state()).toBe(true); expect(c.dictationJobs.current.phase).toBe('requested');
+  });
+
   it('setzt fehlgeschlagenen Mikrofonstart zurück, nächster Hotkey startet direkt', async () => {
     const { context: c, ipc, event, state, win } = main(platform);
     await c.beginRecording(); const id = c.dictationJobs.current.id;

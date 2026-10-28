@@ -1290,6 +1290,11 @@ async function beginRecording() {
     positionRecordingWindow(win);
     win.showInactive();
     win.webContents.send('recording:start', { jobId: job.id });
+    // Modellliste fürs Polieren während der Aufnahme vorladen; darf den Start nie stören.
+    try {
+      const store = getStore();
+      if (store.get('enablePolish')) runPolish.prefetch(store.get('groqApiKey'));
+    } catch { /* nur Tempo */ }
   } catch { failRecording(job, 'Aufnahme nicht gestartet'); }
 }
 

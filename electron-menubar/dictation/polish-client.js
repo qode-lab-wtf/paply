@@ -36,7 +36,7 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
     }
     return state.pending;
   }
-  return async function polish({ text, apiKey, messages, custom = false, vocabulary = '' }) {
+  async function polish({ text, apiKey, messages, custom = false, vocabulary = '' }) {
     if (!apiKey) return null;
     const deadline = now() + 30000;
     if (!session || session.apiKey !== apiKey) session = { apiKey };
@@ -70,7 +70,16 @@ function createPolishClient({ request = readResponse, onUnavailable = () => {}, 
       log('request-failed');
       return null;
     }
+  }
+  // Modellliste schon während der Aufnahme laden (wie Paply iOS): Nach dem Stopp entfällt
+  // dann die serielle Abfrage (~0,2 s), wenn die letzte Prüfung über fünf Minuten her ist.
+  // Fehler bleiben still; das Polieren fragt in dem Fall wie bisher selbst.
+  polish.prefetch = apiKey => {
+    if (!apiKey) return;
+    if (!session || session.apiKey !== apiKey) session = { apiKey };
+    modelsFor(session, 10000).catch(() => {});
   };
+  return polish;
 }
 
 module.exports = { createPolishClient, modelMissing };

@@ -4,7 +4,7 @@ import { buildPolishMessages, POLISH_SYSTEM_PROMPT, recentRawDictations, uncerta
 import { finalPolishText, polishRejection } from '../dictation/polish';
 import { createPolishClient } from '../dictation/polish-client';
 import { readResponse } from '../dictation/policies';
-import { POLISH_MODEL, POLISH_FALLBACK_MODEL, MEETING_MODEL, RETIRED_GROQ_MODEL, GROQ_MODELS_URL, selectPolishModel, migrateMeetingModel } from '../dictation/groq-models';
+import { POLISH_MODEL, POLISH_FALLBACK_MODEL, MEETING_MODEL, RETIRED_GROQ_MODEL, GROQ_MODELS_URL, GROQ_CHAT_URL, selectPolishModel, migrateMeetingModel } from '../dictation/groq-models';
 
 const raw = 'Morgen besprechen wir gemeinsam unsere offenen Aufgaben.';
 const response = (data, status = 200) => ({ ok: status === 200, status, body: JSON.stringify(data) });
@@ -189,6 +189,41 @@ describe('Polieren mit isoliertem Netzwerk', () => {
     expect(await createPolishClient({ request, log })(input())).toBeNull();
     expect(log).toHaveBeenCalledWith('request-failed');
     expect(JSON.stringify(log.mock.calls)).not.toContain(raw);
+  });
+  it('lädt die Modellliste schon bei Aufnahmebeginn vor; das Polieren fragt danach nicht erneut', async () => {
+    let time = 0;
+    const request = vi.fn(async url => url === GROQ_MODELS_URL ? models(POLISH_MODEL) : completion());
+    const polish = createPolishClient({ request, now: () => time });
+    polish.prefetch('');
+    expect(request).not.toHaveBeenCalled();
+    polish.prefetch('test-placeholder');
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0][0]).toBe(GROQ_MODELS_URL);
+    expect(request.mock.calls[0][2]).toBeLessThanOrEqual(10000);
+    time = 20000; expect(await polish(input())).toBe(raw);
+    expect(request.mock.calls.map(([url]) => url)).toEqual([GROQ_MODELS_URL, GROQ_CHAT_URL]);
+    polish.prefetch('test-placeholder');
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('teilt eine noch laufende Vorab-Abfrage mit dem Polieren', async () => {
+    let resolve;
+    const pending = new Promise(r => { resolve = r; });
+    const request = vi.fn(url => url === GROQ_MODELS_URL ? pending : Promise.resolve(completion()));
+    const polish = createPolishClient({ request });
+    polish.prefetch('test-placeholder');
+    const work = polish(input());
+    expect(request).toHaveBeenCalledOnce(); resolve(models(POLISH_MODEL));
+    expect(await work).toBe(raw);
+  });
+  it('fragt nach gescheiterter Vorab-Abfrage beim Polieren wie bisher selbst', async () => {
+    const request = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(models(POLISH_MODEL)).mockResolvedValueOnce(completion());
+    const onUnavailable = vi.fn();
+    const polish = createPolishClient({ request, onUnavailable });
+    polish.prefetch('test-placeholder');
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+    await new Promise(r => setTimeout(r, 0));
+    expect(await polish(input())).toBe(raw);
+    expect(request).toHaveBeenCalledTimes(3); expect(onUnavailable).not.toHaveBeenCalled();
   });
   it('versucht nach temporärem Discovery-Fehler erneut zu prüfen', async () => {
     const request = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(models(POLISH_MODEL)).mockResolvedValueOnce(completion());
