@@ -26,8 +26,13 @@ android {
 }
 dependencies {
     implementation(project(":core"))
+    implementation(project(":thoughts"))
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation(libs.junit)
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.json:json:20240303")
     implementation(libs.androidx.core)
     implementation(libs.coroutines.android)
     implementation(platform(libs.compose.bom))

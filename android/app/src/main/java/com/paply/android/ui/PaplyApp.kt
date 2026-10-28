@@ -31,7 +31,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paply.android.ThoughtState
-import com.paply.android.ThoughtStore
+import com.paply.android.thoughts.ThoughtsRepository
+import com.paply.thoughts.Thought
+import com.paply.thoughts.ThoughtState as StoredThoughtState
 import com.paply.android.history.HistoryEntry
 import com.paply.android.history.HistoryStore
 import com.paply.android.settings.AppPreferences
@@ -45,7 +47,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
+
 
 /** Public retry hook is the only bridge the later pipeline integration needs for failed entries. */
 @Composable
@@ -60,33 +62,30 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
         val historyError by history.error.collectAsStateWithLifecycle()
         val thoughtStatus by ThoughtState.current.collectAsStateWithLifecycle()
         var route by rememberSaveable { mutableStateOf("home") }
+        var setupReturnRoute by rememberSaveable { mutableStateOf("home") }
         var tab by rememberSaveable { mutableStateOf("thoughts") }
         var detailId by rememberSaveable { mutableStateOf<String?>(null) }
         var keyError by remember { mutableStateOf<String?>(null) }
         var hasKey by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf(SetupStatus.read(activity, prefs)) }
-        var thoughts by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-        var interrupted by remember { mutableIntStateOf(0) }
-        var pending by remember { mutableIntStateOf(0) }
+        val thoughtRepository = remember { ThoughtsRepository.get(activity) }
+        val thoughts by thoughtRepository.thoughts.collectAsStateWithLifecycle()
+        val thoughtStates by thoughtRepository.status.collectAsStateWithLifecycle()
         var diagnostic by remember { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
         val screenState = rememberSaveableStateHolder()
         fun message(text: String) { scope.launch { snackbar.showSnackbar(text) } }
         fun refreshKey() {
-            try { hasKey = vault.read() != null; keyError = null }
-            catch (_: Exception) { hasKey = false; keyError = "Der Schlüssel konnte nicht gelesen werden. Bitte neu sichern." }
+            scope.launch {
+                try { hasKey = withContext(Dispatchers.IO) { vault.read() != null }; keyError = null }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { hasKey = false; keyError = "Der Schlüssel konnte nicht gelesen werden. Bitte neu sichern." }
+            }
         }
         fun refresh() {
             status = SetupStatus.read(activity, repository.state.value)
-            refreshKey()
-            scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    val store = ThoughtStore(activity)
-                    Triple(store.entries(), store.interrupted().size, store.pending().size)
-                }
-                thoughts = result.first; interrupted = result.second; pending = result.third
-            }
+            thoughtRepository.kick("foreground")
         }
         fun edit(transform: (AppPreferences) -> AppPreferences) {
             scope.launch {
@@ -95,8 +94,11 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                 catch (_: Exception) { message("Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.") }
             }
         }
-        fun navigate(target: String) { route = target }
-        fun back() { route = if (route in listOf("settings", "detail")) "home" else if (route == "diagnostics") "developer" else "settings" }
+        fun navigate(target: String) {
+            if (target in listOf("keyboard", "tile")) setupReturnRoute = route
+            route = target
+        }
+        fun back() { route = if (route in listOf("keyboard", "tile")) setupReturnRoute else if (route in listOf("settings", "detail")) "home" else if (route == "diagnostics") "developer" else "settings" }
         fun copy(text: String) {
             if (text.isEmpty()) return
             activity.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Paply", text))
@@ -142,8 +144,9 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
             activity.contentResolver.registerContentObserver(Settings.Secure.getUriFor(Settings.Secure.ENABLED_INPUT_METHODS), false, observer)
             onDispose { owner.lifecycle.removeObserver(lifecycleObserver); activity.contentResolver.unregisterContentObserver(observer) }
         }
+        LaunchedEffect(vault) { refreshKey() }
         LaunchedEffect(prefs.betaThoughts) { if (!prefs.betaThoughts) tab = "dictation" }
-        LaunchedEffect(prefs.tileAdded, thoughtStatus) { refresh() }
+        LaunchedEffect(prefs.tileAdded, thoughtStatus.phase, thoughtStatus.id, thoughtStatus.message) { refresh() }
         LaunchedEffect(route) { if (route == "diagnostics") diagnostic = DiagnosticReader.read() }
         BackHandler(route != "home") { back() }
 
@@ -193,12 +196,8 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                                     else if (tab == "tasks") Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                                         EmptyState("Noch keine Aufgaben", "Aufgaben entstehen aus deinen Gedanken. Sag einfach „Ich muss …“ – Paply hält sie hier fest.", PaplyIcons.ListChecks)
                                     }
-                                    else ThoughtsScreen(thoughts, interrupted, pending, thoughtStatus.message, setup) {
-                                        scope.launch { withContext(Dispatchers.IO) {
-                                            val store = ThoughtStore(activity)
-                                            store.interrupted().forEach { store.discard(it) }
-                                        }; refresh() }
-                                    }
+                                    else ThoughtsScreen(thoughts, thoughtStates, thoughtStatus.message, setup,
+                                        activity.intent.getStringExtra("thoughtId"))
                                 }
                                 "settings" -> SettingsHome(activity, prefs, vault, hasKey, keyError, status, ::refreshKey, ::edit, ::navigate, ::message)
                                 "languages" -> LanguagesScreen(prefs, ::edit)
@@ -224,29 +223,30 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
 }
 
 @Composable
-private fun ThoughtsScreen(thoughts: List<JSONObject>, interrupted: Int, pending: Int, status: String,
-    setup: @Composable () -> Unit, discardInterrupted: () -> Unit,
+private fun ThoughtsScreen(thoughts: List<Thought>, states: Map<String, ThoughtsRepository.Status>, status: String,
+    setup: @Composable () -> Unit, focusID: String?,
 ) {
-    LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(focusID, thoughts.size) {
+        val index = thoughts.indexOfFirst { it.id == focusID }
+        if (index >= 0) listState.scrollToItem(index + 1 + if (status.isNotEmpty()) 1 else 0)
+    }
+    LazyColumn(state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item("setup") { setup() }
         if (status.isNotEmpty()) item("status") { Text(status, style = MaterialTheme.typography.bodySmall, color = C.secondary) }
         if (thoughts.isEmpty()) item("empty") {
             EmptyState("Deine Gedanken", "Drück den Paply-Knopf in den Schnelleinstellungen und sprich – wie in ein Diktiergerät. Deine Worte bleiben hier festgehalten.", PaplyIcons.Lightbulb)
         }
-        itemsIndexed(thoughts) { _, thought ->
+        itemsIndexed(thoughts, key = { _, thought -> thought.id }) { _, thought ->
             PaplyCard {
-                Text(historyDate(thought.getLong("createdAt")), color = C.secondary, style = MaterialTheme.typography.bodySmall)
+                Text(historyDate(thought.createdAt.toEpochMilli()), color = C.secondary, style = MaterialTheme.typography.bodySmall)
+                thought.title?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
                 Spacer(Modifier.height(10.dp))
-                SelectionContainer { Text(thought.getString("text"), style = MaterialTheme.typography.bodyLarge) }
-            }
-        }
-        if (pending > 0) item("pending") {
-            PaplyCard { Text("$pending Aufnahme(n) warten auf Verarbeitung.", color = C.beak, style = MaterialTheme.typography.bodyMedium) }
-        }
-        if (interrupted > 0 && !ThoughtState.active) item("interrupted") {
-            PaplyCard {
-                Text("$interrupted unterbrochene Aufnahme(n), ohne bestätigte Mikrofonprüfung. Werden nicht gesendet.", color = C.secondary, style = MaterialTheme.typography.bodyMedium)
-                TextButton(onClick = discardInterrupted) { Text("Unterbrochene Aufnahmen löschen", color = C.danger) }
+                SelectionContainer { Text(thought.text ?: states[thought.id]?.message ?: "Aufnahme gesichert · wird geordnet", style = MaterialTheme.typography.bodyLarge) }
+                if (thought.state != StoredThoughtState.done) states[thought.id]?.audioExpiresAt?.let {
+                    Text("Audio bis zum Rohtext, höchstens bis " + java.time.format.DateTimeFormatter.ofPattern("dd.MM.")
+                        .withZone(java.time.ZoneId.systemDefault()).format(it), color = C.secondary, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

@@ -5,6 +5,10 @@ host=${PAPLY_MACBOOK:-macbook}
 work=${PAPLY_WORK:-paply-android}
 [[ "$work" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo 'PAPLY_WORK: nur Buchstaben, Ziffern, - und _' >&2; exit 2; }
 remote="~/Android/work/$work"
+avd=${PAPLY_AVD:-paply}
+port=${PAPLY_PORT:-5580}
+[[ "$avd" =~ ^[a-zA-Z0-9_-]+$ && "$port" =~ ^[0-9]+$ ]] || { echo "PAPLY_AVD/PAPLY_PORT ungültig" >&2; exit 2; }
+serial="emulator-$port"
 case "${1:-}" in
   sync)
     ssh "$host" 'set -e; source ~/Android/env.sh; mkdir -p ~/Android/work/'"$work"
@@ -12,14 +16,14 @@ case "${1:-}" in
   build)
     ssh "$host" 'set -e; source ~/Android/env.sh; export GRADLE_USER_HOME="$HOME/Android/work/gradle-home"; export TMPDIR="$HOME/Android/work/tmp"; mkdir -p "$TMPDIR"; export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Djava.util.prefs.userRoot=$HOME/Android/work/java-prefs"; cd ~/Android/work/'"$work"'; mkdir -p .local; if [ ! -f .local/debug.keystore ]; then keytool -genkeypair -keystore .local/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000; fi; ./gradlew '"${GRADLE_TASKS:-:core:test :app:assembleDebug}"' --console=plain' ;;
   install)
-    ssh "$host" 'set -e; source ~/Android/env.sh; ~/Android/emu-start.sh; adb -s emulator-5580 install -r ~/Android/work/'"$work"'/app/build/outputs/apk/debug/app-debug.apk' ;;
+    ssh "$host" 'set -e; source ~/Android/env.sh; PAPLY_AVD='"$avd"' PAPLY_PORT='"$port"' ~/Android/emu-start.sh; adb -s '"$serial"' install -r ~/Android/work/'"$work"'/app/build/outputs/apk/debug/app-debug.apk' ;;
   shot)
     name=${2:?shot requires a name}
     [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || exit 2
     evidence=${PAPLY_EVIDENCE_DIR:-/tmp/paply-android-p0}
     mkdir -p "$evidence"
-    ssh "$host" 'set -e; source ~/Android/env.sh; adb -s emulator-5580 exec-out screencap -p' > "$evidence/$name.png" ;;
+    ssh "$host" 'set -e; source ~/Android/env.sh; adb -s '"$serial"' exec-out screencap -p' > "$evidence/$name.png" ;;
   logs)
-    ssh "$host" 'set -e; source ~/Android/env.sh; adb -s emulator-5580 logcat -d -v threadtime Paply:D AndroidRuntime:E "*:S"' ;;
+    ssh "$host" 'set -e; source ~/Android/env.sh; adb -s '"$serial"' logcat -d -v threadtime Paply:D AndroidRuntime:E "*:S"' ;;
   *) echo 'Usage: [PAPLY_WORK=name] [GRADLE_TASKS="…"] mb.sh sync|build|install|shot <name>|logs' >&2; exit 2 ;;
 esac

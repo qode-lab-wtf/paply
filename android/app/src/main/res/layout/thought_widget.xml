@@ -1,0 +1,12 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+    android:gravity="center" android:padding="16dp" android:background="@drawable/thought_widget_background"
+    android:contentDescription="@string/thought_widget_description">
+    <ImageView android:layout_width="32dp" android:layout_height="32dp" android:src="@drawable/ic_mic" android:contentDescription="@null" android:tint="#D8F39A" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/thought_widget_name"
+        android:textColor="#EEF5F0" android:textSize="17sp" android:textStyle="bold" android:gravity="center" android:layout_marginTop="8dp" />
+    <Chronometer android:id="@+id/widget_timer" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="#D8F39A" android:textSize="20sp" android:gravity="center" android:visibility="gone" />
+    <TextView android:id="@+id/widget_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/thought_widget_hint" android:textColor="#BFEEC4" android:textSize="12sp" android:gravity="center" />
+</LinearLayout>

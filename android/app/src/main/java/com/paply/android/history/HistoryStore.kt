@@ -33,18 +33,20 @@ data class HistoryEntry(
 }
 
 /** App-private atomic JSON, newest first; iOS retention: 300 entries, upsert by ID. */
-class HistoryStore private constructor(context: Context) {
-    private val file = File(context.applicationContext.filesDir, "history/history.json")
+class HistoryStore internal constructor(context: Context, autoLoad: Boolean = true) {
+    private val filesDir = context.applicationContext.filesDir
+    private val file = File(filesDir, "history/history.json")
     private val atomic = AtomicFile(file)
     private val mutex = Mutex()
     private var loaded = false
+    private var overflow = emptyList<HistoryEntry>()
     private val mutableEntries = MutableStateFlow<List<HistoryEntry>>(emptyList())
     val entries: StateFlow<List<HistoryEntry>> = mutableEntries.asStateFlow()
     private val mutableError = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = mutableError.asStateFlow()
 
     init {
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        if (autoLoad) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try { reload() } catch (_: Exception) {
                 mutableError.value = "Der Verlauf konnte nicht gelesen werden. Deine Daten bleiben erhalten."
             }
@@ -54,7 +56,7 @@ class HistoryStore private constructor(context: Context) {
     suspend fun reload() = withContext(Dispatchers.IO) { mutex.withLock { load() } }
     suspend fun add(entry: HistoryEntry) {
         require(entry.id.isNotBlank() && entry.durationMs >= 0)
-        change { old -> (listOf(entry) + old.filter { it.id != entry.id }).sortedByDescending { it.createdAt }.take(LIMIT) }
+        change { old -> (listOf(entry) + old.filter { it.id != entry.id }).sortedByDescending { it.createdAt } }
     }
     /** Async work must never recreate an entry the user deleted while it was running. */
     suspend fun updateIfPresent(entry: HistoryEntry): Boolean {
@@ -71,13 +73,25 @@ class HistoryStore private constructor(context: Context) {
         .take(3).asReversed().map { it.raw }
 
     private fun load() {
-        // Unreadable/corrupt is not empty. No write is allowed until successful loading.
         if (loaded) return
         val values = if (file.exists() || File(file.path + ".bak").exists()) {
-            val array = JSONArray(atomic.readFully().toString(Charsets.UTF_8))
-            (0 until array.length()).map { decode(array.getJSONObject(it)) }.sortedByDescending { it.createdAt }.take(LIMIT)
+            try {
+                val array = JSONArray(atomic.readFully().toString(Charsets.UTF_8))
+                (0 until array.length()).mapNotNull { index ->
+                    // One malformed row must never hide the other dictations.
+                    try { decode(array.getJSONObject(index)).also { require(it.id.isNotBlank() && it.durationMs >= 0) } }
+                    catch (_: org.json.JSONException) { null }
+                    catch (_: IllegalArgumentException) { null }
+                }.sortedByDescending { it.createdAt }
+            } catch (_: org.json.JSONException) {
+                quarantine(); emptyList()
+            } catch (_: java.io.IOException) {
+                quarantine(); emptyList()
+            }
         } else emptyList()
-        mutableEntries.value = values
+        // Retain overflow until a successful write; merely reading never deletes audio.
+        overflow = values.drop(LIMIT)
+        mutableEntries.value = values.take(LIMIT)
         loaded = true
         mutableError.value = null
     }
@@ -85,7 +99,9 @@ class HistoryStore private constructor(context: Context) {
     private suspend fun change(transform: (List<HistoryEntry>) -> List<HistoryEntry>) = withContext(Dispatchers.IO) {
         mutex.withLock {
             load()
-            val next = transform(entries.value)
+            val old = entries.value + overflow
+            val candidates = transform(old)
+            val next = candidates.take(LIMIT)
             check(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
             val output = atomic.startWrite()
             try {
@@ -94,7 +110,30 @@ class HistoryStore private constructor(context: Context) {
                 atomic.finishWrite(output)
             } catch (e: Exception) { atomic.failWrite(output); throw e }
             mutableEntries.value = next
+            overflow = emptyList()
             mutableError.value = null
+            // Only remove files once the new index is durable, and never follow an outside path.
+            val retained = next.mapNotNull { audio(it.audioFile) }.toSet()
+            (old + candidates).mapNotNull { audio(it.audioFile) }.distinct().filterNot { it in retained }.forEach {
+                runCatching { it.delete() }
+            }
+        }
+    }
+
+    private fun audio(path: String?): File? = runCatching {
+        if (path == null) return@runCatching null
+        val dir = File(filesDir, "dictations").canonicalFile
+        // Also reject a dictations directory symlink leading outside filesDir.
+        if (!dir.toPath().startsWith(filesDir.canonicalFile.toPath())) return@runCatching null
+        File(path).canonicalFile.takeIf { it.parentFile == dir && it.extension == "wav" }
+    }.getOrNull()
+
+    private fun quarantine() {
+        listOf(file, File(file.path + ".bak"), File(file.path + ".new")).filter { it.exists() }.forEach { source ->
+            var stamp = System.currentTimeMillis()
+            var target = File(file.parentFile, "damaged-$stamp.json")
+            while (target.exists()) { stamp++; target = File(file.parentFile, "damaged-$stamp.json") }
+            check(source.renameTo(target)) { "Could not preserve damaged history" }
         }
     }
 

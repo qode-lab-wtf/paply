@@ -27,7 +27,10 @@ import com.paply.android.ui.theme.PaplyColors as C
 import com.paply.core.GroqClient
 import com.paply.core.GroqFailure
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 
@@ -54,8 +57,8 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
         scope.launch {
             var classification = "failed"
             try {
-                val key = vault.read()
-                if (key == null) { keyCheck = "Bitte zuerst einen Schlüssel sichern."; return@launch }
+                val key = withContext(Dispatchers.IO) { vault.read() }
+                if (key == null) { keyChanged(); keyCheck = "Bitte zuerst einen Schlüssel sichern."; return@launch }
                 withTimeout(15_000) { GroqClient(key).models() }
                 classification = "valid"
                 keyCheck = "Schlüssel funktioniert"
@@ -78,19 +81,40 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
                 keyCheck = "Der Schlüssel konnte nicht gelesen werden. Bitte entfernen und neu sichern."
             } finally {
                 checking = false
-                Diag.event("settings.apiKey.check result=$classification")
+                Diag.event("settings.apiKey.check valid=${classification == "valid"} invalid=${classification == "invalid"} offline=${classification == "offline"}")
             }
         }
     }
     fun saveKey() {
-        if (draft.isBlank()) return
-        try {
-            vault.save(draft)
-            draft = ""
-            keyChanged()
-            Diag.event("settings.apiKey present=true")
-            checkKey()
-        } catch (_: Exception) { message("Schlüssel konnte nicht sicher gespeichert werden. Bitte erneut versuchen.") }
+        if (draft.isBlank() || checking) return
+        val value = draft
+        checking = true
+        scope.launch {
+            var saved = false
+            try {
+                withContext(Dispatchers.IO) { vault.save(value) }
+                draft = ""
+                keyChanged()
+                Diag.event("settings.apiKey present=true")
+                saved = true
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { message("Schlüssel konnte nicht sicher gespeichert werden. Bitte erneut versuchen.") }
+            finally { checking = false }
+            if (saved) checkKey()
+        }
+    }
+    fun removeKey() {
+        if (checking) return
+        checking = true
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { vault.remove() }
+                keyCheck = null; checkFailed = false; keyChanged()
+                Diag.event("settings.apiKey present=false")
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { message("Schlüssel konnte nicht entfernt werden. Bitte erneut versuchen.") }
+            finally { checking = false }
+        }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -99,10 +123,7 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
                 SettingsItem("Schlüssel gespeichert", icon = PaplyIcons.KeyRound, value = "Verschlüsselt auf diesem Gerät")
                 Hairline()
                 TextButton(onClick = { checkKey() }, enabled = !checking, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Schlüssel prüfen") }
-                TextButton(onClick = {
-                    try { vault.remove(); keyCheck = null; keyChanged(); Diag.event("settings.apiKey present=false") }
-                    catch (_: Exception) { message("Schlüssel konnte nicht entfernt werden. Bitte erneut versuchen.") }
-                }, enabled = !checking, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Schlüssel entfernen", color = C.danger) }
+                TextButton(onClick = { removeKey() }, enabled = !checking, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Schlüssel entfernen", color = C.danger) }
             } else {
                 SettingsItem("Kostenlosen Schlüssel holen", icon = PaplyIcons.KeyRound, onClick = {
                     activity.startActivity(Intent(Intent.ACTION_VIEW, "https://console.groq.com/keys".toUri()))
@@ -119,8 +140,12 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
                         TextButton(onClick = {
                             val clipboard = activity.getSystemService(ClipboardManager::class.java)
                             val pasted = clipboard.primaryClip?.getItemAt(0)?.coerceToText(activity)?.toString()
-                            if (!pasted.isNullOrBlank()) { draft = pasted; saveKey() } else message("Die Zwischenablage ist leer.")
-                        }) { Text("Einsetzen") }
+                            if (!pasted.isNullOrBlank()) {
+                                draft = pasted
+                                clipboard.clearPrimaryClip()
+                                saveKey()
+                            } else message("Die Zwischenablage ist leer.")
+                        }, enabled = !checking) { Text("Einsetzen") }
                         TextButton(onClick = { saveKey() }, enabled = draft.isNotBlank() && !checking) { Text("Sichern") }
                     }
                 }
@@ -129,12 +154,8 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
             if (keyStatus != null) Text(keyStatus, style = MaterialTheme.typography.bodyMedium,
                 color = if (keyError != null || checkFailed) C.beak else C.greenBright,
                 modifier = Modifier.padding(16.dp))
-            if (keyError != null && !hasKey) TextButton(onClick = {
-                try {
-                    vault.remove(); keyCheck = null; checkFailed = false; keyChanged()
-                    Diag.event("settings.apiKey present=false")
-                } catch (_: Exception) { message("Schlüssel konnte nicht entfernt werden. Bitte erneut versuchen.") }
-            }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Schlüssel entfernen", color = C.danger) }
+            if (keyError != null && !hasKey) TextButton(onClick = { removeKey() }, enabled = !checking,
+                modifier = Modifier.padding(horizontal = 8.dp)) { Text("Schlüssel entfernen", color = C.danger) }
         }
         Section("Erkennung", if (prefs.betaThoughts) "Gilt für Diktat und Gedanken." else "Gilt fürs Diktat.") {
             SettingsItem("Sprachen", icon = PaplyIcons.Globe,
@@ -161,7 +182,7 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
             }
         }
         Section("Datenschutz") { Text(PRIVACY, style = MaterialTheme.typography.bodyMedium, color = C.secondary, modifier = Modifier.padding(16.dp)) }
-        Section(footer = "Mit Diagnose-Protokoll: nur Abläufe, Zeiten und Kennungen – keine Diktate, keine Gedanken.") {
+        Section(footer = "Mit App- und Android-Version sowie den letzten 200 Diagnose-Ereignissen seit dem App-Start: nur Abläufe, Zahlen und Ja/Nein-Werte, keine Inhalte oder Kennungen.") {
             SettingsItem("Feedback senden", icon = PaplyIcons.MessageSquare, onClick = {
                 scope.launch { shareText(activity, "Feedback zu Paply $VERSION, Android ${Build.VERSION.RELEASE}:\n\n" + DiagnosticReader.read(), "Paply-Feedback") }
             })
@@ -217,9 +238,22 @@ fun LanguagesScreen(prefs: AppPreferences, edit: ((AppPreferences) -> AppPrefere
 
 @Composable
 fun VocabularyScreen(prefs: AppPreferences, edit: ((AppPreferences) -> AppPreferences) -> Unit) {
-    var draft by remember { mutableStateOf(prefs.vocabulary) }
+    var draft by rememberSaveable { mutableStateOf(prefs.vocabulary) }
+    val latestEdit by rememberUpdatedState(edit)
+    val savedVocabulary by rememberUpdatedState(prefs.vocabulary)
+    LaunchedEffect(draft) {
+        delay(500)
+        val value = draft
+        if (value != savedVocabulary) latestEdit { it.copy(vocabulary = value) }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            val value = draft
+            if (value != savedVocabulary) latestEdit { it.copy(vocabulary = value) }
+        }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedTextField(value = draft, onValueChange = { text -> draft = text; edit { it.copy(vocabulary = text) } },
+        OutlinedTextField(value = draft, onValueChange = { text -> draft = text },
             label = { Text("Eigene Begriffe") }, minLines = 9,
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
         Text("Namen und Fachwörter, getrennt durch Komma oder neue Zeile. Paply schreibt sie dann richtig.",

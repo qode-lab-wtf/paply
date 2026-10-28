@@ -17,6 +17,12 @@ class DebugControlReceiver : BroadcastReceiver() {
                 finally { file.delete() }
                 Diag.event("debug.key.loaded")
             }
+            "silence-on" -> CaptureDebug.silenced = true
+            "silence-off" -> CaptureDebug.silenced = false
+            "dead-object" -> CaptureDebug.deadObject = true
+            "nudge-fast" -> CaptureDebug.nudgeEveryMs = 5_000L
+            "nudge-normal" -> CaptureDebug.nudgeEveryMs = 120_000L
+            "work" -> com.paply.android.thoughts.ThoughtsRepository.get(context).kick("debug")
             "direct-on" -> Settings(context).directTile = true
             "direct-off" -> Settings(context).directTile = false
             "finish" -> ThoughtService.command(context, ThoughtService.FINISH)

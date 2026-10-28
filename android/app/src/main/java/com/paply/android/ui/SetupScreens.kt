@@ -7,28 +7,33 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import com.paply.android.settings.AppPreferences
+import com.paply.android.settings.SettingsRepository
 import com.paply.android.ui.components.*
 import com.paply.android.ui.theme.PaplyColors as C
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, microphone: () -> Unit,
     notifications: () -> Unit, navigate: (String) -> Unit,
 ) {
-    data class Step(val title: String, val detail: String, val done: Boolean, val action: String, val click: () -> Unit)
+    data class Step(val title: String, val detail: String, val done: Boolean, val action: String, val click: () -> Unit,
+        val confirmTile: Boolean = false)
     val steps = buildList {
         add(Step("Mikro erlauben", if (prefs.betaThoughts) "Für Diktat und Gedanken." else "Fürs Diktat.", status.microphone, "Erlauben", microphone))
         add(Step("Benachrichtigungen erlauben", "Damit du laufende Aufnahmen immer siehst.", status.notifications, "Erlauben", notifications))
         add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }))
         add(Step("Tastatur aktivieren", "Paply in den Android-Tastatureinstellungen einschalten.", status.keyboardEnabled, "Einrichten", { navigate("keyboard") }))
         add(Step("Tastatur auswählen", "Paply als aktuelle Tastatur auswählen.", status.keyboardSelected, "Auswählen", { navigate("keyboard") }))
-        if (prefs.betaThoughts) add(Step("Gedanken-Kachel hinzufügen", "In den Schnelleinstellungen – ein Tipp, und du sprichst.", status.tileAdded, "Einrichten", { navigate("tile") }))
+        if (prefs.betaThoughts) add(Step("Gedanken-Kachel hinzufügen", "In den Schnelleinstellungen – ein Tipp, und du sprichst.", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
     }
     val expandedType = LocalDensity.current.fontScale >= 1.5f
     val done = steps.count { it.done }
@@ -52,6 +57,7 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
                 if (!step.done && expandedType) Box(Modifier.fillMaxWidth().padding(start = 36.dp), contentAlignment = Alignment.CenterEnd) {
                     Pill(step.action, step.click, prominent = index == next)
                 }
+                if (!step.done && step.confirmTile && Build.VERSION.SDK_INT < 33) LegacyTileConfirmation()
             }
             if (index != steps.lastIndex) Hairline()
         }
@@ -94,7 +100,32 @@ fun TileSetupScreen(activity: Activity, status: SetupStatus, addTile: () -> Unit
             else listOf("Vom oberen Bildschirmrand zweimal nach unten wischen.", "Die Schnelleinstellungen bearbeiten (Stift-Symbol).",
                 "„Paply-Gedanke“ zu deinen Kacheln ziehen.", "Zum Aufnehmen die Kachel antippen."))
         if (Build.VERSION.SDK_INT >= 33) Pill("Kachel hinzufügen", addTile)
+        else if (!status.tileAdded) LegacyTileConfirmation()
         Text("Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.", style = MaterialTheme.typography.bodySmall, color = C.secondary)
+    }
+}
+
+@Composable
+private fun LegacyTileConfirmation() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Kachel schon hinzugefügt? Manche Android-Versionen können das nicht erkennen. Bestätige es hier.",
+            style = MaterialTheme.typography.bodySmall, color = C.secondary)
+        Pill(if (saving) "Sichere …" else "Erledigt", {
+            if (!saving) {
+                saving = true
+                scope.launch {
+                    try { SettingsRepository.get(context).update { it.copy(tileAdded = true) }; error = false }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { error = true }
+                    finally { saving = false }
+                }
+            }
+        }, prominent = false, enabled = !saving)
+        if (error) Text("Bitte erneut versuchen.", color = C.danger, style = MaterialTheme.typography.bodySmall)
     }
 }
 

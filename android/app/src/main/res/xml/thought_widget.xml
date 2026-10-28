@@ -1,0 +1,4 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp" android:minHeight="110dp" android:targetCellWidth="2" android:targetCellHeight="2"
+    android:updatePeriodMillis="0" android:initialLayout="@layout/thought_widget" android:previewLayout="@layout/thought_widget"
+    android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" android:description="@string/thought_widget_description" />

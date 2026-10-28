@@ -127,9 +127,11 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
                 observe(prepared)
                 Diag.event("ime.recording")
             } catch (e: CancellationException) { prepared?.discard(); throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 prepared?.discard(); session = null
-                panel = ImePanelState("error", title = "Mikrofon nicht verfügbar", subtitle = "Prüfe den Mikrofonzugriff oder versuche es erneut.")
+                panel = if (e is MicrophoneBusyException) ImePanelState("error", title = "Mikro belegt",
+                    subtitle = "Beende zuerst die Gedankenaufnahme und versuche es erneut.")
+                else ImePanelState("error", title = "Mikrofon nicht verfügbar", subtitle = "Prüfe den Mikrofonzugriff oder versuche es erneut.")
             } finally { if (token == generation) preparing = null }
         }
     }

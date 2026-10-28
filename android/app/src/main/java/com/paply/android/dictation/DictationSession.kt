@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.asStateFlow
 object DictationRuntime {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val busy = ConcurrentHashMap.newKeySet<String>()
+    val isBusy: Boolean get() = busy.isNotEmpty()
+    internal fun sessionStarted(id: String) { busy.add(id) }
+    internal fun sessionEnded(id: String) { busy.remove(id) }
     private var network: AndroidReachability? = null
     private var recovery: Job? = null
     @Synchronized private fun reachability(context: Context) = network ?: AndroidReachability(context).also { network = it }
@@ -145,6 +148,7 @@ class DictationSession private constructor(private val app: Context, val pipelin
     val speechDetected get() = pipeline.speechDetected
     fun start() {
         recording.start()
+        DictationRuntime.sessionStarted(id)
         started = true
         // Started alongside capture, gated on actual speech: switching past Paply costs no request.
         warm = DictationRuntime.scope.launch(Dispatchers.IO) {
@@ -185,7 +189,7 @@ class DictationSession private constructor(private val app: Context, val pipelin
                 entry = entry.copy(status = HistoryStatus.FAILED, error = "Verarbeitung fehlgeschlagen. Aufnahme bleibt für einen Neuversuch erhalten.")
                 runCatching { HistoryStore.get(app).add(entry) }
                 mutable.value = SessionState("failed", entry, entry.error)
-            } finally { pipeline.close(); pipeline.releaseAudio() }
+            } finally { pipeline.close(); pipeline.releaseAudio(); DictationRuntime.sessionEnded(id) }
         }
     }
     fun discard() {
@@ -195,6 +199,7 @@ class DictationSession private constructor(private val app: Context, val pipelin
         mutable.value = SessionState("discarded")
         DictationRuntime.scope.launch(Dispatchers.IO) {
             if (started) recording.awaitEnd()
+            DictationRuntime.sessionEnded(id)
             pipeline.releaseAudio()
             HistoryStore.get(app).delete(setOf(id)); file.delete()
         }

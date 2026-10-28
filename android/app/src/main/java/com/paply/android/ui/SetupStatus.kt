@@ -26,14 +26,21 @@ data class SetupStatus(val microphone: Boolean, val notifications: Boolean, val 
             val enabled = manager.enabledInputMethodList.any { it.packageName == context.packageName }
             val selected = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
                 ?.let { ComponentName.unflattenFromString(it)?.packageName == context.packageName } == true
-            // A readable live list also detects removal. Otherwise retain only the OS-confirmed add result.
+            // API 29–32 may hide/omit the tile; a manual confirmation is authoritative there.
             val tiles = runCatching { Settings.Secure.getString(context.contentResolver, "sysui_qs_tiles") }.getOrNull()
-            val tile = if (tiles != null) tiles.contains("${context.packageName}/.ThoughtTile") ||
-                tiles.contains("${context.packageName}/${ThoughtTile::class.java.name}") else prefs.tileAdded
+            val tile = tileAdded(tiles, context.packageName, prefs.tileAdded, Build.VERSION.SDK_INT)
             return SetupStatus(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
                 context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(), enabled, selected, tile)
         }
     }
+}
+
+internal fun tileAdded(tiles: String?, packageName: String, confirmed: Boolean, sdk: Int): Boolean {
+    if (sdk < 33 && confirmed) return true
+    if (tiles == null) return confirmed
+    return tiles.split(',').any { it == "custom($packageName/.ThoughtTile)" ||
+        it == "custom($packageName/com.paply.android.ThoughtTile)" ||
+        it == "$packageName/.ThoughtTile" || it == "$packageName/com.paply.android.ThoughtTile" }
 }
 
 fun Activity.openKeyboardSettings() { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
