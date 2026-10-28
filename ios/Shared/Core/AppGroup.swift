@@ -62,6 +62,17 @@ enum PaplyURL {
     static func thoughtStart(source: String) -> URL? {
         URL(string: "\(scheme)://thought/new?src=\(source)")
     }
+
+    /// Reiter „Aufgaben“ (Aufgaben-Widget)
+    static let tasks = URL(string: "\(scheme)://thoughts/tasks")
+
+    /// Eine Aufgabe im Gedanken öffnen (Reiter „Aufgaben“, Detail an der Aufgabe) – aus dem Aufgaben-Widget
+    static func task(thoughtID: String, taskID: String) -> URL? {
+        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+        guard let thought = thoughtID.addingPercentEncoding(withAllowedCharacters: allowed),
+              let task = taskID.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return URL(string: "\(scheme)://task/\(thought)/\(task)")
+    }
 }
 
 /// In welchem Prozess läuft der Code gerade?

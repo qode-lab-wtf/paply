@@ -13,7 +13,7 @@
 import CoreGraphics
 
 enum Lucide: CaseIterable, Sendable {
-    case sparkles, lightbulb, house, codeXml, mapPin, sun, moon, heart, coffee, briefcaseBusiness, calendarDays, messageCircle, bookOpen, music, camera, leaf, flag, circleQuestionMark, pencil, plane, wallet, users, list, zap, listChecks, circleDashed, tag, wifiOff, keyRound, hourglass, triangleAlert, quote, cornerDownRight, link, circle, lock, toggleRight, circleDot, clock, audioLines, loader, merge, circlePlus, volumeOff, micOff, globe, bookA, mic, keyboard, hammer, send, messageSquare, check, shieldCheck
+    case sparkles, lightbulb, house, codeXml, mapPin, sun, moon, heart, coffee, briefcaseBusiness, calendarDays, messageCircle, bookOpen, music, camera, leaf, flag, circleQuestionMark, pencil, plane, wallet, users, list, zap, listChecks, circleDashed, tag, wifiOff, keyRound, hourglass, triangleAlert, quote, cornerDownRight, link, circle, lock, toggleRight, circleDot, clock, audioLines, loader, merge, circlePlus, volumeOff, micOff, globe, bookA, mic, keyboard, hammer, send, messageSquare, check, shieldCheck, bell
 
     /// Lucide-Name (zum Abgleich mit lucide.dev)
     var name: String {
@@ -72,6 +72,7 @@ enum Lucide: CaseIterable, Sendable {
         case .messageSquare: "message-square"
         case .check: "check"
         case .shieldCheck: "shield-check"
+        case .bell: "bell"
         }
     }
 
@@ -132,6 +133,7 @@ enum Lucide: CaseIterable, Sendable {
         case .messageSquare: [.path("M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z")]
         case .check: [.path("M20 6 9 17l-5-5")]
         case .shieldCheck: [.path("M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"), .path("m9 12 2 2 4-4")]
+        case .bell: [.path("M10.268 21a2 2 0 0 0 3.464 0"), .path("M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326")]
         }
     }
 }

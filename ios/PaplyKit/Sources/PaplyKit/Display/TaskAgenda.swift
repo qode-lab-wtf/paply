@@ -141,11 +141,7 @@ public enum TaskDueLabel: Equatable, Sendable {
         let wording = (hint?.isEmpty ?? true) ? nil : hint
         guard let due = task.dueAt else { return wording.map(TaskDueLabel.wording) }
         if let wording, calendar.isDate(recordedAt, inSameDayAs: now) { return .wording(wording) }
-        let time: Date? = {
-            if let spoken = task.dueHasTime { return spoken ? due : nil }
-            guard let clock = DueDate.spokenClock(wording) else { return nil }
-            return SpokenTime.matches(clock, date: due, calendar: calendar) ? due : nil
-        }()
+        let time = spokenTime(of: task, calendar: calendar)
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: due)).day ?? 0
         switch days {
         case 0: return .today(time: time)
@@ -154,5 +150,14 @@ public enum TaskDueLabel: Equatable, Sendable {
         case 2...6: return .weekday(due, time: time)
         default: return .date(due, time: time)
         }
+    }
+
+    /// `dueAt`, wenn eine Uhrzeit gesprochen wurde (Regel oben) – sonst nil. Eine Regel für die Anzeige und für die
+    /// Erinnerung zur Uhrzeit (`TaskReminderPlan`).
+    public static func spokenTime(of task: ThoughtTask, calendar: Calendar = .current) -> Date? {
+        guard let due = task.dueAt else { return nil }
+        if let spoken = task.dueHasTime { return spoken ? due : nil }
+        guard let clock = DueDate.spokenClock(task.dueHint) else { return nil }
+        return SpokenTime.matches(clock, date: due, calendar: calendar) ? due : nil
     }
 }

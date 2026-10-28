@@ -303,6 +303,28 @@ final class ThoughtsModel {
         }
     }
 
+    /// Sofort erledigt (Mitteilung „Erledigt“), ohne die Wartezeit der Oberfläche. Idempotent: schon erledigt bleibt,
+    /// wie es ist. false = Aufgabe nicht (mehr) da. `at`: Zeitpunkt des Tipps (Widget-Warteschlange), sonst jetzt.
+    @discardableResult
+    func completeTask(_ thoughtID: String, _ taskID: String, at: Date = Date()) -> Bool {
+        guard byID[thoughtID]?.tasks.contains(where: { $0.id == taskID }) == true else { return false }
+        let now = at
+        change(thoughtID) { thought in
+            guard let k = thought.tasks.firstIndex(where: { $0.id == taskID }), !thought.tasks[k].done else { return }
+            thought.tasks[k].done = true
+            thought.tasks[k].doneAt = now
+        }
+        return true
+    }
+
+    /// Wartet, bis alle Änderungen gespeichert sind (Hintergrund-Aktionen, bevor iOS die App wieder anhält).
+    func flushWrites() async {
+        while let chain = writeChain {
+            await chain.value
+            if writeChain == chain { return }
+        }
+    }
+
     func addTask(_ thoughtID: String, text: String) {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }

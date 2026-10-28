@@ -16,7 +16,8 @@ import SwiftUI
 //                            tasks-done · tasks-all-done · tasks-detail · detail · detail-zoom · detail-raw ·
 //                            detail-waiting · capture · bar · bar-saved · search · settings · dictation · deleted ·
 //                            topics · guide · picker ·
-//                            map (Karte allein, MapDebugScreen; dazu -PaplyMapFocus, -PaplyLight)
+//                            map (Karte allein, MapDebugScreen; dazu -PaplyMapFocus, -PaplyLight) ·
+//                            widgets · widgets-2 (Aufgaben-Widgets, TaskWidgetPreview; mit -PaplyTasksDemo)
 //   -PaplyClassic            iOS-18-Look (ohne Glas, Leiste als Kapsel) auf iOS 26
 //   -PaplyExpandOriginal     „Original“ im Detail aufgeklappt
 //   -PaplyHoldDone           große Ansicht bleibt nach „Fertig“ offen (Häkchen prüfen)
@@ -148,6 +149,12 @@ enum ThoughtsDebug {
             thoughts[i].tasks.append(ThoughtTask(text: demo.text, quote: demo.text, dueHint: demo.hint, dueAt: demo.due,
                                                  done: demo.doneAt != nil, doneAt: demo.doneAt, owner: .ai, createdAt: created))
         }
+        // mit gesprochener Uhrzeit in der Zukunft (Karte „Bei Uhrzeit erinnern?“, TaskReminders)
+        if let i = index("Team", fresh: true) {
+            thoughts[i].tasks.append(ThoughtTask(text: "Briefe bei Aram bearbeiten", quote: "morgen um 8 Briefe bei Aram bearbeiten",
+                                                 dueHint: "morgen um 8", dueAt: day(1, 8), dueHasTime: true, owner: .ai,
+                                                 createdAt: thoughts[i].createdAt))
+        }
         return ThoughtsModel(thoughts: thoughts + base.deleted, topics: topics, suggestions: base.suggestions)
     }
 
@@ -244,6 +251,8 @@ enum ThoughtsDebug {
             if let rich { nav.topicPicker = SheetID(id: rich.id) }
         case "map":
             MapDebugScreen.present(model: model)
+        case "widgets", "widgets-2":
+            TaskWidgetPreview.present(model: model, page: screen == "widgets-2" ? 2 : 1)
         default:
             break
         }

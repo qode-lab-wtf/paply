@@ -143,6 +143,8 @@ struct TasksPage: View {
     private func list(_ agenda: TaskAgenda) -> some View {
         ScrollViewReader { proxy in
             List {
+                // „Bei Uhrzeit erinnern?“ – nur mit offener Aufgabe mit Uhrzeit in der Zukunft, nie gefragt (TaskReminders)
+                TaskReminderPromptSection(thoughts: model.thoughts)
                 if agenda.openCount == 0 {
                     allDone
                 }

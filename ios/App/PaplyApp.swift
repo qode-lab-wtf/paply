@@ -47,6 +47,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ThoughtBridge.bootstrap()
         // Gedanken: Speicher, Warteschlange, BGTask „com.paply.ios.thoughts“ (muss vor Ende des Starts registriert sein)
         ThoughtsEnvironment.bootstrap()
+        // Aufgaben-Widgets: Momentaufnahme schreiben, im Widget Abgehaktes anwenden
+        TaskWidgetSync.bootstrap()
+        // Erinnerung zur Uhrzeit: Delegate muss vor Ende des Starts stehen (Aktionen „Erledigt“, „In 1 Stunde“).
+        // Fragt nie nach der Erlaubnis.
+        TaskReminders.shared.start()
         return true
     }
 }

@@ -172,6 +172,8 @@ enum ControlKinds {
 enum WidgetKinds {
     /// Sperrbildschirm-Widget „Paply-Gedanke“ (Reihe unter der Uhr)
     static let thought = "thought-widget"
+    /// Aufgaben auf Sperrbildschirm und Home-Bildschirm (`tasks-snapshot.json`)
+    static let tasks = "tasks-widget"
 }
 
 /// `thought-state.json` – nur ob gerade ein Gedanke aufnimmt (für Control und Widget). Kein Text.

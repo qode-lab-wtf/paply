@@ -152,6 +152,9 @@ struct SettingsView: View {
             .paplyRows()
             .id("thoughts")
 
+            // Erinnerungen zur Uhrzeit (TaskReminders)
+            TaskReminderSettingsSection()
+
             Section {
                 if setup.needsKeyboardSetup {
                     NavigationLink(value: Route.keyboardSetup) {
@@ -649,6 +652,8 @@ struct DeveloperView: View {
             .paplyRows()
 
             ThoughtsDeveloperSection()
+
+            TaskReminderDeveloperSection()
 
             Section("Werkzeuge") {
                 NavigationLink("Testseite (Höhe, Diktat)", value: Route.testPage)

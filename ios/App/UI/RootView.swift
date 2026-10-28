@@ -100,7 +100,8 @@ struct RootView: View {
     }
 
     /// Deep Links (§2): `thought/current?id=…` (Live Activity), `thought/new` (Rückfall des Sperrbildschirm-
-    /// Widgets: Aufnahme in der App), `thought/<id>`, `thoughts/tasks` (Reiter Aufgaben).
+    /// Widgets: Aufnahme in der App), `thought/<id>`, `thoughts/tasks` (Reiter Aufgaben),
+    /// `task/<Gedanke>/<Aufgabe>` (Aufgaben-Widget: Detail an der Aufgabe).
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
         guard url.scheme == PaplyURL.scheme else { return }
@@ -127,6 +128,14 @@ struct RootView: View {
                 nav.showTasks()
             } else {
                 nav.tab = .thoughts
+            }
+        case "task":
+            // Aufgaben-Widget: `task/<Gedanke>/<Aufgabe>` → Reiter Aufgaben, Gedanke an der Aufgabe
+            // (nach einem Kaltstart sind die Gedanken evtl. noch nicht gelesen – dann trotzdem öffnen; gelöscht → nur Reiter)
+            let parts = path.split(separator: "/").map(String.init)
+            nav.showTasks()
+            if parts.count == 2, !model.isLoaded || model.thought(parts[0]) != nil {
+                nav.tasksPath = [.thought(parts[0], task: parts[1])]
             }
         default:
             break

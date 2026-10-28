@@ -23,6 +23,8 @@ enum DarwinSignal: String, CaseIterable, Sendable {
     case thoughtToggle
     /// App → alle: `thought-state.json` hat sich geändert
     case thoughtState
+    /// Widget-Prozess → App: Aufgabe im Widget abgehakt (`task-completions/`)
+    case taskCompleted
 
     var notificationName: String { "\(AppGroup.identifier).\(rawValue)" }
 }

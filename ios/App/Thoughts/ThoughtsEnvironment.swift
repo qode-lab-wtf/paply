@@ -208,9 +208,13 @@ enum ThoughtsEnvironment {
         Diag.log("thoughts.bgtask.run")
         let work = Task { @MainActor in
             await ready.value
+            // im Aufgaben-Widget Abgehaktes (falls die App seitdem nicht lief)
+            await TaskWidgetSync.shared.applyQueue(reason: "background", wait: .seconds(5))
             await processor.kick(reason: "background")
             await processor.waitUntilIdle()
             await store.housekeeping(now: Date())
+            // Erinnerungen zur Uhrzeit: neu geordnete Aufgaben, Grenze von 50 nachrücken
+            await TaskReminders.shared.reconcileNow(reason: "background")
             box.complete(success: !Task.isCancelled)
             await scheduleBackgroundProcessing()
         }

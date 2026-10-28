@@ -12,6 +12,7 @@ struct PaplyWidgetsBundle: WidgetBundle {
         ThoughtLiveActivity()
         ThoughtControl()
         ThoughtWidget()
+        TasksWidget()
     }
 }
 
