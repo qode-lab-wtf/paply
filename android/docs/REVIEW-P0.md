@@ -114,3 +114,30 @@ der gerade `AudioCapture`/`DictationSession` umbaut).
     geschrieben. (IME-Fix)
 13. Panel: `idle` nicht als „schreibt“ anzeigen. „Eingesetzt“ bekommt einen Zurück-Knopf. Wischen bricht einen Neuversuch
     ab. (IME-Fix)
+
+## Review Etappe 2 – Gedanken-Aufnahme (Sonnet, Commit `7dd47f7`): Entscheidungen
+Es gibt eine eigene Korrekturrunde **„Fix-G“**. Sie läuft nach dem IME-Fix, weil beide `AudioCapture` berühren.
+
+1. **Benachrichtigung weggewischt** (ab API 34 möglich): `tick` prüft `activeNotifications`. Fehlt die Aufnahme-Meldung,
+   wird sie sofort neu gepostet. Geht das nicht, endet die Aufnahme und wird gespeichert. Ein Mikro ohne Anzeige darf es
+   nie geben.
+2. `ready` bzw. `backend()` lassen sich erneut versuchen, und jeder Discard-Marker läuft einzeln in `runCatching`. Ein
+   einzelner Fehler darf nie die ganze Funktion bis zum Neustart lahmlegen.
+3. Binder-Abfragen in der Leseschleife laufen höchstens alle 500 ms, dazwischen gilt das Callback (wie IME-Fix 10).
+4. `publish()` wird serialisiert (Mutex bzw. ein Konsument). Ein Schnappschuss besteht nie aus Teilen verschiedener Stände.
+5. Die Trim-Kopie bekommt den Namen `.tmp-trim…`. Recovery und `releaseAudio` räumen sie weg, damit kein Sprachrest liegen
+   bleibt.
+6. Stummschaltung gilt nur bei `isClientSilenced` oder `isMicrophoneMute`, nicht bei Klingel- oder VoIP-Modus. Sprache
+   wird nie unnötig verworfen.
+7. **Beta aus** hält auch die Verarbeitung an: keine Groq-Aufrufe und keine Hygiene für ausgeblendete Gedanken. Beta an
+   setzt sie fort. Daten bleiben erhalten.
+8. `waitingKey` ist nicht in der 15-Minuten-Weckschleife. Der Schlüssel-Listener reicht.
+9. Erst `startForeground`, dann die Zustandsaktualisierung für Widget und Kachel.
+10. `finishCapture` mit 0 ms meldet sichtbar „nichts gespeichert“, nicht „gesichert“.
+11. Der FileTranscriber verarbeitet PCM gestreamt bzw. in Stücken, statt 10 Min. als ein Array zu laden. Kein
+    OOM-Absturz.
+12. „Verwerfen“ in der Benachrichtigung verlangt Entsperren (`setAuthenticationRequired`, ab API 31). „Fertig“ geht ohne.
+13. `visible()` wird etwa 1 s gecacht, damit die Karte keine Binder-Abfragen im 100-ms-Takt auslöst.
+14. Widget-PendingIntent mit `FLAG_UPDATE_CURRENT`.
+15. Bewusst so gelassen: Im Lautlos- bzw. DND-Modus vibriert der Hinweis nicht, die Wünsche des Nutzers gelten. Sichtbar
+    bleiben Benachrichtigung, Chip und Mikro-Punkt.
