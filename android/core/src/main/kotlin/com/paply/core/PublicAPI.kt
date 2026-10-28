@@ -1,6 +1,5 @@
 package com.paply.core
 
-import java.util.Locale
 import kotlinx.serialization.json.*
 
 /** Snapshot of one session. Secrets are obtained at session start and never serialized. */
@@ -14,7 +13,8 @@ data class DictationConfiguration(
     val language: String? = null,
     val polishModel: String = GroqModels.polish,
     val fallbackPolishModel: String = GroqModels.polishFallback,
-    val deviceLanguages: List<String> = listOf(Locale.getDefault().toLanguageTag()),
+    /** All preferred device language tags, in order; Android supplies LocaleList. */
+    val deviceLanguages: List<String> = emptyList(),
 ) {
     fun settings() =
         PaplySettings(

@@ -62,7 +62,8 @@ class ModelCatalog(private val clock: PaplyClock = SystemPaplyClock) : AutoClose
                 val ids =
                     try {
                         client.listModels()
-                    } catch (_: GroqFailure) {
+                    } catch (error: Throwable) {
+                        error.asGroqFailure()
                         null
                     }
                 synchronized(this@ModelCatalog) {
@@ -118,6 +119,17 @@ class PolishService(
         messages: List<ChatMessage>,
         vocabulary: String,
         settings: PaplySettings,
+    ): PolishResult = try {
+        polishChecked(text, messages, vocabulary, settings)
+    } catch (error: Throwable) {
+        PolishResult(error = error.asGroqFailure().polishCode)
+    }
+
+    private suspend fun polishChecked(
+        text: String,
+        messages: List<ChatMessage>,
+        vocabulary: String,
+        settings: PaplySettings,
     ): PolishResult {
         val preferred =
             listOf(settings.polishModel, settings.fallbackPolishModel)
@@ -135,7 +147,8 @@ class PolishService(
             try {
                 try {
                     client.chat(model, messages, maxTokens)
-                } catch (failure: GroqFailure) {
+                } catch (error: Throwable) {
+                    val failure = error.asGroqFailure()
                     val fallback = preferred.firstOrNull {
                         it != model && (available == null || it in available)
                     }
@@ -154,8 +167,8 @@ class PolishService(
                     else throw failure
                     client.chat(model, messages, maxTokens)
                 }
-            } catch (failure: GroqFailure) {
-                return PolishResult(error = failure.polishCode, model = model)
+            } catch (error: Throwable) {
+                return PolishResult(error = error.asGroqFailure().polishCode, model = model)
             }
         if (completion.finishReason != null && completion.finishReason != "stop")
             return PolishResult(rejection = "truncated", model = model)

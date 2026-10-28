@@ -175,17 +175,22 @@ class GroqClient(
 
     internal fun request(path: String, authenticated: Boolean = true) =
         Request.Builder().url(requireNotNull(baseUrl.resolve(path))).apply {
-            if (authenticated) header("Authorization", "Bearer $apiKey")
+            if (authenticated) {
+                // Reject before OkHttp can throw an IllegalArgumentException containing the key.
+                if (apiKey.isEmpty() || apiKey.any { it.code !in 0x21..0x7e })
+                    throw GroqFailure(status = 401, code = "unauthorized")
+                header("Authorization", "Bearer $apiKey")
+            }
         }
 
     internal suspend fun <T> send(
         request: Request,
         idleSeconds: Double = polishIdleTimeout,
         parse: (Response) -> T,
-    ): T {
+    ): T = try {
         currentCoroutineContext().ensureActive()
-        if (!reachability.isReachable()) throw GroqFailure()
-        return suspendCancellableCoroutine { continuation ->
+        // Connectivity snapshots can be stale. Only the HTTP attempt decides success.
+        suspendCancellableCoroutine { continuation ->
             val timeout = kotlin.math.ceil(idleSeconds * 1000).toLong()
             val connection = http ?: transport.client()
             val call =
@@ -225,7 +230,7 @@ class GroqClient(
                                 parse(it)
                             }
                             if (continuation.isActive) continuation.resume(result)
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             val failure =
                                 when (e) {
                                     is GroqFailure -> e
@@ -238,6 +243,8 @@ class GroqClient(
                 },
             )
         }
+    } catch (error: Throwable) {
+        throw error.asGroqFailure()
     }
 
     fun retryDelay(failure: GroqFailure): Double? {
@@ -422,4 +429,20 @@ internal fun retrySeconds(message: String?): Double? {
         }
     }
     return if (found) seconds else null
+}
+
+/** Preserve structured cancellation, but classify every other failure without retaining secrets. */
+internal suspend fun Throwable.asGroqFailure(): GroqFailure {
+    currentCoroutineContext().ensureActive()
+    return this as? GroqFailure ?: GroqFailure()
+}
+
+/** Clean pasted keys before saving them in app settings (never silently mutate a request key). */
+fun sanitizeApiKey(value: String): String = buildString {
+    for (code in value.scalars()) {
+        if (!code.isUnicodeWhitespace() && !Character.isISOControl(code) &&
+            Character.getType(code) != Character.FORMAT.toInt() &&
+            code != 0x034f && code !in 0xfe00..0xfe0f && code !in 0xe0100..0xe01ef
+        ) appendCodePoint(code)
+    }
 }

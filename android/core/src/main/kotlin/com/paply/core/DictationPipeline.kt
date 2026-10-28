@@ -3,15 +3,15 @@
 package com.paply.core
 
 import java.io.File
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 
 /**
  * One recording session. append is synchronous/thread-safe; network tasks start at pauses during
  * recording. Call cancel/close when the owner is disposed. finish is idempotent; retry retains
- * successful pieces. State callbacks are serialized with state changes on the calling/worker
- * thread: Android must dispatch UI work.
+ * successful pieces. State callbacks are delivered in order on a worker, outside the state lock
+ * and recording thread: Android must dispatch UI work. Cancelling a finish waiter retains work.
  */
 class DictationPipeline
 internal constructor(
@@ -20,7 +20,7 @@ internal constructor(
     private val catalog: ModelCatalog = ModelCatalog.shared,
     private val options: PipelineOptions = PipelineOptions(),
     recentRawDictations: List<String> = emptyList(),
-    deviceLanguages: List<String> = listOf(Locale.getDefault().toLanguageTag()),
+    deviceLanguages: List<String> = emptyList(),
     private val encoder: AudioEncoding = DefaultAudioEncoding(),
     private val detector: LanguageDetector = NoLanguageDetector,
     private val clock: PaplyClock = SystemPaplyClock,
@@ -93,7 +93,7 @@ internal constructor(
     private var plan: MutableList<PlanPiece>? = null
     private var finishTask: Deferred<DictationOutcome>? = null
     private var finishing = false
-    private var finished = false
+    @Volatile private var finished = false
     private var cancelled = false
     private var audioReleased = false
     private var lastOutcome: DictationOutcome? = null
@@ -117,38 +117,47 @@ internal constructor(
         get() =
             synchronized(lock) { lastFailed && !audioReleased && !cancelled && samples.size > 0 }
 
-    private fun notifyState(next: DictationState = state) {
-        state = next
-        // An observer must not turn an otherwise successful recording into a failure.
-        try {
-            onState(DictationStatus(next, vad.speechDetected, vad.lastLevelDbfs))
-        } catch (_: Exception) {}
+    private val notifications = Channel<DictationStatus>(Channel.UNLIMITED)
+    private val notificationTask = CoroutineScope(Dispatchers.Default).launch {
+        for (status in notifications) {
+            // Observers cannot block recording or break the pipeline, even if they throw Error.
+            try { onState(status) } catch (_: Throwable) {}
+        }
     }
 
-    fun append(samples: ShortArray) = appendPcm(samples, AudioEncoder.floats(samples))
+    // Called under lock: capture the matching VAD/state, never invoke client code here.
+    private fun notifyState(next: DictationState = state) {
+        state = next
+        notifications.trySend(DictationStatus(next, vad.speechDetected, vad.lastLevelDbfs))
+    }
+
+    fun append(samples: ShortArray) {
+        if (!finished) appendPcm(samples, AudioEncoder.floats(samples))
+    }
 
     /** Float entry point retained for parity tests and callers with a resampler. */
-    fun append(samples: FloatArray) = appendPcm(AudioEncoder.int16(samples), samples)
+    fun append(samples: FloatArray) {
+        if (!finished) appendPcm(AudioEncoder.int16(samples), samples)
+    }
 
-    private fun appendPcm(pcm: ShortArray, floating: FloatArray) =
-        synchronized(lock) {
-            if (finished || cancelled || pcm.isEmpty()) return@synchronized
+    private fun appendPcm(pcm: ShortArray, floating: FloatArray) {
+        val ready = synchronized(lock) {
+            if (finished || cancelled || pcm.isEmpty()) return
             samples.append(pcm)
             vad.process(floating)
             notifyState()
-            if (
-                finished ||
-                    cancelled ||
-                    !settings.chunkedUpload ||
-                    !vad.speechDetected ||
-                    chunkingStopped
-            )
-                return@synchronized
-            while (true) {
-                val range = planner.nextCut(vad) ?: break
-                startChunk(range)
+            val pending = mutableListOf<Deferred<ChunkResult>>()
+            if (settings.chunkedUpload && vad.speechDetected && !chunkingStopped) {
+                while (true) {
+                    val range = planner.nextCut(vad) ?: break
+                    prepareChunk(range)?.let { pending += it }
+                }
             }
+            pending
         }
+        // Reservations are already visible to finish/cancel before any task is dispatched.
+        ready.forEach(::startChunk)
+    }
 
     fun discardSilentStart(): Boolean =
         synchronized(lock) {
@@ -160,20 +169,24 @@ internal constructor(
             true
         }
 
-    private fun startChunk(range: IntRange) {
+    private fun startChunk(task: Deferred<ChunkResult>) { task.start() }
+
+    // Under lock: reserve a lazy task so finish cannot miss a cut racing with append.
+    private fun prepareChunk(range: IntRange): Deferred<ChunkResult>? {
         val n = VoiceActivityDetector.frameLength
         val start = range.first * n
         val end = minOf((range.last + 1) * n, samples.size)
-        if (end <= start) return
+        if (end <= start) return null
         val audio = samples.copy(start, end)
         val measured = vad.snapshot()
-        if (chunks.isEmpty() && options.polish) catalog.cachedModels(client)
+        val warmCatalog = chunks.isEmpty() && options.polish
         val previous = chunks.lastOrNull()?.task
         val task =
             scope.async(start = CoroutineStart.LAZY) {
+                if (warmCatalog) catalog.cachedModels(client)
                 val before =
                     if (previous != null)
-                        withTimeoutOrNull(previousTextWaitMillis) { previous.await() }
+                        withTimeoutOrNull(previousTextWaitMillis) { awaitChunk(previous) }
                     else null
                 currentCoroutineContext().ensureActive()
                 if (synchronized(lock) { chunkingStopped }) return@async ChunkResult(sent = false)
@@ -186,10 +199,27 @@ internal constructor(
                 }
             }
         chunks += Chunk(start, end, task)
-        task.start()
+        return task
+    }
+
+    private suspend fun awaitChunk(task: Deferred<ChunkResult>): ChunkResult = try {
+        task.await()
+    } catch (error: Throwable) {
+        ChunkResult(failure = error.asGroqFailure())
     }
 
     private suspend fun transcribe(
+        audio: ShortArray,
+        startSample: Int,
+        measured: VoiceActivityDetector,
+        previous: ChunkResult?,
+    ): ChunkResult = try {
+        transcribeChecked(audio, startSample, measured, previous)
+    } catch (error: Throwable) {
+        ChunkResult(failure = error.asGroqFailure())
+    }
+
+    private suspend fun transcribeChecked(
         audio: ShortArray,
         startSample: Int,
         measured: VoiceActivityDetector,
@@ -239,7 +269,8 @@ internal constructor(
                     result = send(redo)
                     source = LanguageSource.redo
                     sentLanguage = redo
-                } catch (_: GroqFailure) {
+                } catch (error: Throwable) {
+                    error.asGroqFailure()
                     source = LanguageSource.redoFailed
                 }
         }
@@ -309,6 +340,14 @@ internal constructor(
                         .async(start = CoroutineStart.LAZY) {
                             try {
                                 runFinish()
+                            } catch (error: Throwable) {
+                                val failure = error.asGroqFailure()
+                                synchronized(lock) {
+                                    lastFailed = true
+                                    notifyState(DictationState.failed)
+                                }
+                                DictationOutcome(error = failure.dictationError,
+                                    errorMessage = failure.germanMessage)
                             } finally {
                                 synchronized(lock) { finishing = false }
                             }
@@ -322,9 +361,15 @@ internal constructor(
         return try {
             task.await()
         } catch (e: CancellationException) {
-            cancel()
-            if (!currentCoroutineContext().isActive) throw e
-            DictationOutcome(error = DictationError.cancelled)
+            // The deferred belongs to the session, not this waiter (like Swift's Task).
+            currentCoroutineContext().ensureActive()
+            synchronized(lock) {
+                lastOutcome ?: if (cancelled) DictationOutcome(error = DictationError.cancelled)
+                else DictationOutcome(error = DictationError.network, errorMessage = GroqFailure().germanMessage)
+            }
+        } catch (error: Throwable) {
+            val failure = error.asGroqFailure()
+            DictationOutcome(error = failure.dictationError, errorMessage = failure.germanMessage)
         }
     }
 
@@ -336,17 +381,24 @@ internal constructor(
             plan = null
         }
 
-    fun cancel() =
+    fun cancel() {
         synchronized(lock) {
-            if (cancelled) return@synchronized
-            cancelled = true
-            finished = true
-            chunkingStopped = true
-            scope.cancel()
+            if (cancelled) return
+            if (lastOutcome == null || lastFailed) {
+                cancelled = true
+                finished = true
+                chunkingStopped = true
+                notifyState(DictationState.cancelled)
+            }
+            // Successful completion remains terminal; disposal only releases its resources.
             samples.clear()
             plan = null
-            notifyState(DictationState.cancelled)
+            audioReleased = true
+            notifications.close()
         }
+        // Cancelling HTTP may invoke transport hooks. Never do this under the recording lock.
+        scope.cancel()
+    }
 
     override fun close() = cancel()
 
@@ -382,6 +434,7 @@ internal constructor(
                 lastFailed = failed
                 if (!failed) lastOutcome = out
                 notifyState(if (failed) DictationState.failed else DictationState.finished)
+                if (!failed) notifications.close()
                 if (cancelled) DictationOutcome(error = DictationError.cancelled) else out
             }
         currentCoroutineContext().ensureActive()
@@ -397,7 +450,7 @@ internal constructor(
         synchronized(lock) { if (!cancelled) notifyState(DictationState.transcribing) }
         val running = synchronized(lock) { chunks.toList() }
         for (chunk in running) if (chunk.result == null) {
-            val result = chunk.task.await()
+            val result = awaitChunk(chunk.task)
             synchronized(lock) { chunk.result = result }
         }
         currentCoroutineContext().ensureActive()

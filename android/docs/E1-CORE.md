@@ -76,3 +76,24 @@ Vorwärmen nebenläufig beim Aufnahmebeginn: `suspend GroqConnection.prewarm(api
 - `NetworkReachability.isReachable(): Boolean`: JVM optimistisch; Android ConnectivityManager anbinden, Netzwerkwechsel über reset. HTTP bleibt maßgeblich.
 - Funde 11/12 erledigt: SSE-rate_limit → 429 samt Wartezeit; Modellcache 5 Minuten, schlüsselweise gehasht, geteilte Hintergrundabfrage, Polieren wartet nie. Kein Gesamtzeitlimit fürs Polieren, tote Verbindungen über Leerlauf erkannt; genau ein fachlicher Wiederholversuch.
 - Geräte-NLP, echter FLAC-Codec, AudioRecord/IME-Lifecycle und Unicode-Versionen der Android-Laufzeit bleiben Integrationsabnahme; hier bewusst keine App-Klassen oder Emulatorprüfung.
+
+## Review-Fixes
+
+28.10.2026: Funde 1–10 behoben; **284 Tests grün** (264 bestehende + 20 neue), ausschließlich
+`PAPLY_WORK=core GRADLE_TASKS=":core:test" android/scripts/mb.sh build` auf dem MacBook nach `sync`.
+Fremde Ausnahmen werden klassifizierte Fehler bzw. Rohtext-Fallback; `onResponse` fängt auch `Throwable`.
+Ungültige Header-Schlüssel ergeben `unauthorized`; öffentliche `sanitizeApiKey(String): String` entfernt
+Leerraum, Steuer- und Null-Breite-Zeichen und ist beim Speichern in der App aufzurufen.
+Aufrufer-Abbruch beendet nur das Warten auf `finish()`/`retry()`; Sitzung, Audio und erfolgreiche Teile
+bleiben erhalten. Explizites `cancel()` verwirft laufende/fehlgeschlagene Sitzungen; nach Erfolg erhalten
+`cancel()` und `close()` das letzte Ergebnis. HTTP ist maßgeblich, ohne Erreichbarkeits-Vorprüfung.
+Callbacks kommen jetzt geordnet/asynchron auf einem Worker außerhalb des Pipeline-Locks; `append`
+wartet weder auf Beobachter noch Modellcache/Netzwerk. Chunk-Aufgaben werden unter Lock reserviert,
+außerhalb gestartet. Rennen zwischen `append`, `finish` und `cancel` sind getestet.
+Der Nutzer-Prompt entspricht Foundation-JSON (sortierte Schlüssel, zwei Leerzeichen, `" : "`, leere
+Arrays, Zahlen, unmaskierte Slashes); typische und leere UTF-8-Fixtures auf dem MacBook abgeglichen.
+`deviceLanguages` nimmt die vollständige geordnete Liste entgegen und wird für die Sitzung kopiert;
+JVM-Default ist jetzt leer statt einer einzelnen `Locale.getDefault()`-Sprache. Android muss die
+`LocaleList` übergeben. App-Anbindung beider APIs bleibt beim UI-/Integrationshelfer; keine App-Änderung.
+Redo-Mock nennt wieder ausdrücklich `German`. `lowercase(Locale.ROOT)` und FLAC-Adapter unverändert;
+keine echten Groq-Aufrufe, kein Commit/Push, kein Gradle auf dem Mac mini.

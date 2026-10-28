@@ -302,32 +302,16 @@ class PortParityTests {
     }
 
     @Test
-    fun unreachablePortDoesNotTouchHttp() = runBlocking {
-        MockServer { _, _ -> Groq.transcription("never") }
-            .use { s ->
-                val clock = FakeClock()
-                val c =
-                    GroqClient(
-                        "offline",
-                        s.server.url("/"),
-                        clock = clock,
-                        reachability = NetworkReachability { false },
-                    )
-                assertEquals(
-                    "network",
-                    failure {
-                        c.transcribe(
-                            AudioEncoder.encode(shortArrayOf(1), false),
-                            "m",
-                            null,
-                            null,
-                        )
-                    }
-                        .code,
-                )
-                assertEquals(0, s.requests.size)
-                assertEquals(listOf(0.4), clock.sleeps)
-            }
+    fun unreachableHintStillTriesHttp() = runBlocking {
+        MockServer { _, _ -> Groq.transcription("HTTP succeeds.") }.use { s ->
+            val clock = FakeClock()
+            val c = GroqClient("offline", s.server.url("/"), clock = clock,
+                reachability = NetworkReachability { false })
+            val result = c.transcribe(AudioEncoder.encode(shortArrayOf(1), false), "m", null, null)
+            assertEquals(" HTTP succeeds.", result.text)
+            assertEquals(1, s.requests.size)
+            assertTrue(clock.sleeps.isEmpty())
+        }
     }
 
     @Test
@@ -370,6 +354,7 @@ class PortParityTests {
             val first = p.finish()
             assertEquals(first, p.finish())
             assertEquals("Hallo zusammen.", first.text)
+            eventually { states.lastOrNull() == DictationState.finished }
             assertEquals(
                 listOf(
                     DictationState.recording,
@@ -389,14 +374,19 @@ class PortParityTests {
     @Test
     fun observerCanCancelReentrantlyWithoutStartingNetworkWork() = runBlocking {
         standardServer().use { s ->
+            val cancelled = CompletableDeferred<Unit>()
             lateinit var p: DictationPipeline
             p =
                 s.pipeline(
                     onState = {
-                        if (it.state == DictationState.recording && it.speechDetected) p.cancel()
+                        if (it.state == DictationState.recording && it.speechDetected) {
+                            p.cancel()
+                            cancelled.complete(Unit)
+                        }
                     },
                 )
             feed(p, Synth.withFloor(Synth.speech(2.0)))
+            withTimeout(3000) { cancelled.await() }
             assertEquals(DictationError.cancelled, p.finish().error)
             assertTrue(s.requests.isEmpty())
         }

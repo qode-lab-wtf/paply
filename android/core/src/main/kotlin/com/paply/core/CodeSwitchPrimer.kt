@@ -76,7 +76,7 @@ internal object CodeSwitchPrimer {
 
     fun userLanguages(
         settings: PaplySettings,
-        deviceLanguages: List<String> = listOf(Locale.getDefault().toLanguageTag()),
+        deviceLanguages: List<String> = emptyList(),
     ): List<String> {
         val list =
             listOfNotNull(settings.language?.takeIf { it.isNotEmpty() }) + settings.spokenLanguages

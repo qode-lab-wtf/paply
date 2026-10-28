@@ -125,14 +125,14 @@ class ReviewPipelineTests {
     }
 
     @Test
-    fun retryBeforeFinishActsLikeFinishAndAfterCancelReturnsNothing() = runBlocking {
+    fun retryBeforeFinishActsLikeFinishAndCancelPreservesSuccess() = runBlocking {
         standardServer().use { s ->
             val p = pipeline(s)
             feed(p, Synth.withFloor(Synth.speech(2.0)))
             expect(p.retry().text == "Hallo zusammen.")
             expect(p.finish().text == "Hallo zusammen.")
             p.cancel()
-            expect(p.retry().text == "")
+            expect(p.retry().text == "Hallo zusammen.")
         }
     }
 

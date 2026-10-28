@@ -135,7 +135,7 @@ class LanguageGuardTests {
     fun longForeignPieceIsRedoneInThePrimaryLanguage() = runBlocking {
         MockServer { r, _ ->
             if (r.field("language") == "de")
-                Groq.transcription("Guten Morgen, wie geht's dir heute?")
+                Groq.transcription("Guten Morgen, wie geht's dir heute?", language = "German")
             else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian")
         }
             .use { s ->
