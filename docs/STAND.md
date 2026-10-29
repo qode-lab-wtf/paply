@@ -58,6 +58,11 @@
     `readNBytes` gefunden und ersetzt.
   - 0.1.4: Die Einrichtung fordert „Tastatur auswählen“ nicht mehr nach jedem Diktat neu (Samsung-Tester).
   - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.1.4.apk`.
+- **Vorgemerkt (iOS-Bauleitung, 29.10.):** Sobald `shared/polish/system-prompt.txt` auf `main` liegt (Branch
+  `feat/polish-quelle`), `main` nach `feat/android-v1` übernehmen. Dann `PolishPrompt.kt` an diese Datei angleichen: Neu ist
+  „…stay as spoken, including German-inflected forms such as „gepolisht“ or „gecheckt“ – never respell them.“ Dazu
+  ein Test, der den eingebetteten Prompt bytegleich mit der Datei vergleicht. Sicherheitsnetz und Nachrichtenformat
+  bleiben, wie sie sind.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
