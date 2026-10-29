@@ -20,7 +20,13 @@ public enum SpeakerAlignment {
         for a in clusters { for b in clusters where b > a {
             let score = SpeakerThresholds.cosine(diarization.centroids[a]!, diarization.centroids[b]!)
             let small = min(diarization.speechSeconds[a] ?? 0, diarization.speechSeconds[b] ?? 0) < SpeakerThresholds.fragmentSeconds
-            if score >= (small ? SpeakerThresholds.fragmentMerge : SpeakerThresholds.merge) { parent[root(b)] = root(a) }
+            let simultaneous = diarization.segments.contains { left in
+                guard left.cluster == a else { return false }
+                return diarization.segments.contains { right in
+                    right.cluster == b && min(left.end, right.end) - max(left.start, right.start) > 0.1
+                }
+            }
+            if !simultaneous && score >= (small ? SpeakerThresholds.fragmentMerge : SpeakerThresholds.merge) { parent[root(b)] = root(a) }
         } }
         let segments = diarization.segments.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start }
         var totals: [Int: Double] = [:]
@@ -40,6 +46,8 @@ public enum SpeakerAlignment {
             let ranked = overlap.keys.sorted { overlap[$0] == overlap[$1] ? $0 < $1 : overlap[$0]! > overlap[$1]! }
             guard var winner = ranked.first else { continue }
             let best = overlap[winner] ?? 0
+            let distance = segments.map { max(0, max($0.start - word.end, word.start - $0.end)) }.min() ?? .infinity
+            guard best > 0 || distance < 0.5 else { continue }
             if best == 0, let nearest = segments.min(by: { min(abs($0.start - word.start), abs($0.end - word.end)) < min(abs($1.start - word.start), abs($1.end - word.end)) }) { winner = root(nearest.cluster) }
             let second = ranked.dropFirst().first.map { overlap[$0] ?? 0 } ?? 0
             assigned.append(Assigned(word: word, cluster: winner, uncertain: best == 0 || second > best * 0.25, strength: best - second))
@@ -52,7 +60,7 @@ public enum SpeakerAlignment {
             var votes: [Int: Double] = [:]
             for j in start...i { votes[assigned[j].cluster, default: 0] += assigned[j].word.end - assigned[j].word.start }
             let majority = votes.keys.sorted { votes[$0] == votes[$1] ? $0 < $1 : votes[$0]! > votes[$1]! }.first!
-            for j in start...i where assigned[j].cluster != majority && assigned[j].strength < (assigned[j].word.end - assigned[j].word.start) * 0.5 {
+            for j in start...i where assigned[j].cluster != majority && assigned[j].strength <= 0 {
                 assigned[j].cluster = majority; assigned[j].uncertain = true
             }
             start = i + 1

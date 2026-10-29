@@ -57,7 +57,7 @@ public actor ConversationStore: ConversationRecordingStore {
         var next = transcript
         if let old = try self.transcript(id) {
             for i in next.utterances.indices {
-                if let user = old.utterances.first(where: { $0.id == next.utterances[i].id && $0.speakerOwner == .user }) { next.utterances[i] = user }
+                if next.utterances[i].speakerOwner != .user, let user = old.utterances.first(where: { $0.id == next.utterances[i].id && $0.speakerOwner == .user }) { next.utterances[i] = user }
             }
         }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(next), to: directory(id).appendingPathComponent("transcript.json"))
@@ -100,7 +100,7 @@ public actor ConversationStore: ConversationRecordingStore {
         try update(id) { $0.durationMs = durationMs; $0.gaps = gaps; $0.state = .captured }
     }
     public func discardRecording(_ id: String) { try? delete(id) }
-    public func delete(_ id: String) throws { try update(id) { $0.deletedAt = Date() } }
+    public func delete(_ id: String) throws { try update(id) { if $0.deletedAt == nil { $0.deletedAt = Date() } } }
     public func restore(_ id: String) throws { try update(id) { $0.deletedAt = nil } }
     public func purge(_ id: String) throws {
         try check(id); try load()
