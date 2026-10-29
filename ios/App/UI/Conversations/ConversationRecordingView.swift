@@ -35,7 +35,7 @@ struct ConversationRecordingView: View {
                         .accessibilityLabel("Aufnahmedauer \(ConversationTint.clock(elapsed))")
                     Text("Gespräch").font(.title3)
                     if showGuidance {
-                        Text("Leg das iPhone in die Mitte. Paply erkennt danach, wer spricht.")
+                        Text("Leg das iPhone in die Mitte, damit alle gut zu hören sind.")
                             .font(.subheadline).foregroundStyle(Color.paplySecondaryText).multilineTextAlignment(.center)
                     }
                 }.padding(24).frame(maxWidth: .infinity)

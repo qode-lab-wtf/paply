@@ -22,11 +22,14 @@ final class ConversationBackground {
         registered = true
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.identifier, using: .main) { task in
             Task { @MainActor in
-                task.expirationHandler = { Task { @MainActor in
-                    for id in self.ids { self.onExpiration?(id) }
-                } }
-                await self.resumePending?()
-                task.setTaskCompleted(success: true)
+                let work = Task { @MainActor in
+                    await self.resumePending?()
+                    task.setTaskCompleted(success: !Task.isCancelled)
+                }
+                task.expirationHandler = {
+                    work.cancel()
+                    Task { @MainActor in self.onExpiration?("") }
+                }
             }
         }
     }
@@ -84,7 +87,7 @@ final class ConversationBackground {
     private func endAssertion() {
         if assertion != .invalid { UIApplication.shared.endBackgroundTask(assertion); assertion = .invalid }
     }
-    private func schedule() {
+    func schedule() {
         let request = BGProcessingTaskRequest(identifier: Self.identifier)
         request.requiresNetworkConnectivity = true
         try? BGTaskScheduler.shared.submit(request)

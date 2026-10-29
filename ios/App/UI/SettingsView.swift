@@ -150,6 +150,7 @@ struct SettingsView: View {
             .paplyRows()
 
             betaSection
+            ConversationSettingsHost()
 
             if settings.betaThoughts {
                 Section {
@@ -236,6 +237,7 @@ struct SettingsView: View {
     /// Erinnerungen blendet die App aus, gespeichert bleibt alles.
     private var betaSection: some View {
         Section {
+            Toggle("Gespräche", isOn: $settings.betaConversations)
             Toggle(isOn: $settings.betaThoughts) {
                 HStack(spacing: 12) {
                     SettingsIcon(glyph: .flaskConical)

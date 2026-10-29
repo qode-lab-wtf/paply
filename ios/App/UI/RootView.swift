@@ -18,7 +18,7 @@ enum Route: Hashable {
     case entry(String)
 }
 
-/// Vier Reiter: Gedanken | Gespräche (Vorschau) | Aufgaben | Diktat. Einstellungen als
+/// Vier Reiter: Gedanken | Gespräche | Aufgaben | Diktat. Einstellungen als
 /// Blatt hinter dem Zahnrad. Über allem: Aufnahme-Leiste, große Aufnahme-Ansicht, FlashView.
 /// Beta „Gedanken & Aufgaben“ aus (`AppSettings.betaThoughts`): keine Reiter, das Diktat ist die Startseite.
 struct RootView: View {
@@ -43,6 +43,7 @@ struct RootView: View {
         @Bindable var nav = nav
         @Bindable var flow = flow
         content
+        .modifier(ConversationCapturePresentation())
         .animation(.paplySmooth, value: settings.betaThoughts)
         .background { CaptureTracker(flow: flow) }
         .fullScreenCover(isPresented: $flow.showBig) {
@@ -74,9 +75,15 @@ struct RootView: View {
         .environment(checkoff)
         .environment(\.captureZoom, zoom)
         .onOpenURL(perform: open)
+        .onChange(of: ConversationNavigation.shared.requestedID, initial: true) { _, id in
+            if id != nil, settings.betaConversations { nav.tab = .conversations }
+        }
         .task { TopicImages.shared.prepare() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { TaskDay.shared.refresh() }
+        }
+        .onChange(of: settings.betaConversations) { _, on in
+            if !on, nav.tab == .conversations { nav.tab = .dictation }
         }
         .onChange(of: settings.betaThoughts) { _, on in
             // Aus: Reiter weg, das Diktat bleibt (sanft eingeblendet). Wieder an: man steht im Reiter Diktat, die
@@ -103,19 +110,24 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         @Bindable var nav = nav
-        if settings.betaThoughts {
+        if settings.betaThoughts || settings.betaConversations {
             TabView(selection: $nav.tab) {
-                Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
-                    ThoughtsTab()
+                if settings.betaThoughts {
+                    Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
+                        ThoughtsTab()
+                    }
                 }
-                // PLATZHALTER: reine Beispiel-Views, später ConversationsModel anbinden.
-                Tab("Gespräche", systemImage: "person.2.wave.2", value: RootTab.conversations) {
-                    ConversationsPlaceholderTab(onSettings: { nav.showSettings = true })
+                if settings.betaConversations {
+                    Tab("Gespräche", systemImage: "person.2.wave.2", value: RootTab.conversations) {
+                        ConversationsTab()
+                    }
                 }
-                Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
-                    TasksTab()
+                if settings.betaThoughts {
+                    Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
+                        TasksTab()
+                    }
+                    .badge(TasksBadge.count(model))
                 }
-                .badge(TasksBadge.count(model))
                 Tab("Diktat", systemImage: "globe", value: RootTab.dictation) {
                     DictationTab()
                 }
@@ -140,7 +152,7 @@ struct RootView: View {
         }
         if url.scheme == PaplyURL.scheme, url.host == "conversation" {
             let id = url.lastPathComponent
-            ConversationNavigation.shared.showCurrent = id == "current"
+            ConversationNavigation.shared.showCurrent = id == "current" && ConversationCapture.shared.active != nil
             ConversationNavigation.shared.requestedID = id == "current" ? ConversationCapture.shared.active?.id : id
             if SessionController.shared.status == .interrupted {
                 SessionController.shared.attemptResume(trigger: "conversation-link", attempt: 1)
