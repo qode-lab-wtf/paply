@@ -23,8 +23,11 @@ struct CaptureAccessoryModifier: ViewModifier {
         #if compiler(>=6.2.1)
         if #available(iOS 26.1, *) {
             if CaptureBarPlacement.usesAccessory {
-                content.tabViewBottomAccessory(isEnabled: flow.bar != .hidden) {
-                    AccessoryCaptureBar(flow: flow)
+                content.tabViewBottomAccessory(isEnabled: flow.bar != .hidden || ConversationCapture.shared.active != nil) {
+                    VStack(spacing: 4) {
+                        if flow.bar != .hidden { AccessoryCaptureBar(flow: flow) }
+                        ConversationActiveBar()
+                    }
                 }
             } else {
                 content

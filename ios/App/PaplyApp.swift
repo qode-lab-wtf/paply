@@ -28,6 +28,12 @@ struct PaplyApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        guard identifier == ConversationModels.sessionID else { completionHandler(); return }
+        ConversationModels.shared.completion = completionHandler
+        ConversationModels.shared.start()
+    }
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         let keys = (launchOptions ?? [:]).keys.map(\.rawValue).sorted().joined(separator: ",")
         Diag.log("app.launch", [
@@ -47,6 +53,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ThoughtBridge.bootstrap()
         // Gedanken: Speicher, Warteschlange, BGTask „com.paply.ios.thoughts“ (muss vor Ende des Starts registriert sein)
         ThoughtsEnvironment.bootstrap()
+        ConversationsEnvironment.bootstrap()
         // Aufgaben-Widgets: Momentaufnahme schreiben, im Widget Abgehaktes anwenden
         TaskWidgetSync.bootstrap()
         // Erinnerung zur Uhrzeit: Delegate muss vor Ende des Starts stehen (Aktionen „Erledigt“, „In 1 Stunde“).

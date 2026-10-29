@@ -150,6 +150,7 @@ struct SettingsView: View {
             .paplyRows()
 
             betaSection
+            ConversationSettingsHost()
 
             if settings.betaThoughts {
                 Section {
@@ -214,6 +215,10 @@ struct SettingsView: View {
                 if let devHint { Text(devHint) }
             }
             .paplyRows()
+            Section {
+                NavigationLink("Open-Source-Lizenzen") { ConversationLicenses() }
+            }
+            .paplyRows()
         }
         .paplyList()
         .navigationTitle("Einstellungen")
@@ -236,6 +241,7 @@ struct SettingsView: View {
     /// Erinnerungen blendet die App aus, gespeichert bleibt alles.
     private var betaSection: some View {
         Section {
+            Toggle("Gespräche", isOn: $settings.betaConversations)
             Toggle(isOn: $settings.betaThoughts) {
                 HStack(spacing: 12) {
                     SettingsIcon(glyph: .flaskConical)
@@ -717,6 +723,11 @@ struct DeveloperView: View {
                 Text("Ohne Sitzung öffnet die Tastatur Paply automatisch (Variante A) oder zeigt „Paply starten“ (Variante B). „Host-App protokollieren“ liest über private Felder, welche App die Tastatur zeigt, und schreibt das nur ins Protokoll.")
             }
             .paplyRows()
+
+            Section("Gespräche") {
+                NavigationLink("Gespräche-Vorschau") { ConversationsPreviewPage() }
+                Button("Sprechererkennung messen") { Task { await ConversationMeasurement.run() } }
+            }.paplyRows()
 
             ThoughtsDeveloperSection()
 

@@ -16,9 +16,11 @@ enum Route: Hashable {
     case thoughtQueue
     case provisionalTopics
     case entry(String)
+    /// Einstellungen → Gespräche → „Jetzt einsprechen“ (eigene Seite statt Blatt aus einer Form-Zeile)
+    case voiceEnrollment
 }
 
-/// Drei Reiter: „Gedanken“ (Start), „Aufgaben“ (alle Aufgaben aus den Gedanken) und „Diktat“. Einstellungen als
+/// Vier Reiter: Gedanken | Gespräche | Aufgaben | Diktat. Einstellungen als
 /// Blatt hinter dem Zahnrad. Über allem: Aufnahme-Leiste, große Aufnahme-Ansicht, FlashView.
 /// Beta „Gedanken & Aufgaben“ aus (`AppSettings.betaThoughts`): keine Reiter, das Diktat ist die Startseite.
 struct RootView: View {
@@ -27,6 +29,9 @@ struct RootView: View {
     @State private var flow: CaptureFlow
     /// Abhaken mit Wartezeit – eine für alle Reiter, damit dieselbe Aufgabe überall gleich aussieht
     @State private var checkoff = TaskCheckoff()
+    #if DEBUG
+    @State private var devPreview: ConversationDevPreviewRoute?
+    #endif
     @Namespace private var zoom
     @Environment(\.scenePhase) private var scenePhase
     private let session = SessionController.shared
@@ -43,6 +48,7 @@ struct RootView: View {
         @Bindable var nav = nav
         @Bindable var flow = flow
         content
+        .modifier(ConversationCapturePresentation())
         .animation(.paplySmooth, value: settings.betaThoughts)
         .background { CaptureTracker(flow: flow) }
         .fullScreenCover(isPresented: $flow.showBig) {
@@ -74,9 +80,15 @@ struct RootView: View {
         .environment(checkoff)
         .environment(\.captureZoom, zoom)
         .onOpenURL(perform: open)
+        .onChange(of: ConversationNavigation.shared.requestedID, initial: true) { _, id in
+            if id != nil, settings.betaConversations { nav.tab = .conversations }
+        }
         .task { TopicImages.shared.prepare() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { TaskDay.shared.refresh() }
+        }
+        .onChange(of: settings.betaConversations) { _, on in
+            if !on, nav.tab == .conversations { nav.tab = .dictation }
         }
         .onChange(of: settings.betaThoughts) { _, on in
             // Aus: Reiter weg, das Diktat bleibt (sanft eingeblendet). Wieder an: man steht im Reiter Diktat, die
@@ -95,23 +107,42 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         #if DEBUG
+        .fullScreenCover(item: $devPreview) { route in
+            ConversationDevPreview(route: route)
+        }
         .task { await ThoughtsDebug.apply(nav: nav, flow: flow, model: model) }
+        // Bildschirmfotos im Simulator ohne Rückfrage: `simctl launch … -PaplyDevRoute preview/home`
+        .task {
+            if let route = UserDefaults.standard.string(forKey: "PaplyDevRoute"),
+               let url = URL(string: "\(PaplyURL.scheme)://dev/\(route)") {
+                open(url)
+            }
+        }
         #endif
     }
 
-    /// Mit Beta: drei Reiter. Ohne: nur das Diktat (wie die Startseite vor den Gedanken).
+    /// Mit Beta: vier Reiter. Ohne: nur das Diktat (wie die Startseite vor den Gedanken).
     @ViewBuilder
     private var content: some View {
         @Bindable var nav = nav
-        if settings.betaThoughts {
+        if settings.betaThoughts || settings.betaConversations {
             TabView(selection: $nav.tab) {
-                Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
-                    ThoughtsTab()
+                if settings.betaThoughts {
+                    Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
+                        ThoughtsTab()
+                    }
                 }
-                Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
-                    TasksTab()
+                if settings.betaConversations {
+                    Tab("Gespräche", systemImage: "person.2.wave.2", value: RootTab.conversations) {
+                        ConversationsTab()
+                    }
                 }
-                .badge(TasksBadge.count(model))
+                if settings.betaThoughts {
+                    Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
+                        TasksTab()
+                    }
+                    .badge(TasksBadge.count(model))
+                }
                 Tab("Diktat", systemImage: "globe", value: RootTab.dictation) {
                     DictationTab()
                 }
@@ -130,6 +161,45 @@ struct RootView: View {
     /// ausgeschalteter Beta). Ist die Beta „Gedanken & Aufgaben“ aus, zeigen alle diese Links nur den Hinweis.
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
+        #if DEBUG
+        if url.scheme == PaplyURL.scheme, url.host == "dev" {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 2 else { return }
+            switch parts[0] {
+            case "preview":
+                if let route = ConversationDevPreviewRoute(rawValue: parts[1]) {
+                    devPreview = route
+                }
+            case "tab":
+                let tab: RootTab?
+                switch parts[1] {
+                case "gedanken": tab = .thoughts
+                case "gespraeche": tab = .conversations
+                case "aufgaben": tab = .tasks
+                case "diktat": tab = .dictation
+                default: tab = nil
+                }
+                if let tab {
+                    devPreview = nil
+                    nav.showSettings = false
+                    settings.betaThoughts = true
+                    settings.betaConversations = true
+                    nav.tab = tab
+                }
+            default: break
+            }
+            return
+        }
+        #endif
+        if url.scheme == PaplyURL.scheme, url.host == "conversation" {
+            let id = url.lastPathComponent
+            ConversationNavigation.shared.showCurrent = id == "current" && ConversationCapture.shared.active != nil
+            ConversationNavigation.shared.requestedID = id == "current" ? ConversationCapture.shared.active?.id : id
+            if SessionController.shared.status == .interrupted {
+                SessionController.shared.attemptResume(trigger: "conversation-link", attempt: 1)
+            }
+            return
+        }
         guard url.scheme == PaplyURL.scheme else { return }
         let host = url.host ?? ""
         guard settings.betaThoughts else {
@@ -198,6 +268,7 @@ private struct SettingsSheet: View {
                     case .vocabulary: VocabularyView()
                     case .spokenLanguages: SpokenLanguagesView()
                     case .thoughtButton: ThoughtButtonGuideView()
+                    case .voiceEnrollment: ConversationEnrollmentPage()
                     case .keyboardSetup: KeyboardSetupView()
                     case .developer: DeveloperView()
                     case .testVariants: TestVariantsView()

@@ -5,6 +5,8 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.paply.ios.thoughts</string>
+        <string>com.paply.ios.conversations</string>
+        <string>com.paply.ios.conversations.continued.*</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
@@ -35,12 +37,12 @@
 			</array>
 		</dict>
 	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
+    <key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Paply hört nur zu, wenn du diktierst oder einen Gedanken aufnimmst. Für das Diktat hält Paply das Mikro auf Wunsch im Hintergrund bereit; dabei wird nichts gespeichert oder gesendet.</string>
+	<string>Paply hört nur zu, wenn du diktierst oder Gedanken und Gespräche aufnimmst. Für das Diktat hält Paply das Mikro auf Wunsch im Hintergrund bereit; dabei wird nichts gespeichert oder gesendet.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>PaplyAppGroup</key>

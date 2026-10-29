@@ -187,7 +187,7 @@ final class TaskReminders {
         let model = ThoughtsModel.shared
         withObservationTracking {
             _ = model.isLoaded
-            _ = model.thoughts
+            _ = model.taskThoughts
             _ = model.topics
         } onChange: {
             Task { @MainActor in
@@ -361,7 +361,7 @@ final class TaskReminders {
             }
         }
         let now = Date()
-        let thoughts = model.thoughts
+        let thoughts = model.taskThoughts
         // Verschobenes: gespeichert + geplant zusammen, aufgeräumt – und gespeichert, BEVOR Geplantes entfernt wird
         // (sonst ginge ein „In 1 Stunde“ von vor dem ersten Entsperren beim Ausschalten verloren)
         let stored = SnoozeStore.load()
@@ -577,7 +577,7 @@ final class TaskReminders {
         let inSnapshot: Bool? = readable
             ? TaskWidgetFiles.readSnapshot().map { $0.items.contains { $0.thoughtID == thoughtID && $0.taskID == taskID } }
             : nil
-        let facts = TaskReminderPlan.SnoozeFacts(thoughts: model.isLoaded ? model.thoughts : nil, queued: queued,
+        let facts = TaskReminderPlan.SnoozeFacts(thoughts: model.isLoaded ? model.taskThoughts : nil, queued: queued,
                                                  inSnapshot: inSnapshot, locked: !readable)
         return TaskReminderPlan.maySnooze(thoughtID: thoughtID, taskID: taskID, facts: facts)
     }

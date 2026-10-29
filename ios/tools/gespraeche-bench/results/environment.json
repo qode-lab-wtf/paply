@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-29",
+  "hardware": "Mac mini M1, 8 GB",
+  "os": "15.7.9",
+  "ffmpeg": "ffmpeg version 6.0 Copyright (c) 2000-2023 the FFmpeg developers",
+  "fluid_commit": "e15287985625dbf544a343df679436789ffb03fb",
+  "gold_rttm_der_comparison": {
+    "ES2004a": 0,
+    "ES2004b": 0,
+    "IS1009a": 0
+  },
+  "notes": "Concurrent load; not isolated performance measurements. Process RSS excludes some system/ANE allocations.",
+  "FluidInference/speaker-diarization-coreml": "7eab74f3463c736418d0eb10296261ae581146c9",
+  "FluidInference/nemotron-3-diarization-coreml": "25a90f97f254428d4b30374b76af9c74fdee8327"
+}

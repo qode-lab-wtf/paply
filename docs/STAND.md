@@ -2,6 +2,25 @@
 
 **Zeitpunkt:** 29.10.2026 · **Phase:** v1.15.2 veröffentlicht, v1.15.3 (gemeinsame Polier-Quelle) lokal vorbereitet · Paply iOS 0.1.0 bei TestFlight (Builds 1–8, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
 
+## Paply iOS — „Gespräche“ (29.10.2026, Branch `feat/ios-gespraeche`, Build 9)
+
+- **Was:** iPhone liegt beim Meeting, Gespräch vor Ort oder Telefonat (anderes Handy auf Lautsprecher) daneben und
+  nimmt auf; danach Personen, Wortlaut, Zusammenfassung, Aufgaben, Thema. Bauplan `ios/docs/gespraeche/KONZEPT.md`,
+  Messung `ios/docs/gespraeche/MESSUNG.md`.
+- **Allans Vorgaben (29.10.):** nur Mikro dieses iPhones (keine iOS-Anrufaufnahme, kein Import); Ton nach fertiger
+  Auswertung löschen, kein „Erneut auswerten“, kein Anhören; „Person 1/2/3“, bis der Besitzer sicher erkannt oder per
+  Tipp bestätigt ist – erst dann landen seine Aufgaben im Reiter; Pause/Weiter wie Sprachmemos, Pausen im Wortlaut.
+- **Technik:** Sprechererkennung auf dem Gerät (FluidAudio Nemotron-3 fast128 FP16 + CAM++-Stimmabdrücke, Modelle
+  199 MB werden beim ersten Gebrauch geladen), Text Groq `whisper-large-v3` (eigenes Kontingent, Diktat behält turbo),
+  Auswertung `gpt-oss-120b`/`-20b` (nie qwen). Eigene Stimme lernt Paply nebenbei aus Gedanken (≥ 3 stimmige Clips),
+  Rückfall „Jetzt einsprechen (20 s)“.
+- **Geprüft:** 723 PaplyKit-Tests, App Debug/Release (Xcode 26.0.1 Mac mini, 26.5 MacBook), zwei Sonnet-Reviews mit
+  allen Befunden behoben, Bildschirmfotos im Simulator. Messung: deutsche Simulationen fast fehlerfrei, echte englische
+  Meetings 12–19 % falsch zugeordnete Wörter (v. a. kurze Einwürfe; dafür Einwurf-Regeln und KI-Plausibilisierung).
+- **29.10., 16:23:** Debug-Build 9 drahtlos auf Allans iPhone (kein TestFlight-Upload). Offen: echte Aufnahmen von
+  Allan (Telefon über Lautsprecher, Runde mit 3+), Gerätemessung Tempo/Speicher/Hitze (auch iPhone 12 Pro), danach
+  Zusammenführen nach `feat/ios-v1` und TestFlight.
+
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
 - **Phase 0 auf dem Gerät bestätigt** (iPhone 14 Pro Max, iOS 18.0): 🌐 → Paply-Tastatur → sprechen → Tipp →
