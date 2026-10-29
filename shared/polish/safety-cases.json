@@ -1,0 +1,625 @@
+[
+  {
+    "raw": "Morgen morgen morgen treffen wir Leute.",
+    "result": "Morgen treffen wir andere neue Leute.",
+    "vocabulary": "",
+    "expected": "content"
+  },
+  {
+    "raw": "Das finde ich wirklich gut so, danke dir.",
+    "result": "Das finde ich wirklich nicht gut so, danke dir.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Das ist für uns kein Problem, ehrlich gesagt.",
+    "result": "Das ist für uns ein Problem, ehrlich gesagt.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Bitte prüfe das Tilescale Setup.",
+    "result": "Bitte prüfe das Tailscale Setup.",
+    "vocabulary": "Tailscale",
+    "expected": null
+  },
+  {
+    "raw": "I don't think we need another meeting about this.",
+    "result": "I do not think we need another meeting about this.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "c'est pas grave du tout, on verra demain",
+    "result": "Ce n'est pas grave du tout, on verra demain.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "hier ist der plan für morgen und die liste der aufgaben",
+    "result": "Hier ist der Plan für morgen und die Liste der Aufgaben.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "\"Zitat aus dem Buch über Gärten\"",
+    "result": "\"Zitat aus dem Buch über Gärten.\"",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Euh, demain on discute genre des tâches ouvertes.",
+    "result": "Demain on discute des tâches ouvertes.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Um, we need to, uh, finish the onboarding screens.",
+    "result": "We need to finish the onboarding screens.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Basically we need to like finish the onboarding screens.",
+    "result": "We need to finish the onboarding screens.",
+    "vocabulary": "",
+    "expected": "content"
+  },
+  {
+    "raw": "Allora, praticamente domani finiamo il progetto.",
+    "result": "Domani finiamo il progetto.",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "ich hab den pull request gemerged aber the build is still failing on staging",
+    "result": "Ich hab den Pull Request gemerged, aber the build is still failing on staging.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "我明天不能参加会议因为我要去医院",
+    "result": "我明天不能参加会议，因为我要去医院。",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "我明天不能参加会意因为我要去医院",
+    "result": "我明天不能参加会议，因为我要去医院。",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "明日は会議に参加できません",
+    "result": "明日は会議に参加できません。",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Das kostet 1.000 Euro pro Monat für das ganze Team.",
+    "result": "Das kostet 1000 Euro pro Monat für das ganze Team.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "3. Müssen wir noch klären, wie wir mit den Anfragen umgehen.",
+    "result": "Drittens müssen wir noch klären, wie wir mit den Anfragen umgehen.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Please send the quarterly report to the whole marketing team on Monday, no wait, on Tuesday.",
+    "result": "Please send the quarterly report to the whole marketing team on Tuesday.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Envoie le rapport trimestriel à toute l'équipe marketing lundi, non, enfin mardi.",
+    "result": "Envoie le rapport trimestriel à toute l'équipe marketing mardi.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Schick den neuen Quartalsbericht bitte noch heute an das ganze Marketingteam und die Geschäftsführung am Montag, nein Moment, am Dienstag.",
+    "result": "Schick den neuen Quartalsbericht bitte noch heute an das ganze Marketingteam und die Geschäftsführung am Dienstag.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "That is really no problem for the whole team at all.",
+    "result": "That is really a problem for the whole team at all.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Die daten bank für das Projekt ist leider schon voll.",
+    "result": "Die Datenbank für das Projekt ist leider schon voll.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Das neue Designsystem ist seit Montag im Projekt verfügbar.",
+    "result": "Das neue Design-System ist seit Montag im Projekt verfügbar.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "istanbul'da yarın buluşalım mı, hayır değil mi",
+    "result": "İstanbul'da yarın buluşalım mı, hayır değil mi?",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Im Daily Morgan sollten wir klären, wer das übernimmt.",
+    "result": "Im Daily Morning sollten wir klären, wer das übernimmt.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "Er braucht dafür ungefähr zwei Wochen, sagt er.",
+    "result": "Er braucht dafür ungefähr zwei Woche, sagt er.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "Wir sammeln die Anfragen der Kunden auf einer eigenen Seite.",
+    "result": "Wir sammeln die Anfragen der Kundinnen und Kunden auf einer eigenen Seite.",
+    "vocabulary": "",
+    "expected": "inserted"
+  },
+  {
+    "raw": "Ich schlage vor, dass wir dafür eine eigene Seite anlegen.",
+    "result": "Ich schlage vor, dass wir dazu eine eigene Seite anlegen.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "Das Buckend ist fertig, die Schnittstelle ist dokumentiert und alle Endpunkte haben Tests.",
+    "result": "Das Backend ist fertig, die Schnittstelle ist dokumentiert und alle Endpunkte haben Tests.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Für das Unboarding brauchen wir außerdem noch die finalen Screenshots und einen Text.",
+    "result": "Für das Onboarding brauchen wir außerdem noch die finalen Screenshots und einen Text.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Ich habe den pull request gemerget, aber der Build läuft nicht.",
+    "result": "Ich habe den Pull Request gemerged, aber der Build läuft nicht.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "morgen gehen wir gemeinsam essen und danach ins Kino",
+    "result": "Gemeinsam gehen wir morgen essen und danach ins Kino.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "أنا لا أريد الذهاب غدا إلى الاجتماع الكبير",
+    "result": "أنا أريد الذهاب غدا إلى الاجتماع الكبير",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "אני לא יכול לבוא מחר לפגישה הגדולה",
+    "result": "אני יכול לבוא מחר לפגישה הגדולה",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Er braucht dafür äh ungefähr zwei Wochen, sagt er.",
+    "result": "Er braucht dafür ungefähr zwei Woche, sagt er.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "ich äh treffe mich morgen mit Morgan im Büro am Bahnhof",
+    "result": "Ich treffe mich morgen mit Morning im Büro am Bahnhof.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "Nein das passt so leider nicht für uns.",
+    "result": "Nein, das passt so leider nicht für uns.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Gut. No that does not work for the team.",
+    "result": "Gut. No, that does not work for the team.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "No quiero ir mañana a la reunión.",
+    "result": "Quiero ir mañana a la reunión.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Non posso venire domani alla riunione.",
+    "result": "Posso venire domani alla riunione.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Wir treffen uns morgen um 15.30 Uhr am Haupteingang vom Büro.",
+    "result": "Wir treffen uns morgen um 15:30 Uhr am Haupteingang vom Büro.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Meine Handynummer lautet 0171 123 45 67, ruf gern jederzeit an.",
+    "result": "Meine Handynummer lautet 0171 1234567, ruf gern jederzeit an.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Wir treffen uns um 15 Uhr, ich meine um 16 Uhr.",
+    "result": "Wir treffen uns um 16 Uhr.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Ruf mich um 9 an, sorry, um 10 an.",
+    "result": "Ruf mich um 10 an.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Treffen am Montag, nein Moment, am Dienstag.",
+    "result": "Treffen am Dienstag.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "I can't make it to the meeting today, sorry.",
+    "result": "I can make it to the meeting today, sorry.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "We should never deploy on Fridays at all.",
+    "result": "We should deploy on Fridays at all.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Je ne veux pas partir demain matin.",
+    "result": "Je veux partir demain matin.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Eu não posso ir amanhã à reunião.",
+    "result": "Eu posso ir amanhã à reunião.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Ik kan morgen niet naar de vergadering komen.",
+    "result": "Ik kan morgen naar de vergadering komen.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Bu sorun değil, yarın gelirim.",
+    "result": "Bu sorun, yarın gelirim.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Nie mogę jutro przyjść na spotkanie.",
+    "result": "Mogę jutro przyjść na spotkanie.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "我明天不能参加会议因为我要去医院",
+    "result": "我明天能参加会议因为我要去医院",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "明日は会議に参加できません",
+    "result": "明日は会議に参加できます",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "พรุ่งนี้ฉันไม่ไปทำงานเพราะป่วย",
+    "result": "พรุ่งนี้ฉันไปทำงานเพราะป่วย",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "내일은 중요한 회의에 참석할 수 없습니다",
+    "result": "내일은 중요한 회의에 참석할 수 있습니다",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "ich glaube äh das er morgen kommt und alles mitbringt",
+    "result": "Ich glaube, dass er morgen kommt und alles mitbringt.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "ich äh hab das schon erledigt und abgeschickt",
+    "result": "Ich habe das schon erledigt und abgeschickt.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "ich ich hab das Angebot gestern verschickt",
+    "result": "Ich habe das Angebot gestern verschickt.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "die äh daten bank ist seit gestern wieder voll",
+    "result": "Die Datenbank ist seit gestern wieder voll.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "ok dann machen wir das so wie besprochen",
+    "result": "Okay, dann machen wir das so wie besprochen.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "result": "",
+    "vocabulary": "",
+    "expected": "empty"
+  },
+  {
+    "raw": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "result": "Kurz.",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "result": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "result": "Hier ist der korrigierte Text: Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "vocabulary": "",
+    "expected": "meta"
+  },
+  {
+    "raw": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "result": "„Morgen besprechen wir gemeinsam unsere offenen Aufgaben.“",
+    "vocabulary": "",
+    "expected": "meta"
+  },
+  {
+    "raw": "Morgen besprechen wir gemeinsam unsere offenen Aufgaben.",
+    "result": "Heute diskutieren alle zusammen neue schwierige Projekte.",
+    "vocabulary": "",
+    "expected": "content"
+  },
+  {
+    "raw": "Der kurze Text wurde gestern schon gepolisht und danach verschickt.",
+    "result": "Der kurze Text wurde gestern schon gepolst und danach verschickt.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "Das ist ein guter Vorschlag für unseren gemeinsamen Ausflug morgen.",
+    "result": "Das ist ein besser Vorschlag für unseren gemeinsamen Ausflug morgen.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "Ich bin immer sicher mit diesem Werkzeug bei unserer täglichen Arbeit.",
+    "result": "Ich bin nie sicher mit diesem Werkzeug bei unserer täglichen Arbeit.",
+    "vocabulary": "",
+    "expected": "negation"
+  },
+  {
+    "raw": "Wir liefern same day und bestätigen den Auftrag morgen schriftlich.",
+    "result": "Wir liefern selben Tag und bestätigen den Auftrag morgen schriftlich.",
+    "vocabulary": "",
+    "expected": "replaced"
+  },
+  {
+    "raw": "----------",
+    "result": "-------",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "----------",
+    "result": "-------------",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "----------",
+    "result": "------",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "Wir treffen uns um 15 Uhr, ich meine um 16 Uhr.",
+    "result": "Wir treffen uns um 16 Uhr.",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "wir treffen uns am achtundzwanzigsten Dezember im Büro",
+    "result": "Wir treffen uns am 28. Dezember im Büro.",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "wir treffen uns am achtundzwanzigsten Dezember im Büro",
+    "result": "Wir treffen uns am 28. Dezember im Büro.",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": "digits"
+  },
+  {
+    "raw": "Wir brauchen morgen twenty eight große Kartons für den Umzug.",
+    "result": "Wir brauchen morgen 28 große Kartons für den Umzug.",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Wir brauchen morgen 28 große Kartons für den Umzug.",
+    "result": "Wir brauchen morgen 29 große Kartons für den Umzug.",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": "digits"
+  },
+  {
+    "raw": "7 Kilometer in 38 Minuten nee warte 36 die Uhr sagt 36",
+    "result": "7 Kilometer in 36 Minuten, die Uhr sagt 36.",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "Morgen Kartons bestellen und danach Transporter buchen.",
+    "result": "• Morgen Kartons bestellen\n• Danach Transporter buchen.",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj",
+    "result": "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm",
+    "strictEdits": false,
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj",
+    "result": "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll",
+    "strictEdits": false,
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "abcdefghijklmnopqrst",
+    "result": "abcdefghijk",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": "content"
+  },
+  {
+    "raw": "--------------------",
+    "result": "----------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "--------------------",
+    "result": "-----------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "--------------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "-----------------------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "------------------------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "--------------------",
+    "result": "--------------------------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "--------------------",
+    "result": "---------------------------",
+    "profile": "thought",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "--------------------",
+    "result": "----------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "--------------------",
+    "result": "-----------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "--------------------",
+    "result": "--------------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "-----------------------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "------------------------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "--------------------------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": null
+  },
+  {
+    "raw": "--------------------",
+    "result": "---------------------------",
+    "profile": "dictation",
+    "vocabulary": "",
+    "expected": "length"
+  },
+  {
+    "raw": "Mañana revisaremos juntos las tareas pendientes.",
+    "result": "Aquí está el texto corregido: Mañana revisaremos juntos las tareas pendientes.",
+    "vocabulary": "",
+    "expected": "meta"
+  }
+]

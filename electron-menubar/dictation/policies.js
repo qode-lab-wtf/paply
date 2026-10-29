@@ -12,6 +12,7 @@ function friendlyError(error) {
   if (/mikro|micro|permission|notallowederror|notfounderror|notreadableerror/i.test(message)) return 'Mikrofon gesperrt';
   if (/401|403|api.?key|invalid.*key|nicht konfiguriert/i.test(message)) return 'Groq-Schlüssel ungültig';
   if (/429|rate.?limit|quota|limit reached/i.test(message)) return 'Groq-Limit erreicht';
+  if (/413|too large/i.test(message)) return 'Aufnahme zu lang';
   if (/fetch|network|netz|ECONN|ENOTFOUND|ETIMEDOUT|abort|timeout/i.test(message)) return 'Keine Verbindung';
   return 'Diktat fehlgeschlagen';
 }
@@ -26,6 +27,7 @@ function explainDictationStatus(message, platform = process.platform) {
     'Groq-Schlüssel ungültig': 'Ungültiger Groq-Schlüssel — bitte in den Einstellungen prüfen',
     'Keine Verbindung': 'Keine Verbindung — Netzwerk prüfen und erneut versuchen',
     'Groq-Limit erreicht': 'Groq-Limit erreicht — bitte später erneut versuchen',
+    'Aufnahme zu lang': 'Aufnahme zu lang für Groq (höchstens 25 MB, etwa 25 Minuten) — bitte in kürzeren Abschnitten diktieren',
     'Aufnahme neu gestartet': 'Aufnahmefenster neu gestartet — bitte erneut versuchen',
     'Kopiert – ⌘V drücken': 'In Zwischenablage kopiert — mit Cmd+V einfügen; ggf. Bedienungshilfen für Paply erlauben',
     'Kopiert – Strg+V drücken': 'In Zwischenablage kopiert — mit Ctrl+V im gewünschten Fenster einfügen',
@@ -38,8 +40,22 @@ async function readResponse(url, options, timeoutMs, fetchImpl = fetch) {
   try {
     const response = await fetchImpl(url, { ...options, signal: controller.signal });
     const body = await response.text();
-    return { ok: response.ok, status: response.status, body };
+    return { ok: response.ok, status: response.status, body, retryAfter: response.headers?.get?.('retry-after') ?? null };
   } finally { clearTimeout(timer); }
+}
+// Groq nennt bei 429 die Wartezeit in Sekunden; null = unbekannt.
+function retryAfterMs(value) {
+  const seconds = Number(value);
+  return value != null && value !== '' && Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+}
+// Gesamtzeit für den Transkriptions-Upload: 60 s plus Upload mit ~0,5 Mbit/s (64 KB/s).
+// Kurze Diktate behalten praktisch die bisherigen 60 s, lange scheitern nicht mehr am Upload.
+function transcriptionTimeoutMs(bytes) {
+  return 60000 + Math.ceil((Number(bytes) || 0) / 64);
+}
+// Obergrenze für alle Versuche zusammen: wie bisher 4 × 60 s, bei großen Dateien ein Upload + 60 s.
+function transcriptionBudgetMs(bytes) {
+  return Math.max(240000, transcriptionTimeoutMs(bytes) + 60000);
 }
 function sameShortcut(first, second, platform = process.platform) {
   if (!first || !second) return false;
@@ -95,4 +111,4 @@ async function ensureGlobeReady(manager, timeoutMs = 2000) {
     });
   } catch { manager.stop(); return false; }
 }
-module.exports = { polishTokenBudget, completePolish, friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut };
+module.exports = { polishTokenBudget, completePolish, friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs };
