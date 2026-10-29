@@ -102,7 +102,7 @@ object StableHash {
 object Parallel {
     fun <T> map(count: Int, transform: (Int) -> T?): List<T?> =
         if (count <= 0) emptyList()
-        else java.util.stream.IntStream.range(0, count).parallel().mapToObj(transform).toList()
+        else java.util.stream.IntStream.range(0, count).parallel().mapToObj(transform).collect(java.util.stream.Collectors.toList())
 }
 
 object TextForm {

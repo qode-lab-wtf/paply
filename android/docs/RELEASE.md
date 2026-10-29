@@ -32,3 +32,9 @@ Stand: 29.10.2026, 01:40 MEZ · signierte APK gebaut und geprüft.
 - Kopie: Mac mini `~/Paply-Android-Schluessel/`, Rechte 700/600, SHA-256 gleich, nicht im Repo.
 - Ohne diesen Schlüssel lassen sich Updates nicht über bestehende Installationen spielen. Freunde müssten neu installieren
   und verlören ihre lokalen Daten.
+
+## Hotfix 0.1.2 (3), 29.10.2026
+Startabsturz auf Android 10–13 durch Java `Stream.toList()` im JVM-Modul behoben;
+zusätzliche isolierte Fehlerseite mit teilbarem, inhaltsfreiem Bericht.
+Reproduktion, Retrace, vollständige Acht-Versionen-Matrix, Prüfsumme und Auslieferung:
+[STARTUP-0.1.2.md](STARTUP-0.1.2.md).

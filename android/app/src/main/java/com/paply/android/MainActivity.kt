@@ -12,6 +12,11 @@ import com.paply.android.ui.PaplyApp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (StartupFailure.pending(this) != null) {
+            StartupFailure.open(this)
+            finish()
+            return
+        }
         // A notification can recreate an existing task after process death, with saved state present.
         openReminder(intent)
         // The iOS reference deliberately uses its dark forest appearance in both system themes.

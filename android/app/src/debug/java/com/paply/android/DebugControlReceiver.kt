@@ -11,6 +11,9 @@ class DebugControlReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!BuildConfig.DEBUG) return
         when(intent.getStringExtra("command")) {
+            "startup-failure-test" -> android.os.Handler(android.os.Looper.getMainLooper()).post {
+                throw java.security.ProviderException("PRIVATE_TEST_SENTINEL")
+            }
             "load-key" -> {
                 val file = File(context.filesDir, "debug-groq-key")
                 try { if (file.exists()) KeyVault(context).save(file.readText().trim()) }

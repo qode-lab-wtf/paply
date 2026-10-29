@@ -93,7 +93,7 @@ class ThoughtStore(val root: Path, private val now: () -> Instant = Instant::now
     private fun loadThoughts(): Boolean {
         val dirs =
             try {
-                Files.list(thoughtsDirectory).use { it.toList() }
+                Files.list(thoughtsDirectory).use { it.collect(java.util.stream.Collectors.toList()) }
             } catch (_: IOException) {
                 return false
             }
