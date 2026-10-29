@@ -14,7 +14,7 @@ case "${1:-}" in
     ssh "$host" 'set -e; source ~/Android/env.sh; mkdir -p ~/Android/work/'"$work"
     rsync -az --exclude build/ --exclude .gradle/ --exclude .kotlin/ --exclude .local/ --exclude local.properties --exclude "*.jks" --exclude "*.keystore" --exclude paply-release.properties "$root/" "$host:$remote/" ;;
   build)
-    ssh "$host" 'set -e; source ~/Android/env.sh; export GRADLE_USER_HOME="$HOME/Android/work/gradle-home"; export TMPDIR="$HOME/Android/work/tmp"; mkdir -p "$TMPDIR"; export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Djava.util.prefs.userRoot=$HOME/Android/work/java-prefs"; cd ~/Android/work/'"$work"'; mkdir -p .local; if [ ! -f .local/debug.keystore ]; then keytool -genkeypair -keystore .local/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000; fi; ./gradlew '"${GRADLE_TASKS:-:core:test :app:assembleDebug}"' --console=plain' ;;
+    ssh "$host" 'set -e; source ~/Android/env.sh; export GRADLE_USER_HOME="$HOME/Android/work/gradle-home"; export TMPDIR="$HOME/Android/work/tmp"; mkdir -p "$TMPDIR"; export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Djava.util.prefs.userRoot=$HOME/Android/work/java-prefs"; cd ~/Android/work/'"$work"'; mkdir -p .local; if [ ! -f .local/debug.keystore ]; then keytool -genkeypair -keystore .local/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000; fi; ./gradlew '"${GRADLE_TASKS:-:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintRelease}"' --console=plain' ;;
   release)
     evidence=/tmp/paply-android-release
     mkdir -p "$evidence"
@@ -26,7 +26,7 @@ export TMPDIR="$HOME/Android/work/tmp"
 mkdir -p "$TMPDIR"
 export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Djava.util.prefs.userRoot=$HOME/Android/work/java-prefs"
 cd "$HOME/Android/work/$1"
-./gradlew :app:assembleRelease --console=plain
+./gradlew :core:animalsnifferMain :thoughts:animalsnifferMain :app:lintRelease :app:assembleRelease --console=plain
 # Read this build's metadata, so an old signed APK cannot mask an unsigned build.
 apk=$(/usr/bin/python3 -c 'import json; print(json.load(open("app/build/outputs/apk/release/output-metadata.json"))["elements"][0]["outputFile"])')
 if [[ "$apk" != app-release.apk ]]; then
@@ -34,6 +34,9 @@ if [[ "$apk" != app-release.apk ]]; then
   exit 1
 fi
 "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "app/build/outputs/apk/release/$apk"
+mkdir -p build/reports
+python3 scripts/audit-release-api.py "app/build/outputs/apk/release/$apk" > build/reports/release-api29.txt
+echo "Merged-DEX API-29 report: build/reports/release-api29.txt (SDK guards require review)"
 REMOTE_RELEASE
     version=$(ssh "$host" "cd $remote; /usr/bin/python3 -c 'import json; print(json.load(open(\"app/build/outputs/apk/release/output-metadata.json\"))[\"elements\"][0][\"versionName\"])'")
     [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Paply: Ungültige Release-Version' >&2; exit 1; }

@@ -1,4 +1,7 @@
-plugins { alias(libs.plugins.kotlin.jvm) }
+plugins {
+    id("ru.vyarus.animalsniffer")
+    alias(libs.plugins.kotlin.jvm)
+}
 kotlin { jvmToolchain(21) }
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -18,3 +21,11 @@ tasks.withType<Test>().configureEach {
         systemProperty("paply.regression.fixtures", it)
     }
 }
+
+// JVM compilation uses JDK 21; check emitted bytecode against the real Android floor.
+// Unit tests run on the host JVM and intentionally may use newer host APIs.
+animalsniffer { sourceSets = listOf(project.sourceSets.main.get()) }
+dependencies {
+    add("signature", "com.toasttab.android:gummy-bears-api-29:0.14.0@signature")
+}
+tasks.named("test") { dependsOn("animalsnifferMain") }

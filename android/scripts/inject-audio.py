@@ -17,12 +17,14 @@ from emulator_controller_pb2_grpc import EmulatorControllerStub
 parser = argparse.ArgumentParser()
 parser.add_argument('wav')
 parser.add_argument('--wait', type=float, default=0, help='Wait up to this many seconds for an active recorder')
+parser.add_argument('--serial', default='emulator-5580')
+parser.add_argument('--grpc-port', default='8554')
 args = parser.parse_args()
 discovery = Path.home() / 'Library/Caches/TemporaryItems/avd/running'
 configs = []
 for file in discovery.glob('pid_*.ini'):
     values = dict(line.split('=', 1) for line in file.read_text().splitlines() if '=' in line)
-    if values.get('grpc.port') == '8554':
+    if values.get('grpc.port') == args.grpc_port:
         configs.append(values)
 if len(configs) != 1:
     raise SystemExit('Expected one authenticated Paply emulator on port 8554.')
@@ -30,7 +32,7 @@ if len(configs) != 1:
 # Do not begin injection until Android confirms Paply owns an active recorder.
 deadline = time.monotonic() + min(max(args.wait, 0), 15)
 while True:
-    audio_state = subprocess.check_output(['adb', '-s', 'emulator-5580', 'shell', 'dumpsys', 'audio'], text=True)
+    audio_state = subprocess.check_output(['adb', '-s', args.serial, 'shell', 'dumpsys', 'audio'], text=True)
     monitor = audio_state.split('## RecordActivityMonitor', 1)[-1].split('### Recording Activity', 1)[0]
     if 'active? true' in monitor and 'pack:com.paply.android' in monitor:
         break
@@ -60,6 +62,6 @@ def packets():
 with wave.open(args.wav, 'rb') as source:
     timeout = max(45, source.getnframes() / source.getframerate() + 30)
 
-with grpc.insecure_channel('127.0.0.1:8554') as channel:
+with grpc.insecure_channel('127.0.0.1:' + args.grpc_port) as channel:
     # Loopback transport with emulator-generated bearer token; never printed or persisted here.
     EmulatorControllerStub(channel).injectAudio(packets(), metadata=(('authorization', 'Bearer ' + token),), timeout=timeout)

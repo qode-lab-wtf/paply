@@ -1,4 +1,4 @@
-Hey! Hier ist Paply Android 0.1.2 😊
+Hey! Hier ist Paply Android 0.1.3 😊
 Die APK kommt als Anhang; die kurze Anleitung ist dabei.
 Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben.
 Play Protect bitte eingeschaltet lassen; bei einer Warnung schick mir einen Screenshot, bevor du weitermachst.

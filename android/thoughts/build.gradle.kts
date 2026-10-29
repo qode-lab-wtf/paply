@@ -1,4 +1,5 @@
 plugins {
+    id("ru.vyarus.animalsniffer")
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -20,3 +21,11 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)
 }
+
+// JVM compilation uses JDK 21; check emitted bytecode against the real Android floor.
+// Unit tests run on the host JVM and intentionally may use newer host APIs.
+animalsniffer { sourceSets = listOf(project.sourceSets.main.get()) }
+dependencies {
+    add("signature", "com.toasttab.android:gummy-bears-api-29:0.14.0@signature")
+}
+tasks.named("test") { dependsOn("animalsnifferMain") }

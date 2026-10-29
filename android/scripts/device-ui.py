@@ -4,10 +4,11 @@ import argparse
 import re
 import subprocess
 import xml.etree.ElementTree as ET
-adb = ['adb', '-s', 'emulator-5580']
 p = argparse.ArgumentParser()
 p.add_argument('--tap', help='Exact UI text or accessibility label')
+p.add_argument('--serial', default='emulator-5580')
 a = p.parse_args()
+adb = ['adb', '-s', a.serial]
 subprocess.run(adb + ['shell', 'rm', '-f', '/sdcard/paply-window.xml'], check=True)
 try:
     dump = subprocess.run(adb + ['shell', 'uiautomator', 'dump', '/sdcard/paply-window.xml'],

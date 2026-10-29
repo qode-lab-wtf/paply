@@ -41,8 +41,8 @@ android {
         minSdk = 29
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = 4
+        versionName = "0.1.3"
     }
     signingConfigs.getByName("debug") {
         // All generated credentials stay in the remote work directory, never SDK/user-home.

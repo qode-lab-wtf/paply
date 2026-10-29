@@ -1,6 +1,7 @@
 package com.paply.thoughts.store
 
 import com.paply.core.AudioEncoder
+import java.io.DataInputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -153,8 +154,9 @@ class WAVWriter(val url: Path) {
         fun headerDurationMs(url: Path): Int? =
             try {
                 Files.newInputStream(url).use { input ->
-                    val head = input.readNBytes(headerSize)
-                    if (head.size != headerSize || String(head, 0, 4, Charsets.US_ASCII) != "RIFF")
+                    val head = ByteArray(headerSize)
+                    DataInputStream(input).readFully(head)
+                    if (String(head, 0, 4, Charsets.US_ASCII) != "RIFF")
                         null
                     else durationMs(ByteBuffer.wrap(head).order(ByteOrder.LITTLE_ENDIAN).getInt(40))
                 }

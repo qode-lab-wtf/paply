@@ -38,3 +38,18 @@ Startabsturz auf Android 10–13 durch Java `Stream.toList()` im JVM-Modul behob
 zusätzliche isolierte Fehlerseite mit teilbarem, inhaltsfreiem Bericht.
 Reproduktion, Retrace, vollständige Acht-Versionen-Matrix, Prüfsumme und Auslieferung:
 [STARTUP-0.1.2.md](STARTUP-0.1.2.md).
+
+## Kompatibilitätsfix 0.1.3 (4), 29.10.2026
+
+Animal Sniffer prüft `:core` und `:thoughts` automatisch gegen API 29;
+`InputStream.readNBytes` beim Lesen des WAV-Headers durch kompatibles
+`DataInputStream.readFully` ersetzt. Core-Library-Desugaring bleibt aus.
+Methode, Negativkontrolle, Test- und DEX-Befunde: [API-29.md](API-29.md).
+850 Tests, 0 Fehler, 1 übersprungen; Debug, signierter Release und Release-Lint
+mit 0 NewApi erfolgreich. Release auf API 30 und 37 einschließlich Update über
+0.1.2, Kachel/Verarbeitung, Diktat, Landkarte, Aufgaben und Widget geprüft.
+
+APK SHA-256: `354011c083bde263104e174676a422e49b221988a1780cf78c6193429699c441`.
+MacBook: `~/Desktop/Paply-Android/Paply-0.1.3.apk`, `Paply-0.1.3.zip`,
+`FREUNDE.md`, `FREUNDE-NACHRICHT.txt`; 0.1.2-Ausgaben entfernt, keine
+Prüfsummendatei auf dem Schreibtisch. Signierschlüssel unverändert.

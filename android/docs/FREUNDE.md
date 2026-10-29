@@ -1,4 +1,4 @@
-# Paply Android · 0.1.2
+# Paply Android · 0.1.3
 
 1. Öffne die APK im Anhang. Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben. Installieren.
 2. Play Protect eingeschaltet lassen; bei Warnung oder Blockierung erst Allan einen Screenshot schicken.
