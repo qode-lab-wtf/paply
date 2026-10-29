@@ -74,6 +74,26 @@ class HistoryStore internal constructor(context: Context, autoLoad: Boolean = tr
     suspend fun delete(ids: Set<String>) = change { list -> list.filterNot { it.id in ids } }
     suspend fun deleteAll() = change { emptyList() }
 
+    /** Explicit maintenance, never a side effect of reading. Text and history stay intact. */
+    suspend fun expireAudio(now: Long = System.currentTimeMillis(), protectedIDs: Set<String> = emptySet()) {
+        var failed = false
+        change { entries ->
+            fun expired(entry: HistoryEntry) = entry.status == HistoryStatus.FAILED && entry.audioFile != null &&
+                entry.id !in protectedIDs && entry.createdAt <= now - AUDIO_RETENTION_MS
+            val retained = entries.filterNot(::expired).mapNotNull { audio(it.audioFile) }.toSet()
+            entries.map { entry ->
+                if (!expired(entry)) entry else try {
+                    // This is explicit expiry, not ordinary history deletion. Keep the reference on
+                    // unlink failure so the next maintenance run can retry; shared/live audio stays.
+                    audio(entry.audioFile)?.takeUnless { it in retained }?.let { java.nio.file.Files.deleteIfExists(it.toPath()) }
+                    entry.copy(audioFile = null, failure = HistoryFailure.AUDIO_MISSING,
+                        error = "Audio nach 30 Tagen entfernt · bitte erneut aufnehmen")
+                } catch (_: java.io.IOException) { failed = true; entry }
+            }
+        }
+        check(!failed) { "Audio retention incomplete" }
+    }
+
     /** Same polishing context as iOS: last 3 nonempty raws in 30 minutes, oldest first. */
     fun recentRawDictations(now: Long = System.currentTimeMillis()): List<String> = entries.value
         .filter { now - it.createdAt in 0 until 30 * 60 * 1000L && it.raw.isNotEmpty() }
@@ -147,6 +167,7 @@ class HistoryStore internal constructor(context: Context, autoLoad: Boolean = tr
 
     companion object {
         const val LIMIT = 300
+        const val AUDIO_RETENTION_MS = 30L * 24 * 3600 * 1000
         @Volatile private var instance: HistoryStore? = null
         fun get(context: Context): HistoryStore = instance ?: synchronized(this) {
             instance ?: HistoryStore(context).also { instance = it }

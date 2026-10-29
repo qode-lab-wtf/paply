@@ -33,7 +33,7 @@ class KeyVaultDeviceTest {
             assertNull(vault.read()); assertFalse(keyStore().containsAlias(alias))
         } finally { crypto.deleteKey() }
     }
-    @Test fun keyWithoutEncryptionPurposeIsReplacedAndLegacyIsRemoved() {
+    @Test fun unknownInvalidKeyFailureIsReportedWithoutDeletingAlias() {
         val alias = "paply.test.${UUID.randomUUID()}"
         val crypto = KeystoreCryptography(alias)
         try {
@@ -44,12 +44,15 @@ class KeyVaultDeviceTest {
             }.generateKey()
             val storage = Storage().apply { old = "legacy-secret" }
             val vault = KeyVault(storage, crypto)
-            assertEquals("legacy-secret", vault.read())
+            assertTrue(runCatching { vault.read() }.isFailure)
             assertNull(storage.old)
-            assertEquals("legacy-secret", vault.read())
+            assertTrue(keyStore().containsAlias(alias))
+            vault.remove()
+            vault.save("replacement")
+            assertEquals("replacement", vault.read())
         } finally { crypto.deleteKey() }
     }
-    @Test fun authenticationFailureRepairsVaultAndAllowsSavingAgain() {
+    @Test fun damagedCiphertextIsReportedAndPreservedUntilExplicitSave() {
         val alias = "paply.test.${UUID.randomUUID()}"
         val crypto = KeystoreCryptography(alias)
         try {
@@ -57,8 +60,22 @@ class KeyVaultDeviceTest {
             vault.save("test-secret")
             val value = storage.value!!
             storage.value = value.copy(ciphertext = value.ciphertext.copyOf().apply { this[0] = (this[0].toInt() xor 1).toByte() })
-            assertNull(vault.read()); assertNull(storage.value)
+            val damaged = storage.value
+            assertTrue(runCatching { vault.read() }.isFailure)
+            assertSame(damaged, storage.value); assertTrue(keyStore().containsAlias(alias))
             vault.save("new-secret"); assertEquals("new-secret", vault.read())
+        } finally { crypto.deleteKey() }
+    }
+    @Test fun missingAliasIsRecreatedButLossIsReportedInsteadOfReturningEmptySuccess() {
+        val alias = "paply.test.${UUID.randomUUID()}"
+        val crypto = KeystoreCryptography(alias)
+        try {
+            val storage = Storage(); val vault = KeyVault(storage, crypto)
+            vault.save("test-secret")
+            crypto.deleteKey()
+            assertTrue(runCatching { vault.read() }.isFailure)
+            assertNull(storage.value); assertTrue(keyStore().containsAlias(alias))
+            vault.save("replacement"); assertEquals("replacement", vault.read())
         } finally { crypto.deleteKey() }
     }
 }

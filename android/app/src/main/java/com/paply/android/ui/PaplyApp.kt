@@ -171,7 +171,7 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                     }
                 },
             ) { padding ->
-                Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+                Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
                     val home = route == "home"
                     val title = when (route) {
                         "home" -> if (!prefs.betaThoughts || tab == "dictation") "Diktat" else if (tab == "tasks") "Aufgaben" else "Gedanken"
@@ -203,6 +203,7 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                                         onSettings = { navigate("settings") }, onTileSetup = { navigate("tile") },
                                         taskDestination = taskDestination.takeIf { tab == "tasks" },
                                         focusID = activity.intent.getStringExtra("thoughtId").takeIf { tab == "thoughts" },
+                                        onFocusConsumed = { consumeThoughtLink(activity.intent, it) },
                                         setupProgress = listOf(status.microphone, status.notifications, hasKey, status.keyboardEnabled, status.keyboardSelected, status.tileAdded).count { it } to 6)
                                 }
                                 "settings" -> SettingsHome(activity, prefs, vault, hasKey, keyError, status, ::refreshKey, ::edit, ::navigate, ::message)
@@ -227,4 +228,9 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
         }
         }
     }
+}
+
+/** Consume only the link actually opened; a newer notification must remain pending. */
+internal fun consumeThoughtLink(intent: Intent, openedID: String) {
+    if (intent.getStringExtra("thoughtId") == openedID) intent.removeExtra("thoughtId")
 }

@@ -157,4 +157,53 @@ class HistoryStoreTest {
         assertFalse(file.exists())
     }
 
+    @Test fun failedAudioExpiresAtThirtyDaysWithoutRemovingTextOrRecentOrActiveAudio() = runBlocking {
+        val now = 2 * HistoryStore.AUDIO_RETENTION_MS
+        val store = store()
+        val expired = wav("expired"); val recent = wav("recent"); val active = wav("active")
+        store.add(HistoryEntry("expired", now - HistoryStore.AUDIO_RETENTION_MS, raw = "Text behalten",
+            status = HistoryStatus.FAILED, audioFile = expired.path))
+        store.add(HistoryEntry("recent", now - HistoryStore.AUDIO_RETENTION_MS + 1,
+            status = HistoryStatus.FAILED, audioFile = recent.path))
+        store.add(HistoryEntry("active", 1, status = HistoryStatus.PENDING, audioFile = active.path))
+        store.expireAudio(now)
+        assertFalse(expired.exists()); assertTrue(recent.exists()); assertTrue(active.exists())
+        val entry = store.entries.value.first { it.id == "expired" }
+        assertEquals("Text behalten", entry.raw); assertNull(entry.audioFile)
+        assertEquals(HistoryFailure.AUDIO_MISSING, entry.failure)
+        val reloaded = store(); reloaded.reload()
+        assertNull(reloaded.entries.value.first { it.id == "expired" }.audioFile)
+        store.expireAudio(now + 1)
+        assertFalse(recent.exists())
+    }
+    @Test fun retentionDoesNotTouchProtectedRetriesOrOutsidePaths() = runBlocking {
+        val store = store(); val active = wav("retry")
+        val outside = temporary.newFile("outside.wav").apply { writeText("keep") }
+        store.add(HistoryEntry("retry", 1, status = HistoryStatus.FAILED, audioFile = active.path))
+        store.add(HistoryEntry("outside", 1, status = HistoryStatus.FAILED, audioFile = outside.path))
+        store.expireAudio(HistoryStore.AUDIO_RETENTION_MS + 1, setOf("retry"))
+        assertTrue(active.exists()); assertTrue(outside.exists())
+        assertEquals(active.path, store.entries.value.first { it.id == "retry" }.audioFile)
+    }
+    @Test fun expiryRetriesFailedUnlinkWithoutBlockingOtherEntries() = runBlocking {
+        val store = store()
+        val blocked = wav("blocked"); blocked.delete(); blocked.mkdir()
+        val obstacle = File(blocked, "child").apply { writeText("block") }
+        val other = wav("other")
+        for (file in listOf(blocked, other)) store.add(HistoryEntry(file.nameWithoutExtension, 1,
+            status = HistoryStatus.FAILED, audioFile = file.path))
+        assertTrue(runCatching { store.expireAudio(HistoryStore.AUDIO_RETENTION_MS + 1) }.isFailure)
+        assertEquals(blocked.path, store.entries.value.first { it.id == "blocked" }.audioFile)
+        assertFalse(other.exists())
+        obstacle.delete()
+        store.expireAudio(HistoryStore.AUDIO_RETENTION_MS + 1)
+        assertFalse(blocked.exists()); assertTrue(store.entries.value.all { it.audioFile == null })
+    }
+    @Test fun expiringOneReferenceDoesNotDeleteAudioUsedByANewEntry() = runBlocking {
+        val store = store(); val shared = wav("shared")
+        store.add(HistoryEntry("old", 1, status = HistoryStatus.FAILED, audioFile = shared.path))
+        store.add(HistoryEntry("new", HistoryStore.AUDIO_RETENTION_MS, status = HistoryStatus.FAILED, audioFile = shared.path))
+        store.expireAudio(HistoryStore.AUDIO_RETENTION_MS + 1)
+        assertTrue(shared.exists()); assertNull(store.entries.value.first { it.id == "old" }.audioFile)
+    }
 }

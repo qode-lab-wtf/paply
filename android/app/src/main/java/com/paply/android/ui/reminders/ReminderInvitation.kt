@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -44,7 +48,28 @@ fun rememberReminderActions(activity: Activity, onError: (String) -> Unit = {}):
     val state by reminders.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val report by rememberUpdatedState(onError)
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { reminders.requestReconcile() }
+    var pendingExact by rememberSaveable { mutableStateOf(false) }
+    fun exactAccess() {
+        pendingExact = false
+        runCatching {
+            com.paply.android.reminders.ReminderAlarms(activity).exactAccessIntent()?.let {
+                android.widget.Toast.makeText(activity, "Für pünktliche Erinnerungen bitte exakte Alarme erlauben.", android.widget.Toast.LENGTH_LONG).show()
+                activity.startActivity(it)
+            }
+        }.onFailure { report("Bitte exakte Alarme in den Android-Einstellungen für Paply erlauben.") }
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        reminders.requestReconcile()
+        if (pendingExact) exactAccess()
+    }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingExact) exactAccess()
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
     fun run(block: suspend () -> Unit) { scope.launch {
         try { block() } catch (e: CancellationException) { throw e }
         catch (_: Exception) { report("Erinnerungen konnten nicht gespeichert werden. Bitte erneut versuchen.") }
@@ -56,11 +81,12 @@ fun rememberReminderActions(activity: Activity, onError: (String) -> Unit = {}):
         val askedBefore = state.asked
         run {
             reminders.setEnabled(true)
+            pendingExact = true
             if (!reminders.state.value.notificationsAllowed) {
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
                     (!askedBefore || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 else notifications()
-            }
+            } else exactAccess()
         }
     }, disable = { run { reminders.setEnabled(false) } }, dismiss = { run { reminders.dismissInvitation() } },
         notificationSettings = { notifications() }, exactSettings = {
@@ -90,6 +116,8 @@ fun ReminderInvitation(task: ThoughtTask, thought: Thought, modifier: Modifier =
                 Text("Bei Uhrzeit erinnern?", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Text("Hat eine Aufgabe eine Uhrzeit, meldet sich Paply dann – auch auf dem Sperrbildschirm. Abhaken geht direkt in der Benachrichtigung. Aufgaben ohne Uhrzeit bleiben still.",
                     style = MaterialTheme.typography.bodyMedium, color = C.secondary)
+                if (!actions.state.exactAllowed) Text("Für pünktliche Erinnerungen öffnet sich danach die Systemfreigabe für exakte Alarme.",
+                    style = MaterialTheme.typography.bodySmall, color = C.secondary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Pill("Erinnern", actions.enable)
                     Pill("Nicht jetzt", actions.dismiss, prominent = false)

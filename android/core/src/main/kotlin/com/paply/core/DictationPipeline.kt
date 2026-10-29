@@ -227,21 +227,26 @@ constructor(
         previous: ChunkResult?,
     ): ChunkResult {
         val prompt = WhisperPrompt.build(settings.vocabulary, previous?.text, primer)
-        val encoded =
+        var encoded =
             encoder.encode(audio, options.uploadFormat == PipelineOptions.UploadFormat.flac)
         currentCoroutineContext().ensureActive()
         val seconds = audio.size / AudioEncoder.sampleRate
-        suspend fun send(language: String?): Transcription {
+        suspend fun upload(language: String?): Transcription {
+            currentCoroutineContext().ensureActive()
             uploads.incrementAndGet()
-            return client.transcribe(
-                encoded,
-                settings.transcriptionModel,
-                language,
-                prompt,
-                seconds,
-            ) {
+            return client.transcribe(encoded, settings.transcriptionModel, language, prompt, seconds) {
                 bytes.addAndGet(it)
             }
+        }
+        suspend fun send(language: String?): Transcription = try { upload(language) }
+        catch (failure: GroqFailure) {
+            // A manufacturer codec may emit FLAC the server cannot decode. Keep model,
+            // language, prompt and PCM identical; never repeat this fallback for a WAV.
+            if (!encoded.isFLAC || failure.status != 400 || failure.modelMissing ||
+                failure.code !in setOf("invalid_audio", "invalid_audio_file", "invalid_audio_format", "audio_decode_error", "invalid_request_error", "http")) throw failure
+            currentCoroutineContext().ensureActive()
+            encoded = encoder.encode(audio, preferFLAC = false)
+            upload(language)
         }
         val users = CodeSwitchPrimer.userLanguages(settings, deviceLanguages)
         val primary =

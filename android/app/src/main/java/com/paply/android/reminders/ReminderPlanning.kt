@@ -9,7 +9,7 @@ import java.time.ZoneId
 
 /** Android policy around the unchanged iOS-derived plan. No Android dependencies: JVM-testable. */
 object ReminderPlanning {
-    const val WINDOW_RADIUS_MS = 10 * 60 * 1000L
+    const val WINDOW_LENGTH_MS = 10 * 60 * 1000L
     const val INVITATION_PAUSE_SECONDS = 7 * 24 * 3600L
 
     data class Access(val beta: Boolean, val enabled: Boolean, val notifications: Boolean, val exact: Boolean) {
@@ -20,9 +20,9 @@ object ReminderPlanning {
 
     fun timing(fireAt: Instant, now: Instant, exact: Boolean): Timing {
         if (exact) return Timing(true, fireAt.toEpochMilli(), 0)
-        // Android 12+ clips shorter windows to ten minutes. Close tasks start now, never in the past.
-        val start = maxOf(now.toEpochMilli(), fireAt.toEpochMilli() - WINDOW_RADIUS_MS)
-        return Timing(false, start, maxOf(WINDOW_RADIUS_MS, fireAt.toEpochMilli() + WINDOW_RADIUS_MS - start))
+        // Android 12+ requires at least ten minutes. Never notify before the requested time.
+        val start = maxOf(now.toEpochMilli(), fireAt.toEpochMilli())
+        return Timing(false, start, WINDOW_LENGTH_MS)
     }
 
     fun desired(thoughts: List<Thought>, topicsByThought: Map<String, Topic>, snoozes: Map<String, TaskReminderPlan.Snooze>,
@@ -52,7 +52,7 @@ internal data class ReminderUpdate(val data: ReminderData, val schedule: List<Ta
 internal fun reconcileReminders(data: ReminderData, thoughts: List<Thought>, topics: Map<String, Topic>,
     access: ReminderPlanning.Access, now: Instant, zone: ZoneId, force: Boolean = false): ReminderUpdate {
     val snoozes = TaskReminderPlan.keptSnoozes(data.snoozes, thoughts = thoughts, now = now, calendar = zone)
-    // A window alarm can arrive before its due time. Delivered entries must not occupy the next-50 slots.
+    // Delivered entries must not occupy the next-50 slots, even after a clock correction.
     val delivered = data.records.filterValues { it.delivered }.mapValues { it.value.reminder.signature }
     val desired = ReminderPlanning.desired(thoughts, topics, snoozes, access, now, zone, delivered)
     val salt = ReminderPlanning.salt(access.exact, zone)

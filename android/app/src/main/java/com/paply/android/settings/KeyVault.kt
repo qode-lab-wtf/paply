@@ -8,11 +8,12 @@ import android.util.Base64
 import com.paply.core.sanitizeApiKey
 import java.security.GeneralSecurityException
 import java.security.KeyStore
-import java.security.UnrecoverableKeyException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+
+internal class PermanentVaultKeyException(message: String) : GeneralSecurityException(message)
 
 internal data class EncryptedKey(val iv: ByteArray, val ciphertext: ByteArray)
 internal interface VaultStorage {
@@ -38,15 +39,15 @@ class KeyVault internal constructor(private val storage: VaultStorage, private v
         try {
             val legacy = storage.legacy()?.let(::sanitizeApiKey)?.takeIf { it.isNotEmpty() }
             val existing = try {
-                storage.encrypted()?.let(crypto::decrypt)
+                storage.encrypted()?.let { encrypted -> retryTransient { crypto.decrypt(encrypted) } }
             } catch (e: Exception) {
-                if (!e.isUnusableKey()) throw e
+                if (!e.isPermanentKeyFailure()) throw e
                 repair()
                 if (legacy != null) {
                     storage.write(crypto.encrypt(legacy))
                     return@synchronized legacy
                 }
-                return@synchronized null
+                throw GeneralSecurityException("Schlüssel nicht mehr lesbar. Bitte neu eintragen.", e)
             }
             if (existing != null) existing
             else legacy?.also { storage.write(encryptWithRepair(it)) }
@@ -67,9 +68,9 @@ class KeyVault internal constructor(private val storage: VaultStorage, private v
         finally { try { storage.removeLegacy() } finally { crypto.deleteKey() } }
     }
 
-    private fun encryptWithRepair(value: String): EncryptedKey = try { crypto.encrypt(value) }
+    private fun encryptWithRepair(value: String): EncryptedKey = try { retryTransient { crypto.encrypt(value) } }
     catch (e: Exception) {
-        if (!e.isUnusableKey()) throw e
+        if (!e.isPermanentKeyFailure()) throw e
         repair()
         crypto.encrypt(value) // Exactly one retry, including when the new key also fails.
     }
@@ -80,8 +81,16 @@ class KeyVault internal constructor(private val storage: VaultStorage, private v
         crypto.createKey()
     }
 
-    private fun Exception.isUnusableKey() = this is GeneralSecurityException ||
-        this is IllegalArgumentException || this is java.security.ProviderException
+    private fun <T> retryTransient(operation: () -> T): T = try { operation() }
+    catch (e: Exception) {
+        if (e.isPermanentKeyFailure()) throw e
+        operation() // Provider/service/authentication failures never authorize deleting a key.
+    }
+
+    private fun Throwable.isPermanentKeyFailure(): Boolean =
+        generateSequence(this) { it.cause }.take(16).any {
+            it is android.security.keystore.KeyPermanentlyInvalidatedException || it is PermanentVaultKeyException
+        }
 
     companion object { private val lock = Any() }
 }
@@ -108,13 +117,13 @@ internal class KeystoreCryptography(private val alias: String = "paply.groq.aes2
     private fun store() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     override fun encrypt(value: String): EncryptedKey {
         val existing = store().getKey(alias, null)
-        if (existing != null && existing !is SecretKey) throw java.security.InvalidKeyException("Unusable vault key")
+        if (existing != null && existing !is SecretKey) throw PermanentVaultKeyException("Unusable vault key")
         val key = existing ?: generateKey()
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key) }
         return EncryptedKey(cipher.iv, cipher.doFinal(value.toByteArray(Charsets.UTF_8)))
     }
     override fun decrypt(value: EncryptedKey): String {
-        val key = store().getKey(alias, null) as? SecretKey ?: throw UnrecoverableKeyException("Missing vault key")
+        val key = store().getKey(alias, null) as? SecretKey ?: throw PermanentVaultKeyException("Missing vault key")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, value.iv))
         }

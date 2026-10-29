@@ -22,6 +22,11 @@ internal object DictationClipboard {
     private const val NOTICE = 3102
     private val handler = Handler(Looper.getMainLooper())
 
+    /** Readback is advisory: an acknowledged send must never overwrite the user's clipboard. */
+    fun copyIfUndelivered(context: Context, text: String, sent: Boolean, sameTarget: Boolean,
+        notify: Boolean = false, retained: Boolean = true): Boolean =
+        (!sent || !sameTarget) && copy(context, text, notify, retained)
+
     fun copy(context: Context, text: String, notify: Boolean = false, retained: Boolean = true): Boolean = runCatching {
         val app = context.applicationContext
         val manager = app.getSystemService(ClipboardManager::class.java)

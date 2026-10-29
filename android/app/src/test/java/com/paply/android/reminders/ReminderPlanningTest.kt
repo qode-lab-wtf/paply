@@ -96,12 +96,14 @@ class ReminderPlanningTest {
         assertEquals(1, reconcile(window.data).schedule.size)
     }
 
-    @Test fun inexactWindowIsCenteredAndCloseTasksNeverStartInThePast() {
+    @Test fun inexactWindowNeverStartsBeforeRequestedTimeOrInThePast() {
         val timing = ReminderPlanning.timing(due, now, exact = false)
-        assertEquals(due.toEpochMilli() - 600_000, timing.startMillis)
-        assertEquals(1_200_000, timing.windowMillis)
+        assertEquals(due.toEpochMilli(), timing.startMillis)
+        assertEquals(600_000, timing.windowMillis)
         val near = ReminderPlanning.timing(now.plusSeconds(120), now, exact = false)
-        assertEquals(now.toEpochMilli(), near.startMillis); assertEquals(720_000, near.windowMillis)
+        assertEquals(now.plusSeconds(120).toEpochMilli(), near.startMillis); assertEquals(600_000, near.windowMillis)
+        val late = ReminderPlanning.timing(now.minusSeconds(120), now, exact = false)
+        assertEquals(now.toEpochMilli(), late.startMillis)
         assertEquals(0, ReminderPlanning.timing(due, now, exact = true).windowMillis)
     }
 

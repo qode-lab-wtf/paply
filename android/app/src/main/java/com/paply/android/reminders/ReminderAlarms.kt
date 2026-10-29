@@ -13,6 +13,10 @@ internal class ReminderAlarms(private val context: Context) {
     private val manager = context.getSystemService(AlarmManager::class.java)
     fun canScheduleExact() = Build.VERSION.SDK_INT < 31 || manager.canScheduleExactAlarms()
 
+    fun exactAccessIntent(): Intent? = if (Build.VERSION.SDK_INT >= 31 && !canScheduleExact())
+        Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+            Uri.fromParts("package", context.packageName, null)) else null
+
     fun schedule(reminder: TaskReminder, stamp: String, now: Instant) {
         val operation = operation(reminder.id, stamp, PendingIntent.FLAG_UPDATE_CURRENT)!!
         if (canScheduleExact()) {

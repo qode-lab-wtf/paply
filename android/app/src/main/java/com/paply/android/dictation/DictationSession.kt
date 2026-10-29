@@ -20,6 +20,7 @@ object DictationRuntime {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val busy = ConcurrentHashMap.newKeySet<String>()
     val isBusy: Boolean get() = busy.isNotEmpty()
+    internal fun activeIDs(): Set<String> = busy.toSet()
     internal fun sessionStarted(id: String) { busy.add(id) }
     internal fun sessionEnded(id: String) { busy.remove(id) }
     private var network: AndroidReachability? = null
@@ -52,6 +53,7 @@ object DictationRuntime {
             var result = entry
             try {
                 store.reload()
+                store.expireAudio(protectedIDs = if (owns) activeIDs() - entry.id else activeIDs())
                 val found = store.entries.value.firstOrNull { it.id == entry.id }
                 if (found == null) {
                     result = entry.copy(status = HistoryStatus.FAILED, audioFile = null,
@@ -164,6 +166,7 @@ object DictationRuntime {
             store.entries.value.filter { it.status == HistoryStatus.PENDING && it.audioFile != null }.forEach {
                 store.add(it.copy(status = HistoryStatus.FAILED, error = "Verarbeitung unterbrochen. Erneut versuchen."))
             }
+            store.expireAudio(protectedIDs = activeIDs())
             val referenced = store.entries.value.mapNotNull { it.audioFile }.toSet()
             File(context.filesDir, "dictations").listFiles()?.filter { it.path !in referenced }?.forEach { it.delete() }
         }.onFailure { Diag.event("dictation.recovery.failed") }

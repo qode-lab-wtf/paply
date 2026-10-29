@@ -51,11 +51,11 @@ class FixGDeviceTest {
             assertEquals(ThoughtsRepository.Phase.PROCESSED, repo.status.value[id]!!.phase)
         } finally { store.purge(id); repo.publish(store) }
     }
-    @Test fun betaOffRetainsWaitingAudioAndSkipsHousekeepingThenOnResumes() = runBlocking {
+    @Test fun betaOffRetainsUnexpiredAudioAndSkipsProcessingThenOnResumes() = runBlocking {
         check(KeyVault(app).read() == null)
         settings.update { it.copy(betaThoughts = false) }
         val store = repo.backend().store
-        val capture = store.beginCapture(ThoughtTrigger.app, Instant.now().minusSeconds(31L * 86400))
+        val capture = store.beginCapture(ThoughtTrigger.app, Instant.now().minusSeconds(29L * 86400))
         capture.audio.append(FloatArray(16000)); val duration = capture.audio.close()
         store.finishCapture(capture.thought.id, duration)
         try {
@@ -70,6 +70,29 @@ class FixGDeviceTest {
             withTimeout(12000) { while (store.thought(capture.thought.id)?.state != com.paply.thoughts.ThoughtState.waitingKey) delay(100) }
             assertTrue(capture.audio.url.toFile().exists())
         } finally { settings.update { it.copy(betaThoughts = false) }; store.purge(capture.thought.id); repo.publish(store) }
+    }
+    @Test fun betaOffStillExpiresBothKindsOfAudioWithoutStartingProcessing() = runBlocking {
+        check(KeyVault(app).read() == null)
+        settings.update { it.copy(betaThoughts = false) }
+        val store = repo.backend().store
+        val now = Instant.now()
+        val capture = store.beginCapture(ThoughtTrigger.app, now.minusSeconds(30L * 86400))
+        capture.audio.append(FloatArray(16000)); val duration = capture.audio.close()
+        store.finishCapture(capture.thought.id, duration)
+        val history = com.paply.android.history.HistoryStore.get(app)
+        val file = File(app.filesDir, "dictations/fix-final-expired.wav").apply { parentFile!!.mkdirs(); writeText("expired") }
+        val entry = com.paply.android.history.HistoryEntry("fix-final-expired", now.minusSeconds(30L * 86400).toEpochMilli(),
+            status = com.paply.android.history.HistoryStatus.FAILED, audioFile = file.path)
+        try {
+            history.add(entry)
+            repo.expireRetainedAudio(now)
+            assertFalse(settings.state.value.betaThoughts)
+            assertFalse(file.exists()); assertNull(history.entries.value.first { it.id == entry.id }.audioFile)
+            assertFalse(capture.audio.url.toFile().exists()); assertNull(store.thought(capture.thought.id)!!.audio)
+            assertEquals(com.paply.thoughts.ThoughtState.needsAttention, store.thought(capture.thought.id)!!.state)
+            assertTrue(WorkManager.getInstance(app).getWorkInfosForUniqueWork("paply-thoughts").get().all { it.state.isFinished })
+            assertTrue(WorkManager.getInstance(app).getWorkInfosForUniqueWork("paply-audio-retention").get().any { !it.state.isFinished })
+        } finally { history.delete(setOf(entry.id)); store.purge(capture.thought.id); repo.publish(store) }
     }
     @Test fun waitingKeyDoesNotScheduleWakeAlarm() = runBlocking {
         check(KeyVault(app).read() == null)

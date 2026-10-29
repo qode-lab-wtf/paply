@@ -36,11 +36,11 @@ data class ImePanelState(val phase: String = "idle", val title: String = "", val
 
 @Composable
 fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
-    onPrimary: () -> Unit, onCopy: () -> Unit, onBack: () -> Unit) = PaplyTheme {
+    onPrimary: () -> Unit, onCopy: () -> Unit, onBack: () -> Unit,
+    navigationInsets: WindowInsets = WindowInsets.navigationBars) = PaplyTheme {
     val config = LocalConfiguration.current
     val landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
-    // Gboard on the 411dp-wide Pixel AVD: 336dp portrait, 260dp landscape including
-    // its 48dp navigation strip. Android draws that strip OVER the IME, so reserve it.
+    // Reserve the actual system navigation area (gesture, buttons, landscape or hardware keyboard).
     val height = minOf(if (landscape) 260f else 336f, config.screenHeightDp * .68f).dp
     val live = state.phase == "recording"
     val working = state.phase in listOf("working", "starting")
@@ -55,7 +55,7 @@ fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
             delay(40)
         }
     }
-    Box(Modifier.fillMaxWidth().height(height).background(C.forestDeep).padding(bottom = 48.dp).padding(6.dp)) {
+    Box(Modifier.fillMaxWidth().height(height).background(C.forestDeep).windowInsetsPadding(navigationInsets).padding(6.dp)) {
         Column(Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp))
             .background(Brush.verticalGradient(if (green) listOf(C.recordTop, C.recordBottom) else listOf(C.forest, C.forestDeep)))
             .pointerInput(state.phase) {

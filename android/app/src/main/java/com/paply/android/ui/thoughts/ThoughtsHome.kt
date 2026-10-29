@@ -38,7 +38,7 @@ import java.time.Instant
 @Composable
 fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksTab: Boolean,
     setup: @Composable () -> Unit, onSettings: () -> Unit, onTileSetup: () -> Unit,
-    focusID: String? = null, taskDestination: com.paply.android.ui.tasks.TaskOpenRequest? = null, setupProgress: Pair<Int, Int> = 0 to 6) {
+    focusID: String? = null, onFocusConsumed: (String) -> Unit = {}, taskDestination: com.paply.android.ui.tasks.TaskOpenRequest? = null, setupProgress: Pair<Int, Int> = 0 to 6) {
     val thoughts by repository.thoughts.collectAsStateWithLifecycle()
     val topics by repository.topics.collectAsStateWithLifecycle()
     val deleted by repository.deleted.collectAsStateWithLifecycle()
@@ -75,7 +75,10 @@ fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksT
         if (kind == "new" || kind == "newForThought") createdTopicID = null
         sheetID = id; sheet = kind
     }
-    LaunchedEffect(focusID) { if (!focusID.isNullOrBlank()) open(focusID) }
+    val consumeFocus by rememberUpdatedState(onFocusConsumed)
+    LaunchedEffect(focusID) {
+        if (!focusID.isNullOrBlank()) { open(focusID); consumeFocus(focusID) }
+    }
     LaunchedEffect(taskDestination) { taskDestination?.let { if (it.claim()) { sheet = null; open(it.thoughtID, it.taskID) } } }
     LaunchedEffect(topics, filter) {
         if (filter !in listOf("all", "none", "pending") && topics.none { it.id == filter }) filter = "all"

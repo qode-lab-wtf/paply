@@ -55,4 +55,22 @@ class ClipboardTest {
         assertTrue(clipboard.hasPrimaryClip())
     }
 
+    @Test fun acknowledgedSendWithUnreadableOrTransformedEditorPreservesForeignClipboard() {
+        val app = RuntimeEnvironment.getApplication()
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText("Andere App", "behalten"))
+        for (readback in listOf<String?>(null, "", "vom Editor verändert")) {
+            assertNull(ImePolicy.readback("Diktat", readback))
+            assertFalse(DictationClipboard.copyIfUndelivered(app, "Diktat", sent = true, sameTarget = true, notify = true))
+            assertEquals("behalten", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        }
+        assertTrue(org.robolectric.Shadows.shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
+    }
+    @Test fun failedSendAndFieldChangeStillCopy() {
+        val app = RuntimeEnvironment.getApplication()
+        for ((sent, sameTarget) in listOf(false to true, true to false, false to false)) {
+            assertTrue(DictationClipboard.copyIfUndelivered(app, "Diktat", sent, sameTarget))
+            assertEquals("Diktat", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        }
+    }
 }

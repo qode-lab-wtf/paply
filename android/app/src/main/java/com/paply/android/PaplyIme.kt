@@ -222,11 +222,12 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
             // A transformed/read-protected editor is unknown, never insert a second time.
             val accepted = sent && sameTarget()
             val retained = entry.failure !in listOf(HistoryFailure.STORAGE, HistoryFailure.STORAGE_FULL)
-            val copied = (!accepted || confirmed != true) && DictationClipboard.copy(this, entry.text, notify = !visible || destroyed, retained = retained)
+            val sentNotice = if (retained) "Dein Text steht im Verlauf."
+                else "Bitte jetzt kopieren. Der Verlauf konnte nicht gespeichert werden."
+            val copied = DictationClipboard.copyIfUndelivered(this, entry.text, sent, sameTarget(), notify = !visible || destroyed, retained = retained)
             val updated = if (accepted) entry.copy(status = HistoryStatus.OK,
                 error = if (confirmed == true) entry.error?.takeIf { it == "Ohne Polieren gespeichert." }
-                    else if (copied) "Gesendet. Der Text liegt auch in der Zwischenablage. Steht im Feld nichts: Feld lange drücken → „Einfügen“."
-                    else "Gesendet. Steht im Feld nichts: Feld lange drücken → „Einfügen“.")
+                    else "Gesendet. $sentNotice")
             else entry.copy(status = HistoryStatus.PENDING, error = if (copied)
                 "Der Text liegt in der Zwischenablage und im Verlauf. Feld lange drücken → „Einfügen“."
                 else "Dein Text ist im Verlauf gesichert. Kopiere ihn dort und drücke im Feld lange → „Einfügen“.")
@@ -235,9 +236,8 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
                 .onFailure { Diag.event("ime.delivery.save.failed") }
             if (accepted && sameTarget()) {
                 val returning = ImePolicy.returnAfterDelivery(accepted, confirmed, copied)
-                panel = ImePanelState("inserted", title = if (confirmed == true) "Eingesetzt" else "An Textfeld gesendet",
-                    subtitle = if (confirmed == true) "" else if (copied) "Gesendet. Der Text liegt auch in der Zwischenablage. Steht im Feld nichts: Feld lange drücken → „Einfügen“."
-                        else "Gesendet. Steht im Feld nichts: Feld lange drücken → „Einfügen“.", canCopy = true,
+                panel = ImePanelState("inserted", title = if (confirmed == true) "Eingesetzt" else "Gesendet",
+                    subtitle = if (confirmed == true) "" else sentNotice, canCopy = true,
                     returningToKeyboard = returning)
                 if (returning) autoReturn.schedule(
                     isCurrent = { sameTarget() && isInputViewShown && root?.isShown == true &&

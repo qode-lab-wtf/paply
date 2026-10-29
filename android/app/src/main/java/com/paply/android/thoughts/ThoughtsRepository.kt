@@ -70,6 +70,7 @@ class ThoughtsRepository private constructor(private val app: Context) {
         CaptureDiscardJournal.recover(root, store)
         TrimResidue.recover(store)
         val recovered = store.recover()
+        expireThoughtAudio(store, Instant.now())
         if (enabled()) store.housekeeping(Instant.now())
         Diag.event("thoughts.recovered migrated=$migrated count=${recovered.size}")
         val ledger = TokenLedger(root.toPath().resolve("ledger.json"))
@@ -83,6 +84,10 @@ class ThoughtsRepository private constructor(private val app: Context) {
         result
     }
     init {
+        // Local retention is independent of Beta, connectivity, keys and AI maintenance.
+        androidx.work.WorkManager.getInstance(app).enqueueUniquePeriodicWork("paply-audio-retention",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            androidx.work.PeriodicWorkRequestBuilder<AudioRetentionWorker>(1, java.util.concurrent.TimeUnit.HOURS).build())
         com.paply.android.reminders.TaskReminders.start(app, this)
         com.paply.android.widgets.TaskWidgets.start(app, this)
         keyPrefs.registerOnSharedPreferenceChangeListener(keyListener)
@@ -121,9 +126,9 @@ class ThoughtsRepository private constructor(private val app: Context) {
         languageDetector = AndroidLanguageDetector(app),
     )
     fun kick(reason: String = "foreground") {
-        if (!enabled()) return
         scope.launch {
             try {
+                expireRetainedAudio()
                 val b = backend()
                 if (!enabled()) return@launch
                 val hygieneDue = com.paply.thoughts.ai.TopicHygiene.isSuggestionDue(
@@ -473,21 +478,24 @@ class ThoughtsRepository private constructor(private val app: Context) {
             }
         }
     }
-    internal suspend fun maintenance(now: Instant = Instant.now()) = withContext(Dispatchers.IO) {
-        if (!enabled()) return@withContext
-        val store = backend().store
-        if (!enabled()) return@withContext
-        store.housekeeping(now)
-        for (t in store.all()) {
-            if (t.state == ThoughtState.recording || store.hasSource(t.id)) continue
-            if (t.audio != null && !now.isBefore(t.createdAt.plusSeconds(AUDIO_RETENTION_SECONDS))) {
-                // Persist the explanation first; no silent disappearance of the waiting thought.
-                store.update(t.id) { it.copy(state = ThoughtState.needsAttention,
-                    status = Thought.Status("Audio nach 30 Tagen entfernt · bitte erneut aufnehmen")) }
-                store.audioURL(t.id)?.let { java.nio.file.Files.deleteIfExists(it) }
-                store.update(t.id) { it.copy(audio = null) }
+    /** Also invoked while Beta is off. Never starts transcription or topic hygiene. */
+    internal suspend fun expireRetainedAudio(now: Instant = Instant.now()) = withContext(Dispatchers.IO) {
+        workMutex.withLock {
+            val dictations = runCatching {
+                com.paply.android.history.HistoryStore.get(app).expireAudio(now.toEpochMilli(), DictationRuntime.activeIDs())
             }
+            currentCoroutineContext().ensureActive()
+            val store = backend().store
+            val thoughts = runCatching { expireThoughtAudio(store, now) }
+            publish(store)
+            dictations.getOrThrow()
+            thoughts.getOrThrow()
         }
+    }
+    internal suspend fun maintenance(now: Instant = Instant.now()) = withContext(Dispatchers.IO) {
+        val store = backend().store
+        expireThoughtAudio(store, now)
+        if (enabled()) store.housekeeping(now)
         publish(store)
     }
     companion object {
@@ -510,4 +518,37 @@ class ThoughtsRepository private constructor(private val app: Context) {
             instance ?: ThoughtsRepository(context.applicationContext).also { instance = it }
         }
     }
+}
+
+/** Caller holds the processing mutex; the store lock also excludes capture mutations. */
+internal fun expireThoughtAudio(store: ThoughtStore, now: Instant) = synchronized(store) {
+    var failed = false
+    for (thought in store.all()) {
+        if (thought.audio == null || thought.state == ThoughtState.recording ||
+            now.isBefore(thought.createdAt.plusSeconds(ThoughtsRepository.AUDIO_RETENTION_SECONDS))) continue
+        try {
+            val hasSource = store.hasSource(thought.id)
+            if (!hasSource) store.update(thought.id) { it.copy(state = ThoughtState.needsAttention,
+                status = Thought.Status("Audio nach 30 Tagen entfernt · bitte erneut aufnehmen")) }
+            // Validate the directory before touching either supported audio format. Unlinking a
+            // file symlink removes the link only; never resolve it to an outside target.
+            val directory = store.directory(thought.id)
+            check(!java.nio.file.Files.isSymbolicLink(store.thoughtsDirectory) && !java.nio.file.Files.isSymbolicLink(directory))
+            val trimCopies = directory.toFile().listFiles().orEmpty().filter {
+                it.name.startsWith(".tmp-trim-") || it.name == "audio.trim.tmp"
+            }.map { it.toPath() }
+            (listOf(store.wavURL(thought.id), store.m4aURL(thought.id)) + trimCopies)
+                .forEach { java.nio.file.Files.deleteIfExists(it) }
+            store.update(thought.id) { it.copy(audio = null) }
+        } catch (_: Exception) { failed = true }
+    }
+    check(!failed) { "Audio retention incomplete" } // Retry later, without skipping other entries.
+}
+
+class AudioRetentionWorker(context: Context, params: androidx.work.WorkerParameters) : androidx.work.CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result = try {
+        ThoughtsRepository.get(applicationContext).expireRetainedAudio()
+        Result.success()
+    } catch (e: CancellationException) { throw e }
+    catch (_: Exception) { Result.retry() }
 }

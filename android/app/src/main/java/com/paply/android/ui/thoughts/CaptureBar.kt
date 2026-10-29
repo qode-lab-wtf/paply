@@ -30,7 +30,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.*
 
 @Composable
-fun CaptureBar(repository: ThoughtsRepository, actions: ThoughtsActions, onCapture: () -> Unit, onOpen: (String) -> Unit) {
+fun CaptureBar(repository: ThoughtsRepository, actions: ThoughtsActions, onCapture: () -> Unit,
+    navigationInsets: WindowInsets = WindowInsets.navigationBars, onOpen: (String) -> Unit) {
     val state by repository.recording.collectAsStateWithLifecycle()
     val active = state.phase in listOf("starting", "recording", "stopping")
     var transient by remember { mutableStateOf(false) }
@@ -40,7 +41,7 @@ fun CaptureBar(repository: ThoughtsRepository, actions: ThoughtsActions, onCaptu
     }
     if (!active && !transient) return
     Surface(shape = CircleShape, color = C.forest, border = BorderStroke(.5.dp, C.thoughtMint.copy(alpha=.2f)),
-        shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+        shadowElevation = 10.dp, modifier = Modifier.fillMaxWidth().windowInsetsPadding(navigationInsets).padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).clickable {
             if (active) onCapture() else state.id?.let(onOpen)
         }.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
