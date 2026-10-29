@@ -176,7 +176,21 @@ nicht erscheint: Share-Extension als eigenes Target nachrüsten.
 
 ## 5. Sprecher erkennen (plattformneutral)
 
-Wird nach MESSUNG.md mit Motor und Schwellen festgezurrt. Gerüst:
+**Entschieden nach [MESSUNG.md](MESSUNG.md) (29.10.):**
+
+- Motor: FluidAudio mit **Nemotron-3 fast128 FP16** (bis 8 Sprecher, CoreML, 10-s-Blöcke → ~0,1 GB Speicher auch bei
+  90 Min., 50-ms-Mindestturn). Lizenz OpenMDW 1.1 (Gewichte), Apache-2.0 (FluidAudio). Rückfall-Rechenweg CPU/GPU.
+- Stimmabdrücke: **CAM++** (Apache-2.0); WeSpeaker war für Profile deutlich schlechter.
+- Modelle (~220 MB) werden beim ersten Gebrauch automatisch geladen, danach offline. Bis dahin: Wortlaut mit einem
+  Sprecher, Trennung wird nachgeholt.
+- Schwellen (Pilot): fest ab 0,80 **und** Abstand ≥ 0,10 zum Zweitbesten; Enrollment-Ausreißer < 0,6 zum Medoid.
+- Messbild: Simulierte deutsche Gespräche (Telefon, Tisch 3–5, Raum) nahezu fehlerfrei; echte englische Meetings (AMI,
+  Fernfeld) 12–19 % falsch zugeordnete Wörter, fast nur in **kurzen Einwürfen** („ja“, „genau“, „okay“: ~55 % falsch).
+  Daraus folgt: Einwürfe ohne Inhalt nicht als eigene, womöglich falsche Sätze zeigen, unsichere kurze Beiträge über den
+  ohnehin laufenden KI-Lauf plausibilisieren (nur Umhängen markierter kurzer Beiträge, im Code begrenzt) und dezent
+  markieren. Echte Aufnahmen von Allans iPhone sind die eigentliche Abnahme.
+
+Gerüst:
 
 1. **Diarisierung auf dem Gerät** über die ganze Datei: Segmente (Start, Ende, Cluster) + Mittelwert-Abdruck je Cluster.
    Sprecherzahl automatisch; bei Anruf-Import mit zwei Kanälen fest 2.
