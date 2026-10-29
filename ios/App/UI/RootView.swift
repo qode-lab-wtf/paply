@@ -18,7 +18,7 @@ enum Route: Hashable {
     case entry(String)
 }
 
-/// Drei Reiter: „Gedanken“ (Start), „Aufgaben“ (alle Aufgaben aus den Gedanken) und „Diktat“. Einstellungen als
+/// Vier Reiter: Gedanken | Gespräche (Vorschau) | Aufgaben | Diktat. Einstellungen als
 /// Blatt hinter dem Zahnrad. Über allem: Aufnahme-Leiste, große Aufnahme-Ansicht, FlashView.
 /// Beta „Gedanken & Aufgaben“ aus (`AppSettings.betaThoughts`): keine Reiter, das Diktat ist die Startseite.
 struct RootView: View {
@@ -99,7 +99,7 @@ struct RootView: View {
         #endif
     }
 
-    /// Mit Beta: drei Reiter. Ohne: nur das Diktat (wie die Startseite vor den Gedanken).
+    /// Mit Beta: vier Reiter. Ohne: nur das Diktat (wie die Startseite vor den Gedanken).
     @ViewBuilder
     private var content: some View {
         @Bindable var nav = nav
@@ -107,6 +107,10 @@ struct RootView: View {
             TabView(selection: $nav.tab) {
                 Tab("Gedanken", systemImage: "text.bubble", value: RootTab.thoughts) {
                     ThoughtsTab()
+                }
+                // PLATZHALTER: reine Beispiel-Views, später ConversationsModel anbinden.
+                Tab("Gespräche", systemImage: "person.2.wave.2", value: RootTab.conversations) {
+                    ConversationsPlaceholderTab(onSettings: { nav.showSettings = true })
                 }
                 Tab("Aufgaben", systemImage: "checklist", value: RootTab.tasks) {
                     TasksTab()

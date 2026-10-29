@@ -718,6 +718,10 @@ struct DeveloperView: View {
             }
             .paplyRows()
 
+            Section("Gespräche") {
+                NavigationLink("Gespräche-Vorschau") { ConversationsPreviewPage() }
+            }.paplyRows()
+
             ThoughtsDeveloperSection()
 
             TaskReminderDeveloperSection()

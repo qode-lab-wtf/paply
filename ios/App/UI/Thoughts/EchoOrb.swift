@@ -24,6 +24,9 @@ struct EchoOrb: View {
     var size: CGFloat
     var mode: Mode
     var showsAura = true
+    var primary: Color = ThoughtTint.mint
+    var secondary: Color = ThoughtTint.gold
+    var auraColors: [Color] = ThoughtTint.aura
     var level: () -> Float
 
     @Environment(\.accessibilityReduceMotion) private var reduce
@@ -52,7 +55,7 @@ struct EchoOrb: View {
 
     private var aura: some View {
         Circle()
-            .fill(AngularGradient(colors: ThoughtTint.aura, center: .center))
+            .fill(AngularGradient(colors: auraColors, center: .center))
             .frame(width: size * 1.28, height: size * 1.28)
             .blur(radius: size * 0.17)
             .opacity(mode == .heard ? 0.42 : (mode == .done ? 0.3 : 0.15))
@@ -83,9 +86,9 @@ struct EchoOrb: View {
                 let rotA = reduce ? 0 : (t * 0.045).truncatingRemainder(dividingBy: 360)
                 let rotB = reduce ? 0 : (-t * 0.032).truncatingRemainder(dividingBy: 360)
                 drawBlob(EchoEngine.blobB, in: &cloud, center: center, radius: radius, scale: scaleB, degrees: rotB,
-                         color: ThoughtTint.gold.opacity(0.1 + smooth * 0.12))
+                         color: secondary.opacity(0.1 + smooth * 0.12))
                 drawBlob(EchoEngine.blobA, in: &cloud, center: center, radius: radius, scale: scaleA, degrees: rotA,
-                         color: ThoughtTint.mint.opacity(0.13 + smooth * 0.15))
+                         color: primary.opacity(0.13 + smooth * 0.15))
 
                 // Echo-Ringe
                 for start in engine.rings {
@@ -93,7 +96,7 @@ struct EchoOrb: View {
                     let e = EchoEngine.ease(p)
                     let r = radius * (1 + 0.62 * e)
                     let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
-                    gc.stroke(Path(ellipseIn: rect), with: .color(ThoughtTint.mint.opacity(0.7 * (1 - e))),
+                    gc.stroke(Path(ellipseIn: rect), with: .color(primary.opacity(0.7 * (1 - e))),
                               lineWidth: max(1.25, size / 110))
                 }
             }

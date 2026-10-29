@@ -3,6 +3,8 @@ import UIKit
 
 /// Markenfarben aus `electron-menubar/src/globals.css` und der Marke „p-Kopf“.
 enum Brand {
+    static let conversationBlue = UIColor(hex: 0x5AC8FA)
+    static let conversationTurquoise = UIColor(hex: 0x3FD0C9)
     static let green = UIColor(hex: 0x22B45F)
     static let greenBright = UIColor(hex: 0x3AD879)
     static let greenDeep = UIColor(hex: 0x13803F)

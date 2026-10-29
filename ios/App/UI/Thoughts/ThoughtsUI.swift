@@ -528,8 +528,8 @@ enum ThoughtSections {
 
 // MARK: - Navigation und Hinweise
 
-/// Reiter: Gedanken | Aufgaben | Diktat
-enum RootTab: Hashable { case thoughts, tasks, dictation }
+/// Reiter: Gedanken | Gespräche | Aufgaben | Diktat
+enum RootTab: Hashable { case thoughts, conversations, tasks, dictation }
 
 enum ThoughtsRoute: Hashable {
     /// `zoom`: Kennung der Karte bzw. Zeile, aus der das Detail heraus-zoomt (nil = normal schieben)
