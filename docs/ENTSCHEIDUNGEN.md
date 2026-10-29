@@ -158,3 +158,9 @@ Nach Allans Gerätetest.
   Einen **schwebenden Paply-Knopf** (Overlay plus Bedienungshilfe, wie bei Wispr Flow) gibt es bewusst nicht. Allan:
   „keine Lösung, die nur teilweise funktioniert“, denn in manchen Apps ließe sich der Text nicht einsetzen und das
   Einrichten wäre fummelig. Einen Knopf direkt in Gboard oder der Samsung-Tastatur erlaubt Android nicht.
+
+## 2026-10-29 — Paply Android: Konto bzw. Abgleich später (von Allan bestätigt)
+
+Ein Konto, mit dem man sich von mehreren Geräten anmeldet und Transkripte vom Handy auch am Laptop sieht, ist der nächste
+große Schritt. Er kommt aber **später**. Erst müssen die einzelnen Geräte solide laufen. Bis dahin bleiben alle Daten nur
+auf dem jeweiligen Gerät.
