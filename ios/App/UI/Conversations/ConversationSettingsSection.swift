@@ -5,9 +5,13 @@ import SwiftUI
 struct ConversationSettingsSection: View {
     let learnedThoughtCount: Int?
     let people: [VoicePerson]
-    let onEnroll: () -> Void
+    /// nil: „Jetzt einsprechen“ öffnet die Seite `Route.voiceEnrollment` im Navigationsstapel der Einstellungen.
+    /// Ein Blatt aus einer Form-Zeile heraus schloss auf dem Gerät beim Antippen die ganzen Einstellungen.
+    var onEnroll: (() -> Void)? = nil
     let onForgetOwner: () -> Void
     let onDeletePerson: (String) -> Void
+    /// Fehlermeldung (z. B. Stimme vergessen fehlgeschlagen) – als Alert an genau einer Zeile, nicht an der Section
+    var error: Binding<String?>? = nil
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
@@ -20,7 +24,19 @@ struct ConversationSettingsSection: View {
                         .font(.subheadline).foregroundStyle(Color.paplySecondaryText)
                 }
             }
-            Button("Jetzt einsprechen (20 s)", action: onEnroll)
+            .alert("Gespräche", isPresented: Binding(get: { error?.wrappedValue != nil },
+                                                     set: { if !$0 { error?.wrappedValue = nil } })) {
+                Button("OK") { error?.wrappedValue = nil }
+            } message: {
+                Text(error?.wrappedValue ?? "")
+            }
+            if let onEnroll {
+                Button("Jetzt einsprechen (20 s)", action: onEnroll)
+            } else {
+                NavigationLink(value: Route.voiceEnrollment) {
+                    Text("Jetzt einsprechen (20 s)").foregroundStyle(ConversationTint.blue)
+                }
+            }
             if learnedThoughtCount != nil { Button("Stimme vergessen", role: .destructive, action: onForgetOwner) }
             NavigationLink {
                 ConversationKnownVoicesView(people: people, onDelete: onDeletePerson)

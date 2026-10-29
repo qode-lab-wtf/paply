@@ -16,6 +16,8 @@ enum Route: Hashable {
     case thoughtQueue
     case provisionalTopics
     case entry(String)
+    /// Einstellungen → Gespräche → „Jetzt einsprechen“ (eigene Seite statt Blatt aus einer Form-Zeile)
+    case voiceEnrollment
 }
 
 /// Vier Reiter: Gedanken | Gespräche | Aufgaben | Diktat. Einstellungen als
@@ -266,6 +268,7 @@ private struct SettingsSheet: View {
                     case .vocabulary: VocabularyView()
                     case .spokenLanguages: SpokenLanguagesView()
                     case .thoughtButton: ThoughtButtonGuideView()
+                    case .voiceEnrollment: ConversationEnrollmentPage()
                     case .keyboardSetup: KeyboardSetupView()
                     case .developer: DeveloperView()
                     case .testVariants: TestVariantsView()

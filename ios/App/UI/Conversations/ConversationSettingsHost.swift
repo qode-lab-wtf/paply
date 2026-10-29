@@ -3,28 +3,31 @@ import SwiftUI
 
 struct ConversationSettingsHost: View {
     @State private var model = ConversationsModel.shared
-    @State private var showEnrollment = false
     var body: some View {
+        // Keine Modifier wie .sheet/.alert an der Section: In einer Form verteilt SwiftUI sie auf jede Zeile.
         ConversationSettingsSection(
             learnedThoughtCount: model.learnedThoughtCount, people: model.people,
-            onEnroll: { showEnrollment = true },
             onForgetOwner: { model.perform { try await ConversationsEnvironment.profiles.forgetVoice(VoicePerson.ownerID) } },
-            onDeletePerson: { id in model.perform { try await ConversationsEnvironment.profiles.delete(id) } }
+            onDeletePerson: { id in model.perform { try await ConversationsEnvironment.profiles.delete(id) } },
+            error: Binding(get: { model.error }, set: { model.error = $0 })
         )
-        .sheet(isPresented: $showEnrollment) { ConversationEnrollmentSheet() }
-        .alert("Gespräche", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("OK") { model.error = nil }
-        } message: { Text(model.error ?? "") }
     }
 }
 
-/// Die Präsentation lebt unabhängig vom Profil-Reload und endet nur durch Nutzeraktion.
+/// Als Blatt (Hinweis-Pille im Reiter „Gespräche“): eigener Navigationsstapel um die Einsprech-Seite.
 struct ConversationEnrollmentSheet: View {
+    var body: some View {
+        NavigationStack { ConversationEnrollmentPage() }
+    }
+}
+
+/// Einsprechen (20 s). Als Seite in den Einstellungen bzw. im Blatt der Hinweis-Pille; endet nur durch Nutzeraktion.
+struct ConversationEnrollmentPage: View {
     @Environment(\.dismiss) private var dismiss
     @State private var enrollment = ConversationEnrollment()
     @State private var saved = false
     var body: some View {
-        NavigationStack {
+        Group {
             if saved {
                 VStack(spacing: 20) {
                     Text("Stimmaufnahme gesichert").font(.headline)
