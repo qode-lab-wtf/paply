@@ -14,6 +14,19 @@ import org.junit.rules.TemporaryFolder
 class SettingsRepositoryTest {
     @get:Rule val temporary = TemporaryFolder()
 
+    @Test fun paplyButtonDefaultsOnForNewAndPreviouslyUnsetPreferences() {
+        assertTrue(AppPreferences().paplyButton)
+        assertTrue(SettingsRepository.decode("{}").paplyButton)
+    }
+
+    @Test fun explicitPaplyButtonChoiceSurvivesRoundTrip() {
+        listOf(false, true).forEach { enabled ->
+            val prefs = SettingsRepository.decode("""{"paplyButton":$enabled}""")
+            assertEquals(enabled, prefs.paplyButton)
+            assertEquals(enabled, SettingsRepository.decode(SettingsRepository.encode(prefs)).paplyButton)
+        }
+    }
+
     @Test fun languageCodesAreIsoAndLegacyAliasesBecomeModernCodes() {
         assertEquals(listOf("he", "id", "yi", "de", "zh"), LanguageCodes.list(
             listOf("iw-IL", "he", "in_ID", "ji", "de-DE", "zh-Hant", "zz", "xyz", "mul", "und", "zxx", "emoji", "en-XA", "ar_XB")))

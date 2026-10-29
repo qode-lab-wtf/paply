@@ -66,7 +66,7 @@ data class AppPreferences(
     val developerMode: Boolean = false,
     val tileAdded: Boolean = false,
     internal val revision: Long = 0,
-    val paplyButton: Boolean = false,
+    val paplyButton: Boolean = true,
     val buttonForeground: Boolean = false,
 ) {
     val languages: List<String> get() = if (automaticLanguages) detectedLanguages else manualLanguages
@@ -159,7 +159,7 @@ class SettingsRepository private constructor(context: Context) {
             return AppPreferences(o.optBoolean("automaticLanguages", true), list("detectedLanguages"), list("manualLanguages"),
                 o.optString("mainLanguage").takeIf { it.isNotBlank() }, o.optString("vocabulary"),
                 o.optString("transcriptionModel", "whisper-large-v3"), o.optBoolean("chunkUpload", true),
-                o.optBoolean("betaThoughts", true), o.optBoolean("developerMode"), o.optBoolean("tileAdded"), o.optLong("revision"), o.optBoolean("paplyButton"), o.optBoolean("buttonForeground")).normalized()
+                o.optBoolean("betaThoughts", true), o.optBoolean("developerMode"), o.optBoolean("tileAdded"), o.optLong("revision"), o.optBoolean("paplyButton", true), o.optBoolean("buttonForeground")).normalized()
         }
         internal fun encode(p: AppPreferences) = JSONObject().apply {
             put("automaticLanguages", p.automaticLanguages); put("detectedLanguages", JSONArray(p.detectedLanguages))

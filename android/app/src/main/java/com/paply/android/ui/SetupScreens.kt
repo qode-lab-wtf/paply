@@ -32,11 +32,27 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
         val confirmTile: Boolean = false, val keyLink: Boolean = false)
     val context = LocalContext.current
     val buttonEnabled = rememberButtonServiceEnabled()
+    val scope = rememberCoroutineScope()
+    var buttonSetupError by remember { mutableStateOf(false) }
+    var openingButtonSetup by remember { mutableStateOf(false) }
     val steps = buildList {
         add(Step("Mikro erlauben", if (!status.microphone && status.microphoneDenied) "Ist aus. In den Android-Einstellungen bei Paply „Mikrofon“ erlauben." else if (prefs.betaThoughts) "Für Diktat und Gedanken." else "Fürs Diktat.", status.microphone, if (status.microphoneDenied) "Öffnen" else "Erlauben", microphone))
         add(Step("Benachrichtigungen erlauben", if (!status.notifications && status.notificationsDenied) "Ist aus. In den Android-Einstellungen bei Paply „Benachrichtigungen“ erlauben." else "Damit du laufende Aufnahmen immer siehst.", status.notifications, if (status.notificationsDenied) "Öffnen" else "Erlauben", notifications))
         add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }, keyLink = true))
-        add(Step("Paply-Knopf", "Diktiere neben deiner normalen Tastatur. Öffne die Einrichtung und tippe zuerst auf „Bedienungshilfe öffnen“.", prefs.paplyButton && buttonEnabled, "Einrichten", { navigate("settings") }))
+        add(Step("Paply-Knopf", "Diktiere neben deiner normalen Tastatur. Öffne die Einrichtung und tippe zuerst auf „Bedienungshilfe öffnen“.", prefs.paplyButton && buttonEnabled, "Einrichten", {
+            if (!openingButtonSetup) {
+                openingButtonSetup = true
+                scope.launch {
+                    try {
+                        SettingsRepository.get(context).update { it.copy(paplyButton = true) }
+                        buttonSetupError = false
+                        navigate("settings")
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { buttonSetupError = true }
+                    finally { openingButtonSetup = false }
+                }
+            }
+        }))
         if (prefs.betaThoughts) add(Step("Gedanken-Knopf", "Als Kachel in den Schnelleinstellungen", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
     }
     val expandedType = LocalDensity.current.fontScale >= 1.5f
@@ -68,6 +84,8 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
             }
             if (index != steps.lastIndex) Hairline()
         }
+        if (buttonSetupError) Text("Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+            color = C.danger, style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = { navigate("keyboard") }) { Text("Alternativ: Paply-Tastatur einrichten") }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Glyph(PaplyIcons.ShieldCheck, tint = C.thoughtMint, size = 16.dp)

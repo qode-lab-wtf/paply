@@ -16,6 +16,28 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.paply.android.button.PaplyButtonService
 import kotlinx.coroutines.delay
 
+/** Pending destinations are saved too, so returning after recreation follows the same cycle. */
+internal enum class ButtonSetupStage {
+    START, ACCESSIBILITY_OPEN, APP_INFO, APP_INFO_OPEN, RETRY_ACCESSIBILITY,
+}
+
+internal enum class ButtonSetupEvent { OPEN_ACCESSIBILITY, OPEN_APP_INFO, RESUME }
+
+internal fun nextButtonSetupStage(
+    stage: ButtonSetupStage,
+    event: ButtonSetupEvent,
+    serviceEnabled: Boolean,
+    restrictedSettingsPossible: Boolean,
+): ButtonSetupStage = when {
+    serviceEnabled -> ButtonSetupStage.START
+    event == ButtonSetupEvent.OPEN_ACCESSIBILITY -> ButtonSetupStage.ACCESSIBILITY_OPEN
+    event == ButtonSetupEvent.OPEN_APP_INFO -> ButtonSetupStage.APP_INFO_OPEN
+    stage == ButtonSetupStage.APP_INFO_OPEN -> ButtonSetupStage.RETRY_ACCESSIBILITY
+    stage == ButtonSetupStage.ACCESSIBILITY_OPEN ->
+        if (restrictedSettingsPossible) ButtonSetupStage.APP_INFO else ButtonSetupStage.START
+    else -> stage
+}
+
 internal fun buttonSetupLocation(manufacturer: String): String =
     if (manufacturer.equals("samsung", ignoreCase = true)) {
         "Dort: Installierte Apps → Paply → einschalten."
