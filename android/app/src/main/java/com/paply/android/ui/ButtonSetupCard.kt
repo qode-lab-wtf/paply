@@ -38,9 +38,9 @@ fun ButtonSetupCard(prefs: AppPreferences) {
         if (error) Text("Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.")
         StatusLine("Bedienungshilfe eingeschaltet", enabled)
         if (enabled && prefs.paplyButton) {
+            Text("Fertig. Tipp in ein Textfeld – der Paply-Knopf erscheint über dem Eingabefeld.")
             Text("Unten rechts erscheint ein Bedienungshilfe-Symbol? In den Einstellungen bei Paply-Knopf die „Verknüpfung“ ausschalten.",
                 style = MaterialTheme.typography.bodySmall, color = C.secondary)
-            Text("Fertig. Tipp in ein Textfeld – der Paply-Knopf erscheint über deiner Tastatur.")
         } else if (prefs.paplyButton) {
             Text("Schritt 1", style = MaterialTheme.typography.titleSmall)
             Pill("Bedienungshilfe öffnen", {

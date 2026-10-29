@@ -34,6 +34,7 @@ class PaplyButtonService : AccessibilityService() {
     private var keyboardTop = 0
     private val keyboardStability = ButtonKeyboardStability()
     private var keyboardStable = false
+    private val fieldStability by lazy { ButtonFieldStability(dp(4)) }
     private var generation = 0
     private var foreground = false
     internal var awaitingForeground = false; private set
@@ -91,6 +92,9 @@ class PaplyButtonService : AccessibilityService() {
             next?.isFocused == true, next?.isEditable == true, next?.isPassword == true, keyboard.isNotEmpty() &&
                 getSystemService(android.os.PowerManager::class.java).isInteractive &&
                 !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
+        if (next != field || !eligible) fieldStability.reset()
+        val fieldBounds = if (eligible) next?.let { Rect().also(it::getBoundsInScreen) } else null
+        fieldStability.observe(fieldBounds?.takeUnless { it.isEmpty }?.top, SystemClock.elapsedRealtime())
         field = next
         if (phase != ButtonPolicy.Phase.IDLE && (changed || next != origin || !eligible)) {
             changed = true
@@ -272,7 +276,10 @@ class PaplyButtonService : AccessibilityService() {
         val safeTop = maxOf(insets?.stableInsetTop ?: dp(28), insets?.displayCutout?.safeInsetTop ?: 0)
         val safeLeft = maxOf(insets?.displayCutout?.safeInsetLeft ?: 0, insets?.stableInsetLeft ?: 0)
         val safeRight = maxOf(insets?.displayCutout?.safeInsetRight ?: 0, insets?.stableInsetRight ?: 0)
-        val y = ButtonPosition.top(keyboardTop.coerceAtMost(screen.y), safeTop, dp(72), dp(8), offset)
+        val size = if (phase == ButtonPolicy.Phase.IDLE) dp(56) else dp(72)
+        val inset = (dp(72) - size) / 2
+        val y = ButtonPosition.fieldTop(keyboardTop.coerceAtMost(screen.y), screen.y,
+            fieldStability.top, safeTop, dp(72), dp(8), offset)?.plus(inset)
         val show = keyboardStable && y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
         if (!show) {
             bar?.let { view ->
@@ -294,10 +301,10 @@ class PaplyButtonService : AccessibilityService() {
             cancel = TextView(this).apply { text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
             label?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); cornerRadius = dp(16).toFloat() }
             cancel?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); shape = GradientDrawable.OVAL }
-            view.addView(label, LinearLayout.LayoutParams(-2,dp(64)))
+            view.addView(label, LinearLayout.LayoutParams(-2,dp(48)))
             view.addView(cancel, LinearLayout.LayoutParams(dp(48),dp(48)))
-            view.addView(logo, LinearLayout.LayoutParams(dp(72),dp(72)))
-            layout = WindowManager.LayoutParams(-2, dp(72), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            view.addView(logo, LinearLayout.LayoutParams(size,size))
+            layout = WindowManager.LayoutParams(-2, size, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.RIGHT
@@ -320,21 +327,25 @@ class PaplyButtonService : AccessibilityService() {
             if (ValueAnimator.areAnimatorsEnabled()) { view.alpha = 0f; view.animate().alpha(1f).setDuration(140).start() }
         }
         logo?.setPhase(phase)
+        logo?.let { if (it.layoutParams.width != size) {
+            it.layoutParams = LinearLayout.LayoutParams(size, size)
+        } }
         label?.visibility = if (hintText == null) View.GONE else View.VISIBLE
         cancel?.visibility = if (phase == ButtonPolicy.Phase.STARTING || phase == ButtonPolicy.Phase.RECORDING) View.VISIBLE else View.GONE
         if (label?.text?.toString().orEmpty() != hintText.orEmpty()) label?.text = hintText
         val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, dp(8))
-        val controlsWidth = dp(72) + (if (cancel?.visibility == View.VISIBLE) dp(48) else 0)
-        label?.maxWidth = (horizontal.width - controlsWidth).coerceAtLeast(0)
+        val controlsWidth = size + (if (cancel?.visibility == View.VISIBLE) dp(48) else 0)
+        label?.maxWidth = (horizontal.width - inset - controlsWidth).coerceAtLeast(0)
         bar?.layoutDirection = View.LAYOUT_DIRECTION_LTR
-        bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(72), View.MeasureSpec.EXACTLY))
+        bar?.measure(View.MeasureSpec.makeMeasureSpec((horizontal.width - inset).coerceAtLeast(0), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY))
         // Fix the actual window width too: a WRAP_CONTENT relayout can otherwise
         // grow beyond the measured left-anchored position on the next frame.
-        val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
-        layout.width = (bar?.measuredWidth ?: dp(72)).coerceAtMost(horizontal.width)
-        layout.x = horizontal.rightMargin
+        val previousHeight = layout.height; val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
+        layout.width = (bar?.measuredWidth ?: size).coerceAtMost(horizontal.width)
+        layout.height = size
+        layout.x = horizontal.rightMargin + inset
         layout.y = y ?: safeTop
-        if (layout.width != previousWidth || layout.x != previousX || layout.y != previousY)
+        if (layout.height != previousHeight || layout.width != previousWidth || layout.x != previousX || layout.y != previousY)
             bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
     }
     override fun onInterrupt() {

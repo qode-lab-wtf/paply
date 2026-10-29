@@ -30,4 +30,28 @@ class ButtonPositionTest {
         }
         assertNull(ButtonPosition.top(100, 80, 44, 8, 0))
     }
+    @Test fun lowerEditorKeepsSendRowClear() {
+        assertEquals(620, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 0))
+        // A malformed field below the IME must never lower the button.
+        assertEquals(680, ButtonPosition.fieldTop(760, 1000, 900, 24, 72, 8, 0))
+    }
+    @Test fun upperEditorAndMissingBoundsUseKeyboard() {
+        for (field in listOf(null, 40, 400, 500)) {
+            assertEquals(680, ButtonPosition.fieldTop(760, 1000, field, 24, 72, 8, 0))
+        }
+    }
+    @Test fun multilineGrowthRaisesButton() {
+        val single = ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 0)!!
+        val multiline = ButtonPosition.fieldTop(760, 1000, 580, 24, 72, 8, 0)!!
+        assertEquals(120, single - multiline)
+    }
+    @Test fun insufficientRoomAboveFieldFallsBackAndAboveKeyboardHides() {
+        assertEquals(180, ButtonPosition.fieldTop(260, 300, 160, 100, 72, 8, 0))
+        assertNull(ButtonPosition.fieldTop(170, 300, 160, 100, 72, 8, 0))
+    }
+    @Test fun dragOffsetAppliesAboveFieldAndClampsToSafeTop() {
+        assertEquals(520, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 100))
+        assertEquals(24, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 9999))
+        assertEquals(620, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, -20))
+    }
 }

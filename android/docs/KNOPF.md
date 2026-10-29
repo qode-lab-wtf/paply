@@ -158,3 +158,29 @@ grün. 401 Core + 433 Thoughts + 153 App bestanden, 1 bestehender Core-Test
 Neue Tests: Samsung-/Standardtext, beide Hervorhebungs-Extras sowie Rückfälle auf
 Bedienungshilfe ohne Extras und allgemeine Einstellungen. Keine Emulator-UI und
 keine Groq-Aufrufe; Geräteabnahme der Einrichtung bleibt bei der Bauleitung.
+
+## 0.2.1 – Knopf über dem Eingabefeld
+
+Die Oberkante des fokussierten editierbaren Feldes (`getBoundsInScreen`, ohne
+Textzugriff) bestimmt jetzt die Position: Liegt sie in der unteren Bildschirmhälfte
+und ist darüber genügend Platz bis `safeTop`, sitzt der Knopf über dem Feld.
+Sonst bleibt er über der Tastatur, niemals tiefer als bisher. Der gespeicherte
+Zieh-Offset verschiebt ihn zusätzlich nach oben, begrenzt durch `safeTop`.
+Wachsende Felder werden nach 150 ms stabiler Lage übernommen; Änderungen bis
+4 dp werden ignoriert. Bei Fokuswechsel wird die alte Feldposition verworfen.
+
+Ruhe: 56 × 56 dp Fenster mit 48-dp-Knopf, ohne unsichtbare 72-dp-Touchfläche.
+Start/Aufnahme: 120 × 72 dp einschließlich 48-dp-Abbrechen links; Verarbeitung
+und Haken: 72 × 72 dp. Sichtbare Hinweise erweitern nur die benötigte Breite.
+Die Position reserviert den 72-dp-Ringbereich mit 8 dp Abstand zum Feld bzw.
+zur Tastatur; das Ruhefenster ist darin um 8 dp eingerückt (16 dp Abstand).
+So bleibt der Mittelpunkt beim Größenwechsel unverändert. Größe und Position
+werden gemeinsam mit einem `updateViewLayout` übernommen.
+
+Prüfung auf dem MacBook über `scripts/mb.sh`, `PAPLY_WORK=work-knopf021`:
+`:app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest`
+alle grün (`BUILD SUCCESSFUL`, 26 s).
+Neue Unit-Tests decken untere/obere Felder, mehrzeiliges Wachstum, Platzmangel,
+Zieh-Offset, Stabilisierung, 4-dp-Toleranz und das Verwerfen alter Grenzen ab.
+Keine Emulator-UI, keine Groq-Aufrufe. Geräteabnahme auf dem Samsung S22 bleibt
+offen. Version unverändert 0.2.1 (7).
