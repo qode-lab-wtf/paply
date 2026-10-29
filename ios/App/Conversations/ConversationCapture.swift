@@ -40,6 +40,8 @@ final class ConversationCapture {
     @ObservationIgnored private var bootstrapped = false
     @ObservationIgnored private var lastCommand: UUID?
     private var manualPause = false
+    private var pauseNotified = false
+    private var gapWrite: Task<Void, Never>?
     private var interrupted = false
     private var gapReason = "call"
     var elapsed: Double { Double(writer?.durationMs ?? 0) / 1000 }
@@ -72,7 +74,6 @@ final class ConversationCapture {
 
     /// false: Mikro braucht den Vordergrund; Speicherfehler werden als Hinweis sichtbar.
     func toggle(trigger: ThoughtTrigger = .app) async -> Bool {
-        ConversationModels.shared.start()
         bootstrap()
         if active != nil { finish(); return true }
         guard !starting, !finishing else { return true }
@@ -86,6 +87,7 @@ final class ConversationCapture {
             ConversationNavigation.shared.error = notice
             return true
         }
+        ConversationModels.shared.start()
         starting = true
         pendingDiscard = nil
         defer { starting = false }
@@ -156,6 +158,7 @@ final class ConversationCapture {
                 return
             }
             do {
+                await gapWrite?.value
                 if let value = try await store.finishRecording(current.id, durationMs: duration, gaps: savedGaps) {
                     finishing = false
                     if let onRecordingFinished { await onRecordingFinished(value) }
@@ -196,6 +199,8 @@ final class ConversationCapture {
                 gapPosition = sink?.pause() ?? elapsed
                 pauseAt = Date()
                 gapReason = reason
+                pauseNotified = false
+                persistGaps()
             }
         } else {
             closeGap()
@@ -211,25 +216,17 @@ final class ConversationCapture {
                 reason: gapReason, startedAt: pauseAt, endedAt: end))
         }
         pauseAt = nil
+        persistGaps()
     }
-    func importAudio(_ url: URL) async {
-        guard AppSettings.shared.betaConversations else {
-            ConversationNavigation.shared.error = "Aktiviere Gespräche in den Beta-Einstellungen."
-            return
-        }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do {
-            let value = try await store.importAudio(from: url, at: Date())
-            let inbox = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Inbox").standardizedFileURL
-            if url.standardizedFileURL.deletingLastPathComponent() == inbox { try? FileManager.default.removeItem(at: url) }
-            ConversationNavigation.shared.requestedID = value.id
-            ConversationBackground.shared.begin(id: value.id)
-            await onRecordingFinished?(value)
-            ConversationBackground.shared.end(id: value.id)
-        } catch {
-            ConversationNavigation.shared.error = "Die Aufnahme ließ sich nicht öffnen."
-            Diag.log("conversation.import.failed", ["code": .i((error as NSError).code)])
+    private func persistGaps() {
+        guard let id = active?.id else { return }
+        var snapshot = gaps
+        if let pauseAt { snapshot.append(.init(at: gapPosition, seconds: 0, reason: gapReason, startedAt: pauseAt, endedAt: nil)) }
+        let saved = snapshot
+        let previous = gapWrite
+        gapWrite = Task {
+            await previous?.value
+            try? await ConversationsEnvironment.store.update(id) { if $0.state == .recording { $0.gaps = saved } }
         }
     }
     private var freeBytes: Int64 {
@@ -245,6 +242,10 @@ final class ConversationCapture {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard !Task.isCancelled, let active else { return }
+                if let pauseAt, !pauseNotified, Date().timeIntervalSince(pauseAt) >= 600 {
+                    pauseNotified = true
+                    update(.paused, note: "Pausiert seit 10 Min.")
+                }
                 let seconds = elapsed
                 let wallSeconds = Date().timeIntervalSince(active.startedAt)
                 if seconds >= 14_400 || wallSeconds >= 28_800 || freeBytes < 200_000_000 || writer?.hasFailed == true {

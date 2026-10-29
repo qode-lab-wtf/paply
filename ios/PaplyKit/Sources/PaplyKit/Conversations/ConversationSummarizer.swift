@@ -63,7 +63,7 @@ public actor ConversationSummarizer {
 
     public func summarize(_ input: ConversationAnalysisInput, transcript: ConversationTranscript, speakers: [ConversationSpeaker], apiKey: String) async throws -> ConversationAnalysis {
         let raw = transcript.utterances.map(\.text).joined(separator: " ")
-        let lines = ConversationText.transcriptLines(transcript.utterances, gaps: input.gaps) { "\($0.speakerID)\(ConversationInterjections.eligible($0) ? " [UNSICHER \($0.id)]" : ""): \($0.text)" }
+        let lines = ConversationText.transcriptLines(transcript.utterances, gaps: input.gaps.map { ConversationGap(at: $0.at, seconds: max(60, $0.seconds), reason: "pause") }) { "\($0.speakerID)\(ConversationInterjections.eligible($0) ? " [UNSICHER \($0.id)]" : ""): \($0.text)" }
         let context = Self.context(input, speakers: speakers, raw: raw)
         func chunks(_ text: String) -> [String] {
             var result: [String] = [], current = ""

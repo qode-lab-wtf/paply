@@ -18,7 +18,6 @@ struct ConversationsTab: View {
                 showPrivacyHint: AppSettings.shared.conversationRecordingCount < 3,
                 onRecord: {
                     Task {
-                        model.stopPlayback()
                         if ConversationCapture.shared.active == nil {
                             _ = await ConversationCapture.shared.toggle(trigger: .app)
                         }
@@ -34,7 +33,7 @@ struct ConversationsTab: View {
             .safeAreaInset(edge: .top) {
                 if !ConversationModels.shared.ready {
                     Button { ConversationModels.shared.start() } label: {
-                        Text(ConversationModels.shared.failed ? "Fehler – erneut versuchen" : "Sprechererkennung wird geladen … \(Int(ConversationModels.shared.fraction * 100)) %")
+                        Text(ConversationModels.shared.statusLine)
                             .font(.footnote).padding(8)
                     }
                 }
@@ -75,7 +74,7 @@ struct ConversationDetailHost: View {
         Group {
             if let item = model.display(id, thoughts: thoughts), item.conversation.deletedAt == nil {
                 ConversationDetailView(
-                    item: item, utterances: model.transcripts[id] ?? [], playingUtteranceID: model.playingUtteranceID,
+                    item: item, utterances: model.transcripts[id] ?? [], playingUtteranceID: nil,
                     audioAvailable: model.audioIDs.contains(id), pendingTaskIDs: checkoff.pending,
                     actions: actions(item)
                 )
@@ -123,7 +122,7 @@ struct ConversationDetailHost: View {
     private func actions(_ item: ConversationDisplay) -> ConversationDetailActions {
         ConversationDetailActions(
             rename: { title in model.perform { try await ConversationsEnvironment.editing.rename(id, title: title) } },
-            chooseTopic: { nav.topicPicker = SheetID(id: id) }, speaker: { speakerID = $0 },
+            chooseTopic: { nav.topicPicker = SheetID(id: id) }, speaker: { if item.conversation.stagesDone.contains(.speakers) { speakerID = $0 } },
             suggestion: { speakerID, yes in
                 guard let speaker = item.conversation.speakers.first(where: { $0.id == speakerID }) else { return }
                 if yes, let suggestion = speaker.suggestion {
@@ -138,10 +137,10 @@ struct ConversationDetailHost: View {
                 if let task = item.tasks.first(where: { $0.id == taskID }) {
                     checkoff.toggle(task, thoughtID: id, model: thoughts, reduceMotion: reduce)
                 }
-            }, play: { model.play(id, utterance: $0, continuing: false) }, reassign: { utteranceID = $0 },
+            }, play: { _ = $0 }, reassign: { utteranceID = $0 },
             copyUtterance: { utteranceID in
                 UIPasteboard.general.string = model.transcripts[id]?.first { $0.id == utteranceID }?.text
-            }, playFrom: { model.play(id, utterance: $0, continuing: true) }, share: { share = true },
+            }, playFrom: { _ = $0 }, share: { share = true },
             copyTranscript: { model.copyTranscript(item) },
             retry: { model.perform { try await ConversationsEnvironment.processor.retry(id) } },
             delete: {

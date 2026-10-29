@@ -160,8 +160,17 @@ private struct AvailableSpeakerDiarizer: SpeakerDiarizing {
         return try await NemotronSpeakerDiarizer(directory: ConversationModels.directory).voiceprint(audio: audio)
     }
     func diarize(audio: URL, expectedSpeakers: Int?, progress: @escaping @Sendable (Double) -> Void) async throws -> Diarization {
+        guard ProcessInfo.processInfo.thermalState != .serious,
+              ProcessInfo.processInfo.thermalState != .critical else { throw SpeakerProcessingDeferred.thermal }
         guard ConversationModels.isReady else { throw ThoughtStoreError.unavailable }
-        return try await NemotronSpeakerDiarizer(directory: ConversationModels.directory)
-            .diarize(audio: audio, expectedSpeakers: expectedSpeakers, progress: progress)
+        do {
+            return try await NemotronSpeakerDiarizer(directory: ConversationModels.directory)
+                .diarize(audio: audio, expectedSpeakers: expectedSpeakers, progress: progress)
+        } catch SpeakerProcessingDeferred.thermal { throw SpeakerProcessingDeferred.thermal }
+        catch is CancellationError { throw CancellationError() }
+        catch {
+            await MainActor.run { ConversationModels.shared.invalidate() }
+            throw error
+        }
     }
 }

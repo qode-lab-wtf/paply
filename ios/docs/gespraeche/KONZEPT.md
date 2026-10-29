@@ -24,8 +24,8 @@ danach festgezurrt). Schnittstellen: `PaplyKit/Sources/PaplyKit/Conversations/Co
 
 Alle belegten Aufgaben bleiben am Gespräch (`summary.commitments`, Sprecher-ID oder `shared`).
 Nur sicher erkannte oder als „Ich“ bestätigte Personen liefern Aufgaben für den Reiter; gemeinsame/unklare
-Aufgaben erst, wenn ein Besitzer feststeht. Alte Zusagen bleiben lesbar, alte Gedanken-Aufgaben werden einmal
-als unklar in den Katalog übernommen (`taskCatalogVersion = 1`).
+Aufgaben ausschließlich nach ausdrücklichem „In meine Aufgaben“. Alte Zusagen bleiben lesbar, alte KI-Aufgaben werden einmal
+als unklar in den Katalog übernommen (niemals Nutzer-Aufgaben) (`taskCatalogVersion = 1`).
 
 ## 1. Erlebnis
 
@@ -147,9 +147,9 @@ Gespräch                                         (Wortlaut, Beiträge nach Spre
   Bestätigen speichert den Stimmabdruck dieser Person (lokal) → nächstes Mal ohne Frage.
 - **Vorschlag als Frage im Kopf**, wenn vorhanden: dezentes Band „Ist Person 2 Herr Müller?  [Ja] [Nein]“ – höchstens
   eins gleichzeitig, das mit dem größten Sprechanteil zuerst.
-- **Beitrag lange drücken** → „Anderer Sprecher …“, „Text kopieren“, „Ab hier anhören“.
-- **Antippen eines Beitrags** spielt die Stelle ab (Ton bleibt 30 Tage, siehe §7), damit man prüfen kann, wer es war.
-- ⋯: Teilen (Zusammenfassung + Aufgaben als Text), Wortlaut kopieren, Erneut auswerten, Löschen.
+- **Beitrag lange drücken** → „Anderer Sprecher …“, „Text kopieren“.
+- Keine Wiedergabe: Ton wird unmittelbar nach erfolgreicher Auswertung gelöscht.
+- ⋯: Teilen (Zusammenfassung + Aufgaben als Text), Wortlaut kopieren, Löschen.
 - Zustände: wartend/fehlend wie bei Gedanken (Band oben mit „Erneut versuchen“). Teilweise fertig: Sprecher + Wortlaut
   stehen, Zusammenfassung zeigt „wartet auf Kontingent“ o. ä.
 
@@ -160,14 +160,10 @@ Gespräch                                         (Wortlaut, Beiträge nach Spre
 - **Bekannte Stimmen:** Liste (Name, seit wann), Wischen löscht.
 - **Hinweis Datenschutz:** 3 Sätze (§ 201 StGB, was lokal bleibt, was an Groq geht).
 
-### 3.6 Teilen → Paply (Anrufaufnahme, Sprachmemos, Dateien)
+### 3.6 Nur Mikrofonaufnahme
 
-Die App meldet Audio-Dokumenttypen an (`CFBundleDocumentTypes`: `public.audio`, `com.apple.m4a-audio`,
-`public.mpeg-4-audio`, `com.microsoft.waveform-audio`, `public.mp3`, `com.apple.coreaudio-format`) und erscheint so
-im Teilen-Menü. Öffnen → Gespräch „Importiert“ wird angelegt und ausgewertet, Detail öffnet sich. Ob die
-iOS-Anrufaufnahme (Notizen) beide Seiten getrennt als Stereo liefert, klärt ein Testanruf; falls ja, ordnet Paply
-die Sprecher bei Anrufen direkt über die Kanäle zu (praktisch fehlerfrei). Falls die App im Teilen-Menü aus Notizen
-nicht erscheint: Share-Extension als eigenes Target nachrüsten.
+Gespräche entstehen ausschließlich über das Mikro dieses iPhones. Kein Dateiimport, keine Audio-Dokumenttypen,
+keine Inbox-Verarbeitung. Die ungenutzte Importfähigkeit in PaplyKit bleibt für spätere Plattformen erhalten.
 
 ## 4. Aufnahme-Technik
 
@@ -208,7 +204,7 @@ eine zusätzlich gesetzte eigene Pause bleibt bestehen.
 Gerüst:
 
 1. **Diarisierung auf dem Gerät** über die ganze Datei: Segmente (Start, Ende, Cluster) + Mittelwert-Abdruck je Cluster.
-   Sprecherzahl automatisch; bei Anruf-Import mit zwei Kanälen fest 2.
+   Sprecherzahl automatisch; in der App gibt es keine Importe.
 2. **Aufräumen:** Splitter-Cluster (wenig Sprechzeit) dem ähnlichsten zuschlagen; sehr ähnliche Cluster zusammenlegen.
 3. **Wort → Sprecher:** Whisper-Wörter mit Zeitmarken; jedes Wort bekommt den Cluster mit der größten Überlappung
    (Lücken: nächstes Segment). Danach Beiträge bilden: Satzgrenzen aus Satzzeichen/Pausen, Sprecherwechsel innerhalb
@@ -247,7 +243,7 @@ Text erhalten; nur Sprecher und Eigentümerschaft werden übertragen.
   Er darf: Titel, Zusammenfassung, Kernpunkte, Aufgaben (mit Zitat), Zusagen anderer (mit Zitat), Thema (vorhandene ID,
   keins oder Vorschlag), Namensvorschläge je Sprecher (mit Zitat). Er darf **nichts** an Themen, anderen Gedanken oder vom
   Nutzer gesetzten Feldern ändern. Prompt knapp, Rechte im Code durchgesetzt.
-- Alle Aufgaben mit Zuständigkeit → Gespräch; nur sichere Besitzer-Aufgaben sowie bei bekanntem Besitzer unklare/gemeinsame → Aufgaben-Reiter. Zitate werden im Wortlaut geprüft (wie `ThoughtValidator`), Fälligkeiten über `SpokenTime`.
+- Alle Aufgaben mit Zuständigkeit → Gespräch; nur sichere Besitzer-Aufgaben → Aufgaben-Reiter. Zitate werden im Wortlaut geprüft (wie `ThoughtValidator`), Fälligkeiten über `SpokenTime`.
 - **Free-Tier-Grenzen (gemessen 29.10.):** `gpt-oss-120b` und `-20b` je 8000 Tokens/Min., 1000 Anfragen/Tag; Whisper je
   Modell 7200 Audio-s/Std. Lange Gespräche: Wortlaut in Stücke (≤ ca. 4500 Tokens Eingabe), je Stück Kernpunkte,
   Aufgaben, Zusagen, Namenshinweise; danach ein Abschluss-Lauf über die Stück-Ergebnisse. Takt nach den
@@ -265,7 +261,7 @@ Application Support/Gespraeche/
   conversations/<id>/conversation.json   (Conversation)
                      transcript.json     (ConversationTranscript)
                      voiceprints.json    (Abdruck je Sprecher-ID, lokal)
-                     audio.wav           (Ton; nach erfolgreicher Auswertung → audio.m4a, 30 Tage, dann gelöscht)
+                     audio.wav           (Ton nur bis done; dann sofort gelöscht, keine m4a-Kopie)
                      work/               (Zwischenstände der Stufen; nach „done“ gelöscht)
   voices.json                            ([VoicePerson], inkl. Besitzer)
   voice-learning/                        (kurz zwischengelagerte Gedanken-WAVs fürs Lernen; nach Abdruck gelöscht)
@@ -288,10 +284,29 @@ nach „Zuletzt gelöscht“; Wiederherstellen ebenso.
 | --- | --- | --- |
 | M | astra | Messung Motoren + eigene Logik → MESSUNG.md, Mess-Werkzeug `ios/tools/gespraeche-bench/` |
 | K | astra | PaplyKit `Conversations/`: Speicher, Ledger, Whisper-Stücke, Zuordnung, Profile, KI + Validierung, Warteschlange, Tests |
-| A | astra | App: Mithörer im Tap, Aufnahme, Live Activity, Steuerelement/Siri, Import (Dokumenttypen), Hintergrund, Gedanken-Lernhaken, Verknüpfung Gedanke, `ConversationsModel` |
+| A | astra | App: Mithörer im Tap, Aufnahme, Live Activity, Steuerelement/Siri, Hintergrund, Gedanken-Lernhaken, Verknüpfung Gedanke, `ConversationsModel` |
 | U | sol | Oberfläche §3 als reine Views mit Beispieldaten; danach Verdrahtung |
 | D | astra | Diarisierungs-Motor nach MESSUNG.md hinter `SpeakerDiarizing` |
 | R | Sonnet | Gebündeltes Review je Etappe; gezielt: Tap/Diktat, Hintergrund, Daten |
 
 Verträge: `ConversationContracts.swift`. Abnahme: PaplyKit-Tests grün, App/Widgets bauen Debug + Release, echte
-Aufnahme auf Allans iPhone (2 Personen, 3+ Personen, Anruf-Import), keine Verschlechterung bei Diktat und Gedanken.
+Aufnahme auf Allans iPhone (2 Personen, 3+ Personen), keine Verschlechterung bei Diktat und Gedanken.
+
+
+## Entscheidungen und Härtung nach Review 2 (29.10.2026)
+
+- **E1:** Bei done Ton sofort löschen; wartende/teilweise Gespräche behalten die Aufnahme. Kein Abspielen.
+- **E2:** Fertige Gespräche werden nicht erneut ausgewertet; Neuversuch nur mit vorhandener Aufnahme.
+- **E3:** Nur Mikro dieses iPhones, kein Import in der App.
+- Aufgaben im Reiter stammen nur von sicher zugeordneten Besitzer-Sprechern. Gemeinsam/unklar bleibt im Gespräch;
+  die Modellaktion „In meine Aufgaben“ übernimmt eine einzelne Zusage ausdrücklich als Nutzer-Aufgabe.
+- Gelöschte KI-Aufgaben erhalten Grabsteine; Ableitung nur bei geändertem Katalog/Besitzer.
+  Nutzer-Aufgaben werden niemals in den Gesprächskatalog migriert.
+- Vorläufige Einzelsprecher sind keine Identitäten: Benennen und „Welche Person bist du?“ warten auf die Sprecherstufe.
+- Modellladen nur mit Beta, 199 MB plus 1 GB Kompilierpuffer; Speicherhinweis statt Dialog.
+- Sprecherfehler führen nach drei Versuchen zu needsAttention; Hitze verschiebt die Stufe ohne Fehlerverbrauch.
+- Pausen werden bei Zustandswechsel gespeichert, offene Pausen beim Wiederherstellen geschlossen.
+  Nach zehn Minuten Pause erscheint einmal ein stiller Live-Activity-Hinweis; Mikro bleibt bereit.
+- Stimmprofile, Stimmabdrücke und Diarisierungs-Caches sind vom Backup ausgenommen; Texte bleiben sicherbar.
+- Lernen endet bei zehn Besitzer-Abdrücken. Defekte Lerndateien blockieren weitere Kandidaten nicht.
+- Groq erhält nur Pausendauer in Minuten, keine Pausen-Uhrzeiten.

@@ -6,6 +6,8 @@ import Darwin
 
 /// Lokaler Nemotron-Motor. Der Ordner enthält fast128.mlmodelc und learnable_sil_emb.bin.
 /// CAM++ liefert getrennt davon die lokal vergleichbaren Stimmabdrücke.
+public enum SpeakerProcessingDeferred: Error { case thermal }
+
 public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
     public let embeddingModel = CAMVoiceEmbedding.modelID
     public let directory: URL
@@ -43,6 +45,7 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
             for units in Self.computeUnits {
                 try Task.checkCancellation()
                 do { return try Self.process(audio: audio, directory: directory, units: units, progress: progress) }
+                catch SpeakerProcessingDeferred.thermal { throw SpeakerProcessingDeferred.thermal }
                 catch { lastError = error }
             }
             try Task.checkCancellation()
@@ -51,8 +54,15 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
         return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
     }
 
+    private static func checkThermal() throws {
+        if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
+            throw SpeakerProcessingDeferred.thermal
+        }
+    }
+
     private static func process(audio: URL, directory: URL, units: MLComputeUnits,
                                 progress: @Sendable (Double) -> Void) throws -> Diarization {
+        try checkThermal()
         let config = Nemotron3Config.fast128
         let configuration = MLModelConfiguration()
         configuration.computeUnits = units
@@ -71,18 +81,20 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
         var turns = NemotronTurnAccumulator()
         while file.framePosition < file.length {
             try Task.checkCancellation()
+            try checkThermal()
             try autoreleasepool {
                 try file.read(into: buffer)
                 guard buffer.frameLength > 0, let channel = buffer.floatChannelData?[0] else { throw ThoughtStoreError.unavailable }
                 engine.appendAudio(Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))))
                 for chunk in try engine.processBufferedAudio() {
-                    turns.append(chunk.probabilities, frames: chunk.frameCount)
+                    try turns.append(chunk.probabilities, frames: chunk.frameCount)
                 }
             }
             progress(min(0.99, Double(file.framePosition) / Double(max(1, file.length))))
         }
-        for chunk in try engine.finishStream() { turns.append(chunk.probabilities, frames: chunk.frameCount) }
+        for chunk in try engine.finishStream() { try turns.append(chunk.probabilities, frames: chunk.frameCount) }
         let segments = turns.finish()
+        guard !segments.isEmpty else { throw ThoughtStoreError.unavailable }
         var seconds: [Int: Double] = [:]
         for segment in segments { seconds[segment.cluster, default: 0] += segment.end - segment.start }
         let embedder = try CAMVoiceEmbedding()
@@ -102,7 +114,11 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
                 }
                 clean += parts.filter { $0.upperBound - $0.lowerBound >= 3 }
             }
-            let selected = clean.sorted { $0.upperBound - $0.lowerBound > $1.upperBound - $1.lowerBound }.prefix(5)
+            let windows = clean.flatMap { range -> [Range<Double>] in
+                stride(from: range.lowerBound, to: range.upperBound - 2.99, by: 8).map { $0..<min($0 + 8, range.upperBound) }
+            }.sorted { $0.lowerBound < $1.lowerBound }
+            let count = min(5, windows.count)
+            let selected = (0..<count).map { windows[count == 1 ? 0 : $0 * (windows.count - 1) / (count - 1)] }
             var prints: [VoicePrint] = []
             for range in selected {
                 try Task.checkCancellation()
@@ -114,7 +130,10 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
                 prints.append(VoicePrint(vector: try embedder.embedding(samples: samples), model: CAMVoiceEmbedding.modelID,
                                          seconds: Double(buffer.frameLength) / 16000, source: .conversation))
             }
-            centroids[cluster] = SpeakerThresholds.enrollmentCentroid(prints)
+            let consistent = prints.allSatisfy { a in prints.allSatisfy { b in
+                SpeakerThresholds.cosine(a.vector, b.vector) >= SpeakerThresholds.learning
+            } }
+            if consistent { centroids[cluster] = SpeakerThresholds.enrollmentCentroid(prints) }
         }
         progress(1)
         return Diarization(segments: segments, centroids: centroids, speechSeconds: seconds, model: CAMVoiceEmbedding.modelID)
@@ -126,8 +145,8 @@ struct NemotronTurnAccumulator {
     private var frame = 0
     private var starts = Array<Int?>(repeating: nil, count: 8)
     private var segments: [Diarization.Segment] = []
-    mutating func append(_ probabilities: [Float], frames: Int) {
-        precondition(probabilities.count == frames * 8)
+    mutating func append(_ probabilities: [Float], frames: Int) throws {
+        guard frames >= 0, frames <= Int.max / 8, probabilities.count == frames * 8, probabilities.allSatisfy({ $0.isFinite }) else { throw ThoughtStoreError.unavailable }
         for local in 0..<frames {
             for speaker in 0..<8 {
                 if probabilities[local * 8 + speaker] > 0.5 {

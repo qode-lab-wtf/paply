@@ -33,7 +33,7 @@ struct ConversationReviewTests {
         let root = try ConversationCoreTests().root()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = ConversationStore(root: root)
-        try await store.save(.init(id: "test", origin: .recording, trigger: .app, state: .done))
+        try await store.save(.init(id: "test", origin: .recording, trigger: .app, state: .done, stagesDone: [.speakers]))
         let old = ConversationUtterance(id: "u0", speakerID: "S2", start: 10, end: 12, text: "Guten Morgen", speakerOwner: .user)
         var transcript = ConversationTranscript(utterances: [old], languages: ["de"], model: "test", createdAt: Date())
         try await store.saveTranscript(transcript, for: "test")

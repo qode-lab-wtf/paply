@@ -10,10 +10,14 @@ public final class CAMVoiceEmbedding {
         let config = MLModelConfiguration()
         // Kleines Profilmodell: CPU vermeidet zusätzliche ANE-Kompilierung und Speicherbelegung.
         config.computeUnits = .cpuOnly
-        if let compiled = Bundle.module.url(forResource: "CAMPlus", withExtension: "mlmodelc") {
+        let candidates = [Bundle.main.resourceURL, Bundle(for: CAMVoiceEmbedding.self).resourceURL,
+                          Bundle.main.bundleURL.deletingLastPathComponent()].compactMap { $0 }
+        guard let bundle = candidates.compactMap({ Bundle(url: $0.appendingPathComponent("PaplyKit_PaplyKit.bundle")) }).first
+        else { throw ThoughtStoreError.unavailable }
+        if let compiled = bundle.url(forResource: "CAMPlus", withExtension: "mlmodelc") {
             // Xcode kompiliert auch die SwiftPM-Ressource beim App-Build.
             model = try MLModel(contentsOf: compiled, configuration: config)
-        } else if let source = Bundle.module.url(forResource: "CAMPlus", withExtension: "mlpackage") {
+        } else if let source = bundle.url(forResource: "CAMPlus", withExtension: "mlpackage") {
             let compiled = try MLModel.compileModel(at: source)
             defer { try? FileManager.default.removeItem(at: compiled) }
             model = try MLModel(contentsOf: compiled, configuration: config)

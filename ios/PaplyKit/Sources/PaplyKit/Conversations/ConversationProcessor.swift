@@ -30,6 +30,7 @@ public actor ConversationProcessor: ConversationEditing {
     }
     private var analysis: (id: String, task: Task<ConversationAnalysisOutcome, Never>)?
     private var rerun = false
+    private var reconciled = false
     private var timer: Task<Void, Never>?
     public init(store: ConversationStore, thoughts: ThoughtStore, profiles: VoiceProfileStore, analyzer: any ConversationAnalyzing, environment: Environment) {
         self.store = store; self.thoughts = thoughts; self.profiles = profiles; self.analyzer = analyzer; self.environment = environment
@@ -42,12 +43,17 @@ public actor ConversationProcessor: ConversationEditing {
     public func waitUntilIdle() async { while let running { await running.value } }
     public func cancelRunning() { analysis?.task.cancel(); running?.cancel(); timer?.cancel() }
     public func retry(_ id: String) async throws {
+        guard let item = try await store.conversation(id), item.deletedAt == nil,
+              [.captured, .waitingKey, .waitingNetwork, .waitingBudget, .waitingLimit, .needsAttention].contains(item.state),
+              try await store.audioURL(id) != nil else { return }
         try await store.update(id) { $0.state = .captured; $0.status = .init() }
         kick(reason: "retry")
     }
     public func nextRetryDate() async -> Date? { (try? await store.all())?.filter { $0.deletedAt == nil && [.waitingNetwork, .waitingBudget, .waitingLimit].contains($0.state) }.compactMap(\.status.retryAt).min() }
     private func drain() async {
-        try? await reconcileDeletionStates()
+        if !reconciled {
+            do { try await reconcileDeletionStates(); reconciled = true } catch { running = nil; return }
+        }
         repeat {
             rerun = false
             let items = (try? await store.all()) ?? []
@@ -98,7 +104,13 @@ public actor ConversationProcessor: ConversationEditing {
                 switch outcome {
                 case .done(let result):
                     try await apply(result, id: item.id, state: .done, retryAt: nil, message: nil)
-                case .partial(let result, let state, let retry, let message): try await apply(result, id: item.id, state: state, retryAt: retry, message: message)
+                case .partial(let result, let state, let retry, let message):
+                    var next = state
+                    if !result.stagesDone.contains(.speakers), result.stagesDone.contains(.transcript) {
+                        let updated = try await store.update(item.id) { $0.status.attempts += 1 }
+                        if (updated?.status.attempts ?? 0) >= 3 { next = .needsAttention }
+                    }
+                    try await apply(result, id: item.id, state: next, retryAt: next == .needsAttention ? nil : retry, message: message)
                 case .wait(let state, let retry, let message):
                     try await store.update(item.id) { $0.state = state; $0.status.retryAt = retry; $0.status.message = message }
                 case .empty: try await store.update(item.id) { $0.state = .empty; $0.progress = nil }
@@ -115,6 +127,7 @@ public actor ConversationProcessor: ConversationEditing {
     }
     private func apply(_ result: ConversationAnalysis, id: String, state: ConversationState, retryAt: Date?, message: String?) async throws {
         var result = result
+        try await rememberDeletedTasks(id)
         let edits = try readEdits(id)
         func target(_ source: String) -> String {
             var next = source
@@ -125,7 +138,7 @@ public actor ConversationProcessor: ConversationEditing {
         if var transcript = result.transcript {
             let previous = try await store.transcript(id)
             for i in transcript.utterances.indices {
-                if let user = previous?.utterances.first(where: {
+                if (try await store.conversation(id))?.stagesDone.contains(.speakers) == true, let user = previous?.utterances.first(where: {
                     $0.speakerOwner == .user && ConversationUtteranceMatch.matches($0, transcript.utterances[i])
                 }) {
                     transcript.utterances[i].speakerID = user.speakerID
@@ -186,11 +199,12 @@ public actor ConversationProcessor: ConversationEditing {
             if let model = applied.model {
                 item.ai = .init(model: model, promptVersion: 1, tokens: applied.usage?.total ?? 0, at: Date())
             }
+            let hadSpeakers = item.stagesDone.contains(.speakers)
             item.stagesDone = applied.stagesDone; item.state = state; item.progress = nil
             item.status.retryAt = retryAt; item.status.message = message
             if item.titleOwner != .user, let title = applied.title { item.title = title; item.titleOwner = .ai }
             if let summary = applied.summary { item.summary = summary }
-            item.speakers = applied.speakers.map { speaker in item.speakers.first { $0.id == speaker.id && $0.nameSource == .user } ?? speaker }
+            item.speakers = applied.speakers.map { speaker in item.speakers.first { hadSpeakers && $0.id == speaker.id && $0.nameSource == .user } ?? speaker }
         }
         guard let item, item.deletedAt == nil, let summary = result.summary else { return }
         if await thoughts.thought(id) == nil {
@@ -210,10 +224,13 @@ public actor ConversationProcessor: ConversationEditing {
             if thought.titleOwner != .user { thought.title = item.title.map { ConversationText.render($0, speakers: item.speakers) }; thought.titleOwner = .ai }
             if thought.textOwner != .user { thought.text = ConversationText.render(([summary.overview] + summary.points.map { "• " + $0 }).joined(separator: "\n"), speakers: item.speakers); thought.textOwner = .ai }
             if thought.topicOwner != .user { thought.topicId = topicID; thought.topicOwner = .ai }
-            thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
+            if item.taskDerivationKey != ConversationTasks.key(item) {
+                thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
+            }
             thought.ai = item.ai
             thought.state = .done
         }
+        try await rememberDerivedTasks(id)
     }
     public func housekeeping(now: Date = Date()) async throws {
         for item in try await store.all() {
@@ -260,7 +277,7 @@ public actor ConversationProcessor: ConversationEditing {
         await lock()
         defer { unlock() }
         for item in try await store.all() {
-            if item.deletedAt == nil { try await renderThought(item.id) }
+            if item.deletedAt == nil, item.taskDerivationKey != ConversationTasks.key(item) { try await renderThought(item.id) }
             let journal = store.directory(item.id).appendingPathComponent("deletion.json")
             if FileSafety.exists(journal) {
                 let deleted = try JSONDecoder().decode(Bool.self, from: Data(contentsOf: journal))
@@ -293,11 +310,23 @@ public actor ConversationProcessor: ConversationEditing {
     private func writeEdits(_ edits: Edits, _ id: String) throws {
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(edits), to: store.directory(id).appendingPathComponent("edits.json"))
     }
+    private func rememberDeletedTasks(_ id: String) async throws {
+        guard let item = try await store.conversation(id), let thought = await thoughts.thought(id) else { return }
+        let missing = (item.derivedTaskIDs ?? []).subtracting(thought.tasks.map(\.id))
+        guard !missing.isEmpty else { return }
+        try await store.update(id) { $0.deletedTaskIDs = ($0.deletedTaskIDs ?? []).union(missing) }
+    }
+    private func rememberDerivedTasks(_ id: String) async throws {
+        guard let thought = await thoughts.thought(id) else { return }
+        let ids = Set(thought.tasks.filter { $0.owner == .ai }.map(\.id))
+        try await store.update(id) { $0.derivedTaskIDs = ids; $0.taskDerivationKey = ConversationTasks.key($0) }
+    }
     private func renderThought(_ id: String) async throws {
+        try await rememberDeletedTasks(id)
         if let old = try await store.conversation(id), old.summary?.taskCatalogVersion == nil,
            let linked = await thoughts.thought(id), old.summary != nil {
             try await store.update(id) { item in
-                for task in linked.tasks where !(item.summary?.commitments.contains { $0.id == task.id } ?? false) {
+                for task in linked.tasks where task.owner == .ai && !(item.summary?.commitments.contains { $0.id == task.id } ?? false) {
                     item.summary?.commitments.append(.init(id: task.id, speakerID: "shared", text: task.text, quote: task.quote, dueHint: task.dueHint))
                 }
                 item.summary?.taskCatalogVersion = 1
@@ -311,15 +340,30 @@ public actor ConversationProcessor: ConversationEditing {
             if thought.textOwner != .user, let summary = item.summary {
                 thought.text = ConversationText.render(([summary.overview] + summary.points.map { "• " + $0 }).joined(separator: "\n"), speakers: item.speakers)
             }
-            thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
+            if item.taskDerivationKey != ConversationTasks.key(item) {
+                thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
+            }
         }
+        try await rememberDerivedTasks(id)
         broadcast.yield(.changed(id))
+    }
+
+    public func takeTask(_ id: String, taskID: String) async throws {
+        await lock()
+        defer { unlock() }
+        guard let item = try await store.conversation(id),
+              let task = item.summary?.commitments.first(where: { $0.id == taskID }) else { return }
+        try await thoughts.update(id) { thought in
+            guard !thought.tasks.contains(where: { $0.id == taskID }) else { return }
+            thought.tasks.append(ThoughtTask(id: task.id, text: ConversationText.render(task.text, speakers: item.speakers),
+                quote: task.quote, dueHint: task.dueHint, owner: .user))
+        }
     }
 
     public func nameSpeaker(_ conversationID: String, speakerID: String, as identity: SpeakerIdentity, rememberVoice: Bool) async throws {
         await lock()
         defer { unlock() }
-        guard let item = try await store.conversation(conversationID), item.speakers.contains(where: { $0.id == speakerID }) else { throw ThoughtStoreError.notFound }
+        guard let item = try await store.conversation(conversationID), item.stagesDone.contains(.speakers), item.speakers.contains(where: { $0.id == speakerID }) else { throw ThoughtStoreError.notFound }
         let person: VoicePerson
         switch identity {
         case .owner:
@@ -410,7 +454,7 @@ public actor ConversationProcessor: ConversationEditing {
             item.speakers.removeAll { $0.id == from }
             if let i = item.speakers.firstIndex(where: { $0.id == into }) {
                 item.speakers[i].speechSeconds += source.speechSeconds
-                if source.isOwner {
+                if source.isOwner && item.speakers[i].nameSource != .user {
                     item.speakers[i].personID = VoicePerson.ownerID
                     item.speakers[i].nameSource = .user
                     item.speakers[i].name = nil

@@ -223,6 +223,9 @@ public struct ConversationSummary: Codable, Sendable, Equatable {
 
 /// `conversation.json`. Eine Datei je Gespräch, atomar geschrieben, `rev` steigt bei jeder Änderung.
 public struct Conversation: Codable, Sendable, Identifiable, Equatable {
+    public var taskDerivationKey: String?
+    public var deletedTaskIDs: Set<String>?
+    public var derivedTaskIDs: Set<String>?
     public var schemaVersion: Int
     /// = ID des verknüpften Gedankens (`ThoughtIDs.thought()`)
     public var id: String
@@ -469,9 +472,7 @@ public protocol ConversationRecordingStore: Sendable {
     func finishRecording(_ id: String, durationMs: Int, gaps: [ConversationGap]) async throws -> Conversation?
     /// Verwerfen (landet in „Zuletzt gelöscht“, wiederherstellbar)
     func discardRecording(_ id: String) async
-    /// Fremde Audiodatei übernehmen (Teilen → Paply): kopiert, wandelt nach 16 kHz mono WAV, `state == .captured`.
-    /// `expectedSpeakers` = 2, wenn die Datei zwei getrennte Kanäle hat.
-    func importAudio(from url: URL, at: Date) async throws -> Conversation
+
 }
 
 // MARK: - Bearbeiten durch den Nutzer (Oberfläche ruft, PaplyKit setzt um)

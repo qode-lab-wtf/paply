@@ -30,20 +30,20 @@ struct SpeakerPilotTests {
         let center = SpeakerThresholds.enrollmentCentroid([print([1, 0]), print([1, 0.1]), print([0, 1])])!
         #expect(SpeakerThresholds.cosine(center, [1, 0]) > 0.99)
     }
-    @Test func turnsContinueAcrossReadBoundaries() {
+    @Test func turnsContinueAcrossReadBoundaries() throws {
         var accumulator = NemotronTurnAccumulator()
         var first = Array(repeating: Float(0), count: 3 * 8)
         for frame in 0..<3 { first[frame * 8] = 0.9 }
-        accumulator.append(first, frames: 3)
-        accumulator.append(first, frames: 3)
+        try accumulator.append(first, frames: 3)
+        try accumulator.append(first, frames: 3)
         let segments = accumulator.finish()
         #expect(segments == [.init(start: 0, end: 0.06, cluster: 0)])
     }
-    @Test func shortTurnsAreRemovedAndOverlapPreserved() {
+    @Test func shortTurnsAreRemovedAndOverlapPreserved() throws {
         var accumulator = NemotronTurnAccumulator()
         var values = Array(repeating: Float(0), count: 8 * 8)
         for frame in 0..<8 { values[frame * 8] = 0.9; if frame < 5 { values[frame * 8 + 1] = 0.9 }; if frame < 4 { values[frame * 8 + 2] = 0.9 } }
-        accumulator.append(values, frames: 8)
+        try accumulator.append(values, frames: 8)
         #expect(accumulator.finish().map(\.cluster) == [0, 1])
     }
 }

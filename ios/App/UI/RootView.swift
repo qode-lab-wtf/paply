@@ -189,10 +189,6 @@ struct RootView: View {
             return
         }
         #endif
-        if url.isFileURL {
-            Task { await ConversationCapture.shared.importAudio(url) }
-            return
-        }
         if url.scheme == PaplyURL.scheme, url.host == "conversation" {
             let id = url.lastPathComponent
             ConversationNavigation.shared.showCurrent = id == "current" && ConversationCapture.shared.active != nil

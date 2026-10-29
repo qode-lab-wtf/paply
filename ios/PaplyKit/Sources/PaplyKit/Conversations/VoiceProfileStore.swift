@@ -9,6 +9,7 @@ public actor VoiceProfileStore {
 
     public func people() throws -> [VoicePerson] {
         guard FileSafety.exists(file) else { return [VoicePerson(id: VoicePerson.ownerID, name: "")] }
+        FileSafety.excludeFromBackup(file)
         var all = try ThoughtJSON.decoder().decode([VoicePerson].self, from: Data(contentsOf: file))
         if !all.contains(where: { $0.isOwner }) { all.insert(VoicePerson(id: VoicePerson.ownerID, name: ""), at: 0) }
         return all
@@ -16,6 +17,7 @@ public actor VoiceProfileStore {
     private func save(_ people: [VoicePerson]) throws {
         try FileSafety.createDirectory(root)
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(people), to: file)
+        FileSafety.excludeFromBackup(file)
     }
     @discardableResult public func create(name: String) throws -> VoicePerson {
         var all = try people()
@@ -167,6 +169,7 @@ public actor VoiceProfileStore {
             records = []
         }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(records), to: candidatesFile)
+        FileSafety.excludeFromBackup(candidatesFile)
     }
 
     public func processLearningQueue(diarizer: any SpeakerDiarizing) async throws {
@@ -177,7 +180,8 @@ public actor VoiceProfileStore {
         let files = try FileManager.default.contentsOfDirectory(at: learningDirectory, includingPropertiesForKeys: nil).filter { $0.pathExtension == "wav" }.sorted { $0.path < $1.path }
         for file in files {
             try Task.checkCancellation()
-            if var print = try await diarizer.voiceprint(audio: file), print.seconds >= SpeakerThresholds.minimumLearningSeconds {
+            if try people().first(where: { $0.isOwner })?.prints.count ?? 0 >= 10 { break }
+            if var print = try? await diarizer.voiceprint(audio: file), print.seconds >= SpeakerThresholds.minimumLearningSeconds {
                 // Nach „Vergessen“ während der Diarisierung nicht erneut lernen.
                 guard FileSafety.exists(file) else { continue }
                 print.source = .thought

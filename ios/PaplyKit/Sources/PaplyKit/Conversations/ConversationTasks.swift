@@ -2,12 +2,19 @@ import Foundation
 
 /// Einzige Ableitung für Auswertung und spätere Sprecherkorrekturen.
 public enum ConversationTasks {
+    static func key(_ item: Conversation) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let catalog = (try? encoder.encode(item.summary?.commitments ?? [])) ?? Data()
+        let owners = item.speakers.filter(\.isOwner).map(\.id).sorted().joined(separator: ",")
+        return catalog.base64EncodedString() + ":" + owners
+    }
     public static func derive(_ conversation: Conversation, preserving existing: [ThoughtTask], now: Date = Date()) -> [ThoughtTask] {
         let owners = Set(conversation.speakers.filter(\.isOwner).map(\.id))
         let kept = existing.filter { $0.owner == .user || $0.done }
         guard !owners.isEmpty else { return kept }
         let drafts = (conversation.summary?.commitments ?? []).filter {
-            owners.contains($0.speakerID) || $0.speakerID == "shared"
+            owners.contains($0.speakerID) && !(conversation.deletedTaskIDs ?? []).contains($0.id)
         }.map { task in
             let due = DueDate.resolved(task.dueHint, reference: conversation.createdAt, now: now)
             return ThoughtTask(id: task.id, text: ConversationText.render(task.text, speakers: conversation.speakers),
@@ -23,6 +30,7 @@ extension ConversationGap {
         let duration = seconds < 60 ? "\(max(1, Int(seconds))) Sek." : "\(Int(seconds / 60)) Min."
         guard let startedAt, let endedAt else { return "\(title) · \(duration)" }
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
         formatter.dateFormat = "HH:mm"
         return "\(title) · \(duration) (\(formatter.string(from: startedAt))–\(formatter.string(from: endedAt)))"
     }
