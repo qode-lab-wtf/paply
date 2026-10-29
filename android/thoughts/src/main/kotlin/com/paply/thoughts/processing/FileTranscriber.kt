@@ -6,6 +6,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Path
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import okhttp3.HttpUrl
 
 enum class TranscriptionFailure {
@@ -49,7 +51,7 @@ class FileTranscriber(
     private val transport: GroqTransport = GroqTransport.shared,
     private val baseURL: HttpUrl = GroqClient.defaultBaseURL,
     private val catalog: ModelCatalog = ModelCatalog.shared,
-    private val decoder: (Path) -> FloatArray? = ::readSamples,
+    private val decoder: ((Path) -> FloatArray?)? = null,
     private val diagnostic: (String) -> Unit = {},
 ) : ThoughtTranscribing {
     override suspend fun transcribe(
@@ -57,38 +59,74 @@ class FileTranscriber(
         apiKey: String,
         settings: PaplySettings,
     ): TranscriptionResult {
-        val samples =
-            decoder(audioURL)
-                ?: return TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio)
-        if (samples.isEmpty()) return TranscriptionResult.NoSpeech
-        val pipeline =
-            DictationPipeline(
-                settings.copy(chunkedUpload = false),
-                GroqClient(apiKey, baseUrl = baseURL, transport = transport, diagnostic = {
-                    if (it == "whisper.request") diagnostic("thought.groq count=1")
-                }),
-                catalog,
-                PipelineOptions(polish = false, removeLongSilence = true),
-            )
-        return try {
-            var start = 0
-            while (start < samples.size) {
-                val end = minOf(samples.size, start + 16000)
-                pipeline.append(samples.copyOfRange(start, end))
-                start = end
+        // Production WAV reads are bounded. The optional legacy decoder is only an adapter.
+        val input = try {
+            if (decoder != null) ArrayPcm(decoder.invoke(audioURL)
+                ?: return TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio))
+            else WavePcm(audioURL)
+        } catch (_: Exception) { return TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio) }
+        return input.use { pcm ->
+            try {
+                if (pcm.size == 0) return@use TranscriptionResult.NoSpeech
+                // First pass retains VAD measurements, never the recording's PCM.
+                val vad = VoiceActivityDetector(analyzeQuietFrames = true)
+                var start = 0
+                while (start < pcm.size) {
+                    currentCoroutineContext().ensureActive()
+                    val end = minOf(pcm.size, start + 16000)
+                    vad.process(pcm.read(start, end)); start = end
+                }
+                val ranges = LongSilence.ranges(vad, 0, pcm.size)
+                val texts = mutableListOf<String>()
+                val languages = linkedSetOf<String>()
+                for (range in ranges) {
+                    start = range.first
+                    while (start <= range.last) {
+                        currentCoroutineContext().ensureActive()
+                        var end = minOf(range.last + 1, start + MAX_PIECE_SAMPLES)
+                        if (end < range.last + 1) {
+                            // Prefer a quiet frame near the bound; no samples are lost at the seam.
+                            val n = VoiceActivityDetector.frameLength
+                            val cut = ((end - 5 * 16000) / n until end / n)
+                                .minByOrNull { vad.frames[it].dbfs }
+                            if (cut != null) end = cut * n
+                        }
+                        val pipeline = DictationPipeline(
+                            settings.copy(chunkedUpload = false),
+                            GroqClient(apiKey, baseUrl = baseURL, transport = transport, diagnostic = {
+                                if (it == "whisper.request") diagnostic("thought.groq count=1")
+                            }), catalog, PipelineOptions(polish = false, removeLongSilence = true),
+                        )
+                        try {
+                            var offset = start
+                            while (offset < end) {
+                                currentCoroutineContext().ensureActive()
+                                val next = minOf(end, offset + 16000)
+                                pipeline.append(pcm.read(offset, next)); offset = next
+                            }
+                            val outcome = pipeline.finish()
+                            diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
+                            when (val result = result(outcome, settings.transcriptionModel)) {
+                                is TranscriptionResult.Failure -> return@use result
+                                is TranscriptionResult.Success -> { texts += result.text; languages += result.languages }
+                                TranscriptionResult.NoSpeech -> Unit
+                            }
+                        } finally { pipeline.releaseAudio(); pipeline.close() }
+                        start = end
+                    }
+                }
+                if (texts.isEmpty()) TranscriptionResult.NoSpeech
+                else TranscriptionResult.Success(texts.joinToString(" "), languages.toList(), pcm.size / 16000.0, settings.transcriptionModel)
+            } catch (_: CancellationException) {
+                TranscriptionResult.Failure(TranscriptionFailure.cancelled)
+            } catch (_: java.io.IOException) {
+                TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio)
             }
-            val outcome = pipeline.finish()
-            diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
-            result(outcome, settings.transcriptionModel)
-        } catch (_: CancellationException) {
-            TranscriptionResult.Failure(TranscriptionFailure.cancelled)
-        } finally {
-            pipeline.releaseAudio()
-            pipeline.close()
         }
     }
 
     companion object {
+        internal const val MAX_PIECE_SAMPLES = 60 * 16000
         fun result(outcome: DictationOutcome, model: String): TranscriptionResult {
             if (outcome.noSpeech) return TranscriptionResult.NoSpeech
             outcome.errorMessage?.let {
@@ -132,42 +170,67 @@ class FileTranscriber(
          * input.
          */
         fun readSamples(url: Path): FloatArray? = runCatching {
-            val bytes = java.nio.file.Files.readAllBytes(url)
-            val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            fun tag(at: Int) = String(bytes, at, 4, Charsets.US_ASCII)
-            if (bytes.size < 12 || tag(0) != "RIFF" || tag(8) != "WAVE") return null
-            var format = 0
-            var bits = 0
-            var validFormat = false
-            var data: Pair<Int, Int>? = null
-            var p = 12
-            while (p + 8 <= bytes.size) {
-                val size = b.getInt(p + 4).toLong() and 0xffffffffL
-                val begin = p + 8
-                if (size > bytes.size - begin) return null
-                when (tag(p)) {
-                    "fmt " -> {
-                        if (size < 16) return null
-                        format = b.getShort(begin).toInt()
-                        bits = b.getShort(begin + 14).toInt()
-                        validFormat =
-                            b.getShort(begin + 2).toInt() == 1 &&
-                                b.getInt(begin + 4) == 16000 &&
-                                ((format == 1 && bits == 16) || (format == 3 && bits == 32))
-                    }
-                    "data" -> data = begin to size.toInt()
-                }
-                p = (begin + size + (size % 2)).toInt()
-            }
-            if (!validFormat) return null
-            val (begin, size) = data ?: return null
-            val width = bits / 8
-            if (size % width != 0) return null
-            FloatArray(size / width) { i ->
-                if (format == 1) b.getShort(begin + i * 2) / 32768f
-                else b.getFloat(begin + i * 4).takeIf { it.isFinite() } ?: 0f
-            }
-        }
-            .getOrNull()
+            WavePcm(url).use { it.read(0, it.size) }
+        }.getOrNull()
     }
+}
+
+internal interface FilePcm : AutoCloseable {
+    val size: Int
+    fun read(start: Int, end: Int): FloatArray
+}
+private class ArrayPcm(private val samples: FloatArray) : FilePcm {
+    override val size get() = samples.size
+    override fun read(start: Int, end: Int) = samples.copyOfRange(start, end)
+    override fun close() {}
+}
+
+/** Seekable RIFF parser. Chunk lengths are validated before allocating only the requested window. */
+internal class WavePcm(url: Path) : FilePcm {
+    private val file = java.io.RandomAccessFile(url.toFile(), "r")
+    private var dataStart = 0L
+    private var format = 0
+    private var width = 0
+    override val size: Int
+    init {
+        try {
+            fun bytes(count: Int) = ByteArray(count).also(file::readFully)
+            val header = bytes(12)
+            require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "WAVE")
+            var dataSize = -1L
+            var valid = false
+            while (file.filePointer + 8 <= file.length()) {
+                val chunk = bytes(8)
+                val length = ByteBuffer.wrap(chunk).order(ByteOrder.LITTLE_ENDIAN).getInt(4).toLong() and 0xffffffffL
+                val begin = file.filePointer
+                require(length <= file.length() - begin)
+                when (String(chunk, 0, 4, Charsets.US_ASCII)) {
+                    "fmt " -> {
+                        require(length >= 16)
+                        val f = ByteBuffer.wrap(bytes(16)).order(ByteOrder.LITTLE_ENDIAN)
+                        format = f.getShort(0).toInt()
+                        val bits = f.getShort(14).toInt()
+                        valid = f.getShort(2).toInt() == 1 && f.getInt(4) == 16000 &&
+                            (format == 1 && bits == 16 || format == 3 && bits == 32)
+                        width = bits / 8
+                    }
+                    "data" -> { dataStart = begin; dataSize = length }
+                }
+                file.seek(begin + length + length % 2)
+            }
+            require(valid && dataSize >= 0 && dataSize % width == 0L && dataSize / width <= Int.MAX_VALUE)
+            size = (dataSize / width).toInt()
+        } catch (e: Exception) { file.close(); throw e }
+    }
+    override fun read(start: Int, end: Int): FloatArray {
+        require(start >= 0 && end >= start && end <= size)
+        file.seek(dataStart + start.toLong() * width)
+        val bytes = ByteArray(Math.multiplyExact(end - start, width))
+        file.readFully(bytes)
+        val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        return FloatArray(end - start) {
+            if (format == 1) b.short / 32768f else b.float.takeIf { it.isFinite() } ?: 0f
+        }
+    }
+    override fun close() = file.close()
 }

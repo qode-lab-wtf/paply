@@ -35,10 +35,10 @@ internal class ReminderNotifications(private val context: Context) {
             data = ReminderLinks.uri(reminder.thoughtID, reminder.taskID)
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val public = NotificationCompat.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_mic)
+        val public = NotificationCompat.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_stat_paply)
             .setContentTitle("Paply-Erinnerung").setVisibility(NotificationCompat.VISIBILITY_PUBLIC).build()
         val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_mic).setContentTitle(reminder.title).setContentText(reminder.body)
+            .setSmallIcon(R.drawable.ic_stat_paply).setContentTitle(reminder.title).setContentText(reminder.body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(reminder.body))
             .setCategory(NotificationCompat.CATEGORY_REMINDER).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(public).setAutoCancel(true).setOnlyAlertOnce(true).setContentIntent(open)

@@ -41,6 +41,7 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
     override val savedStateRegistry get() = saved.savedStateRegistry
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val handler = Handler(Looper.getMainLooper())
+    private val autoReturn = ImeAutoReturn(handler)
     private var root: ComposeView? = null
     private var panel by mutableStateOf(ImePanelState())
     private var session: DictationSession? = null
@@ -86,7 +87,7 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
         setViewTreeSavedStateRegistryOwner(this@PaplyIme)
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setContent { ImePanel(panel, onFinish = ::finish, onDiscard = ::discard, onPrimary = ::primary,
-            onCopy = ::copyLast, onBack = ::previousKeyboard) }
+            onCopy = ::copyLast, onBack = { previousKeyboard() }) }
         root = this
         Diag.event("ime.panel.created phase=${panel.phase}")
         }
@@ -96,6 +97,10 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
         super.onStartInput(attribute, restarting)
         val next = EditorTarget.from(attribute)
         val rotating = rebuilding || android.os.SystemClock.elapsedRealtime() < rotationUntil
+        if (ImePolicy.fieldChanged(restarting, next == field, rotating)) {
+            autoReturn.cancel()
+            if (panel.returningToKeyboard) panel = panel.copy(returningToKeyboard = false)
+        }
         if ((session != null || retry?.isActive == true) && ImePolicy.fieldChanged(restarting, next == field, rotating)) {
             fieldChanged = true
             if (session?.state?.value?.phase == "recording") finish()
@@ -121,6 +126,7 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
     private fun scheduleStart() { handler.removeCallbacks(startVisible); handler.postDelayed(startVisible, 120) }
     private fun beginIfVisible() {
         if (!visible || !isInputViewShown || root?.isAttachedToWindow != true || panel.phase != "idle" || preparing != null || retry?.isActive == true) return
+        autoReturn.cancel()
         lastEntry = null
         if (isPassword(currentInputEditorInfo)) { panel = ImePanelState("password", title = "Passwortfeld", subtitle = "Hier nimmt Paply nichts auf."); return }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -227,12 +233,21 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
             lastEntry = updated
             runCatching { HistoryStore.get(this@PaplyIme).updateIfPresent(updated) }
                 .onFailure { Diag.event("ime.delivery.save.failed") }
-            if (accepted) {
+            if (accepted && sameTarget()) {
+                val returning = ImePolicy.returnAfterDelivery(accepted, confirmed, copied)
                 panel = ImePanelState("inserted", title = if (confirmed == true) "Eingesetzt" else "An Textfeld gesendet",
                     subtitle = if (confirmed == true) "" else if (copied) "Einsetzen nicht bestätigt. Text liegt auch in der Zwischenablage."
-                        else "Einsetzen nicht bestätigt. Dein Text bleibt im Verlauf gesichert.", canCopy = true)
-                // Keep the success and its Back button visible until the user leaves.
-            } else {
+                        else "Einsetzen nicht bestätigt. Dein Text bleibt im Verlauf gesichert.", canCopy = true,
+                    returningToKeyboard = returning)
+                if (returning) autoReturn.schedule(
+                    isCurrent = { sameTarget() && isInputViewShown && root?.isShown == true &&
+                        panel.phase == "inserted" && lastEntry?.id == updated.id },
+                    onReturn = {
+                        if (confirmed != true && copied) Toast.makeText(this, "Paply: Text auch in der Zwischenablage.", Toast.LENGTH_SHORT).show()
+                        // A failed automatic return leaves a visible, user-operated escape hatch.
+                        if (!previousKeyboard(pickOnFailure = false)) panel = panel.copy(returningToKeyboard = false)
+                    })
+            } else if (!accepted) {
                 if (deliveryGeneration == generation) panel = ImePanelState("pending",
                     title = if (copied) "In Zwischenablage" else "Text wartet",
                     subtitle = if (retained) "Feld gewechselt oder Einsetzen nicht möglich. Dein Text ist im Verlauf gesichert."
@@ -268,6 +283,7 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
     private fun copy(text: String, notify: Boolean = false) = DictationClipboard.copy(this, text, notify)
     private fun copyLast() { lastEntry?.text?.takeIf { it.isNotBlank() }?.let { if (copy(it)) Toast.makeText(this, "In Zwischenablage", Toast.LENGTH_SHORT).show() } }
     private fun discard() {
+        autoReturn.cancel()
         generation++; preparing?.cancel(); preparing = null
         retryEpoch++; retry?.cancel(); retry = null
         val active = session
@@ -275,16 +291,19 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
         active?.takeIf { it.state.value.phase == "recording" || it.state.value.phase == "working" }?.discard()
         lastEntry = null; panel = ImePanelState(); previousKeyboard()
     }
-    private fun previousKeyboard() {
+    private fun previousKeyboard(pickOnFailure: Boolean = true): Boolean {
+        autoReturn.cancel()
         val changed = runCatching { switchToPreviousInputMethod() }.getOrDefault(false)
         Diag.event("ime.previous success=$changed")
-        if (!changed) getSystemService(InputMethodManager::class.java).showInputMethodPicker()
+        if (!changed && pickOnFailure) getSystemService(InputMethodManager::class.java).showInputMethodPicker()
+        return changed
     }
     private fun hidden(force: Boolean = false) {
         handler.removeCallbacks(startVisible)
         val panelShown = isInputViewShown && root?.isShown == true
         Diag.event("ime.hide rebuilding=$rebuilding panel=$panelShown rotation=${android.os.SystemClock.elapsedRealtime() < rotationUntil}")
         if (!force && (rebuilding || (android.os.SystemClock.elapsedRealtime() < rotationUntil && panelShown))) return
+        autoReturn.cancel()
         visible = false; generation++; preparing?.cancel(); preparing = null
         val active = session
         if (active?.state?.value?.phase == "recording") {

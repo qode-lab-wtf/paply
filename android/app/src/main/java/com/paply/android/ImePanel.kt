@@ -31,7 +31,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.*
 
 data class ImePanelState(val phase: String = "idle", val title: String = "", val subtitle: String = "",
-    val startedAt: Long = 0, val level: () -> Float = { 0f }, val canCopy: Boolean = false)
+    val startedAt: Long = 0, val level: () -> Float = { 0f }, val canCopy: Boolean = false,
+    val returningToKeyboard: Boolean = false)
 
 @Composable
 fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
@@ -106,9 +107,9 @@ fun ImePanel(state: ImePanelState, onFinish: () -> Unit, onDiscard: () -> Unit,
                         colors = ButtonDefaults.buttonColors(containerColor = C.greenBright, contentColor = C.forest)) {
                         Text(when (state.phase) { "setup", "key" -> "Paply einrichten"; "audioMissing" -> "Neu aufnehmen"; "pending" -> "Einsetzen"; else -> "Erneut versuchen" })
                     }
-                    if (state.canCopy) TextButton(onClick = onCopy) { Text("In Zwischenablage", color = ink) }
+                    if (state.canCopy && !state.returningToKeyboard) TextButton(onClick = onCopy) { Text("In Zwischenablage", color = ink) }
                 }
-                TextButton(onClick = onBack) {
+                if (!state.returningToKeyboard) TextButton(onClick = onBack) {
                     Icon(PaplyIcons.Keyboard, null, Modifier.size(18.dp), tint = ink.copy(alpha = .7f))
                     Spacer(Modifier.width(8.dp)); Text("Zurück zur Tastatur", color = ink.copy(alpha = .7f))
                 }

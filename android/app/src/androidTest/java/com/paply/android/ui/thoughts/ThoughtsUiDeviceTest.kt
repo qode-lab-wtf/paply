@@ -36,13 +36,13 @@ class ThoughtsUiDeviceTest {
         val store = repository.backend().store
         repository.workMutex.lock()
         try {
-            store.purge(store.all().filter { it.id.startsWith("s_ui_") }.map { it.id })
+            store.purge(store.all().filter { it.id.startsWith("s_ui_") || it.id.startsWith("s_map_") || it.id.startsWith("s_stress_") }.map { it.id })
             val now = Instant.now()
             val garden = Topic(id="t_ui_garden", title="Garten", icon=TopicIcon.leaf, owner=Owner.ai, createdAt=now.minusSeconds(80000))
             val paply = Topic(id="t_ui_paply", title="Paply", icon=TopicIcon.code, owner=Owner.user, note="Meine App für freie Gedanken", createdAt=now.minusSeconds(70000))
             val move = Topic(id="t_ui_move", title="Balkon", icon=TopicIcon.home, owner=Owner.ai, createdAt=now.minusSeconds(60000))
             val travel = Topic(id="t_ui_trip", title="Lissabon", icon=TopicIcon.plane, owner=Owner.ai, createdAt=now.minusSeconds(50000))
-            store.updateTopics { it.filterNot { topic -> topic.id.startsWith("t_ui_") } + listOf(garden,paply,move,travel) }
+            store.updateTopics { it.filterNot { topic -> topic.id.startsWith("t_ui_") || topic.id.startsWith("t_map_") || topic.id.startsWith("t_stress_") } + listOf(garden,paply,move,travel) }
             val today = now.atZone(ZoneId.systemDefault()).toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant()
             fun save(id: String, title: String, text: String, topic: Topic?, at: Instant, tasks: List<ThoughtTask> = emptyList(), links: List<ThoughtLink> = emptyList(), deleted: Boolean = false) {
                 val thought = Thought(id=id, trigger=ThoughtTrigger.app, state=ThoughtState.done, title=title, titleOwner=Owner.ai,
@@ -191,6 +191,7 @@ class ThoughtsUiDeviceTest {
     @Test fun fixtureUiOpensDetailOriginalTopicPickerAndTasks() {
         runBlocking { seedExamples() }
         context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        showListIfNeeded()
         assertVisible("Tomaten brauchen größere Töpfe")
         assertFalse(nodes().any { it.text?.toString() == "Löschen" })
         tap("Tomaten brauchen größere Töpfe")
@@ -211,6 +212,7 @@ class ThoughtsUiDeviceTest {
     @Test fun hygieneSuggestionWaitsForConfirmation() {
         seedExamples()
         context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        showListIfNeeded()
         assertVisible("Tomaten brauchen größere Töpfe")
         tapDescription("Mehr"); tap("Themen bearbeiten"); tap("Zusammenführen")
         assertVisible("Themen zusammenführen?")
@@ -223,6 +225,7 @@ class ThoughtsUiDeviceTest {
     @Test fun delayedTaskCheckoffSurvivesTabChangeAndCanBeCancelled() {
         seedExamples()
         context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        showListIfNeeded()
         tap("Tomaten brauchen größere Töpfe")
         tapDescription("Abhaken: Töpfe besorgen")
         tapDescription("Erledigt: Töpfe besorgen")
@@ -250,6 +253,7 @@ class ThoughtsUiDeviceTest {
             bitmap.recycle()
         }
         context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        showListIfNeeded()
         assertVisible("Tomaten brauchen größere Töpfe")
         shot("home")
         tap("Gedanke · 0:42"); assertVisible("Erneut versuchen"); shot("error"); tapDescription("Zurück")
@@ -306,6 +310,11 @@ class ThoughtsUiDeviceTest {
             File(directory,"ui-capture-bar-$appearance.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
             bitmap.recycle()
         } finally { com.paply.android.ThoughtState.current.value = previous }
+    }
+
+    private fun showListIfNeeded() {
+        val toggle = waitNode { it.contentDescription?.toString() in listOf("Liste zeigen", "Karte zeigen") }
+        if (toggle.contentDescription?.toString() == "Liste zeigen") click(toggle)
     }
 
     private fun selectTopic(title: String) {

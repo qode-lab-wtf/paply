@@ -19,6 +19,12 @@ class ThoughtWidget : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             update(context, manager, manager.getAppWidgetIds(ComponentName(context, ThoughtWidget::class.java)))
         }
+        internal fun captureIntent(context: Context, id: Int): PendingIntent {
+            val intent = Intent(context, CaptureActivity::class.java).setAction(ThoughtService.TOGGLE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(context, 100 + id, intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
         private fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
             val state = ThoughtState.current.value
             val enabled = SettingsRepository.get(context).state.value.betaThoughts
@@ -28,10 +34,7 @@ class ThoughtWidget : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_status, if (active) "Nochmal tippen: fertig" else if (enabled) "Tippen und sprechen" else "In Paply unter Beta einschalten")
                 views.setViewVisibility(R.id.widget_timer, if (active) View.VISIBLE else View.GONE)
                 views.setChronometer(R.id.widget_timer, SystemClock.elapsedRealtime() - (System.currentTimeMillis() - state.startedAt), null, active)
-                val intent = Intent(context, CaptureActivity::class.java).setAction(ThoughtService.TOGGLE)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 100 + id, intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT))
+                views.setOnClickPendingIntent(R.id.widget_root, captureIntent(context, id))
                 manager.updateAppWidget(id, views)
             }
         }

@@ -44,6 +44,8 @@ class ThoughtService : Service() {
     private var foreground = false
     private var lastNudge = 0L
     private var discardRequested = false
+    private val visibilityGuard = RecordingVisibilityGuard()
+    private var lastNotificationCheck = Long.MIN_VALUE
     private val repository by lazy { ThoughtsRepository.get(this) }
     private val notifications get() = getSystemService(NotificationManager::class.java)
     override fun onBind(intent: Intent?) = null
@@ -65,6 +67,14 @@ class ThoughtService : Service() {
                 if (target == null || target == captureId) finishRecording(intent.action == DISCARD)
                 else if (recorder == null && !starting) stopSelf(startId)
             }
+            REPOST -> {
+                val target = intent.getStringExtra("thoughtId")
+                if (recorder != null && !stopping && (target == null || target == captureId)) {
+                    // Android may still return a dismissed FGS in its app-active snapshot.
+                    if (!ThoughtNotifications.visible(this) ||
+                        !visibilityGuard.dismissed(SystemClock.elapsedRealtime(), ::postRecordingNotification)) finishRecording(false)
+                } else if (recorder == null && !starting) stopSelf(startId)
+            }
             HIDDEN -> if (recorder != null && !stopping) {
                 if (!ThoughtNotifications.visible(this)) finishRecording(false)
                 else { nudge("leave"); nextNudge = SystemClock.elapsedRealtime() + nudgeEvery() }
@@ -77,12 +87,13 @@ class ThoughtService : Service() {
         starting = true
         val wall = System.currentTimeMillis()
         val initial = ThoughtState.State("starting", wall)
-        ThoughtState.update(this, initial)
         try {
             // Complete the FGS contract immediately, even when a racing revocation/beta change rejects capture.
             if (Build.VERSION.SDK_INT >= 30) startForeground(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this, initial), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this, initial))
             foreground = true
+            Diag.event("thought.notification active=true count=0")
+            ThoughtState.update(this, initial)
         } catch (e: Exception) { failStart(safeError(e)); return }
         scope.launch {
             var prepared: com.paply.thoughts.store.ThoughtStore.Capture? = null
@@ -103,7 +114,9 @@ class ThoughtService : Service() {
                 val capture = AudioCapture(this@ThoughtService, captureFile.audio.url.toFile(), thoughtWriter = captureFile.audio)
                 capture.start(); recorder = capture; starting = false
                 ThoughtState.update(this@ThoughtService, initial.copy(phase = "recording", id = captureId))
-                notifications.notify(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this@ThoughtService, ThoughtState.current.value))
+                if (runCatching { notifications.notify(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this@ThoughtService, ThoughtState.current.value)) }.isFailure) {
+                    finishRecording(false); return@launch
+                }
                 ticker = scope.launch { tick(capture) }
                 scope.launch {
                     capture.awaitEnd()
@@ -112,7 +125,7 @@ class ThoughtService : Service() {
                 Diag.event("thought.recording.started")
                 scope.launch {
                     delay(700)
-                    val posted = notifications.activeNotifications.firstOrNull { it.id == ThoughtNotifications.RECORDING }
+                    val posted = notifications.activeNotifications.firstOrNull { it.id == ThoughtNotifications.RECORDING && it.tag == null }
                     Diag.event("thought.notification promoted=${posted?.notification?.flags?.and(0x40000) != 0} visible=${ThoughtNotifications.visible(this@ThoughtService)}")
                 }
             } catch (e: CancellationException) {
@@ -134,8 +147,13 @@ class ThoughtService : Service() {
             val warn = elapsed >= WARN_AFTER
             val state = ThoughtState.current.value.copy(elapsedMs = elapsed, level = capture.level, interrupted = capture.interrupted, warnLimit = warn)
             ThoughtState.update(this, state)
+            val now = SystemClock.elapsedRealtime()
+            if (lastNotificationCheck == Long.MIN_VALUE || now - lastNotificationCheck >= 500) {
+                lastNotificationCheck = now
+                if (!ensureNotification()) { finishRecording(false); return }
+            }
             if (state.interrupted != lastInterrupted || warn != warned) {
-                notifications.notify(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this, state))
+                if (runCatching { notifications.notify(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this, state)) }.isFailure) { finishRecording(false); return }
                 lastInterrupted = state.interrupted
             }
             if (warn && !warned) { nudge("one-minute"); warned = true }
@@ -145,6 +163,16 @@ class ThoughtService : Service() {
             if (!CaptureActivity.cardVisible && !ThoughtNotifications.visible(this)) { finishRecording(false); return }
             delay(100)
         }
+    }
+    private fun ensureNotification(): Boolean = visibilityGuard.check(
+        SystemClock.elapsedRealtime(), CaptureActivity.cardVisible,
+        allowed = { ThoughtNotifications.visible(this) },
+        posted = { notifications.activeNotifications.any { it.id == ThoughtNotifications.RECORDING && it.tag == null } },
+        repost = ::postRecordingNotification,
+    )
+    private fun postRecordingNotification() {
+        notifications.notify(ThoughtNotifications.RECORDING, ThoughtNotifications.recording(this, ThoughtState.current.value))
+        Diag.event("thought.notification active=true count=1")
     }
     private fun nudgeEvery() = if (BuildConfig.DEBUG) CaptureDebug.nudgeEveryMs else NUDGE_EVERY
     @Suppress("DEPRECATION")
@@ -176,17 +204,18 @@ class ThoughtService : Service() {
             // The service ends with capture. Only the application scope closes the durable handoff;
             // every network operation runs later in WorkManager, after stopSelf.
             removeForeground(); stopSelf()
-            ThoughtState.update(this@ThoughtService, ThoughtState.State(id = id, message = if (discard) "Verworfen" else "Gedanke gesichert · wird geordnet"))
+            ThoughtState.update(this@ThoughtService, ThoughtState.State(id = id, message = captureEndMessage(discard, result)))
             repository.scope.launch {
                 try {
                     val store = repository.backend().store
-                    if (discard || !result.usable && result.error == null) {
+                    if (discard || result.durationMs <= 0 && result.file.length() <= 44 || !result.usable && result.error == null) {
                         repository.discardCapture(id)
                         Diag.event("thought.discard explicit=$discard fileDeleted=${!result.file.exists()}")
-                        if (!discard) ThoughtNotifications.show(applicationContext, id, "Keine Sprache aufgenommen", "Nichts gespeichert")
+                        if (!discard) ThoughtNotifications.show(applicationContext, id, "Nichts gespeichert", "Keine Sprache aufgenommen")
                     } else {
                         // Any partial recording survives a read/storage failure, even below the speech threshold.
-                        store.finishCapture(id, result.durationMs.toInt())
+                        val duration = if (result.durationMs <= 0 && result.file.length() > 44) com.paply.thoughts.store.WAVWriter.repair(result.file.toPath()) else result.durationMs.toInt()
+                        store.finishCapture(id, duration)
                         if (store.thought(id) != null) {
                             val key = runCatching { com.paply.android.settings.KeyVault(applicationContext).read() }.getOrNull()
                             val waiting = when {
@@ -199,7 +228,7 @@ class ThoughtService : Service() {
                             ThoughtNotifications.show(applicationContext, id, if (waiting != null) "Gedanke wartet – Schlüssel/Netz prüfen" else "Gedanke gesichert",
                                 if (waiting != null) "Audio bleibt bis zum Rohtext erhalten, höchstens 30 Tage." else "Wird geordnet · Mikrofon ist aus")
                             repository.kick("captured")
-                        }
+                        } else ThoughtNotifications.show(applicationContext, id, "Nichts gespeichert", "Keine Aufnahme vorhanden")
                     }
                     repository.publish(store)
                 } catch (_: Exception) {
@@ -243,6 +272,7 @@ class ThoughtService : Service() {
         const val DISCARD = "com.paply.android.DISCARD"
         const val SHOW = "com.paply.android.SHOW"
         const val TOGGLE = "com.paply.android.TOGGLE"
+        const val REPOST = "com.paply.android.REPOST_RECORDING"
         const val HIDDEN = "com.paply.android.CARD_HIDDEN"
         const val BETA_OFF = "Gedanken & Aufgaben sind aus. In Paply unter Beta einschalten."
         const val WARN_AFTER = 9 * 60_000L

@@ -42,6 +42,12 @@ fun TasksPage(thoughts: List<Thought>, topics: List<Topic>, loaded: Boolean, act
                 EmptyState("Noch keine Aufgaben", "Aufgaben entstehen aus deinen Gedanken. Sag einfach „Ich muss …“ – Paply hält sie hier fest.", PaplyIcons.ListChecks)
                 Pill("Gedanke aufnehmen", onCapture)
             } else LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                agenda.items(TaskAgenda.Group.today).plus(agenda.items(TaskAgenda.Group.upcoming)).firstOrNull {
+                    com.paply.thoughts.display.TaskReminderPlan.reminderTime(it.task, it.thought)?.isAfter(now) == true
+                }?.let { candidate -> item("reminder-invitation") {
+                    com.paply.android.ui.reminders.ReminderInvitation(candidate.task, candidate.thought,
+                        modifier = Modifier.padding(vertical = 8.dp), onError = actions::message)
+                } }
                 if (agenda.openCount == 0) item { EmptyState("Alles erledigt", "Neue Aufgaben entstehen aus deinen Gedanken.", PaplyIcons.Check) }
                 TaskAgenda.Group.entries.forEach { group ->
                     val members = agenda.items(group)

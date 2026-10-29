@@ -70,7 +70,7 @@ internal object DictationClipboard {
         val open = PendingIntent.getActivity(app, NOTICE, Intent(app, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         manager.notify(NOTICE, androidx.core.app.NotificationCompat.Builder(app, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setSmallIcon(com.paply.android.R.drawable.ic_stat_paply)
             .setContentTitle("Text liegt in der Zwischenablage")
             .setContentText(if (retained) "Dein Text bleibt im Paply-Verlauf gesichert" else "Bitte jetzt einsetzen · Verlauf konnte nicht gespeichert werden")
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_SECRET).setSilent(true).setAutoCancel(true)

@@ -27,11 +27,13 @@ import java.util.Locale
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** App boundary for the next UI stage. All actions finish only after the core's atomic commit. */
 class ThoughtsRepository private constructor(private val app: Context) {
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     internal val workMutex = Mutex()
+    private val publishMutex = Mutex()
     private val mutableThoughts = MutableStateFlow<List<Thought>>(emptyList())
     val thoughts = mutableThoughts.asStateFlow()
     private val mutableDeleted = MutableStateFlow<List<Thought>>(emptyList())
@@ -61,27 +63,32 @@ class ThoughtsRepository private constructor(private val app: Context) {
         if (key == "ciphertext" || key == null) kick("key")
     }
     internal data class Backend(val store: ThoughtStore, val ledger: TokenLedger, val finder: CandidateFinder)
-    private val ready = scope.async {
+    private val ready = RetryableReady {
         val root = File(app.filesDir, "thoughts")
         val store = ThoughtStore(root.toPath())
-        // Subscribe before loading so writes during first publication cannot be lost.
-        scope.launch { store.changes.collect { publish(store) } }
         val migrated = LegacyThoughtMigration.run(root, store)
         CaptureDiscardJournal.recover(root, store)
+        TrimResidue.recover(store)
         val recovered = store.recover()
-        store.housekeeping(Instant.now())
+        if (enabled()) store.housekeeping(Instant.now())
         Diag.event("thoughts.recovered migrated=$migrated count=${recovered.size}")
-        publish(store)
         val ledger = TokenLedger(root.toPath().resolve("ledger.json"))
         mutableUsage.value = ledger.summary()
+        val result = Backend(store, ledger, CandidateFinder(store, detector = AndroidLanguageDetector(app)))
+        publish(store)
+        // No caller can mutate this store until ready returns. Install only after every fallible initialization step.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { store.changes.collect { publish(store) } }
+        mutableError.value = null
         mutableLoaded.value = true
-        Backend(store, ledger, CandidateFinder(store, detector = AndroidLanguageDetector(app)))
+        result
     }
     init {
         com.paply.android.reminders.TaskReminders.start(app, this)
+        com.paply.android.widgets.TaskWidgets.start(app, this)
         keyPrefs.registerOnSharedPreferenceChangeListener(keyListener)
         scope.launch {
-            SettingsRepository.get(app).state.map { it.betaThoughts }.distinctUntilChanged().collect {
+            SettingsRepository.get(app).state.map { it.betaThoughts }.distinctUntilChanged().collect { enabled ->
+                if (enabled) { ThoughtWork.installMaintenance(app); kick("beta-on") } else ThoughtWork.pause(app)
                 com.paply.android.ThoughtWidget.updateAll(app)
                 android.service.quicksettings.TileService.requestListeningState(app,
                     android.content.ComponentName(app, com.paply.android.ThoughtTile::class.java))
@@ -91,11 +98,12 @@ class ThoughtsRepository private constructor(private val app: Context) {
             override fun onAvailable(network: Network) { kick("network") }
         })
         scope.launch {
-            try { ready.await(); ThoughtWork.installMaintenance(app); kick("launch") }
+            try { backend(); if (enabled()) ThoughtWork.installMaintenance(app); kick("launch") }
             catch (_: Exception) { mutableError.value = "Gedanken konnten nicht geladen werden. Die Dateien bleiben erhalten." }
         }
     }
-    internal suspend fun backend(): Backend = ready.await()
+    internal suspend fun backend(): Backend = ready.get()
+    internal fun enabled() = SettingsRepository.get(app).state.value.betaThoughts
     internal fun online() = manager.getNetworkCapabilities(manager.activeNetwork)
         ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     internal fun dictationBusy() = DictationRuntime.isBusy
@@ -106,16 +114,18 @@ class ThoughtsRepository private constructor(private val app: Context) {
     }
     internal fun processor(b: Backend): ThoughtProcessor = ThoughtProcessor(
         b.store, ThoughtStructurer(b.ledger, trace = trace), b.finder, b.ledger,
-        ProcessorEnvironment(apiKey = { KeyVault(app).read() }, isOnline = { online() },
-            isDictationBusy = { dictationBusy() }, settings = { settings() }, uiLanguage = Locale.getDefault().language),
+        ProcessorEnvironment(apiKey = { KeyVault(app).read() }, isOnline = { enabled() && online() },
+            isDictationBusy = { !enabled() || dictationBusy() }, settings = { settings() }, uiLanguage = Locale.getDefault().language),
         TopicIndex, b.finder, transcriber = com.paply.thoughts.processing.FileTranscriber(diagnostic = Diag::event),
         options = ThoughtProcessor.Options(autoRetry = false), trace = trace,
         languageDetector = AndroidLanguageDetector(app),
     )
     fun kick(reason: String = "foreground") {
+        if (!enabled()) return
         scope.launch {
             try {
-                val b = ready.await()
+                val b = backend()
+                if (!enabled()) return@launch
                 val hygieneDue = com.paply.thoughts.ai.TopicHygiene.isSuggestionDue(
                     TopicIndex.summaries(b.store.topics(), b.store.all()).count { it.isActive }, b.store.topicsInfo().lastHygieneAt)
                 if (hygieneDue || b.store.all().any { it.deletedAt == null && (ThoughtProcessor.isInFlight(it.state) || ThoughtProcessor.isWaiting(it.state)) }) {
@@ -127,6 +137,8 @@ class ThoughtsRepository private constructor(private val app: Context) {
     }
     internal suspend fun publish() = publish(backend().store)
     internal suspend fun publish(store: ThoughtStore) = withContext(Dispatchers.IO) {
+      publishMutex.withLock { synchronized(store) {
+        TrimResidue.releaseAudio(store)
         val all = store.all()
         val visible = all.filter { it.deletedAt == null && it.state != ThoughtState.empty && it.state != ThoughtState.recording }.sortedByDescending { it.createdAt }
         mutableThoughts.value = visible
@@ -142,6 +154,7 @@ class ThoughtsRepository private constructor(private val app: Context) {
             else -> Phase.WAITING
         }, t.status.message, if (t.audio != null) t.createdAt.plusSeconds(AUDIO_RETENTION_SECONDS) else null) }
         mutableSuggestions.value = store.pendingSuggestions()
+      } }
     }
     internal suspend fun refreshUsage() { mutableUsage.value = backend().ledger.summary() }
     internal suspend fun markDiscard(id: String) = withContext(Dispatchers.IO) {
@@ -382,6 +395,9 @@ class ThoughtsRepository private constructor(private val app: Context) {
     suspend fun search(query: String): List<com.paply.thoughts.model.SearchHit> = withContext(Dispatchers.Default) {
         makeSearchIndex().search(query)
     }
+    /** Map selection also follows merged aliases, which the public topic summary intentionally omits. */
+    suspend fun mapTopics(): List<Topic> = withContext(Dispatchers.IO) { backend().store.topics() }
+
     suspend fun topicColorSlots(): Map<String, Int> = withContext(Dispatchers.IO) {
         val store = backend().store
         synchronized(store) {
@@ -458,7 +474,9 @@ class ThoughtsRepository private constructor(private val app: Context) {
         }
     }
     internal suspend fun maintenance(now: Instant = Instant.now()) = withContext(Dispatchers.IO) {
+        if (!enabled()) return@withContext
         val store = backend().store
+        if (!enabled()) return@withContext
         store.housekeeping(now)
         for (t in store.all()) {
             if (t.state == ThoughtState.recording || store.hasSource(t.id)) continue

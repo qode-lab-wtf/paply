@@ -1,0 +1,7 @@
+Hey! Hier ist Paply 0.1.0 für dein Android 😊
+Damit kannst du in anderen Apps diktieren und Gedanken mit Aufgaben festhalten.
+Öffne die APK im Anhang; die kurze Anleitung schicke ich dir dazu.
+Android braucht dafür „Unbekannte Apps installieren“ für Browser oder Dateien.
+Play Protect bitte eingeschaltet lassen; bei einer Warnung schick mir einen Screenshot.
+Beim ersten Öffnen hilft dir die Einrichtung; du brauchst einen kostenlosen Groq-Schlüssel.
+Es ist eine Testversion – sag mir gern, was klappt und was hakt. Danke! Allan

@@ -49,6 +49,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
     @Volatile private var recorder: AudioRecord? = null
     private var wasSilenced = false
     private val configPoll = RecordingConfigPoll()
+    private var microphoneMuted = false
     private val callback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
             val session = recorder?.audioSessionId ?: return
@@ -92,7 +93,6 @@ class AudioCapture(private val context: Context, val file: File, private val max
     fun requestStop() { running.set(false) }
     suspend fun finish(): CaptureResult { requestStop(); return completed.await() }
     suspend fun awaitEnd(): CaptureResult = completed.await()
-    private fun inCall() = manager.mode in listOf(AudioManager.MODE_IN_CALL, AudioManager.MODE_IN_COMMUNICATION, AudioManager.MODE_RINGTONE)
     private fun setInterrupted(value: Boolean) {
         if (value) wasSilenced = true
         if (interrupted != value) { interrupted = value; Diag.event("audio.interrupted value=$value") }
@@ -106,10 +106,9 @@ class AudioCapture(private val context: Context, val file: File, private val max
             writer = thoughtWriter ?: WAVWriter(file.toPath())
             val samples = ShortArray(320)
             while (running.get() && SystemClock.elapsedRealtime() - startedAt < maxMs) {
-                // After DEAD_OBJECT, wait for the call to end before building exactly one new recorder.
+                // After DEAD_OBJECT, rebuild once; Android alone decides whether the client is silenced.
                 if (recorder == null) {
                     setInterrupted(true)
-                    if (inCall() || manager.isMicrophoneMute) { Thread.sleep(40); continue }
                     recorder = freshRecorder(); Diag.event("audio.rebuilt")
                 }
                 val audio = requireNotNull(recorder)
@@ -125,9 +124,10 @@ class AudioCapture(private val context: Context, val file: File, private val max
                 }
                 if (configPoll.due(SystemClock.elapsedRealtime())) {
                     audio.activeRecordingConfiguration?.let { clientSilenced = it.isClientSilenced }
+                    microphoneMuted = manager.isMicrophoneMute
                 }
                 val silenced = clientSilenced ||
-                    manager.isMicrophoneMute || inCall() || (BuildConfig.DEBUG && CaptureDebug.silenced)
+                    microphoneMuted || (BuildConfig.DEBUG && CaptureDebug.silenced)
                 setInterrupted(silenced)
                 if (count == 0) { Thread.sleep(10); continue }
                 // Exclude interrupted blocks from BOTH retained WAV and the IME pipeline.
@@ -160,7 +160,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
             }
             if (onSamples == null && voiced >= 1600 && error == null) {
                 // Trim a copy; a failed trim/rename can never corrupt the only recording.
-                val copy = File(file.parentFile, "audio.trim.tmp")
+                val copy = File(file.parentFile, ".tmp-trim-${file.name}")
                 runCatching {
                     file.copyTo(copy, overwrite = true)
                     @Suppress("DEPRECATION") val trimmed = com.paply.core.trimQuietEdges(copy, firstVoiced, lastVoiced)

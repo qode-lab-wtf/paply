@@ -38,7 +38,7 @@ import java.time.Instant
 @Composable
 fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksTab: Boolean,
     setup: @Composable () -> Unit, onSettings: () -> Unit, onTileSetup: () -> Unit,
-    focusID: String? = null, setupProgress: Pair<Int, Int> = 0 to 6) {
+    focusID: String? = null, taskDestination: com.paply.android.ui.tasks.TaskOpenRequest? = null, setupProgress: Pair<Int, Int> = 0 to 6) {
     val thoughts by repository.thoughts.collectAsStateWithLifecycle()
     val topics by repository.topics.collectAsStateWithLifecycle()
     val deleted by repository.deleted.collectAsStateWithLifecycle()
@@ -50,6 +50,9 @@ fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksT
     var path by rememberSaveable { mutableStateOf(listOf<String>()) }
     var focusTask by rememberSaveable { mutableStateOf<String?>(null) }
     var filter by rememberSaveable { mutableStateOf("all") }
+    var mapMode by rememberSaveable { mutableStateOf(true) }
+    var mapFocus by rememberSaveable { mutableStateOf<String?>(null) }
+    var listQuery by rememberSaveable { mutableStateOf("") }
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     var sheetID by rememberSaveable { mutableStateOf("") }
     var newTopicPrefill by rememberSaveable { mutableStateOf("") }
@@ -73,6 +76,7 @@ fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksT
         sheetID = id; sheet = kind
     }
     LaunchedEffect(focusID) { if (!focusID.isNullOrBlank()) open(focusID) }
+    LaunchedEffect(taskDestination) { taskDestination?.let { if (it.claim()) { sheet = null; open(it.thoughtID, it.taskID) } } }
     LaunchedEffect(topics, filter) {
         if (filter !in listOf("all", "none", "pending") && topics.none { it.id == filter }) filter = "all"
     }
@@ -90,17 +94,20 @@ fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksT
             "deleted" -> RecentlyDeletedView(deleted, topics, actions, { back() })
             "guide" -> ThoughtButtonGuide({ back() }, onTileSetup, ::capture)
             "search" -> ThoughtsSearchView(thoughts, topics, repository, { back() }, { open(it) },
-                onTopic = { filter = it; route = "home" }, actions = actions, onTopicPicker = { present("pick", it) })
+                onTopic = { filter = it; mapFocus = it; route = "home" }, actions = actions, onTopicPicker = { present("pick", it) })
             else -> {
                 if (tasksTab) {
                     TasksPage(thoughts, topics, loaded, actions, onSettings, ::capture, { id, task -> open(id, task) })
                 } else {
                     var more by remember { mutableStateOf(false) }
-                    ThoughtToolbar("Gedanken", beta = true, actions = {
+                    val largeType = LocalDensity.current.fontScale >= 1.5f
+                    ThoughtToolbar("Gedanken", beta = !largeType, actions = {
+                        if (!largeType) IconButton(onClick = { mapMode = !mapMode }) { Glyph(if (mapMode) PaplyIcons.List else PaplyIcons.Map, if (mapMode) "Liste zeigen" else "Karte zeigen", C.greenBright) }
                         IconButton(onClick = { route = "search" }) { Glyph(PaplyIcons.Search, "Suchen", C.greenBright) }
                         Box {
                             IconButton(onClick = { more = true }) { Glyph(PaplyIcons.More, "Mehr", C.greenBright) }
                             DropdownMenu(more, { more = false }) {
+                                if (largeType) DropdownMenuItem(text = { Text(if (mapMode) "Liste zeigen" else "Karte zeigen") }, onClick = { more = false; mapMode = !mapMode })
                                 DropdownMenuItem(text = { Text("Themen bearbeiten") }, onClick = { more = false; route = "topics" })
                                 DropdownMenuItem(text = { Text(if (deleted.isEmpty()) "Zuletzt gelöscht" else "Zuletzt gelöscht (${deleted.size})") }, onClick = { more = false; route = "deleted" })
                             }
@@ -112,13 +119,17 @@ fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksT
                     else if (thoughts.isEmpty()) Box(Modifier.weight(1f)) {
                         ThoughtsEmptyState(setup, { route = "guide" }, ::capture)
                     } else {
-                        var query by rememberSaveable { mutableStateOf("") }
-                        SearchField(query, { query = it }, "Gedanken durchsuchen")
-                        val hits by searchResults(repository, query, thoughts, topics)
                         val chipTopics = topics.filter { topic ->
                             val count = thoughts.count { it.topicId == topic.id }
                             count > 0 && TopicIndex.isActive(topic, count)
                         }
+                        if (mapMode) Box(Modifier.weight(1f)) {
+                            com.paply.android.ui.thoughts.map.ThoughtMapSlot(thoughts, topics, repository, actions,
+                                mapFocus, { mapFocus = it }, { id, task -> open(id, task) }, { present("actions", it) }, setup, setupProgress)
+                        } else {
+                        val query = listQuery
+                        SearchField(query, { listQuery = it }, "Gedanken durchsuchen")
+                        val hits by searchResults(repository, query, thoughts, topics)
                         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.padding(vertical = 10.dp)) {
                             item { TopicFilter("Alle", filter == "all", { filter = "all" }) }
@@ -137,8 +148,9 @@ fun ThoughtsTab(repository: ThoughtsRepository, actions: ThoughtsActions, tasksT
                             else thoughts.filter { when (filter) { "all" -> true; "none" -> it.topicId == null && it.state == ThoughtState.done
                                 "pending" -> it.state != ThoughtState.done; else -> it.topicId == filter } }
                         Box(Modifier.weight(1f)) {
-                            ThoughtMapSlot(shown, topics, statuses, filter, actions, { open(it) }, { present("pick", it) },
+                            ThoughtsList(shown, topics, statuses, filter, actions, { open(it) }, { present("pick", it) },
                                 setup = setup, setupProgress = setupProgress, query = query, hits = hits, onEditTopic = { present("actions", it) })
+                        }
                         }
                         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("${thoughts.size} ${if (thoughts.size == 1) "Gedanke" else "Gedanken"}" + if (chipTopics.isEmpty()) "" else " · ${chipTopics.size} ${if (chipTopics.size == 1) "Thema" else "Themen"}",
@@ -193,9 +205,9 @@ private fun TopicFilter(title: String, selected: Boolean, onClick: () -> Unit, t
     }
 }
 
-/** Replacement seam for the next stage. No map layout, anchors or viewport state live here. */
+/** The list remains available beside the map and for search results. */
 @Composable
-fun ThoughtMapSlot(thoughts: List<Thought>, topics: List<Topic>, statuses: Map<String, ThoughtsRepository.Status>,
+fun ThoughtsList(thoughts: List<Thought>, topics: List<Topic>, statuses: Map<String, ThoughtsRepository.Status>,
     filter: String, actions: ThoughtsActions, onOpen: (String) -> Unit, onTopicPicker: (String) -> Unit,
     setup: @Composable () -> Unit = {}, setupProgress: Pair<Int, Int> = 0 to 0, query: String = "", hits: List<SearchHit> = emptyList(), onEditTopic: (String) -> Unit = {}) {
     val selectedTopic = topics.firstOrNull { it.id == filter }
@@ -296,7 +308,7 @@ private fun ThoughtsSearchView(thoughts: List<Thought>, topics: List<Topic>, rep
         topics.filter { it.title.contains(query, ignoreCase = true) }.take(3).forEach { topic ->
             TextButton(onClick = { onTopic(topic.id) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Thema: ${topic.title}") }
         }
-        ThoughtMapSlot(hits.mapNotNull { hit -> thoughts.firstOrNull { it.id == hit.thoughtID } }, topics, statuses, "all", actions, onOpen, onTopicPicker,
+        ThoughtsList(hits.mapNotNull { hit -> thoughts.firstOrNull { it.id == hit.thoughtID } }, topics, statuses, "all", actions, onOpen, onTopicPicker,
             query = query, hits = hits)
     }
 }

@@ -70,6 +70,13 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
         var hasKey by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf(SetupStatus.read(activity, prefs)) }
         val thoughtRepository = remember { ThoughtsRepository.get(activity) }
+        var taskDestination by remember { mutableStateOf<com.paply.android.ui.tasks.TaskOpenRequest?>(null) }
+        com.paply.android.ui.reminders.ReminderDeepLinkEffect(thoughtRepository) { thoughtID, taskID ->
+            if (prefs.betaThoughts) {
+                taskDestination = com.paply.android.ui.tasks.TaskOpenRequest(thoughtID, taskID)
+                tab = "tasks"; route = "home"
+            } else { route = "settings" }
+        }
         var diagnostic by remember { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
@@ -196,6 +203,7 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                                         }, error = historyError, retryLoad = { historyAction { history.reload() } })
                                     else ThoughtsTab(thoughtRepository, thoughtActions, tasksTab = tab == "tasks", setup = setup,
                                         onSettings = { navigate("settings") }, onTileSetup = { navigate("tile") },
+                                        taskDestination = taskDestination.takeIf { tab == "tasks" },
                                         focusID = activity.intent.getStringExtra("thoughtId").takeIf { tab == "thoughts" },
                                         setupProgress = listOf(status.microphone, status.notifications, hasKey, status.keyboardEnabled, status.keyboardSelected, status.tileAdded).count { it } to 6)
                                 }

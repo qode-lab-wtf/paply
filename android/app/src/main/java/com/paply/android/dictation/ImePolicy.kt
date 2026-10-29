@@ -10,6 +10,8 @@ internal object ImePolicy {
     const val WARNING_MS = 540_000L
     fun fieldChanged(restarting: Boolean, sameIdentity: Boolean, rotating: Boolean) =
         !rotating && (!restarting || !sameIdentity)
+    fun returnAfterDelivery(accepted: Boolean, confirmed: Boolean?, copied: Boolean) =
+        accepted && (confirmed == true || copied)
     fun readback(expected: String, actual: String?): Boolean? {
         fun normalized(s: String) = s.replace(Regex("[\\s\\p{Z}]+"), " ").trim().lowercase(Locale.ROOT)
         return if (actual != null && normalized(actual).endsWith(normalized(expected))) true else null
@@ -21,6 +23,24 @@ internal object ImePolicy {
         generateSequence(error) { it.cause }.any { (it is android.system.ErrnoException && it.errno == android.system.OsConstants.ENOSPC) || (it is java.io.IOException && (it.message.orEmpty().contains("ENOSPC") || it.message.orEmpty().contains("No space left on device"))) } -> HistoryFailure.STORAGE_FULL
         error is java.io.IOException || error is StorageAccessException -> HistoryFailure.STORAGE
         else -> HistoryFailure.MICROPHONE
+    }
+}
+
+/** The success stays readable briefly; leaving the IME invalidates its pending return. */
+internal class ImeAutoReturn(private val handler: android.os.Handler) {
+    private var pending: Runnable? = null
+    fun schedule(isCurrent: () -> Boolean, onReturn: () -> Unit) {
+        cancel()
+        val callback = Runnable {
+            pending = null
+            if (isCurrent()) onReturn()
+        }
+        pending = callback
+        handler.postDelayed(callback, 350)
+    }
+    fun cancel() {
+        pending?.let(handler::removeCallbacks)
+        pending = null
     }
 }
 internal class KeyAccessException(cause: Throwable? = null) : Exception("key", cause)

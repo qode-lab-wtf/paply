@@ -66,3 +66,29 @@ Gedanken: maximal zehn Minuten; Karte wegwischen oder Home beendet die Aufnahme 
 Diagnoseprotokoll: ausschließlich Zustände, Dauer, Pegel, Zeichenlängen und Modellnamen; keine Transkripte, Schlüssel oder HTTP-Antworten. V1-Arbeit: vollständige PaplyKit-Portierung, echtes VAD, Historie/Vokabular, Safety-Net sowie Pixel-/Samsung-/Bluetooth-/Anruf-Tests.
 
 Nach Tests eine gesetzte Test-PIN wieder entfernen und den Emulator mit `ssh macbook 'source ~/Android/env.sh; ~/Android/emu-stop.sh'` stoppen. Echte Groq-Aufrufe bewusst zählen; Unit-Tests verwenden ausschließlich MockWebServer.
+
+## Release für Freunde (0.1.0)
+
+Gebaut wird ausschließlich auf dem MacBook. `release` prüft die Signatur und holt nur die signierte APK
+samt SHA-256-Datei nach `/tmp/paply-android-release/` auf den Mac mini:
+
+```sh
+PAPLY_WORK=rel android/scripts/mb.sh sync
+PAPLY_WORK=rel android/scripts/mb.sh release
+cd /tmp/paply-android-release && shasum -a 256 -c Paply-0.1.0.apk.sha256
+```
+
+Die Signierung liest auf dem MacBook `~/Android/keys/paply-release.properties` (Rechte `600`):
+`storeFile` (absoluter Pfad außerhalb des Repos), `storePassword`, `keyAlias`, `keyPassword`.
+Alternativ gelten `PAPLY_RELEASE_STORE_FILE`, `PAPLY_RELEASE_STORE_PASSWORD`, `PAPLY_RELEASE_KEY_ALIAS`
+und `PAPLY_RELEASE_KEY_PASSWORD` in der **MacBook-Buildumgebung**; sie überschreiben Properties einzeln.
+Ohne `keyPassword` gilt `storePassword`. Geheimnisse nie in Befehlszeilen, Logs oder das Repository schreiben.
+Ohne Signierdaten erzeugt `assembleRelease` mit deutlicher Meldung eine unsignierte APK;
+`mb.sh release` bricht dann ab, ohne sie zu verteilen. Unvollständige Angaben sind ein Konfigurationsfehler.
+
+Keystore: `~/Android/keys/paply-release.jks`. Keystore **und** Properties außerhalb des Repos sicher sichern:
+Updates müssen mit demselben Schlüssel signiert werden, sonst ist eine Neuinstallation mit Datenverlust nötig.
+Für die nächste Version `versionName` ändern und `versionCode` erhöhen (`app/build.gradle.kts`).
+Release verwendet R8 und Ressourcenverkleinerung, keine Debug-Receiver oder Testdaten.
+Freundes-Anleitung: [FREUNDE.md](docs/FREUNDE.md), Begleittext: [FREUNDE-NACHRICHT.txt](docs/FREUNDE-NACHRICHT.txt).
+Prüfstand und offene Punkte: [RELEASE.md](docs/RELEASE.md).

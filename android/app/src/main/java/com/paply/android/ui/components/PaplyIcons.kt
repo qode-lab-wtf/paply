@@ -99,4 +99,7 @@ object PaplyIcons {
     val Search by lazy { vector("search", "M21 21l-4.34-4.34", "M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0") }
     val Trash by lazy { vector("trash", "M3 6h18", "M9 6V4h6v2", "M5 6l1 14h12l1-14", "M10 10v6", "M14 10v6") }
     val Close by lazy { vector("close", "M6 6l12 12", "M6 18L18 6") }
+    val Map by lazy { vector("Map", "m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z", "M9 3v15", "M15 6v15") }
+    val Scan by lazy { vector("Scan", "M3 7V5a2 2 0 0 1 2-2h2", "M17 3h2a2 2 0 0 1 2 2v2", "M21 17v2a2 2 0 0 1-2 2h-2", "M7 21H5a2 2 0 0 1-2-2v-2") }
+
 }

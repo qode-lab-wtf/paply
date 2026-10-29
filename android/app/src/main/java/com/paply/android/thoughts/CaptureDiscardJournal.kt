@@ -24,9 +24,20 @@ internal object CaptureDiscardJournal {
         check(store.thought(id) == null && !store.wavURL(id).parent.toFile().exists()) { "discard-pending" }
         marker(root, id).delete()
     }
+    fun unsafePending(root: File, store: ThoughtStore) = markers(root).any { marker ->
+        store.thought(marker.name.removePrefix("discard-"))?.state?.let {
+            it != com.paply.thoughts.ThoughtState.needsAttention
+        } == true
+    }
+    private fun markers(root: File) = root.listFiles().orEmpty().filter { it.name.matches(Regex("discard-[A-Za-z0-9_-]+")) }
     fun recover(root: File, store: ThoughtStore) {
-        root.listFiles().orEmpty().filter { it.name.matches(Regex("discard-[A-Za-z0-9_-]+")) }.forEach {
-            discard(root, store, it.name.removePrefix("discard-"))
+        markers(root).forEach {
+            val id = it.name.removePrefix("discard-")
+            runCatching { discard(root, store, id) }.onFailure {
+                // Quarantine only this item; healthy captures still proceed. Keep its journal for retry.
+                runCatching { store.update(id) { thought -> thought.copy(state = com.paply.thoughts.ThoughtState.needsAttention,
+                    status = com.paply.thoughts.Thought.Status("Verwerfen wird erneut versucht")) } }
+            }
         }
     }
 }

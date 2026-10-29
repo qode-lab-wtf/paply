@@ -138,6 +138,12 @@ fun ThoughtDetailView(id: String, thoughts: List<Thought>, topics: List<Topic>, 
                 }
             }
         }
+        thought.tasks.firstOrNull {
+            com.paply.thoughts.display.TaskReminderPlan.reminderTime(it, thought)?.isAfter(Instant.now()) == true
+        }?.let { candidate -> item("reminder-invitation") {
+            com.paply.android.ui.reminders.ReminderInvitation(candidate, thought,
+                onError = actions::message)
+        } }
         if (thought.state == ThoughtState.done) item("add-task") {
             TextButton(onClick = { editingTask = "new"; taskDraft = "" }) {
                 Glyph(PaplyIcons.CirclePlus, tint = C.greenBright, size = 22.dp); Spacer(Modifier.width(12.dp)); Text("Aufgabe")

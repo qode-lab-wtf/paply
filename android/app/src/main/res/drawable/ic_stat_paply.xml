@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paply p-Kopf: geometry and gradients from electron-menubar/brand/mark.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+<group android:scaleX="0.034375" android:scaleY="0.034375" android:translateX="-6.21875" android:translateY="-6.5625"><group><clip-path android:fillType="evenOdd" android:pathData="M0,0 H1024 V1024 H0 Z M240,450 a230,230 0,1 0,460,0 a230,230 0,1 0,-460,0 Z" /><path android:fillColor="#FFFFFFFF" android:pathData="M529.21,538.93 A150,150 0,1 1,729.96,576.91 A110,110 0,0 0,529.21,538.93 Z" /></group>
+<group><clip-path android:fillType="evenOdd" android:pathData="M0,0 H1024 V1024 H0 Z M458,410 a62,62 0,1 0,124,0 a62,62 0,1 0,-124,0 Z" /><path android:fillColor="#FFFFFFFF" android:pathData="M256,450 a214,214 0,1 1,428,0 a214,214 0,1 1,-428,0 Z M334,450 A78,78 0,0 1,412,528 V764 A78,78 0,0 1,256,764 V528 A78,78 0,0 1,334,450 Z" /></group></group>
+</vector>
