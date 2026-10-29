@@ -40,7 +40,7 @@ class PaplyButtonService : AccessibilityService() {
     private var overlayFailed = false
     private var bar: LinearLayout? = null
     private var label: TextView? = null
-    private var logo: ImageView? = null
+    private var logo: PaplyButtonView? = null
     private var cancel: TextView? = null
     private lateinit var wm: WindowManager
     private lateinit var layout: WindowManager.LayoutParams
@@ -107,6 +107,7 @@ class PaplyButtonService : AccessibilityService() {
             hint("Öffne Paply und erlaube das Mikrofon."); return
         }
         if (MicrophoneLease.isBusy()) { hint("Das Mikrofon ist gerade belegt."); return }
+        hintJob?.cancel(); hintText = null
         origin = field; changed = false
         bar?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         transition(ButtonPolicy.Event.START)
@@ -177,7 +178,10 @@ class PaplyButtonService : AccessibilityService() {
                             if (entry.text.isNotBlank()) deliver(entry)
                             else hint(state.error ?: "Das hat nicht geklappt. Öffne den Verlauf für einen Neuversuch.")
                         }
-                        session = null; stopForeground(); transition(ButtonPolicy.Event.RESULT); cancel()
+                        session = null; stopForeground()
+                        if (phase != ButtonPolicy.Phase.SUCCESS) transition(ButtonPolicy.Event.RESULT)
+                        else scope.launch { delay(650); if (phase == ButtonPolicy.Phase.SUCCESS) transition(ButtonPolicy.Event.RESULT) }
+                        cancel()
                     }
                     "discarded" -> {
                         val audio = active.recording.awaitEnd()
@@ -188,7 +192,7 @@ class PaplyButtonService : AccessibilityService() {
                         }
                         session = null; stopForeground(); transition(ButtonPolicy.Event.SILENCE)
                         hint(if (audio.error != null) "Mikrofon unterbrochen. Bitte erneut versuchen."
-                            else if (active.limitReached) "10 Minuten erreicht. Keine Sprache erkannt." else "Keine Sprache erkannt.")
+                            else if (active.limitReached) "10 Minuten erreicht. Keine Sprache erkannt." else "Keine Sprache erkannt. Bitte erneut versuchen.")
                         cancel()
                     }
                 }
@@ -218,42 +222,45 @@ class PaplyButtonService : AccessibilityService() {
             (setTextResult == ButtonTextInsertion.Result.VERIFIED || sameField())
         val retained = entry.failure !in listOf(HistoryFailure.STORAGE, HistoryFailure.STORAGE_FULL)
         val copied = setTextResult == ButtonTextInsertion.Result.UNAVAILABLE && (!accepted || !retained) && DictationClipboard.copy(this, entry.text, notify = true, retained = retained)
-        val message = if (sent == ButtonTextInsertion.Result.REVIEW) "Bitte Text prüfen – liegt im Verlauf"
-            else if (!retained) "Verlauf konnte nicht gespeichert werden. Bitte den Text jetzt kopieren oder einsetzen."
-            else if (clipboardFallback) "Text liegt auch in der Zwischenablage"
-            else if (accepted) "An Textfeld gesendet. Im Verlauf gesichert."
-            else if (copied) "Feld lange drücken → Einfügen. Text auch im Verlauf."
-            else "Text wartet im Verlauf. Dort kopieren und im Feld einsetzen."
+        val message = if (sent == ButtonTextInsertion.Result.REVIEW) "Textfeld nimmt Text nicht sicher an. Bitte prüfen."
+            else if (!retained && !accepted) {
+                if (copied) "Text in Zwischenablage. Jetzt einfügen; Verlauf nicht gespeichert."
+                else "Text konnte nicht gesichert werden. Bitte erneut versuchen."
+            }
+            else if (accepted) null
+            else if (copied || clipboardFallback) "Text in Zwischenablage. Feld lange drücken → Einfügen."
+            else "Text nur im Verlauf. Dort kopieren und einsetzen."
         runCatching { HistoryStore.get(this).updateIfPresent(entry.copy(
             status = if (accepted) HistoryStatus.OK else HistoryStatus.PENDING, error = message)) }
-        hint(message)
+        if (message != null) hint(message)
+        if (accepted) transition(ButtonPolicy.Event.SUCCESS)
     }
     private fun finish() { transition(ButtonPolicy.Event.FINISH); session?.finish() }
-    private fun discard(message: String = "Aufnahme verworfen.") {
+    private fun discard(message: String? = null) {
         generation++; preparing?.cancel(); preparing = null
         val active = session; session = null; active?.discard()
-        stopForeground(); transition(ButtonPolicy.Event.DISCARD); hint(message)
+        stopForeground(); transition(ButtonPolicy.Event.DISCARD)
+        if (message != null) hint(message)
+        else { hintJob?.cancel(); hintText = null; render() }
     }
+
     private fun hint(message: String) {
         hintJob?.cancel()
         hintText = when {
+            message.startsWith("10 Minuten") -> message
             message.contains("Schlüssel", true) -> "Schlüssel fehlt oder ist ungültig"
-            message.contains("Keine Sprache", true) -> "Keine Sprache erkannt"
+            message.contains("Keine Sprache", true) -> "Keine Sprache erkannt. Bitte erneut versuchen."
             message.contains("belegt", true) -> "Mikrofon belegt"
             message.contains("Einfügen") -> "Feld lange drücken → Einfügen"
-            message.startsWith("An Textfeld") -> "Gesendet · im Verlauf gesichert"
             message.startsWith("Mikrofon wird") -> "Mikrofon startet neu …"
             message.startsWith("Feld gewechselt") -> "Feld gewechselt · Text wird gesichert"
             message.startsWith("Öffne Paply") || message.startsWith("Mikrofon nicht verfügbar") -> "Mikrofon in Paply freigeben"
             else -> message
         }
-        label?.animate()?.cancel(); label?.alpha = 1f
         render()
         hintJob = scope.launch {
-            delay(2500)
-            if (ValueAnimator.areAnimatorsEnabled()) label?.animate()?.alpha(0f)?.setDuration(220)?.start()
-            delay(220)
-            hintText = null; label?.alpha = 1f; render()
+            delay(4000)
+            hintText = null; render()
         }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -265,10 +272,11 @@ class PaplyButtonService : AccessibilityService() {
         val safeTop = maxOf(insets?.stableInsetTop ?: dp(28), insets?.displayCutout?.safeInsetTop ?: 0)
         val safeLeft = maxOf(insets?.displayCutout?.safeInsetLeft ?: 0, insets?.stableInsetLeft ?: 0)
         val safeRight = maxOf(insets?.displayCutout?.safeInsetRight ?: 0, insets?.stableInsetRight ?: 0)
-        val y = ButtonPosition.top(keyboardTop.coerceAtMost(screen.y), safeTop, dp(44), dp(8), offset)
+        val y = ButtonPosition.top(keyboardTop.coerceAtMost(screen.y), safeTop, dp(72), dp(8), offset)
         val show = keyboardStable && y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
         if (!show) {
             bar?.let { view ->
+                logo?.stopAnimation()
                 bar = null
                 if (keyboardStable && ValueAnimator.areAnimatorsEnabled()) view.animate().alpha(0f).setDuration(140).withEndAction { runCatching { wm.removeView(view) } }.start()
                 else runCatching { wm.removeView(view) }
@@ -277,25 +285,27 @@ class PaplyButtonService : AccessibilityService() {
         if (bar == null) {
             val view = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); cornerRadius = dp(24).toFloat() }
-                elevation = dp(6).toFloat()
             }
-            logo = ImageView(this).apply { setImageResource(R.drawable.ic_paply); contentDescription = "Paply-Diktat starten"; setPadding(dp(10),dp(10),dp(10),dp(10)) }
+            logo = PaplyButtonView(this).apply {
+                level = { session?.recording?.level ?: 0f }
+                setOnClickListener { if (phase == ButtonPolicy.Phase.IDLE) start() else if (phase == ButtonPolicy.Phase.RECORDING) finish() }
+            }
             label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER_VERTICAL; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(8),0,dp(8),0) }
             cancel = TextView(this).apply { text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
-            view.addView(logo, LinearLayout.LayoutParams(dp(44),dp(44)))
-            view.addView(label, LinearLayout.LayoutParams(-2,dp(44)))
-            view.addView(cancel, LinearLayout.LayoutParams(dp(44),dp(44)))
-            layout = WindowManager.LayoutParams(-2, dp(44), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            label?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); cornerRadius = dp(16).toFloat() }
+            cancel?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); shape = GradientDrawable.OVAL }
+            view.addView(label, LinearLayout.LayoutParams(-2,dp(64)))
+            view.addView(cancel, LinearLayout.LayoutParams(dp(48),dp(48)))
+            view.addView(logo, LinearLayout.LayoutParams(dp(72),dp(72)))
+            layout = WindowManager.LayoutParams(-2, dp(72), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.RIGHT
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                     if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0) }
             bar = view
-            view.setOnClickListener { if (phase == ButtonPolicy.Phase.IDLE) start() else if (phase == ButtonPolicy.Phase.RECORDING) finish() }
             var down = 0f; var initial = 0; var dragged = false
-            view.setOnTouchListener { v, event ->
+            logo?.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> { down = event.rawY; initial = offset; dragged = false; true }
                     MotionEvent.ACTION_MOVE -> {
@@ -309,29 +319,23 @@ class PaplyButtonService : AccessibilityService() {
             try { wm.addView(view, layout) } catch (_: Exception) { bar = null; overlayFailed = true; discard("Paply-Knopf kann nicht angezeigt werden. Bedienungshilfe erneut einschalten."); return }
             if (ValueAnimator.areAnimatorsEnabled()) { view.alpha = 0f; view.animate().alpha(1f).setDuration(140).start() }
         }
-        val active = session
-        val elapsed = active?.let { (SystemClock.elapsedRealtime() - it.recording.startedAt) / 1000 } ?: 0
-        logo?.visibility = if (phase == ButtonPolicy.Phase.IDLE) View.VISIBLE else View.GONE
-        label?.visibility = if (phase == ButtonPolicy.Phase.IDLE && hintText == null) View.GONE else View.VISIBLE
-        cancel?.visibility = if (phase == ButtonPolicy.Phase.IDLE) View.GONE else View.VISIBLE
-        label?.text = hintText ?: when (phase) {
-            ButtonPolicy.Phase.STARTING -> "Mikrofon …"
-            ButtonPolicy.Phase.WORKING -> "schreibt …"
-            ButtonPolicy.Phase.RECORDING -> "${"▮".repeat(1 + ((active?.recording?.level ?: 0f) * 5).toInt())}  ${elapsed / 60}:${(elapsed % 60).toString().padStart(2,'0')} · Fertig" + if (elapsed >= 540) " · noch ${600-elapsed}s" else ""
-            else -> ""
-        }
+        logo?.setPhase(phase)
+        label?.visibility = if (hintText == null) View.GONE else View.VISIBLE
+        cancel?.visibility = if (phase == ButtonPolicy.Phase.STARTING || phase == ButtonPolicy.Phase.RECORDING) View.VISIBLE else View.GONE
+        if (label?.text?.toString().orEmpty() != hintText.orEmpty()) label?.text = hintText
         val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, dp(8))
-        val controlsWidth = (if (logo?.visibility == View.VISIBLE) dp(44) else 0) +
-            (if (cancel?.visibility == View.VISIBLE) dp(44) else 0)
+        val controlsWidth = dp(72) + (if (cancel?.visibility == View.VISIBLE) dp(48) else 0)
         label?.maxWidth = (horizontal.width - controlsWidth).coerceAtLeast(0)
         bar?.layoutDirection = View.LAYOUT_DIRECTION_LTR
-        bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(44), View.MeasureSpec.EXACTLY))
+        bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(72), View.MeasureSpec.EXACTLY))
         // Fix the actual window width too: a WRAP_CONTENT relayout can otherwise
         // grow beyond the measured left-anchored position on the next frame.
-        layout.width = (bar?.measuredWidth ?: dp(44)).coerceAtMost(horizontal.width)
+        val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
+        layout.width = (bar?.measuredWidth ?: dp(72)).coerceAtMost(horizontal.width)
         layout.x = horizontal.rightMargin
         layout.y = y ?: safeTop
-        bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
+        if (layout.width != previousWidth || layout.x != previousX || layout.y != previousY)
+            bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
     }
     override fun onInterrupt() {
         if (phase == ButtonPolicy.Phase.STARTING) discard("Aufnahme unterbrochen.")
@@ -340,6 +344,7 @@ class PaplyButtonService : AccessibilityService() {
         connected = null; changed = true; generation++; preparing?.cancel()
         if (phase == ButtonPolicy.Phase.RECORDING) { hint("Paply-Knopf beendet. Text wird gesichert."); session?.finish() }
         stopForeground(); scope.cancel()
+        logo?.stopAnimation()
         bar?.let { runCatching { wm.removeViewImmediate(it) } }; bar = null
         super.onDestroy()
     }

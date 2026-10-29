@@ -31,6 +31,24 @@ class ButtonPolicyTest {
             assertEquals(UNAVAILABLE, ButtonPolicy.insert(api, { ++checks == 1 }, {false}, {UNAVAILABLE}, {error("field changed")}))
         }
     }
+    @Test fun repeatedFinishDiscardFinishReturnsToFreshRecording() {
+        var phase = Phase.IDLE
+        fun step(event: Event, expected: Phase) {
+            phase = ButtonPolicy.next(phase, event)
+            assertEquals(expected, phase)
+        }
+        repeat(3) { round ->
+            step(Event.START, Phase.STARTING)
+            step(Event.READY, Phase.RECORDING)
+            if (round == 1) step(Event.DISCARD, Phase.IDLE)
+            else {
+                step(Event.FINISH, Phase.WORKING)
+                step(Event.START, Phase.WORKING)
+                step(Event.SUCCESS, Phase.SUCCESS)
+                step(Event.RESULT, Phase.IDLE)
+            }
+        }
+    }
     @Test fun pillStartFinishAndTerminalEvents() {
         assertEquals(Phase.STARTING, ButtonPolicy.next(Phase.IDLE, Event.START))
         assertEquals(Phase.RECORDING, ButtonPolicy.next(Phase.STARTING, Event.READY))

@@ -113,8 +113,8 @@ class ButtonDeviceTest {
                     assertEquals(end, field.textSelectionEnd)
                 }
             }
-            assertTrue(button.parent.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            waitFor { it.text?.contains("· Fertig") == true }
+            assertTrue(button.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
             // Bauleitung injects its known WAV now, after audio.start, via the authorized host.
             Thread.sleep(12_000)
             if (scenario == "field") {
@@ -129,7 +129,7 @@ class ButtonDeviceTest {
                 assertTrue(ui.setRotation(UiAutomation.ROTATION_FREEZE_90))
                 Thread.sleep(1000)
                 // Rotation may end capture if Android replaces the editor; either way no insertion into a new field.
-                val outcome = waitFor { it.text?.contains("· Fertig") == true || it.text?.contains("Einfügen") == true }
+                val outcome = waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" || it.text?.contains("Einfügen") == true }
                 if (outcome.text?.contains("Einfügen") == true) {
                     assertTrue(waitFor { it.hintText?.toString() == "Erstes Textfeld" }.text.isNullOrEmpty())
                     assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
@@ -137,8 +137,8 @@ class ButtonDeviceTest {
                     aboveKeyboard(); return@runBlocking
                 }
             }
-            val pill = waitFor { it.text?.contains("· Fertig") == true }
-            assertTrue(pill.parent.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val pill = waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
+            assertTrue(pill.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             if (scenario == "reject") {
                 // On API 33+ commitText is acknowledged IPC, not editor acceptance; history remains authoritative.
                 waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }

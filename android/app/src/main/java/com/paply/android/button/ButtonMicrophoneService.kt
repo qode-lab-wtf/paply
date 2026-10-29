@@ -17,7 +17,7 @@ class ButtonMicrophoneService : Service() {
                 NotificationChannel("button-microphone", "Paply-Diktat", NotificationManager.IMPORTANCE_LOW))
             val notification = Notification.Builder(this, "button-microphone")
                 .setSmallIcon(R.drawable.ic_stat_paply).setContentTitle("Paply hört zu")
-                .setContentText("Mit der Paply-Pille fertigstellen oder verwerfen.")
+                .setContentText("Paply-Knopf antippen zum Einsetzen. X verwirft.")
                 .setOngoing(true).setUsesChronometer(true).build()
             startForeground(410, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             owner.foregroundReady()

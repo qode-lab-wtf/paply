@@ -1,3 +1,65 @@
+# Paply-Knopf · 0.2.1 (7) – runder Aufnahmeknopf
+
+Stand: 29.10.2026. Die folgenden Änderungen ersetzen die Pille; Einsetzlogik,
+Mikrofonwege, Passwortschutz und 10-Minuten-Grenze bleiben erhalten.
+
+- Ruhe: 48-dp-Kreis in Forest (#0F2C20), Paply-Marke; 72-dp-Touchfläche.
+- Aufnahme: Kreis wächst weich auf 56 dp, drei transparente GreenBright-Ringe
+  (#3AD879), maximal 71 dp Außendurchmesser. Pegel direkt aus AudioCapture.level,
+  zeitbasierte exponentielle Glättung (120 ms), langsames Atmen (ca. 2,4 s).
+  Eigene Canvas-View, ValueAnimator am Displaytakt, keine Layouts pro Animationsframe.
+  Tipp: beenden/einsetzen. Links daneben separates X mit 48-dp-Touchziel.
+- Verarbeitung: grüner Drehring (2,4 s); kein Zeit- oder Fertig-Text.
+  Bestätigtes Senden: Haken für 650 ms, dann Ruhe. Bei commitText bleibt wie bisher
+  die Grenze: IPC-Bestätigung ist kein Beweis, dass ein fremder Editor Text annimmt.
+- Feste Overlayhöhe 72 dp, vollständig 8 dp oberhalb der stabilen Tastaturgrenze;
+  Bildschirmkoordinaten, Cutout-Schutz und Verschieben unverändert. Der Knopf
+  bleibt rechts stehen, X und Hinweise wachsen nach links.
+- Animatoren stoppen bei Ausblenden/Detach/Zerstören. Systemweit abgeschaltete
+  Animationen ergeben statische Zustände. Unveränderte Fensterkoordinaten lösen
+  kein erneutes updateViewLayout aus.
+- Erfolg und Verwerfen ohne Satz. Handlungs-/Fehlerhinweise stehen separat und
+  verschwinden nach 4 s; neuer Start entfernt alte Hinweise.
+- Zweitaufnahme: Die alte gemeinsame Label-View wurde vom Hinweis per
+  ViewPropertyAnimator auf alpha=0 animiert. Ein gleich langer Coroutine-delay
+  setzte alpha=1, ohne den erst am nächsten Frame fertig werdenden Animator zu
+  stoppen. Dieser konnte danach erneut alpha=0 schreiben; Aufnahme-render()
+  setzte nur Text/visibility zurück. Die konkurrierende Animation ist entfernt;
+  Hinweise und Aufnahme haben getrennte Views. Kein Geräte-Repro hier ausgeführt.
+- Regression: Unit-Test Start→Fertig→Haken→Ruhe, Start→Verwerfen→Ruhe,
+  Start→Fertig→Haken→Ruhe; zusätzlicher Gerätetest für Sichtbarkeit, Zeichnung
+  und TalkBack-Beschriftungen über dieselben Runden. Bestehende Gerätetests
+  benutzen jetzt die Knopf-Beschriftung und klicken direkt den Knopf.
+
+## Android-/Samsung-Verknüpfung
+
+Die XML fordert weiterhin keinen Accessibility-Button an. Das fehlende
+FLAG_REQUEST_ACCESSIBILITY_BUTTON verhindert keine vom Nutzer gewählte
+System-Verknüpfung zum Ein-/Ausschalten des Dienstes. Die öffentliche API bietet
+Paply keinen Schalter, um diese Nutzerzuordnung zu entfernen. Keine versteckten
+APIs, keine Reflection. In der eingeschalteten Einrichtungskarte steht daher
+der Hinweis auf das Ausschalten der „Verknüpfung“ (Dienst eingeschaltet lassen).
+Die konkrete Zuordnung auf Allans S22 muss dort bestätigt werden.
+
+Quellen (29.10.2026):
+- [Android: Flag-Bedeutung](https://developer.android.com/reference/android/accessibilityservice/AccessibilityServiceInfo#FLAG_REQUEST_ACCESSIBILITY_BUTTON)
+- [Android: Nutzer entfernt Verknüpfungen](https://support.google.com/accessibility/android/answer/7650693?hl=en)
+- [Samsung: Verknüpfung in der Navigationsleiste](https://www.samsung.com/us/support/answer/ANS10001906/)
+- [Öffentliche AccessibilityManager-API](https://developer.android.com/reference/android/view/accessibility/AccessibilityManager)
+
+## Prüfung dieser Änderung
+
+Build ausschließlich per android/scripts/mb.sh, PAPLY_WORK=work-knopf021:
+:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug
+:app:lintDebug :app:assembleDebugAndroidTest.
+Ergebnis: BUILD SUCCESSFUL, alle Unit-Test-Aufgaben und Lint grün (42 s).
+Gerätetests nur kompiliert; keine Emulatorsteuerung und keine Groq-Aufrufe.
+S22-Abnahme von Bewegung, Touch und mehreren Diktaten bleibt bei der Bauleitung.
+
+---
+
+## Vorheriger Abnahmestand (0.2.0)
+
 # Paply-Knopf · 0.2.0 (6)
 Stand: 29.10.2026 · Doppel-Einsetzen-Fix, Basis 43104fa.
 Nur android/; kein Emulator, kein Commit, kein Push.
