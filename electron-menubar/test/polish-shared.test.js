@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import cases from '../../shared/polish/safety-cases.json';
 import swiftMessages from '../../shared/polish/messages-swift.json';
 import { polishRejection, contentWords } from '../dictation/polish';
-import { buildPolishMessages, vocabularyPrompt } from '../dictation/polish-prompt';
+import { buildPolishMessages, customTermsPrompt } from '../dictation/polish-prompt';
 import { digitsPreserved, editDistance } from '../dictation/polish-edit-check';
 
 describe('Gemeinsame mobile Sicherheitsfälle', () => {
-  it.each(cases.map((c, i) => ({ ...c, id: i + 1 })))('$id: $expected — $raw', c => {
+  it.each(cases.filter(c => !c.profile || c.profile === 'dictation').map((c, i) => ({ ...c, id: i + 1 })))('$id: $expected — $raw', c => {
     expect(polishRejection(c.raw, c.result, c)).toBe(c.expected);
   });
   it('erzeugt bytegleiches Swift-JSON (JSONEncoder prettyPrinted/sortedKeys/withoutEscapingSlashes)', () => {
@@ -16,7 +16,7 @@ describe('Gemeinsame mobile Sicherheitsfälle', () => {
     })[1].content;
     expect(Buffer.from(message)).toEqual(Buffer.from(swiftMessages[0]));
     expect(buildPolishMessages('Hallo')[1].content).toBe(swiftMessages[1]);
-    expect(vocabularyPrompt('a,,; b\r\nc')).toBe('a, b, c');
+    expect(customTermsPrompt('a,,; b\r\nc')).toBe('a, b, c');
     expect(buildPolishMessages('Zahlen', { segments: [
       { text: 'klein', start: -0, end: 1e-7, avg_logprob: -1e-5 - 1 },
       { text: 'groß', start: 1e16, end: 1e20, avg_logprob: -0.7 },

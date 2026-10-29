@@ -615,5 +615,11 @@
     "profile": "dictation",
     "vocabulary": "",
     "expected": "length"
+  },
+  {
+    "raw": "Mañana revisaremos juntos las tareas pendientes.",
+    "result": "Aquí está el texto corregido: Mañana revisaremos juntos las tareas pendientes.",
+    "vocabulary": "",
+    "expected": "meta"
   }
 ]

@@ -19,7 +19,7 @@ test('chronology and history use only the last three preceding baseline raw dict
   assert.deepEqual(previousDictations(rows, 4).map(r => r.text), ['second', 'third', 'fourth']);
   const messages = contextMessages(rows[1].transcripts.a, previousDictations(rows, 1));
   assert.equal(JSON.stringify(messages).includes('SECRET'), false);
-  assert.deepEqual(JSON.parse(messages[1].content).hintergrund_nicht_bearbeiten, ['first']);
+  assert.deepEqual(JSON.parse(messages[1].content).background_do_not_edit, ['first']);
   assert.equal(JSON.stringify(messages).includes('third'), false);
 });
 test('conditioning is bounded, uses recent raw text and never adds vocabulary', () => {
@@ -33,12 +33,12 @@ test('conditioning is bounded, uses recent raw text and never adds vocabulary', 
 test('only avg_logprob below -0.5 marks an uncertain segment', () => {
   const t = { text: 'raw', segments: [{ text: 'low', avg_logprob: -.6, start: 3, end: 5 }, { text: 'edge', avg_logprob: -.5 }, { text: 'high', avg_logprob: -.1 }, { text: 'unknown' }] };
   assert.deepEqual(uncertainSegments(t).map(s => s.text), ['low']);
-  assert.equal(JSON.parse(contextMessages(t, [])[1].content).unsicher_gehoert[0].start, 3);
+  assert.equal(JSON.parse(contextMessages(t, [])[1].content).uncertain_segments[0].start, 3);
 });
 test('new static prompt has no corpus-specific correction dictionary or examples', () => {
   for (const word of ['Push-to-Torque', 'reflektore', 'Tilescale', 'Codelab', 'Pipo', 'Slicer', 'in dieser Zeit verbringen', 'Paply', 'Schillerstraße', 'Tailscale', 'Vitest']) assert.equal(CONTEXT_PROMPT.includes(word), false);
-  assert.match(CONTEXT_PROMPT, /hoher Sicherheit/);
-  assert.match(CONTEXT_PROMPT, /Dateinamen/);
+  assert.match(CONTEXT_PROMPT, /high certainty/);
+  assert.match(CONTEXT_PROMPT, /file names/);
 });
 test('context result invalidates on changed history, confidence, order or conditioned input', () => {
   const rows = [row('a', '', 'old'), row('b', '', 'current')];
@@ -129,7 +129,7 @@ test('CLI context ignores vocab/references, uses chronological raw history and i
   assert.equal(state.recordings[1].transcripts.wctx.conditioning, 'Rohtext.');
   assert.equal(Object.keys(state.recordings[0].polish).length, 4);
   const p = state.recordings[1].polish['P2/qwen/qwen3.8-27b'];
-  assert.deepEqual(JSON.parse(p.messages[1].content).hintergrund_nicht_bearbeiten, ['Rohtext.']);
+  assert.deepEqual(JSON.parse(p.messages[1].content).background_do_not_edit, ['Rohtext.']);
   assert.equal(JSON.stringify(p.messages).includes('FORBIDDEN'), false);
   state.recordings[0].transcripts.a.text = 'Korrigierter früherer Rohtext.';
   await writeJson(path.join(data, 'results.json'), state);

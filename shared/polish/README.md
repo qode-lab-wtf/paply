@@ -2,6 +2,7 @@
 
 `system-prompt.txt` ist die **einzige Quelle** des System-Prompts. iOS, Android und
 Desktop betten ihn ein und sichern die Byte-Gleichheit jeweils mit einem Test ab.
+Die Datei hat keinen abschließenden Zeilenumbruch; der Gleichheitstest vergleicht byte-genau.
 Änderungen nur hier vornehmen und anschließend in **allen drei Apps** übernehmen.
 Der Desktop braucht die eingebettete Konstante, weil Electron nur `electron-menubar/` packt.
 Die mobilen Einbettungen/Gleichheitstests müssen in ihren jeweiligen Branches mitgezogen werden;
@@ -10,8 +11,9 @@ dieser Desktop-Commit verändert keine anderen Worktrees.
 `safety-cases.json` enthält ausschließlich künstliche, kurze Prüffälle aus den mobilen
 Sicherheitsnetz-Tests und zusätzliche Regressionen. `expected` ist der Ablehnungsgrund
 oder `null`; optional wählen `profile` und `strictEdits` das mobile Prüfprofil.
-Desktop führt alle Fälle aus. Das Netz portiert `PolishSafetyNet`, `EditCheck`,
-`TextAnalysis`, `Lexicon` sowie `SpokenNumbers` für das Gedanken-Profil.
+Desktop führt die Fälle ohne Profil und mit Profil `dictation` aus; `thought` bleibt
+als mobile Referenz enthalten und wird auf dem Desktop nicht verwendet. Das Netz
+portiert `PolishSafetyNet`, `EditCheck`, `TextAnalysis` und `Lexicon`.
 Das Diktat-Profil bleibt Standard; bestehende Desktop-Profile coding/meeting/dictation
 verwenden es weiterhin. Eigene Agenten behalten ihren bisherigen freien Vertrag.
 

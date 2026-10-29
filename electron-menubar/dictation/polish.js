@@ -1,7 +1,6 @@
 // Sicherheitsnetz auf PaplyKit-Stand. Bei Ablehnung behält der Aufrufer den Rohtext.
 const T = require('./polish-text');
 const E = require('./polish-edit-check');
-const SpokenNumbers = require('./polish-spoken-numbers');
 const { contentWords, negationCount } = T;
 
 function finalPolishText(content) {
@@ -15,12 +14,10 @@ function finalPolishText(content) {
 }
 
 const PROFILES = Object.freeze({
-  dictation: Object.freeze({ lengthLow: 0.7, lengthHigh: 1.3, missingContent: 0.3, addedShare: 0.15, ignoresLayout: false, spoken: false }),
-  thought: Object.freeze({ lengthLow: 0.55, lengthHigh: 1.15, missingContent: 0.25, addedShare: 0.10, ignoresLayout: true, spoken: true }),
+  dictation: Object.freeze({ lengthLow: 0.7, lengthHigh: 1.3, missingContent: 0.3, addedShare: 0.15 }),
 });
 const metaAnswer = new RegExp(T.lexicon.metaAnswer, 'iu');
 const wrappedInQuotes = new RegExp(T.lexicon.wrappedInQuotes, 'u');
-const spokenNegationCount = text => negationCount(text.replace(/[\p{L}\p{M}]+/gu, w => ['nee', 'nein', 'nö'].includes(T.normalizedLower(w)) ? '' : w));
 function polishRejection(raw, result, { vocabulary = '', strictEdits = true, profile } = {}) {
   const limits = PROFILES[profile ?? 'dictation'];
   if (!limits) throw new RangeError('Unbekanntes Polier-Profil');
@@ -34,12 +31,10 @@ function polishRejection(raw, result, { vocabulary = '', strictEdits = true, pro
   return reason;
 }
 function check(raw, result, vocabulary, strictEdits, lengthReference, limits) {
-  const measured = limits.ignoresLayout ? result.replaceAll('• ', '').replaceAll('\n', '') : result;
-  const length = Array.from(measured).length;
+  const length = Array.from(result).length;
   if (length / Math.max(1, Array.from(raw.trim()).length) < limits.lengthLow || length / Math.max(1, Array.from(lengthReference.trim()).length) > limits.lengthHigh) return 'length';
   const [r, h] = E.compoundAligned(T.letterRuns(T.normalizedLower(raw)), T.letterRuns(T.normalizedLower(result)));
-  let before = contentWords(r.join(' ')), after = contentWords(h.join(' '));
-  if (limits.spoken) { before = before.filter(w => !SpokenNumbers.isNumberWord(w)); after = after.filter(w => !SpokenNumbers.isNumberWord(w)); }
+  const before = contentWords(r.join(' ')), after = contentWords(h.join(' '));
   const remaining = new Map();
   for (const w of after) remaining.set(w, (remaining.get(w) || 0) + 1);
   let missing = 0;
@@ -47,9 +42,8 @@ function check(raw, result, vocabulary, strictEdits, lengthReference, limits) {
     if (remaining.get(w) > 0) remaining.set(w, remaining.get(w) - 1); else missing++;
   }
   if (before.length && missing / before.length > limits.missingContent) return 'content';
-  const countNegations = limits.spoken ? spokenNegationCount : negationCount;
-  if (countNegations(raw) !== countNegations(result)) return 'negation';
-  if (!(limits.spoken ? SpokenNumbers.preserved(raw, result) : E.digitsPreserved(raw, result))) return 'digits';
+  if (negationCount(raw) !== negationCount(result)) return 'negation';
+  if (!E.digitsPreserved(raw, result)) return 'digits';
   if (strictEdits) { const reason = E.substitutionRejection(raw, result, vocabulary); if (reason) return reason; }
   const allowed = new Set([...before, ...contentWords(vocabulary)]);
   const added = after.filter(w => !allowed.has(w)).length;
