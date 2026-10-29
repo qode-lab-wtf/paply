@@ -56,7 +56,8 @@
     stille Schließen.
   - Seit 0.1.3 prüft Animal Sniffer `:core`/`:thoughts` gegen API 29 (`android/docs/API-29.md`), dabei wurde
     `readNBytes` gefunden und ersetzt.
-  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.1.3.apk`.
+  - 0.1.4: Die Einrichtung fordert „Tastatur auswählen“ nicht mehr nach jedem Diktat neu (Samsung-Tester).
+  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.1.4.apk`.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
