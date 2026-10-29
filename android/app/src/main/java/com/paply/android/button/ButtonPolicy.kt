@@ -12,10 +12,15 @@ internal object ButtonPolicy {
         else -> Phase.IDLE
     }
     // API 33+ keeps the existing IME path; older supported releases use the focused node.
-    fun insert(api: Int, sameField: () -> Boolean, commit: () -> Boolean, setText: () -> Boolean, paste: () -> Boolean): Boolean {
-        if (!sameField()) return false
-        if (api >= 33 && runCatching(commit).getOrDefault(false)) return true
-        if (api in 29..32 && runCatching(setText).getOrDefault(false)) return true
-        return sameField() && runCatching(paste).getOrDefault(false)
+    fun insert(api: Int, sameField: () -> Boolean, commit: () -> Boolean,
+               setText: () -> ButtonTextInsertion.Result, paste: () -> Boolean): ButtonTextInsertion.Result {
+        if (!sameField()) return ButtonTextInsertion.Result.UNAVAILABLE
+        if (api >= 33 && runCatching(commit).getOrDefault(false)) return ButtonTextInsertion.Result.VERIFIED
+        if (api in 29..32) {
+            val result = runCatching(setText).getOrDefault(ButtonTextInsertion.Result.UNAVAILABLE)
+            if (result != ButtonTextInsertion.Result.UNAVAILABLE) return result
+        }
+        return if (sameField() && runCatching(paste).getOrDefault(false)) ButtonTextInsertion.Result.VERIFIED
+            else ButtonTextInsertion.Result.UNAVAILABLE
     }
 }

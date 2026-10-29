@@ -1,6 +1,7 @@
 package com.paply.android.button
 import org.junit.Assert.*
 import org.junit.Test
+import com.paply.android.button.ButtonTextInsertion.Result.*
 import com.paply.android.button.ButtonPolicy.Phase
 import com.paply.android.button.ButtonPolicy.Event
 
@@ -15,19 +16,19 @@ class ButtonPolicyTest {
         for (api in listOf(29,30,31,32,33,34,37)) {
             for (primarySuccess in listOf(false, true)) {
                 val calls = mutableListOf<String>()
-                assertTrue(ButtonPolicy.insert(api, {true},
+                assertEquals(VERIFIED, ButtonPolicy.insert(api, {true},
                     { calls += "commit"; primarySuccess },
-                    { calls += "set"; primarySuccess },
+                    { calls += "set"; if (primarySuccess) VERIFIED else UNAVAILABLE },
                     { calls += "paste"; true }))
                 assertEquals(listOf(if (api >= 33) "commit" else "set") +
                     if (primarySuccess) emptyList() else listOf("paste"), calls)
             }
-            assertFalse(ButtonPolicy.insert(api, {false}, {error("wrong field")},
+            assertEquals(UNAVAILABLE, ButtonPolicy.insert(api, {false}, {error("wrong field")},
                 {error("wrong field")}, {error("wrong field")}))
-            assertTrue(ButtonPolicy.insert(api, {true}, {error("unsupported")}, {error("unsupported")}, {true}))
-            assertFalse(ButtonPolicy.insert(api, {true}, {false}, {false}, {false}))
+            assertEquals(VERIFIED, ButtonPolicy.insert(api, {true}, {error("unsupported")}, {error("unsupported")}, {true}))
+            assertEquals(UNAVAILABLE, ButtonPolicy.insert(api, {true}, {false}, {UNAVAILABLE}, {false}))
             var checks = 0
-            assertFalse(ButtonPolicy.insert(api, { ++checks == 1 }, {false}, {false}, {error("field changed")}))
+            assertEquals(UNAVAILABLE, ButtonPolicy.insert(api, { ++checks == 1 }, {false}, {UNAVAILABLE}, {error("field changed")}))
         }
     }
     @Test fun pillStartFinishAndTerminalEvents() {

@@ -8,6 +8,7 @@ import java.util.Locale
 /** Field contents exist only for this insertion attempt; never persist or log them. */
 internal object ButtonTextInsertion {
     const val MAX_FIELD_LENGTH = 5000
+    enum class Result { VERIFIED, REVIEW, UNAVAILABLE }
     data class Edit(val text: String, val cursor: Int)
 
     fun compose(text: String, start: Int, end: Int, hint: Boolean, dictated: String): Edit? {
@@ -27,16 +28,19 @@ internal object ButtonTextInsertion {
     }
 
     fun apply(edit: Edit, setText: (String) -> Boolean, setSelection: (Int) -> Boolean,
-              readBack: () -> String?): Boolean {
-        if (!setText(edit.text)) return false
-        val selected = setSelection(edit.cursor)
-        return verified(edit.text, readBack()) && selected
+              readBack: () -> String?): Result {
+        if (!runCatching { setText(edit.text) }.getOrDefault(false)) return Result.UNAVAILABLE
+        // SET_TEXT already changed the field. Neither cursor failures nor uncertain
+        // readback may trigger another insertion (or overwrite the clipboard).
+        runCatching { setSelection(edit.cursor) }
+        return if (runCatching { verified(edit.text, readBack()) }.getOrDefault(false))
+            Result.VERIFIED else Result.REVIEW
     }
 
-    fun insert(node: AccessibilityNodeInfo?, dictated: String): Boolean {
-        if (node == null || !node.refresh() || !node.isFocused || !node.isEditable || node.isPassword) return false
+    fun insert(node: AccessibilityNodeInfo?, dictated: String): Result {
+        if (node == null || !node.refresh() || !node.isFocused || !node.isEditable || node.isPassword) return Result.UNAVAILABLE
         val edit = compose(node.text?.toString().orEmpty(), node.textSelectionStart,
-            node.textSelectionEnd, node.isShowingHintText, dictated) ?: return false
+            node.textSelectionEnd, node.isShowingHintText, dictated) ?: return Result.UNAVAILABLE
         return apply(edit, { text ->
             node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)

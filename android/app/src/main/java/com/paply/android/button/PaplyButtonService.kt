@@ -202,21 +202,24 @@ class PaplyButtonService : AccessibilityService() {
     }
     private suspend fun deliver(entry: HistoryEntry) {
         var clipboardFallback = false
+        var setTextResult = ButtonTextInsertion.Result.UNAVAILABLE
         val sent = ButtonPolicy.insert(Build.VERSION.SDK_INT, ::sameField, {
             if (Build.VERSION.SDK_INT >= 33) {
                 val connection = inputMethod?.currentInputConnection
                 if (connection != null) { connection.commitText(entry.text, 1, null); true } else false
             } else false
-        }, { ButtonTextInsertion.insert(field, entry.text) }, {
+        }, { ButtonTextInsertion.insert(field, entry.text).also { setTextResult = it } }, {
             clipboardFallback = Build.VERSION.SDK_INT in 29..32
             ButtonClipboard(getSystemService(ClipboardManager::class.java)).paste(entry.text,
                 { sameField() && field?.performAction(AccessibilityNodeInfo.ACTION_PASTE) == true },
                 { restore -> DictationRuntime.scope.launch { delay(500); runCatching(restore) } }, retain = clipboardFallback)
         })
-        val accepted = sent && sameField()
+        val accepted = sent == ButtonTextInsertion.Result.VERIFIED &&
+            (setTextResult == ButtonTextInsertion.Result.VERIFIED || sameField())
         val retained = entry.failure !in listOf(HistoryFailure.STORAGE, HistoryFailure.STORAGE_FULL)
-        val copied = (!accepted || !retained) && DictationClipboard.copy(this, entry.text, notify = true, retained = retained)
-        val message = if (!retained) "Verlauf konnte nicht gespeichert werden. Bitte den Text jetzt kopieren oder einsetzen."
+        val copied = setTextResult == ButtonTextInsertion.Result.UNAVAILABLE && (!accepted || !retained) && DictationClipboard.copy(this, entry.text, notify = true, retained = retained)
+        val message = if (sent == ButtonTextInsertion.Result.REVIEW) "Bitte Text prüfen – liegt im Verlauf"
+            else if (!retained) "Verlauf konnte nicht gespeichert werden. Bitte den Text jetzt kopieren oder einsetzen."
             else if (clipboardFallback) "Text liegt auch in der Zwischenablage"
             else if (accepted) "An Textfeld gesendet. Im Verlauf gesichert."
             else if (copied) "Feld lange drücken → Einfügen. Text auch im Verlauf."
@@ -260,7 +263,7 @@ class PaplyButtonService : AccessibilityService() {
         val insets = bar?.rootWindowInsets
         @Suppress("DEPRECATION")
         val safeTop = maxOf(insets?.stableInsetTop ?: dp(28), insets?.displayCutout?.safeInsetTop ?: 0)
-        val safeLeft = insets?.displayCutout?.safeInsetLeft ?: 0
+        val safeLeft = maxOf(insets?.displayCutout?.safeInsetLeft ?: 0, insets?.stableInsetLeft ?: 0)
         val safeRight = maxOf(insets?.displayCutout?.safeInsetRight ?: 0, insets?.stableInsetRight ?: 0)
         val y = ButtonPosition.top(keyboardTop.coerceAtMost(screen.y), safeTop, dp(44), dp(8), offset)
         val show = keyboardStable && y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
@@ -278,15 +281,15 @@ class PaplyButtonService : AccessibilityService() {
                 elevation = dp(6).toFloat()
             }
             logo = ImageView(this).apply { setImageResource(R.drawable.ic_paply); contentDescription = "Paply-Diktat starten"; setPadding(dp(10),dp(10),dp(10),dp(10)) }
-            label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER_VERTICAL; maxLines = 2; setPadding(dp(8),0,dp(8),0) }
+            label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER_VERTICAL; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(8),0,dp(8),0) }
             cancel = TextView(this).apply { text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
             view.addView(logo, LinearLayout.LayoutParams(dp(44),dp(44)))
             view.addView(label, LinearLayout.LayoutParams(-2,dp(44)))
             view.addView(cancel, LinearLayout.LayoutParams(dp(44),dp(44)))
             layout = WindowManager.LayoutParams(-2, dp(44), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.START
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.RIGHT
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                     if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0) }
             bar = view
@@ -317,10 +320,16 @@ class PaplyButtonService : AccessibilityService() {
             ButtonPolicy.Phase.RECORDING -> "${"▮".repeat(1 + ((active?.recording?.level ?: 0f) * 5).toInt())}  ${elapsed / 60}:${(elapsed % 60).toString().padStart(2,'0')} · Fertig" + if (elapsed >= 540) " · noch ${600-elapsed}s" else ""
             else -> ""
         }
-        label?.maxWidth = (screen.x - safeLeft - safeRight - dp(104)).coerceAtLeast(dp(44))
+        val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, dp(8))
+        val controlsWidth = (if (logo?.visibility == View.VISIBLE) dp(44) else 0) +
+            (if (cancel?.visibility == View.VISIBLE) dp(44) else 0)
+        label?.maxWidth = (horizontal.width - controlsWidth).coerceAtLeast(0)
         bar?.layoutDirection = View.LAYOUT_DIRECTION_LTR
-        bar?.measure(View.MeasureSpec.makeMeasureSpec(screen.x - safeLeft - safeRight - dp(16), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(44), View.MeasureSpec.EXACTLY))
-        layout.x = (screen.x - safeRight - dp(8) - (bar?.measuredWidth ?: dp(44))).coerceAtLeast(safeLeft)
+        bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(44), View.MeasureSpec.EXACTLY))
+        // Fix the actual window width too: a WRAP_CONTENT relayout can otherwise
+        // grow beyond the measured left-anchored position on the next frame.
+        layout.width = (bar?.measuredWidth ?: dp(44)).coerceAtMost(horizontal.width)
+        layout.x = horizontal.rightMargin
         layout.y = y ?: safeTop
         bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
     }

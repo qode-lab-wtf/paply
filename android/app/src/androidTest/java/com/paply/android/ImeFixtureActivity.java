@@ -22,6 +22,7 @@ public class ImeFixtureActivity extends Activity {
         title.setText("Paply · IME-Abnahme (Test-APK)"); title.setTextSize(20);
         body.addView(title);
         EditText first = field(1001, "Erstes Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
+        if (getIntent().getBooleanExtra("emptyWithoutHint", false)) first.setHint(null);
         field(1002, "Zweites Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
         field(1003, "Passwort", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, false);
         field(1004, "Editor lehnt Einsetzen ab", InputType.TYPE_CLASS_TEXT, true);
@@ -55,7 +56,7 @@ public class ImeFixtureActivity extends Activity {
                 };
             }
         };
-        edit.setId(id); edit.setHint(label); edit.setInputType(type); edit.setTextSize(16);
+        edit.setId(id); edit.setContentDescription(label); edit.setHint(label); edit.setInputType(type); edit.setTextSize(16);
         edit.setMinLines(1); edit.setMaxLines(3);
         body.addView(edit, new LinearLayout.LayoutParams(-1, -2));
         return edit;

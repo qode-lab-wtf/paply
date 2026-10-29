@@ -19,6 +19,9 @@ class ButtonDeviceTest {
     @Test fun rotateDuringRecording() { exercise("rotate") }
     @Test fun dragRemainsAboveKeyboard() { exercise("drag") }
     @Test fun rejectingEditor() { exercise("reject") }
+    @Test fun emptyFieldPreservesClipboardApi30() { exercise("empty") }
+    @Test fun hintFieldPreservesClipboardApi30() { exercise("hint") }
+    @Test fun cursorAtEndPreservesClipboardApi30() { exercise("end") }
     @Test fun cursorInsertionPreservesClipboardApi30() { exercise("cursor") }
     @Test fun selectionReplacementPreservesClipboardApi30() { exercise("selection") }
 
@@ -51,6 +54,7 @@ class ButtonDeviceTest {
                 (services.orEmpty().split(':').filter { it.isNotBlank() } + component).distinct().joinToString(":"))
             Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
             context.startActivity(Intent().setComponent(ComponentName("com.paply.android.test", "com.paply.android.ImeFixtureActivity"))
+                .putExtra("emptyWithoutHint", scenario == "empty")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             fun find(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
                 fun walk(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
@@ -65,9 +69,10 @@ class ButtonDeviceTest {
                 repeat(200) { find(predicate)?.let { return it }; Thread.sleep(100) }
                 error("UI condition missing")
             }
-            val clipboardCase = scenario in listOf("cursor", "selection")
+            val clipboardCase = scenario in listOf("cursor", "selection", "end", "empty", "hint")
             if (clipboardCase) require(android.os.Build.VERSION.SDK_INT == 30) { "Requires API 30" }
-            val field = waitFor { it.hintText?.toString() == if (scenario == "reject") "Editor lehnt Einsetzen ab" else "Erstes Textfeld" }
+            val field = waitFor { it.isEditable &&
+                it.contentDescription?.toString() == if (scenario == "reject") "Editor lehnt Einsetzen ab" else "Erstes Textfeld" }
             assertTrue(field.isShowingHintText || field.text.isNullOrEmpty())
             assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             val button = waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
@@ -89,16 +94,24 @@ class ButtonDeviceTest {
                 Thread.sleep(500); aboveKeyboard(); return@runBlocking
             }
             if (clipboardCase) {
-                assertTrue(waitFor { it.text?.toString() == "Zwischenablage vorbelegen" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage vorbelegen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-                assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
-                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                        if (scenario == "selection") "Anfang ALT Ende" else "Anfang Ende")
-                }))
-                assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, android.os.Bundle().apply {
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 6)
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, if (scenario == "selection") 10 else 6)
-                }))
+                if (scenario in listOf("cursor", "selection", "end")) {
+                    assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                            if (scenario == "selection") "Anfang ALT Ende" else "Anfang Ende")
+                    }))
+                    val start = if (scenario == "end") 11 else 6
+                    val end = if (scenario == "selection") 10 else start
+                    // API 30 can return false when SET_TEXT already put the cursor here.
+                    field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, android.os.Bundle().apply {
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start)
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end)
+                    })
+                    assertTrue(field.refresh())
+                    assertEquals(start, field.textSelectionStart)
+                    assertEquals(end, field.textSelectionEnd)
+                }
             }
             assertTrue(button.parent.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             waitFor { it.text?.contains("· Fertig") == true }
@@ -108,7 +121,7 @@ class ButtonDeviceTest {
                 assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 waitFor { it.text?.contains("Einfügen") == true }
                 assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.text.isNullOrEmpty())
-                assertTrue(waitFor { it.text?.toString() == "Zwischenablage prüfen" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 waitFor { !it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
                 return@runBlocking
             }
@@ -119,7 +132,7 @@ class ButtonDeviceTest {
                 val outcome = waitFor { it.text?.contains("· Fertig") == true || it.text?.contains("Einfügen") == true }
                 if (outcome.text?.contains("Einfügen") == true) {
                     assertTrue(waitFor { it.hintText?.toString() == "Erstes Textfeld" }.text.isNullOrEmpty())
-                    assertTrue(waitFor { it.text?.toString() == "Zwischenablage prüfen" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                     waitFor { !it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
                     aboveKeyboard(); return@runBlocking
                 }
@@ -130,26 +143,37 @@ class ButtonDeviceTest {
                 // On API 33+ commitText is acknowledged IPC, not editor acceptance; history remains authoritative.
                 waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
                 val rejected = waitFor { it.hintText?.toString() == "Editor lehnt Einsetzen ab" }
-                assertTrue(rejected.isShowingHintText || rejected.text.isNullOrEmpty())
+                assertEquals("", if (rejected.isShowingHintText) "" else rejected.text?.toString().orEmpty())
                 val history = com.paply.android.history.HistoryStore.get(context).entries.value
                 assertTrue("Rejected text must be retained", history.any { entry -> entry.id !in previousHistory && expected.any { entry.text.contains(it, ignoreCase = true) } })
                 if (android.os.Build.VERSION.SDK_INT < 33) {
-                    assertTrue(waitFor { it.text?.toString() == "Zwischenablage prüfen" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                     waitFor { !it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
                 }
             } else {
-                waitFor { it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
+                // History is the complete dictated result, independent of token alternatives
+                // used to recognize the external audio. Compare the entire field to detect duplicates.
+                var result: String? = null
+                repeat(200) {
+                    if (result == null) {
+                        result = com.paply.android.history.HistoryStore.get(context).entries.value
+                            .firstOrNull { it.id !in previousHistory && it.text.isNotBlank() }?.text
+                        if (result == null) Thread.sleep(100)
+                    }
+                }
+                val dictated = requireNotNull(result)
+                val fullText = when (scenario) {
+                    "end" -> "Anfang Ende " + dictated
+                    "cursor", "selection" -> "Anfang " + dictated + " Ende"
+                    else -> dictated
+                }
+                val inserted = waitFor { it.isEditable && it.text?.toString() == fullText }
+                Thread.sleep(500)
+                assertTrue(inserted.refresh())
+                assertEquals(fullText, inserted.text?.toString())
                 if (clipboardCase) {
-                    val inserted = waitFor { it.isEditable && it.text?.startsWith("Anfang") == true &&
-                        expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }.text.toString()
-                    assertTrue(inserted.startsWith("Anfang "))
-                    assertTrue(inserted.endsWith(" Ende"))
-                    assertFalse(inserted.contains("ALT"))
-                    val result = com.paply.android.history.HistoryStore.get(context).entries.value
-                        .first { it.id !in previousHistory && it.text.isNotBlank() }.text
-                    assertEquals("Anfang " + result + " Ende", inserted)
                     Thread.sleep(800)
-                    assertTrue(waitFor { it.text?.toString() == "Zwischenablage prüfen" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                     waitFor { it.text?.toString() == "Vorheriger Clip" }
                 }
             }
