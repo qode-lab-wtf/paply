@@ -1,0 +1,47 @@
+{
+  "runs": {
+    "fluid": {
+      "wall_seconds": 29.57,
+      "rss_bytes": 397230080,
+      "footprint_bytes": 691374848
+    },
+    "nemotron-fp16": {
+      "wall_seconds": 63.97,
+      "rss_bytes": 312688640,
+      "footprint_bytes": 232688448
+    },
+    "stress90": {
+      "wall_seconds": 74.02,
+      "rss_bytes": 496336896,
+      "footprint_bytes": 869125952
+    },
+    "stress90-nemotron": {
+      "wall_seconds": 32.2,
+      "rss_bytes": 942145536,
+      "footprint_bytes": 983666304
+    },
+    "stress90-stream": {
+      "wall_seconds": 26.36,
+      "rss_bytes": 106201088,
+      "footprint_bytes": 65210240
+    },
+    "cpu60": {
+      "wall_seconds": 2.22,
+      "rss_bytes": 431243264,
+      "footprint_bytes": 24496256
+    },
+    "nemotron-ane": {
+      "wall_seconds": 129.94,
+      "rss_bytes": 239550464,
+      "footprint_bytes": 218073856
+    }
+  },
+  "model_bytes": {
+    "community1": 21787007,
+    "nemotron_fp16": 199094387,
+    "nemotron_w8a8": 100009774,
+    "wespeaker_en_voxceleb_resnet34_LM.onnx": 26530550,
+    "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx": 28281164,
+    "segmentation_fp32": 5992913
+  }
+}

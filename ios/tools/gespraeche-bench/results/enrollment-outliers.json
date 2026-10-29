@@ -1,0 +1,212 @@
+[
+  {
+    "speaker": "4705",
+    "outsider": "1054",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "1054",
+    "outsider": "2252",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "2252",
+    "outsider": "1844",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "1844",
+    "outsider": "3588",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "3588",
+    "outsider": "3052",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "3052",
+    "outsider": "3363",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "3363",
+    "outsider": "3040",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "3040",
+    "outsider": "278",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "278",
+    "outsider": "4748",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "4748",
+    "outsider": "4739",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "4739",
+    "outsider": "4911",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "4911",
+    "outsider": "6067",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "6067",
+    "outsider": "7120",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "7120",
+    "outsider": "7261",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "7261",
+    "outsider": "8223",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "8223",
+    "outsider": "8125",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "8125",
+    "outsider": "7456",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "7456",
+    "outsider": "8450",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "8450",
+    "outsider": "7406",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "7406",
+    "outsider": "7624",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "7624",
+    "outsider": "144",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "144",
+    "outsider": "91",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "91",
+    "outsider": "140",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "140",
+    "outsider": "12379",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "12379",
+    "outsider": "11695",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "11695",
+    "outsider": "1660",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "1660",
+    "outsider": "1262",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "1262",
+    "outsider": "9494",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "9494",
+    "outsider": "1874",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  },
+  {
+    "speaker": "1874",
+    "outsider": "4705",
+    "rejected_outlier": true,
+    "rejected_correct": 0,
+    "medoid_is_outlier": false
+  }
+]
