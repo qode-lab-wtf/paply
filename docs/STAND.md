@@ -37,8 +37,18 @@
   - Im Flugmodus wird das Diktat als fehlgeschlagen gespeichert, „Erneut versuchen“ klappt danach.
   - Ein Tipp auf die Systemtaste genügt, bei Gboard mit zwei Sprachen teils zwei Tipps.
   - Offen: ein gebündeltes Review samt Korrekturrunde.
-- **Etappe 2 (Gedanken), läuft:** Der Gedanken-Kern wird als eigenes Modul `:thoughts` portiert (`android/docs/NLP.md`: BM25 +
-  Snowball statt Apple-NaturalLanguage, kein Embedding in V1, so wie der iOS-Rückfallweg mit EVAL E0 10/11).
+- **Etappen 2 und 3 gebaut (29.10. nachts):**
+  - Gedanken: Kern `:thoughts`, E0 10/11, Aufnahme-Dienst, WorkManager, Oberfläche, Landkarte
+  - Aufgaben-Reiter, Erinnerungen, Aufgaben-Widgets
+  - Release-Vorbereitung: Icon, R8, signierte APK 0.1.0, `android/docs/FREUNDE.md`
+  - Endreviews: kein Blocker. Endkorrekturen (`REVIEW-P0.md`, „Endreview“) laufen.
+- **Stand vor der Freigabe:**
+  - Die Abschluss-Testrunde (`android/docs/E2E-FINAL.md`) brach ab, weil das MacBook um 02:08 einschlief.
+  - **Regression im Live-Diktat** (Android 17, synthetische Sprache): Der Satzanfang fehlt („Hallo Testname, ich komme heute“),
+    ein langer Satz kommt verstümmelt an. Der Neuversuch aus derselben WAV ist korrekt, also liegt es vermutlich an der
+    Stücke-Verarbeitung beim Sprechen, eingeführt nach E1-IME (IME-Fix bzw. Fix-G).
+  - Muss vor der Freigabe behoben und mit dem kompletten Testlauf (Android 17 + 14) belegt sein.
+  - Release-Keystore liegt auf dem MacBook unter `~/Android/keys/` (sichern!). Pfade stehen in `android/docs/RELEASE.md`.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
