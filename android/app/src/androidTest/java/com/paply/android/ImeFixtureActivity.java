@@ -39,6 +39,10 @@ public class ImeFixtureActivity extends Activity {
     }
     private EditText field(int id, String label, int type, boolean reject) {
         EditText edit = new EditText(this) {
+            @Override public boolean performAccessibilityAction(int action, Bundle arguments) {
+                if (reject && action == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT) return false;
+                return super.performAccessibilityAction(action, arguments);
+            }
             @Override public boolean onTextContextMenuItem(int id) {
                 if (reject && id == android.R.id.paste) return false;
                 return super.onTextContextMenuItem(id);

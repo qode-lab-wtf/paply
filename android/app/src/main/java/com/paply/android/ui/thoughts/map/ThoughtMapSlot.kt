@@ -256,7 +256,7 @@ fun ThoughtMapSlot(thoughts:List<Thought>,topics:List<Topic>,repository:Thoughts
             Text("Mit jedem Gedanken wächst deine Karte.",color=style.secondary,style=MaterialTheme.typography.bodyMedium)
         }
         if(selected==null && inboxCount>0) MapInboxOrb(inboxCount,MapInboxStatus.of(content.pending.map { it.state })?:MapInboxStatus.ordering,
-            style,accessibility.reduce,{ onFocus(PENDING) },Modifier.align(Alignment.BottomCenter))
+            style,accessibility.reduce,content.pending.any { it.state == com.paply.thoughts.ThoughtState.waitingKey && it.status.message?.contains("ungültig") == true },{ onFocus(PENDING) },Modifier.align(Alignment.BottomCenter))
         else if(selected==null && content.placed.size<=12 && !camera.moved) Text(
             if(content.placed.size<=2) "Mit jedem Gedanken wächst deine Karte." else "Größer = mehr Gedanken · Linien = gehört zusammen",
             color=style.tertiary,style=MaterialTheme.typography.bodySmall,modifier=Modifier.align(Alignment.BottomCenter).padding(16.dp))
@@ -273,9 +273,9 @@ fun ThoughtMapSlot(thoughts:List<Thought>,topics:List<Topic>,repository:Thoughts
 }
 
 @Composable
-private fun MapInboxOrb(count:Int,status:MapInboxStatus,style:MapStyle,reduce:Boolean,onClick:()->Unit,modifier:Modifier) {
+private fun MapInboxOrb(count:Int,status:MapInboxStatus,style:MapStyle,reduce:Boolean,keyRejected:Boolean,onClick:()->Unit,modifier:Modifier) {
     val text=when(status) {
-        MapInboxStatus.ordering->"Wird geordnet …"; MapInboxStatus.network->"Wartet auf Netz"; MapInboxStatus.key->"Schlüssel fehlt"
+        MapInboxStatus.ordering->"Wird geordnet …"; MapInboxStatus.network->"Wartet auf Netz"; MapInboxStatus.key->if(keyRejected) "Schlüssel ungültig" else "Schlüssel fehlt"
         MapInboxStatus.limit->"Groq-Limit, später"; MapInboxStatus.budget->"Kontingent erreicht"; MapInboxStatus.attention->"Nicht verschriftlicht"
     }
     val active=status==MapInboxStatus.ordering

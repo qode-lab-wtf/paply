@@ -11,6 +11,11 @@ import org.robolectric.annotation.Config
 @Config(manifest = Config.NONE, sdk = [30,34])
 class ButtonClipboardTest {
     private val manager get() = RuntimeEnvironment.getApplication().getSystemService(ClipboardManager::class.java)
+    @Test fun explicitFallbackRetainsDictationForManualPaste() {
+        manager.setPrimaryClip(ClipData.newPlainText("old", "alt"))
+        assertTrue(ButtonClipboard(manager).paste("neu", {true}, {error("must retain")}, retain = true))
+        assertEquals("neu", manager.primaryClip!!.getItemAt(0).text)
+    }
     @Test fun restoresOpaqueClipOnlyAfterPaste() {
         val old = ClipData.newPlainText("vorher", "alt")
         manager.setPrimaryClip(old)

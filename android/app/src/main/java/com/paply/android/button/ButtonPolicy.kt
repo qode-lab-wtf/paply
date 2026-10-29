@@ -11,10 +11,11 @@ internal object ButtonPolicy {
         Event.FINISH, Event.FIELD_CHANGE -> if (phase == Phase.RECORDING) Phase.WORKING else phase
         else -> Phase.IDLE
     }
-    // An IPC acknowledgement cannot be verified without reading private field contents.
-    fun insert(api: Int, sameField: () -> Boolean, commit: () -> Boolean, paste: () -> Boolean): Boolean {
+    // API 33+ keeps the existing IME path; older supported releases use the focused node.
+    fun insert(api: Int, sameField: () -> Boolean, commit: () -> Boolean, setText: () -> Boolean, paste: () -> Boolean): Boolean {
         if (!sameField()) return false
         if (api >= 33 && runCatching(commit).getOrDefault(false)) return true
+        if (api in 29..32 && runCatching(setText).getOrDefault(false)) return true
         return sameField() && runCatching(paste).getOrDefault(false)
     }
 }

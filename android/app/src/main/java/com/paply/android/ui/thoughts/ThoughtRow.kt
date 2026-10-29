@@ -22,6 +22,7 @@ import com.paply.thoughts.model.SearchHit
 import java.time.Instant
 
 fun stateMessage(thought: Thought, status: ThoughtsRepository.Status?): String = status?.message?.takeIf { it.isNotBlank() }
+    ?: thought.status.message?.takeIf { it.isNotBlank() }
     ?: when (thought.state) {
         ThoughtState.recording -> "Aufnahme läuft"
         ThoughtState.waitingNetwork -> "Gesichert · wartet auf Netz"

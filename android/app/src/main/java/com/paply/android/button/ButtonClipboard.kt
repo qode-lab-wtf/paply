@@ -5,12 +5,13 @@ import android.content.ClipboardManager
 import android.os.PersistableBundle
 import java.util.UUID
 
-/** Keep the previous clip opaque. Never coerce, inspect or log its contents. */
+/** Keep readable previous clips opaque. API 29–32's announced fallback retains the
+ * dictation: an unfocused service cannot reliably read even hasPrimaryClip there. */
 internal class ButtonClipboard(private val manager: ClipboardManager) {
-    fun paste(text: String, action: () -> Boolean, later: (() -> Unit) -> Unit): Boolean {
-        val previous = manager.primaryClip
-        // Android may deny clipboard reads. Do not replace a clip we cannot restore.
-        if (previous == null && manager.hasPrimaryClip()) return false
+    fun paste(text: String, action: () -> Boolean, later: (() -> Unit) -> Unit, retain: Boolean = false): Boolean {
+        val previous = if (retain) null else manager.primaryClip
+        // Best effort only; Android can deny both queries. The announced fallback skips them.
+        if (!retain && previous == null && manager.hasPrimaryClip()) return false
         val token = UUID.randomUUID().toString()
         val clip = ClipData.newPlainText("Paply", text).apply {
             description.extras = PersistableBundle().apply {
@@ -19,7 +20,7 @@ internal class ButtonClipboard(private val manager: ClipboardManager) {
         }
         manager.setPrimaryClip(clip)
         val accepted = runCatching(action).getOrDefault(false)
-        if (accepted) later {
+        if (accepted && !retain) later {
             if (manager.primaryClipDescription?.extras?.getString("paply.button.owner") == token) {
                 if (previous == null) manager.clearPrimaryClip() else manager.setPrimaryClip(previous)
             }

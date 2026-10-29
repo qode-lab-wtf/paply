@@ -32,6 +32,8 @@ class PaplyButtonService : AccessibilityService() {
     private var changed = false
     private var eligible = false
     private var keyboardTop = 0
+    private val keyboardStability = ButtonKeyboardStability()
+    private var keyboardStable = false
     private var generation = 0
     private var foreground = false
     internal var awaitingForeground = false; private set
@@ -75,12 +77,13 @@ class PaplyButtonService : AccessibilityService() {
             event.source?.let { it != origin && it.isEditable } == true) changed = true
         inspect()
     }
-    // Deliberately never access event text, node text, hint, description or selection.
+    // Inspection never reads field contents; only the explicit insertion attempt does.
     private fun inspect() {
         if (!::wm.isInitialized) return
         val windows = runCatching { windows }.getOrDefault(emptyList())
         val keyboard = windows.filter { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
             .map { Rect().also(it::getBoundsInScreen) }.filter { !it.isEmpty }
+        keyboardStable = keyboardStability.observe(keyboard, SystemClock.elapsedRealtime())
         keyboardTop = keyboard.minOfOrNull { it.top } ?: resources.displayMetrics.heightPixels
         val next = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isActive }
             ?.root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
@@ -198,20 +201,23 @@ class PaplyButtonService : AccessibilityService() {
         return connected === this && eligible && !changed && origin == field && field?.isPassword == false
     }
     private suspend fun deliver(entry: HistoryEntry) {
+        var clipboardFallback = false
         val sent = ButtonPolicy.insert(Build.VERSION.SDK_INT, ::sameField, {
             if (Build.VERSION.SDK_INT >= 33) {
                 val connection = inputMethod?.currentInputConnection
                 if (connection != null) { connection.commitText(entry.text, 1, null); true } else false
             } else false
-        }, {
+        }, { ButtonTextInsertion.insert(field, entry.text) }, {
+            clipboardFallback = Build.VERSION.SDK_INT in 29..32
             ButtonClipboard(getSystemService(ClipboardManager::class.java)).paste(entry.text,
                 { sameField() && field?.performAction(AccessibilityNodeInfo.ACTION_PASTE) == true },
-                { restore -> DictationRuntime.scope.launch { delay(500); runCatching(restore) } })
+                { restore -> DictationRuntime.scope.launch { delay(500); runCatching(restore) } }, retain = clipboardFallback)
         })
         val accepted = sent && sameField()
         val retained = entry.failure !in listOf(HistoryFailure.STORAGE, HistoryFailure.STORAGE_FULL)
         val copied = (!accepted || !retained) && DictationClipboard.copy(this, entry.text, notify = true, retained = retained)
         val message = if (!retained) "Verlauf konnte nicht gespeichert werden. Bitte den Text jetzt kopieren oder einsetzen."
+            else if (clipboardFallback) "Text liegt auch in der Zwischenablage"
             else if (accepted) "An Textfeld gesendet. Im Verlauf gesichert."
             else if (copied) "Feld lange drücken → Einfügen. Text auch im Verlauf."
             else "Text wartet im Verlauf. Dort kopieren und im Feld einsetzen."
@@ -257,11 +263,11 @@ class PaplyButtonService : AccessibilityService() {
         val safeLeft = insets?.displayCutout?.safeInsetLeft ?: 0
         val safeRight = maxOf(insets?.displayCutout?.safeInsetRight ?: 0, insets?.stableInsetRight ?: 0)
         val y = ButtonPosition.top(keyboardTop.coerceAtMost(screen.y), safeTop, dp(44), dp(8), offset)
-        val show = y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
+        val show = keyboardStable && y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
         if (!show) {
             bar?.let { view ->
                 bar = null
-                if (ValueAnimator.areAnimatorsEnabled()) view.animate().alpha(0f).setDuration(140).withEndAction { runCatching { wm.removeView(view) } }.start()
+                if (keyboardStable && ValueAnimator.areAnimatorsEnabled()) view.animate().alpha(0f).setDuration(140).withEndAction { runCatching { wm.removeView(view) } }.start()
                 else runCatching { wm.removeView(view) }
             }; return
         }
