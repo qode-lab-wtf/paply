@@ -42,20 +42,16 @@
   - Aufgaben-Reiter, Erinnerungen, Aufgaben-Widgets
   - Release-Vorbereitung: Icon, R8, signierte APK 0.1.0, `android/docs/FREUNDE.md`
   - Endreviews: kein Blocker. Endkorrekturen (`REVIEW-P0.md`, „Endreview“) laufen.
-- **Stand vor der Freigabe:**
-  - Die Abschluss-Testrunde (`android/docs/E2E-FINAL.md`) brach ab, weil das MacBook um 02:08 einschlief.
-  - **Regression im Live-Diktat** (Android 17, synthetische Sprache): Der Satzanfang fehlt („Hallo Testname, ich komme heute“),
-    ein langer Satz kommt verstümmelt an. Der Neuversuch aus derselben WAV ist korrekt, also liegt es vermutlich an der
-    Stücke-Verarbeitung beim Sprechen, eingeführt nach E1-IME (IME-Fix bzw. Fix-G).
-  - Muss vor der Freigabe behoben und mit dem kompletten Testlauf (Android 17 + 14) belegt sein.
-  - Release-Keystore liegt auf dem MacBook unter `~/Android/keys/` (sichern!). Pfade stehen in `android/docs/RELEASE.md`.
-- **Wiederaufnahme, sobald das MacBook wach ist** (die Reihenfolge ist wichtig):
-  1. Die hängenden Emulatoren beenden: `PAPLY_AVD=paply ~/Android/emu-stop.sh`, `PAPLY_AVD=paply34 ~/Android/emu-stop.sh`.
-  2. Fix-Final bauen und testen (`android/docs/FIX-FINAL.md`, Code committet, aber noch nicht gebaut).
-  3. Diktat-Regression klären (`android/docs/REGRESSION-DIKTAT.md`): JVM-Test für den Stücke-Upload,
-     Treue der Aufnahme gegenüber der Quell-WAV im Emulator, VAD-Kandidat „leiser Schluss“.
-  4. Die restlichen Punkte von `android/docs/E2E-FINAL.md` auf API 37 und API 34 nachholen.
-  5. Release aus einem sauberen Commit bauen (`mb.sh release`, `lintRelease`), danach Allan die APK und `FREUNDE.md` geben.
+- **0.1.0 freigabefähig (29.10. vormittags):**
+  - Abschlussprüfung der Release-APK auf Android 17 und 14 (`android/docs/E2E-FINAL.md`): kein Blocker, kein Absturz,
+    Kernfunktionen bestanden.
+  - Die APK liegt mit Anleitung auf Allans MacBook unter `~/Desktop/Paply-Android/`, SHA-256 `1a00fd03…dae9`.
+  - Der Signierschlüssel ist auf MacBook und Mac mini gesichert (`android/docs/RELEASE.md`).
+- **0.1.1 in Arbeit:**
+  - Whisper erfindet Text nach langem stillen Vorlauf in der Tastatur (F1).
+  - Drehen mit laufender Sprache auf Android 17 (F2).
+  - Kommt als Update über 0.1.0, die Daten bleiben.
+- **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
