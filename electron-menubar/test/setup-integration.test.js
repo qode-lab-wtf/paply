@@ -2,6 +2,7 @@
 // Keine App, globalen Hotkeys, Mikrofone, Helferprozesse oder Nutzerdaten.
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
@@ -10,7 +11,7 @@ import { EventEmitter } from 'node:events';
 const root = path.resolve(__dirname, '..');
 const realRequire = createRequire(path.join(root, 'electron-main.js'));
 
-function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
+function harness({ platform = 'win32', persisted = {}, polishFactory, logPath = '/test-only/logs/paply.log' } = {}) {
   let ready;
   const handlers = new Map();
   const data = { ...persisted };
@@ -33,11 +34,12 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
     systemPreferences: { isTrustedAccessibilityClient: () => true },
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), on: vi.fn() },
     globalShortcut: { register: vi.fn(() => true), unregister: vi.fn() },
-    shell: { openExternal: vi.fn(async () => {}) },
+    shell: { openExternal: vi.fn(async () => {}), showItemInFolder: vi.fn(), openPath: vi.fn(async () => '') },
     dialog: { showErrorBox: vi.fn() },
     session: { defaultSession: { setDisplayMediaRequestHandler: vi.fn() } },
+    Menu: { buildFromTemplate: vi.fn(template => ({ template })) },
   };
-  const spies = { overlay: vi.fn(), dictation: vi.fn(), show: vi.fn() };
+  const spies = { overlay: vi.fn(), dictation: vi.fn(), show: vi.fn(), logFile: vi.fn(() => ({ path: logPath })) };
   const notes = { start: vi.fn(), shutdown: vi.fn(), flush: vi.fn(async () => {}), bridge: { dictationState: vi.fn(), meetingStarted: vi.fn() } };
   const context = {
     require: name => {
@@ -48,9 +50,10 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
       if (name === './meeting/meeting-store') return { createMeetingStore: () => ({}) };
       if (name === './meeting/meeting-controller') return { createMeetingController: () => controller };
       if (name === './notes') return { createNotes: () => notes };
+      if (name === './diagnostics/log-file') return { installLogFile: spies.logFile };
       return realRequire(name);
     },
-    process: { platform, env: {}, arch: 'x64' }, __dirname: root,
+    process: { platform, env: {}, arch: 'x64', versions: { electron: '0.0.0-test' } }, __dirname: root,
     console: { log: vi.fn(), error: vi.fn() },
     setTimeout: vi.fn(() => ({ unref() {} })), setInterval: vi.fn(() => ({ unref() {} })), setImmediate: vi.fn(), clearTimeout: vi.fn(), clearInterval: vi.fn(), spies,
   };
@@ -63,7 +66,7 @@ function harness({ platform = 'win32', persisted = {}, polishFactory } = {}) {
     registerHotkey = spies.dictation;
     ensureMeetingOverlayWindow = spies.overlay;
     showMainWindow = spies.show;
-    globalThis.fixture = { getStore, setupIpcHandlers, setDashboard: win => { mainWindow = win; } };
+    globalThis.fixture = { getStore, setupIpcHandlers, setDashboard: win => { mainWindow = win; }, updateTrayMenu, setTray: value => { tray = value; } };
   }`);
   vm.runInContext(source, context);
   return { ready: () => ready(), handlers, data, controller, electron, spies, helpers, context, notes };
@@ -186,5 +189,44 @@ describe('Main: Polieren-Einstellungen und Migration', () => {
     expect(send).toHaveBeenCalledExactlyOnceWith('settings:changed');
     expect(h.handlers.get('settings:get')().polishUnavailable).toBe(true);
     expect(h.data).not.toHaveProperty('polishUnavailable');
+  });
+});
+
+describe('Main: Diagnose-Protokoll', () => {
+  it('hängt das Protokoll vor allen Modulen an userData/logs und schreibt eine Startzeile', () => {
+    const h = harness();
+    expect(h.spies.logFile).toHaveBeenCalledOnce();
+    const [options] = h.spies.logFile.mock.calls[0];
+    expect(options.directory).toBe(path.join('/test-only', 'logs'));
+    expect(options.console).toBe(h.context.console);
+    expect(options.process).toBe(h.context.process);
+    const start = h.context.console.log.mock.calls.find(([first]) => first === '[Start] paply');
+    expect(start.join(' ')).toMatch(/^\[Start\] paply \d+\.\d+\.\d+ win32\/x64 OS \S+ Electron 0\.0\.0-test$/);
+    expect(h.electron.app.on).toHaveBeenCalledWith('render-process-gone', expect.any(Function));
+    expect(h.electron.app.on).toHaveBeenCalledWith('child-process-gone', expect.any(Function));
+  });
+  it('„Protokoll anzeigen“ im Tray markiert die Datei, ohne Datei öffnet es den Ordner', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'paply-log-menu-'));
+    const logPath = path.join(directory, 'paply.log');
+    try {
+      for (const platform of ['darwin', 'win32']) {
+        fs.rmSync(logPath, { force: true });
+        const h = harness({ platform, logPath }); h.ready();
+        h.context.fixture.setTray({ setContextMenu: vi.fn() });
+        h.context.fixture.updateTrayMenu();
+        const template = h.electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        const labels = template.map(item => item.label).filter(Boolean);
+        expect(labels.slice(labels.indexOf('Einstellungen...'))).toEqual(
+          ['Einstellungen...', 'Nach Updates suchen...', 'Protokoll anzeigen', 'Über paply', 'Beenden']);
+        const entry = template.find(item => item.label === 'Protokoll anzeigen');
+        entry.click();
+        expect(h.electron.shell.openPath).toHaveBeenCalledWith(directory);
+        fs.writeFileSync(logPath, '');
+        entry.click();
+        expect(h.electron.shell.showItemInFolder).toHaveBeenCalledExactlyOnceWith(logPath);
+      }
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

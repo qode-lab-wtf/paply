@@ -38,8 +38,8 @@ describe.each(['darwin', 'win32'])('P2 im echten Diktatpfad auf %s', platform =>
     const payload = JSON.parse(c.fetch.mock.calls[2][1].body);
     expect(payload.model).toBe(POLISH_MODEL); expect(payload.temperature).toBe(0);
     expect(JSON.parse(payload.messages[1].content)).toEqual({
-      aktuelles_diktat: raw, hintergrund_nicht_bearbeiten: ['Vorheriges Rohdiktat'],
-      unsicher_gehoert: [segment], eigene_begriffe_nur_hintergrund: 'Paply, Müller',
+      current_dictation: raw, background_do_not_edit: ['Vorheriges Rohdiktat'],
+      uncertain_segments: [segment], custom_terms: 'Paply, Müller',
     });
     expect(c.addToHistory).toHaveBeenCalledWith(expect.objectContaining({ transcript: raw, polished }));
   });

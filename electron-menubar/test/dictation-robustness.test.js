@@ -32,6 +32,25 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     ]);
   });
 
+  it('lädt die Polier-Modellliste erst nach dem Aufnahmestart vor, nur mit Polieren', async () => {
+    const { context: c, win, values } = main(platform);
+    c.runPolish.prefetch.mockImplementationOnce(() => {
+      expect(win.webContents.send).toHaveBeenCalledWith('recording:start', expect.anything());
+    });
+    await c.beginRecording();
+    expect(c.runPolish.prefetch).toHaveBeenCalledExactlyOnceWith('test-placeholder');
+    c.stopRecording(); values.enablePolish = false;
+    await c.beginRecording();
+    expect(c.runPolish.prefetch).toHaveBeenCalledOnce();
+  });
+
+  it('startet die Aufnahme auch, wenn das Vorladen scheitert', async () => {
+    const { context: c, state } = main(platform);
+    c.runPolish.prefetch.mockImplementationOnce(() => { throw new Error('kaputt'); });
+    await c.beginRecording();
+    expect(state()).toBe(true); expect(c.dictationJobs.current.phase).toBe('requested');
+  });
+
   it('setzt fehlgeschlagenen Mikrofonstart zurück, nächster Hotkey startet direkt', async () => {
     const { context: c, ipc, event, state, win } = main(platform);
     await c.beginRecording(); const id = c.dictationJobs.current.id;
@@ -127,6 +146,63 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     timers.find(timer => timer.ms === 200).fn();
     expect(win.hide).toHaveBeenCalledOnce();
   });
+});
+
+it('wiederholt bei langem Groq-Limit (429, Retry-After > 10 s) nicht stur', async () => {
+  const { context: c, timers } = main();
+  c.fetch.mockResolvedValue({ ok: false, status: 429, headers: { get: () => '600' }, text: async () => '{}' });
+  await expect(c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech)).rejects.toMatchObject({ status: 429 });
+  expect(c.fetch).toHaveBeenCalledOnce(); expect(timers).toHaveLength(0);
+});
+
+it('wartet bei kurzem Groq-Limit die genannte Zeit und versucht es erneut', async () => {
+  const { context: c, timers } = main();
+  c.fetch.mockResolvedValueOnce({ ok: false, status: 429, headers: { get: () => '4' }, text: async () => '{}' });
+  const work = c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech);
+  await tick(); await tick();
+  expect(timers.map(timer => timer.ms)).toEqual([4000]);
+  timers[0].fn();
+  expect(await work).toBe('Gesprochener Text'); expect(c.fetch).toHaveBeenCalledTimes(2);
+});
+
+it('wiederholt hängende Uploads nur, solange das bisherige Gesamtbudget reicht', async () => {
+  const { context: c, timers } = main();
+  let now = 0;
+  c.Date = class extends Date { static now() { return now; } };
+  const aborted = () => Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+  c.fetch.mockImplementation(async () => { now += 239000; throw aborted(); });
+  await expect(c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech)).rejects.toMatchObject({ name: 'AbortError' });
+  expect(c.fetch).toHaveBeenCalledOnce(); expect(timers).toHaveLength(0);
+  now = 0; c.fetch.mockReset();
+  c.fetch.mockImplementationOnce(async () => { now += 60000; throw aborted(); });
+  const work = c.transcribeAudio(Buffer.from('audio'), 'de', 3, speech);
+  await tick(); await tick();
+  expect(timers.map(timer => timer.ms)).toEqual([1000]);
+  c.fetch.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ text: 'Gesprochener Text' }) });
+  timers[0].fn();
+  expect(await work).toBe('Gesprochener Text');
+});
+
+it('zählt einen Fehler genau einmal je Aufnahme, nicht beim Wiederholen', async () => {
+  const { context: c } = main();
+  c.fetch.mockResolvedValue({ ok: false, status: 401, text: async () => '{}' });
+  await c.processAudioData(Buffer.from('audio'), false, speech);
+  expect(c.updateStats).toHaveBeenCalledExactlyOnceWith(0, 0, true);
+  await c.processAudioData(Buffer.from('audio'), true, speech);
+  expect(c.updateStats).toHaveBeenCalledOnce();
+});
+
+it('gibt dem Verlauf die gemessene Aufnahmedauer für die Minuten-Statistik mit', async () => {
+  const { context: c } = main();
+  await c.processAudioData(Buffer.from('audio'), false, speech);
+  expect(c.addToHistory).toHaveBeenCalledWith(expect.objectContaining({ durationMinutes: speech.durationMs / 60000 }));
+});
+
+it('gibt dem Upload je nach Dateigröße mehr Zeit', async () => {
+  const { context: c } = main();
+  const original = c.readResponse; c.readResponse = vi.fn(original);
+  await c.transcribeAudio(Buffer.alloc(640000), 'de', 0, speech);
+  expect(c.readResponse.mock.calls[0][2]).toBe(70000);
 });
 
 it('speichert bei ungültigem neuen Kürzel gar keine Einstellungen und liefert strukturierten Fehler', async () => {

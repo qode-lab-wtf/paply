@@ -1,6 +1,6 @@
 # Paply — Stand
 
-**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.0 veröffentlicht und auf Allans MacBook installiert; Praxistest durch Allan · Paply iOS 0.1.0 bei TestFlight (Builds 1–7, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
+**Zeitpunkt:** 29.10.2026 · **Phase:** v1.15.2 veröffentlicht, v1.15.3 (gemeinsame Polier-Quelle) lokal vorbereitet · Paply iOS 0.1.0 bei TestFlight (Builds 1–8, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
@@ -63,6 +63,52 @@
   Protokoll und To-dos.
 - Nebenwirkung 27.10.: Die Mac-Latenzmessung hat das Free-Tier-Polierkontingent (qwen) von Allans Groq-Schlüssel
   fast aufgebraucht; das Desktop-Diktat setzte bis zur Erholung Rohtext ein.
+
+## v1.15.3 — Gemeinsame Polier-Quelle (29.10.2026, lokal vorbereitet)
+
+- Einziger System-Prompt unter `shared/polish/system-prompt.txt`, bytegleich im Desktop eingebettet;
+  englisches JSON-Nachrichtenformat wie iOS/Android, eigene Begriffe normalisiert.
+- Mobiles Sicherheitsnetz inklusive Zahlen, Selbstkorrekturen, kleinen Ersetzungen und Profilgrenzen
+  portiert. Bei Ablehnung bleibt der Rohtext; Aufnahme, Cmd+X und Einfügen unverändert.
+- 744 automatische Tests grün; 99 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
+  Bekannte mobile Fehlablehnungen/heuristische Grenzen bleiben erhalten (siehe `shared/polish/README.md`).
+- Private Verlaufsauswertung nur lokal, ohne Groq-Aufrufe. Keine Veröffentlichung, kein Tag/Push;
+  mobile Prompt-Einbettungen und Gleichheitstests in den jeweiligen Branches nachziehen.
+
+## v1.15.2 — Robustheit Mac/Windows nach Log-Sichtung und iOS-Abgleich (28.10.2026)
+
+Allan: „dass auf macOS und Windows alles neueste Version und korrekt läuft“.
+- **Polieren:** Bei Groq-Limit (429, z. B. qwen-Tageskontingent) einmal `gpt-oss-120b` mit eigenem Kontingent
+  (wie iOS) statt still Rohtext; nur mit ≥ 3 s Restzeit, Sicherheitsnetz gilt weiter.
+- **Lange Diktate:** Upload-Zeitlimit wächst mit der Dateigröße (60 s + ~0,5 Mbit/s), alle Versuche zusammen
+  höchstens wie bisher 4 × 60 s bzw. ein Upload + 60 s; 413 → „Aufnahme zu lang“ mit Erklärung; bei 429 mit
+  Retry-After > 10 s kein sturer Neuversuch.
+- **Diagnose-Protokoll:** `<Datenordner>/logs/paply.log` (≤ 2 MB + eine alte Datei), ohne Diktattext, Schlüssel
+  geschwärzt; Tray „Protokoll anzeigen“. Damit lassen sich Fehler beim Windows-Freund nachvollziehen.
+- **Dashboard:** Aufnahmeminuten und Fehler werden gezählt (vorher immer „0 min“ / „100 %“).
+- **Sicherheit:** config.json (API-Schlüssel) nur für den eigenen Benutzer (0600, vorher rw-rw-rw-).
+  Laufzeit-Pakete semver-kompatibel aktualisiert (js-yaml, form-data, ajv, fast-uri). GitHub Actions auf
+  Node-24-Versionen, Build mit Node 22.
+- Bewusst nicht: Zahlen-Schutz beim Polieren (215 echte polierte Diktate: keine verfälschte Zahl, einziger Treffer
+  wäre harmlose Formatierung gewesen); `electron-updater` bleibt 6.6.2 (Fix ändert Windows-Update-Ablauf, Lücke
+  betrifft Paply nicht); **Electron 33 → 45+** steht aus (viele Sicherheitshinweise, eigenes Projekt mit Praxistest).
+- Geprüft: 651 automatische Tests, TypeScript, Review (keine Blocker, Befunde behoben), echter Durchlauf mit
+  Fake-Mikro + Groq (Satz → poliert in ~1 s, Stille → nichts, Protokoll ohne Text/Schlüssel, config 0600).
+- Log-Sichtung iOS (28.10.): 1 Absturz nach Anruf (Build 5) — in Build 6 behoben, auf dem iPhone noch zu prüfen;
+  Akku/Wärme in Bereitschaft ungeklärt (Mikro dauerhaft offen) → Paply-Anteil in Einstellungen › Batterie ansehen.
+
+## v1.15.1 — Abgleich mit Paply iOS (28.10.2026)
+
+- Allans Auftrag: Diktat auf Mac/Windows so flüssig wie Paply iOS, nur Eindeutiges reparieren.
+- Abgleich: Die iOS-„Sprachwache“ (≤ 5 s gesprochen → Hauptsprache) betrifft nur automatische Spracherkennung;
+  der Desktop schickt immer die feste Sprache (de/en) → dort kein Problem. Stille-Filter (Ursprung des iOS-Filters)
+  wirkt: in Allans MacBook-Verlauf 21 reine „Vielen Dank“ vor v1.14.0, 0 in 200 Diktaten danach.
+- **Behoben:** Die Modellliste fürs Polieren wurde erst nach dem Stopp seriell geholt, sobald die letzte Prüfung
+  > 5 min her war (≥ 37 % von Allans Diktaten). Jetzt wird sie bei Aufnahmestart vorgeladen (wie iOS), nach dem
+  Aufnahmestart und ohne Einfluss auf ihn. Echt gemessen: Stopp → polierter Text ~500 → ~200 ms. Text unverändert.
+- 623 automatische Tests und TypeScript grün.
+- Bewusst nicht übernommen (eigenes Projekt, nur auf Wunsch): Stücke-Upload während des Sprechens (iOS) — spart bei
+  Diktaten > 30 s (27 % bei Allan, Median 16 s) ~0,5–1 s, ist aber ein Umbau im Diktat-Kern.
 
 ## v1.15.0 — Notes
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { isBackupAtOrBefore, compareBackups } from '../dictation/backup-order.js';
 import { createDictationJobs } from '../dictation/jobs.js';
-import { readResponse, friendlyError, explainDictationStatus } from '../dictation/policies.js';
+import { readResponse, friendlyError, explainDictationStatus, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs } from '../dictation/policies.js';
 import { filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment } from '../audio/silence-filter.js';
 
 // Die echten Main-Funktionen mit isoliertem Store/Fenster/Netzwerk ausführen.
@@ -24,7 +24,7 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
   const values = { language: 'de', groqApiKey: 'test-placeholder', enablePolish: true, autopaste: true, ...settings };
   const window = { webContents: { send: vi.fn() }, hide: vi.fn(), showInactive: vi.fn() };
   const context = vm.createContext({
-    process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus,
+    process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
     savePreviousApp: async () => null, positionRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date,
