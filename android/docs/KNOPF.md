@@ -241,3 +241,35 @@ Gerätetests werden ausschließlich kompiliert, erneute Geräteabnahme steht aus
 Abschlussprüfung ausschließlich über `scripts/mb.sh`, `PAPLY_WORK=work-knopf021`:
 `:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 :app:assembleDebugAndroidTest` vollständig grün (`BUILD SUCCESSFUL`, 31 s).
+
+## 0.2.1 – Sichtbarkeit und stabile Knopfposition nach Nachprüfung
+
+- Ursache des verschluckten Zwischenablage-Hinweises: Die erste Sichtbarkeitsprüfung
+  ließ ihn zu, die nachgelagerte Kandidatensuche konnte jedoch `null` liefern und
+  das Fenster unsichtbar schalten, während der 4-s-Hinweistimer weiterlief.
+  Konkret wurde der lange Hinweis in IDLE bis zur verfügbaren Breite minus 8 dp
+  gemessen, die Suche erlaubte wegen beidseitigem Inset aber nur minus 16 dp.
+  Die neue Suche verwendet für Hinweise die volle sichere Bildschirmbreite.
+  Aktive Phasen und Hinweise erhalten jetzt garantiert eine Rückfallposition:
+  rechts bei `safeTop + 8 dp`, auch bei Vollbild-IME oder fehlendem Feldanker.
+  IME-Fenstergrenzen zählen bei der regulären Kandidatensuche mit; wenn die IME
+  den ganzen Bildschirm belegt, bleibt der obere Rückfall bewusst erreichbar.
+- Nur klickbare Elemente bis einschließlich 160 × 160 dp sowie alle editierbaren
+  Felder sind Hindernisse. Die Platzierung reserviert stets 120 × 72 dp für
+  Aufnahme plus X; der Knopfmittelpunkt bleibt beim Start unverändert.
+  Seitliche Kandidaten neben der Feldecke vermeiden Überlappungen im Querformat.
+- Sichtbare Position während kurzer Fokuslücken (max. 350 ms) und bis zur neuen
+  Feldstabilität halten, danach vorhandenes 180-ms-Gleiten auf freiem Weg.
+  Passwortfelder beenden die Ruhe-Übergangsfrist sofort. Render-Cache berücksichtigt
+  auch Tastaturfenster, Stabilität und Übergangszustand.
+- Regressionstests: Phase × Anker × Hinweis, Vollbild-IME mit Ergebnisübergang,
+  Bannerfilter, unveränderter Mittelpunkt, vierzeiliges Querformat und Feldwechsel.
+  Gerätetests setzen Paplys Sprache explizit auf Deutsch, prüfen den Hinweis nach
+  3 s erneut und verlangen nach Rotation sichtbaren Aufnahmeknopf plus X.
+
+Prüfung ausschließlich über `scripts/mb.sh`, `PAPLY_WORK=work-knopf021`:
+`:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+:app:assembleDebugAndroidTest`. Keine Emulatorsteuerung oder Groq-Aufrufe;
+Gerätetests nur kompiliert, UI-Nachabnahme weiterhin separat. Version 0.2.1 (7).
+Abschluss: alle sechs Aufgaben grün (`BUILD SUCCESSFUL`, 9 s; vollständiger
+Produktions-Neubau zuvor 38 s), einschließlich sieben neuer Regressionstests.

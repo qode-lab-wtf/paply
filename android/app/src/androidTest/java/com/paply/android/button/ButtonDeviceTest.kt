@@ -48,7 +48,8 @@ class ButtonDeviceTest {
             assertNull("Service must be disconnected before setup", PaplyButtonService.connected)
             ui.executeShellCommand("am force-stop com.paply.android.test").use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
             ui.grantRuntimePermission(context.packageName, Manifest.permission.RECORD_AUDIO)
-            prefs.update { it.copy(paplyButton = true, buttonForeground = args.getString("microphone") == "fgs") }
+            prefs.update { it.copy(automaticLanguages = false, manualLanguages = listOf("de"), mainLanguage = "de",
+                paplyButton = true, buttonForeground = args.getString("microphone") == "fgs") }
             val component = ComponentName(context, PaplyButtonService::class.java).flattenToString()
             Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
                 (services.orEmpty().split(':').filter { it.isNotBlank() } + component).distinct().joinToString(":"))
@@ -119,7 +120,10 @@ class ButtonDeviceTest {
             Thread.sleep(12_000)
             if (scenario == "field") {
                 assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-                waitFor { it.text?.contains("Einfügen") == true }
+                val notice = waitFor { it.text?.contains("Einfügen") == true }
+                Thread.sleep(3000)
+                assertTrue("Clipboard notice must stay visible", notice.refresh() && notice.isVisibleToUser)
+                waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
                 assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.let { it.isShowingHintText || it.text.isNullOrEmpty() || it.text == it.hintText })
                 assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 waitFor { !it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
@@ -130,7 +134,9 @@ class ButtonDeviceTest {
                 Thread.sleep(1000)
                 // Same resource-ID editor after rotation must keep recording and become visible again.
                 waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
-                aboveKeyboard()
+                val recording = bounds(waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" })
+                assertTrue(recording.top >= 0 && recording.width() > 0)
+                waitFor { it.contentDescription?.toString() == "Aufnahme verwerfen" }
             }
             val pill = waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
             assertTrue(pill.performAction(AccessibilityNodeInfo.ACTION_CLICK))

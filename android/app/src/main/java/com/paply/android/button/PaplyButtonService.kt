@@ -31,7 +31,10 @@ class PaplyButtonService : AccessibilityService() {
     private var origin: AccessibilityNodeInfo? = null
     private var changed = false
     private var eligible = false
+    private var fieldGapUntil = 0L
     private var keyboardTop = 0
+    private var imeBounds = emptyList<ButtonPosition.Box>()
+    private var reservedPosition: ButtonPosition.Box? = null
     private val keyboardStability = ButtonKeyboardStability()
     private var keyboardStable = false
     private val fieldStability by lazy { ButtonFieldStability(dp(4)) }
@@ -54,7 +57,9 @@ class PaplyButtonService : AccessibilityService() {
     private var warning = ButtonRecordingWarning()
     private var amber = false
     private data class RenderKey(val model: ButtonPresentation.Render, val x: Int, val y: Int,
-                                 val width: Int, val amber: Boolean)
+                                 val width: Int, val amber: Boolean, val eligible: Boolean,
+                                 val keyboardStable: Boolean, val holding: Boolean,
+                                 val ime: List<ButtonPosition.Box>, val safeTop: Int)
     private var lastRender: RenderKey? = null
     private var positionAnimator: ValueAnimator? = null
     private var obstacles = emptyList<ButtonPosition.Box>()
@@ -75,7 +80,8 @@ class PaplyButtonService : AccessibilityService() {
             if (++visited > 160) return
             if (node.isVisibleToUser && (node.isClickable || node.isEditable)) {
                 val rect = Rect().also(node::getBoundsInScreen)
-                if (!rect.isEmpty) result += rect.box()
+                if (!rect.isEmpty && ButtonPosition.obstacle(rect.width(), rect.height(),
+                    node.isEditable, node.isClickable, dp(160))) result += rect.box()
             }
             if (depth < 12) for (i in 0 until node.childCount) {
                 if (visited >= 160) break
@@ -91,6 +97,7 @@ class PaplyButtonService : AccessibilityService() {
         rotationUntil = SystemClock.elapsedRealtime() + 1800
         obstaclesDirty = true
         fieldStability.reset()
+        reservedPosition = null
         inspect()
     }
 
@@ -133,6 +140,7 @@ class PaplyButtonService : AccessibilityService() {
         val windows = runCatching { windows }.getOrDefault(emptyList())
         val keyboard = windows.filter { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
             .map { Rect().also(it::getBoundsInScreen) }.filter { !it.isEmpty }
+        imeBounds = keyboard.map { it.box() }
         keyboardStable = keyboardStability.observe(keyboard, SystemClock.elapsedRealtime())
         keyboardTop = keyboard.minOfOrNull { it.top } ?: resources.displayMetrics.heightPixels
         val root = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isActive }
@@ -151,7 +159,9 @@ class PaplyButtonService : AccessibilityService() {
             next?.isFocused == true, next?.isEditable == true, next?.isPassword == true, keyboard.isNotEmpty() &&
                 getSystemService(android.os.PowerManager::class.java).isInteractive &&
                 !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
-        if (!eligible) fieldStability.reset()
+        if (eligible) fieldGapUntil = now + 350
+        if (next?.isPassword == true || !SettingsRepository.get(this).state.value.paplyButton) fieldGapUntil = 0
+        if (!eligible) fieldStability.reset(hold = bar != null)
         else if (next != field) fieldStability.reset(hold = bar != null)
         val previousBounds = fieldBounds
         fieldBounds = next?.takeIf { it.isFocused && it.isEditable }?.let { Rect().also(it::getBoundsInScreen) }
@@ -375,9 +385,9 @@ class PaplyButtonService : AccessibilityService() {
         val bounds = fieldBounds?.takeUnless { it.isEmpty }
         val candidate = ButtonPosition.anchor(keyboardTop.coerceAtMost(screen.y), bounds?.top,
             bounds?.bottom, safeTop, dp(72), dp(8), dp(96), dp(200))
-        // Stabilize the field's preferred top; actual bounds still veto unsafe positions immediately.
+        // Hold the accepted position through a field transition; settle before moving.
         if (bounds != null) fieldStability.observe(bounds.top, SystemClock.elapsedRealtime())
-        else fieldStability.reset()
+        else fieldStability.reset(hold = bar != null)
         val anchor = if (bounds != null) fieldStability.top?.let {
             ButtonPosition.anchor(keyboardTop.coerceAtMost(screen.y), it, bounds.bottom,
                 safeTop, dp(72), dp(8), dp(96), dp(200))
@@ -385,11 +395,15 @@ class PaplyButtonService : AccessibilityService() {
         maxOffset = anchor?.let { ButtonPosition.maxOffset(it, safeTop, dp(72), dp(8)) } ?: 0
         if (anchor != null) offset = offset.coerceIn(0, maxOffset)
         val anchoredY = anchor?.let { ButtonPosition.top(it, safeTop, dp(72), dp(8), offset) }?.plus(inset)
-        val fallbackHint = hintText != null && (!keyboardStable || anchoredY == null || !eligible)
-        val y = if (fallbackHint) screen.y - navigationBottom() - size - dp(8) else anchoredY
-        val show = y != null && !overlayFailed && (fallbackHint || (keyboardStable && eligible))
+        val persistent = phase != ButtonPolicy.Phase.IDLE || hintText != null
+        val holding = bar != null && reservedPosition != null &&
+            ((!eligible && SystemClock.elapsedRealtime() < fieldGapUntil) ||
+                (eligible && bounds != null && fieldStability.top != null &&
+                    kotlin.math.abs(fieldStability.top!! - bounds.top) > dp(4)))
+        val show = !overlayFailed && (persistent || (eligible && keyboardStable && anchoredY != null) || holding)
         if (!show) {
             lastRender = null
+            reservedPosition = null
             positionAnimator?.cancel(); positionAnimator = null
             bar?.let { view ->
                 logo?.stopAnimation()
@@ -399,7 +413,8 @@ class PaplyButtonService : AccessibilityService() {
             }; return
         }
         val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, dp(8))
-        val key = RenderKey(model, horizontal.rightMargin + inset, y, horizontal.width, amber)
+        val key = RenderKey(model, horizontal.rightMargin + inset, anchoredY ?: safeTop, horizontal.width, amber,
+            eligible, keyboardStable, holding, imeBounds, safeTop)
         if (bar != null && key == lastRender) return
         val needsMeasure = bar == null || lastRender?.model != model || lastRender?.width != horizontal.width
         if (bar == null) {
@@ -459,15 +474,25 @@ class PaplyButtonService : AccessibilityService() {
         val previousHeight = layout.height; val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
         layout.width = (bar?.measuredWidth ?: size).coerceAtMost(horizontal.width)
         layout.height = size
-        val target = if (fallbackHint) {
-            val left = (screen.x - layout.width) / 2
-            val centered = ButtonPosition.Box(left, y, left + layout.width, y + size)
-            if (ButtonPosition.clearPath(centered, centered, bounds?.box(), obstacles)) centered
+        val placementObstacles = obstacles + imeBounds
+        val reserved = if (holding) reservedPosition else if (eligible && keyboardStable && anchoredY != null)
+            ButtonPosition.choose(safeLeft + dp(8), screen.x - safeRight - dp(8), safeTop,
+                keyboardTop.coerceAtMost(screen.y), dp(120), dp(72), dp(8),
+                bounds?.box(), placementObstacles, offset, fieldStability.top)
+        else null
+        reservedPosition = reserved
+        val anchored = reserved?.let {
+            val window = ButtonPosition.window(it, layout.width, size, dp(72))
+            if (hintText == null || (window.left >= safeLeft + dp(8) &&
+                    ButtonPosition.clearPath(window, window, bounds?.box(), placementObstacles))) window
             else ButtonPosition.choose(safeLeft + dp(8), screen.x - safeRight - dp(8), safeTop,
-                screen.y - navigationBottom(), layout.width, size, dp(8), bounds?.box(), obstacles)
-        } else ButtonPosition.choose(safeLeft + dp(8) + inset, screen.x - safeRight - dp(8) - inset, safeTop,
-            keyboardTop.coerceAtMost(screen.y), layout.width, size, dp(8) + inset,
-            bounds?.box(), obstacles, offset, fieldStability.top)
+                keyboardTop.coerceAtMost(screen.y), layout.width, size, dp(8),
+                bounds?.box(), placementObstacles, offset, fieldStability.top)
+        }
+        // Full-screen IME bounds may cover every candidate. Keep controls at safeTop,
+        // never fall back to the IME's bottom-right Done/Send area.
+        val target = ButtonPosition.resolve(phase, hintText != null, anchored,
+            screen.x - safeRight - dp(8) - inset, safeTop, layout.width, size, dp(8))
         if (target == null) { bar?.visibility = View.INVISIBLE; lastRender = null; return }
         bar?.visibility = View.VISIBLE
         layout.x = screen.x - target.right
@@ -479,7 +504,7 @@ class PaplyButtonService : AccessibilityService() {
             val from = ButtonPosition.Box(screen.x - previousX - layout.width, previousY,
                 screen.x - previousX, previousY + size)
             if (previousWidth > 0 && previousHeight == size && ValueAnimator.areAnimatorsEnabled() &&
-                ButtonPosition.clearPath(from, target, bounds?.box(), obstacles)) {
+                ButtonPosition.clearPath(from, target, bounds?.box(), placementObstacles)) {
                 positionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
                     duration = 180
                     interpolator = android.view.animation.DecelerateInterpolator()
@@ -493,12 +518,6 @@ class PaplyButtonService : AccessibilityService() {
                 }
             } else bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
         }
-    }
-    private fun navigationBottom(): Int {
-        if (Build.VERSION.SDK_INT >= 30) return wm.currentWindowMetrics.windowInsets
-            .getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()).bottom
-        val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
-        return if (id == 0) dp(48) else resources.getDimensionPixelSize(id)
     }
     private fun screenInsets(): ButtonPosition.Insets {
         if (Build.VERSION.SDK_INT >= 30) {
