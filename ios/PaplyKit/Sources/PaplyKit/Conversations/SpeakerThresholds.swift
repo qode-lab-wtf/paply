@@ -1,8 +1,11 @@
 import Foundation
 
-/// Vorläufig; wird durch die Messung kalibriert.
+/// Pilotwerte aus MESSUNG.md; unabhängige Geräte-/Negativtests stehen aus.
 public enum SpeakerThresholds {
-    public static let match = 0.82
+    public static let match = 0.80
+    public static let margin = 0.10
+    public static let enrollmentOutlier = 0.60
+    // 0,65 bleibt ein bestätigungspflichtiger Vorschlag, niemals eine Identität.
     public static let suggestion = 0.65
     public static let learning = 0.70
     public static let merge = 0.92
@@ -18,8 +21,38 @@ public enum SpeakerThresholds {
     }
 
     public static func score(_ print: VoicePrint, against person: VoicePerson) -> Double {
-        let best = person.prints.filter { $0.model == print.model && $0.vector.count == print.vector.count }
+        let compatible = person.prints.filter { $0.model == print.model && $0.vector.count == print.vector.count }
+        if compatible.count >= 3, let center = enrollmentCentroid(compatible) {
+            return cosine(print.vector, center)
+        }
+        let best = compatible
             .map { cosine(print.vector, $0.vector) }.sorted(by: >).prefix(3)
         return best.isEmpty ? 0 : best.reduce(0, +) / Double(best.count)
+    }
+}
+
+extension SpeakerThresholds {
+    public static func enrollmentInliers(_ prints: [VoicePrint]) -> [VoicePrint] {
+        guard !prints.isEmpty else { return [] }
+        let medoid = prints.indices.max { a, b in
+            prints.reduce(0) { $0 + cosine(prints[a].vector, $1.vector) } <
+            prints.reduce(0) { $0 + cosine(prints[b].vector, $1.vector) }
+        }!
+        return prints.filter { cosine($0.vector, prints[medoid].vector) >= enrollmentOutlier }
+    }
+    /// Einzelne fremde Clips beeinflussen den Profilmittelwert nicht.
+    public static func enrollmentCentroid(_ prints: [VoicePrint]) -> [Float]? {
+        guard let first = prints.first, !first.vector.isEmpty,
+              prints.allSatisfy({ $0.model == first.model && $0.vector.count == first.vector.count && $0.vector.allSatisfy(\.isFinite) })
+        else { return nil }
+        let accepted = enrollmentInliers(prints)
+        var mean = Array(repeating: Float(0), count: first.vector.count)
+        for print in accepted {
+            let norm = sqrt(print.vector.reduce(0) { $0 + $1 * $1 })
+            guard norm > 0 else { continue }
+            for i in mean.indices { mean[i] += print.vector[i] / norm }
+        }
+        let norm = sqrt(mean.reduce(0) { $0 + $1 * $1 })
+        return norm > 0 ? mean.map { $0 / norm } : nil
     }
 }

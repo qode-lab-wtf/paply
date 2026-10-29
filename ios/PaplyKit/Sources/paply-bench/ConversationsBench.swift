@@ -3,41 +3,43 @@ import AVFoundation
 import Synchronization
 import PaplyKit
 
-/// Nur ein Platzhalter: Pegelfenster, keine echte Sprecheridentifikation.
-private struct BenchDiarizer: SpeakerDiarizing {
-    let embeddingModel = "bench-energy-placeholder"
-    func voiceprint(audio: URL) async throws -> VoicePrint? { nil }
-    func diarize(audio: URL, expectedSpeakers: Int?, progress: @escaping @Sendable (Double) -> Void) async throws -> Diarization {
-        let samples = try readWav(audio)
-        var segments: [Diarization.Segment] = []
-        for start in stride(from: 0, to: samples.count, by: 480) {
-            let end = min(samples.count, start + 480)
-            let energy = samples[start..<end].reduce(Float(0)) { $0 + $1 * $1 } / Float(end - start)
-            if energy > 0.00001 {
-                segments.append(.init(start: Double(start) / 16000, end: Double(end) / 16000, cluster: 0))
-            }
-        }
-        progress(1)
-        return .init(segments: segments, centroids: [0: [1, 0]],
-                     speechSeconds: [0: segments.reduce(0) { $0 + $1.end - $1.start }], model: embeddingModel)
-    }
-}
-
 func conversationsBench(_ path: String) async throws {
-    let root = URL(fileURLWithPath: "/tmp/paply-gsp-k2-bench-" + UUID().uuidString)
+    let root = URL(fileURLWithPath: "/tmp/paply-gsp-d-bench-" + UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let audio = URL(fileURLWithPath: path)
     let file = try AVAudioFile(forReading: audio)
     let duration = Double(file.length) / file.processingFormat.sampleRate
+    if ProcessInfo.processInfo.environment["PAPLY_CAM_ONLY"] == "1" {
+        file.framePosition = AVAudioFramePosition((Double(ProcessInfo.processInfo.environment["PAPLY_CAM_OFFSET"] ?? "10") ?? 10) * 16000)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 128000)!
+        try file.read(into: buffer)
+        let samples = Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+        let values = try CAMVoiceEmbedding().embedding(samples: samples)
+        print(String(decoding: try JSONEncoder().encode(values), as: UTF8.self))
+        return
+    }
+    if ProcessInfo.processInfo.environment["PAPLY_DIARIZATION_ONLY"] == "1" {
+        guard let models = ProcessInfo.processInfo.environment["PAPLY_SPEAKER_MODELS"] else { fail("PAPLY_SPEAKER_MODELS fehlt") }
+        let start = Date()
+        let result = try await NemotronSpeakerDiarizer(directory: URL(fileURLWithPath: models)).diarize(audio: audio, expectedSpeakers: nil) { _ in }
+        let elapsed = Date().timeIntervalSince(start)
+        let output: [String: Any] = ["speakers": result.speechSeconds.count, "seconds": elapsed,
+            "duration": duration, "rtf": elapsed / max(0.001, duration),
+            "segments": result.segments.map { ["start": $0.start, "end": $0.end, "speaker": String($0.cluster)] as [String: Any] }]
+        print(String(decoding: try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys]), as: UTF8.self))
+        return
+    }
     guard duration <= 600 else { fail("Audio-Budget überschritten") }
     let ledger = TokenLedger(fileURL: root.appendingPathComponent("ledger.json"), limits: {
         var limits = TokenLedger.Limits()
-        limits.dailyTokens = 40000
+        limits.dailyTokens = 10000
         limits.dailyAudioSeconds = 600
         return limits
     })
-    let analyzer = ConversationAnalyzer(diarizer: BenchDiarizer(), ledger: ledger)
+    guard let modelPath = ProcessInfo.processInfo.environment["PAPLY_SPEAKER_MODELS"] else { fail("PAPLY_SPEAKER_MODELS fehlt") }
+    let diarizer = NemotronSpeakerDiarizer(directory: URL(fileURLWithPath: modelPath))
+    let analyzer = ConversationAnalyzer(diarizer: diarizer, ledger: ledger)
     let started = Date()
     let stages = Mutex<[String: Double]>([:])
     let input = ConversationAnalysisInput(id: "bench", audio: audio, workDirectory: root,

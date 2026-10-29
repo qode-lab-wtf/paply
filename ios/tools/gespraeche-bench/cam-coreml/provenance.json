@@ -1,0 +1,51 @@
+{
+  "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
+  "source_sha256": "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2",
+  "model_card": "https://modelscope.cn/models/iic/speech_campplus_sv_zh_en_16k-common_advanced",
+  "license": "Apache-2.0",
+  "input": "1 x 800 x 80; 16 kHz normalized waveform; Kaldi Fbank; low 20 Hz, high 7600 Hz; snip_edges=false; per-bin mean subtraction",
+  "coreml_onnx_parity": [
+    {
+      "offset": 10,
+      "cosine": 0.9997011423110962
+    },
+    {
+      "offset": 80,
+      "cosine": 0.9997355937957764
+    },
+    {
+      "offset": 200,
+      "cosine": 0.9995399713516235
+    }
+  ],
+  "test_audio": "AMI ES2004a.Array1-01.wav, 8-second excerpts at offsets 10, 80, 200",
+  "files": {
+    "Manifest.json": {
+      "bytes": 617,
+      "sha256": "3d298542909ef73ad42f7f4acab9e8583ab36bec655c9f5f3f0db416d5614b1f"
+    },
+    "Data/com.apple.CoreML/model.mlmodel": {
+      "bytes": 614273,
+      "sha256": "5a678071f8cfca8ef00146cab2837c409f6a48ef16c4dc72af78b49a2cca43fa"
+    },
+    "Data/com.apple.CoreML/weights/weight.bin": {
+      "bytes": 13958272,
+      "sha256": "343a3e712454249c197f450f94fa758450fb12a9eb671ddea11e59620ea3c233"
+    }
+  },
+  "swift_fbank_coreml_vs_onnx": [
+    {
+      "offset": 10,
+      "cosine": 0.9996819185900784
+    },
+    {
+      "offset": 80,
+      "cosine": 0.9997885390798638
+    },
+    {
+      "offset": 200,
+      "cosine": 0.9996276070734014
+    }
+  ],
+  "xcode_compiled_bundle_vs_onnx_offset_10_cosine": 0.9996819185900783
+}

@@ -59,7 +59,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                 let aligned = SpeakerAlignment.align(words: whisper.words, diarization: fallback, gaps: input.gaps)
                 partial.stagesDone = [.transcript]
                 partial.speakers = aligned.speakers
-                partial.transcript = .init(utterances: aligned.utterances, languages: [whisper.language ?? input.mainLanguage],
+                partial.transcript = .init(utterances: aligned.utterances.map { var item = $0; item.uncertain = true; return item }, languages: [whisper.language ?? input.mainLanguage],
                     model: "whisper-large-v3", createdAt: input.recordedAt)
                 partial.audioSeconds = whisper.duration ?? end
                 return .partial(partial, waiting: .waitingNetwork, retryAt: Date().addingTimeInterval(60),

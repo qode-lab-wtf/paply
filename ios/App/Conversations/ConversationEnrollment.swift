@@ -2,14 +2,6 @@ import Foundation
 import Observation
 import PaplyKit
 
-/// PLATZHALTER für den kommenden Kern-Anschluss `profiles.enroll`.
-protocol ConversationEnrolling: Sendable {
-    func enroll(audio: URL, diarizer: any SpeakerDiarizing) async throws
-}
-struct EnrollmentPlaceholder: ConversationEnrolling {
-    func enroll(audio: URL, diarizer: any SpeakerDiarizing) async throws { throw EditingPlaceholder.Unavailable() }
-}
-
 @MainActor @Observable
 final class ConversationEnrollment {
     private(set) var startedAt: Date?
@@ -21,6 +13,7 @@ final class ConversationEnrollment {
     @ObservationIgnored private var id = UUID().uuidString
     @ObservationIgnored private var cancelled = false
     func start() async {
+        ConversationModels.shared.start()
         guard startedAt == nil, !starting, !SessionController.shared.isConversationActive else { return }
         starting = true
         cancelled = false
@@ -59,9 +52,9 @@ final class ConversationEnrollment {
             defer { try? FileManager.default.removeItem(at: writer.url) }
             if save {
                 do {
-                    try await EnrollmentPlaceholder().enroll(
+                    try await ConversationsEnvironment.profiles.enroll(
                         audio: writer.url, diarizer: ConversationsEnvironment.makeDiarizer())
-                } catch { ConversationsModel.shared.error = "Einsprechen ist noch nicht verfügbar." }
+                } catch { ConversationsModel.shared.error = "Die Stimme konnte nicht eindeutig erkannt werden. Bitte erneut einsprechen." }
             }
         }
     }

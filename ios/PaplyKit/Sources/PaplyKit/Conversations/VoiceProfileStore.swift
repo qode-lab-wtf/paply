@@ -120,6 +120,18 @@ public actor VoiceProfileStore {
         guard started == generation else { return }
         print.source = .enrollment
         try add(print, to: VoicePerson.ownerID)
+        var all = try people()
+        if let owner = all.firstIndex(where: { $0.isOwner }) {
+            let clips = all[owner].prints.filter { $0.model == print.model && $0.source == .enrollment }
+            if clips.count >= 3 {
+                let accepted = SpeakerThresholds.enrollmentInliers(clips)
+                all[owner].prints.removeAll {
+                    $0.model == print.model && $0.source == .enrollment &&
+                    !accepted.contains($0)
+                }
+                try save(all)
+            }
+        }
     }
 
     func learn(_ print: VoicePrint, candidateID: String = UUID().uuidString) throws {

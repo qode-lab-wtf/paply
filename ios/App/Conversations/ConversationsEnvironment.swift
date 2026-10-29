@@ -10,8 +10,8 @@ enum ConversationsEnvironment {
     static let store = ConversationStore(root: root)
     static let profiles = VoiceProfileStore(root: root)
     static let ledger = ConversationLedger.make(root: root)
-    static let editing: any ConversationEditing = EditingPlaceholder()
-    static func makeDiarizer() -> any SpeakerDiarizing { SingleSpeakerFallback() }
+    static var editing: any ConversationEditing { processor }
+    static func makeDiarizer() -> any SpeakerDiarizing { AvailableSpeakerDiarizer() }
     static let processor = ConversationProcessor(
         store: store, thoughts: ThoughtsEnvironment.store, profiles: profiles,
         analyzer: ConversationAnalyzer(diarizer: makeDiarizer(), ledger: ledger), environment: processorEnvironment)
@@ -123,7 +123,7 @@ enum ConversationsEnvironment {
     private static func learnWhenIdle() async {
         // Der Rückfall darf die begrenzte Warteschlange nicht ohne Lernergebnis leeren.
         let diarizer = makeDiarizer()
-        guard voiceLearningAllowed, diarizer.embeddingModel != "fallback-vad-no-voiceprint", learning == nil,
+        guard voiceLearningAllowed, ConversationModels.isReady, learning == nil,
             !ThoughtsEnvironment.isDictationBusy(), !SessionController.shared.isThoughtActive,
             !SessionController.shared.isConversationActive, !ConversationBackground.shared.isRunning
         else { return }
@@ -152,24 +152,16 @@ enum ConversationsEnvironment {
     }
 }
 
-/// EHRLICHER RÜCKFALL: Sprachpausen, aber keine Sprechertrennung und keine Stimmerkennung.
-private struct SingleSpeakerFallback: SpeakerDiarizing {
-    let embeddingModel = "fallback-vad-no-voiceprint"
-    func voiceprint(audio: URL) async throws -> VoicePrint? { nil }
-    func diarize(audio: URL, expectedSpeakers: Int?, progress: @escaping @Sendable (Double) -> Void) async throws
-        -> Diarization
-    {
-        let work = Task.detached(priority: .utility) { try SpeechRegions.read(audio) }
-        let regions = try await withTaskCancellationHandler {
-            try await work.value
-        } onCancel: {
-            work.cancel()
-        }
-        try Task.checkCancellation()
-        progress(1)
-        return Diarization(
-            segments: regions.map { .init(start: $0.lowerBound, end: $0.upperBound, cluster: 0) },
-            centroids: [:], speechSeconds: [0: regions.reduce(0) { $0 + $1.upperBound - $1.lowerBound }],
-            model: embeddingModel)
+/// Prüft den Modellstand bei jedem Lauf; fehlende Modelle lassen die Sprecherstufe offen.
+private struct AvailableSpeakerDiarizer: SpeakerDiarizing {
+    var embeddingModel: String { CAMVoiceEmbedding.modelID }
+    func voiceprint(audio: URL) async throws -> VoicePrint? {
+        guard ConversationModels.isReady else { throw ThoughtStoreError.unavailable }
+        return try await NemotronSpeakerDiarizer(directory: ConversationModels.directory).voiceprint(audio: audio)
+    }
+    func diarize(audio: URL, expectedSpeakers: Int?, progress: @escaping @Sendable (Double) -> Void) async throws -> Diarization {
+        guard ConversationModels.isReady else { throw ThoughtStoreError.unavailable }
+        return try await NemotronSpeakerDiarizer(directory: ConversationModels.directory)
+            .diarize(audio: audio, expectedSpeakers: expectedSpeakers, progress: progress)
     }
 }

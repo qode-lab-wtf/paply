@@ -129,7 +129,8 @@ struct ConversationCoreTests {
         let prints = ["S1": VoicePrint(vector: [1,0], model: "m", seconds: 5, source: .conversation), "S2": VoicePrint(vector: [0.8,0.6], model: "m", seconds: 4, source: .conversation)]
         let people = [VoicePerson(id: "owner", name: "", prints: [.init(vector: [1,0], model: "m", seconds: 10, source: .enrollment)]), VoicePerson(id: "other", name: "Anna", prints: [.init(vector: [0.9,-0.43589], model: "m", seconds: 10, source: .enrollment)])]
         let result = SpeakerIdentifier.identify(speakers, prints: prints, people: people)
-        #expect(result[0].personID == "other")
+        #expect(result[0].personID == nil)
+        #expect(result[0].suggestion?.personID == "other")
         #expect(result[1].suggestion?.personID == "owner")
         let owner = SpeakerIdentifier.identify([speakers[0]], prints: prints, people: [people[0]])
         #expect(owner[0].colorIndex == 0); #expect(owner[0].nameSource == .owner)
