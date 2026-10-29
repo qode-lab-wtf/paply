@@ -49,6 +49,13 @@
     Stücke-Verarbeitung beim Sprechen, eingeführt nach E1-IME (IME-Fix bzw. Fix-G).
   - Muss vor der Freigabe behoben und mit dem kompletten Testlauf (Android 17 + 14) belegt sein.
   - Release-Keystore liegt auf dem MacBook unter `~/Android/keys/` (sichern!). Pfade stehen in `android/docs/RELEASE.md`.
+- **Wiederaufnahme, sobald das MacBook wach ist** (die Reihenfolge ist wichtig):
+  1. Die hängenden Emulatoren beenden: `PAPLY_AVD=paply ~/Android/emu-stop.sh`, `PAPLY_AVD=paply34 ~/Android/emu-stop.sh`.
+  2. Fix-Final bauen und testen (`android/docs/FIX-FINAL.md`, Code committet, aber noch nicht gebaut).
+  3. Diktat-Regression klären (`android/docs/REGRESSION-DIKTAT.md`): JVM-Test für den Stücke-Upload,
+     Treue der Aufnahme gegenüber der Quell-WAV im Emulator, VAD-Kandidat „leiser Schluss“.
+  4. Die restlichen Punkte von `android/docs/E2E-FINAL.md` auf API 37 und API 34 nachholen.
+  5. Release aus einem sauberen Commit bauen (`mb.sh release`, `lintRelease`), danach Allan die APK und `FREUNDE.md` geben.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
