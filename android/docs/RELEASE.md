@@ -94,3 +94,9 @@ nach Abschluss bleibt nur der Hinweis auf das Tastatur-Symbol.
 ## 0.2.0 (6) – 29.10.2026
 - Paply-Knopf (Bedienungshilfe) als Hauptweg; geprüft auf API 30/34/37 (Emulator), u. a. kein doppeltes Einsetzen, Zwischenablage bleibt auf API 29–32.
 - SHA-256 `29d83a3a5236f9bfd9b3b4317d1b1fc0a5639154302e54b32e7d9363bc142955`, Commit `51028d9`.
+
+## 0.2.1 (7) – 29.10.2026
+- Tester-Feedback (Samsung S22, Android 16): Einrichtung führt in richtiger Reihenfolge durch die Android-Sperre („Eingeschränkte Einstellung“ erst nach blockiertem Versuch), Paply in der Bedienungshilfe hervorgehoben, Samsung-Pfad „Installierte Apps“.
+- Knopf neu: Pegelringe statt Pille mit Zeit/„Fertig“, Tipp auf den Knopf = einsetzen, X = verwerfen, kurzer Haken statt Erfolgstext; sitzt über der Eingabezeile (Senden frei), weicht tippbaren Elementen aus, gleitet bei Feldwechsel, bleibt während Aufnahme immer sichtbar; Leerzeichen ab Android 13; 9-min-Vorwarnung mit Haptik.
+- Abnahme Emulator API 30/34/36 (Sideload über Dateien-App, Instrumented + manuell, Google Messages): bereit. Rest klein: im Querformat mit mehrzeiligem Entwurf überlappt der Knopf die leere Feldecke; im Vollbild-Editor teils über der „Weiter“-Taste.
+- SHA-256 `e3db4757a8b4edfcaf18aeaf0446e19d14bd866e8b2b6ccf35579b87b19dbbd3`, Commit `b075036`.

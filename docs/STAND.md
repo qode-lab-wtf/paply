@@ -64,7 +64,11 @@
   Leitung per Claude-Helfer. Seit 29.10. abends: MacBook (T3 0.1.4) als Umgebung verknüpft (Tailscale, bis 28.11.,
   `t3 environment list`), SDK unter `~/Library/Android/sdk` verlinkt – Helfer können dort künftig selbst Emulatoren nutzen.
   - Branch `feat/android-v1` liegt als Sicherung auf GitHub (kein PR, `main` unberührt).
-  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.2.0.apk`.
+- **0.2.1 (29.10., nach S22-Test von Allan):** Einrichtung führt in richtiger Reihenfolge durch die Android-Sperre
+  (Freigabe-Menü erscheint erst nach blockiertem Versuch; Samsung: „Installierte Apps“). Knopf mit Pegelringen statt Pille,
+  Tipp = einsetzen, X = verwerfen, nur Haken statt Erfolgstext; sitzt über der Eingabezeile (Senden frei), bleibt während
+  der Aufnahme immer sichtbar. Emulator-Abnahme API 30/34/36 bestanden (`android/docs/RELEASE.md`).
+  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.2.1.apk`.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.

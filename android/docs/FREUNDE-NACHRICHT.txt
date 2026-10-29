@@ -1,5 +1,5 @@
 Hey! Hier ist Paply Android 0.2.1 😊
-Neu: Diktieren mit einem Tipp – über deiner normalen Tastatur erscheint ein kleines Paply-Symbol.
+Neu: Diktieren mit einem Tipp – über dem Eingabefeld erscheint ein kleines Paply-Symbol. Antippen, sprechen, nochmal antippen – fertig. Deine normale Tastatur bleibt.
 Die APK kommt als Anhang. Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben.
 Öffne Paply und tippe auf der Karte „Einrichten“ jeweils den grünen Knopf, bis alles abgehakt ist.
 Du brauchst einen kostenlosen Groq-Schlüssel – die App führt dich hin. Den Schlüssel bitte nirgends posten.
