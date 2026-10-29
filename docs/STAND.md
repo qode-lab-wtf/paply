@@ -1,8 +1,8 @@
 # Paply — Stand
 
-**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.2 veröffentlicht (Robustheit Mac/Windows, Protokoll); Praxistest durch Allan
+**Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.3 veröffentlicht (gemeinsame Polier-Quelle) und auf Allans MacBook installiert; Praxistest durch Allan
 
-## v1.15.3 — Gemeinsame Polier-Quelle (29.10.2026, lokal vorbereitet)
+## v1.15.3 — Gemeinsame Polier-Quelle (29.10.2026, veröffentlicht, MacBook installiert)
 
 - Einziger System-Prompt unter `shared/polish/system-prompt.txt`, bytegleich im Desktop eingebettet;
   englisches JSON-Nachrichtenformat wie iOS/Android, eigene Begriffe normalisiert.
@@ -10,8 +10,10 @@
   portiert. Bei Ablehnung bleibt der Rohtext; Aufnahme, Cmd+X und Einfügen unverändert.
 - 744 automatische Tests grün; 100 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
   Bekannte mobile Fehlablehnungen/heuristische Grenzen bleiben erhalten (siehe `shared/polish/README.md`).
-- Private Verlaufsauswertung nur lokal, ohne Groq-Aufrufe. Keine Veröffentlichung, kein Tag/Push;
-  mobile Prompt-Einbettungen und Gleichheitstests in den jeweiligen Branches nachziehen.
+- Allans Verlauf seit 21.10. (202 polierte Diktate, nur lokal ausgewertet): 24 schlechte Polituren würden jetzt
+  gestoppt (z. B. „guter“→„besser“, „sicher“→„nie sicher“, „same day“ übersetzt, „60“→„60000“, „gepolisht“→„gepolst“),
+  8 harmlose Grammatikkorrekturen gingen mit verloren (dann Whisper-Rohtext).
+- iOS übernommen (feat/ios-v1, `SharedPolishTests`), Android folgt im eigenen Branch.
 
 ## v1.15.2 — Robustheit Mac/Windows nach Log-Sichtung und iOS-Abgleich (28.10.2026)
 
