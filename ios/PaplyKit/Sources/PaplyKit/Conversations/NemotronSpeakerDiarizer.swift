@@ -11,6 +11,50 @@ public enum SpeakerProcessingDeferred: Error { case thermal }
 public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
     public let embeddingModel = CAMVoiceEmbedding.modelID
     public let directory: URL
+    // Alle Zugriffe auf die nicht-Sendable CoreML-Objekte sind durch diesen Lock serialisiert.
+    private final class Cache: @unchecked Sendable {
+        let lock = NSLock()
+        var models: Nemotron3Models?
+        var embedder: CAMVoiceEmbedding?
+        var key: String?
+    }
+    private static let cache = Cache()
+    public static func releaseModels() {
+        cache.lock.lock(); defer { cache.lock.unlock() }
+        cache.models = nil; cache.embedder = nil; cache.key = nil
+    }
+    public func prewarm() async throws {
+        let directory = directory
+        try await Task.detached(priority: .background) {
+            try Self.warm(directory)
+        }.value
+    }
+    private static func warm(_ directory: URL) throws {
+        cache.lock.lock(); defer { cache.lock.unlock() }
+        _ = try load(directory: directory, units: computeUnits[0])
+    }
+    private static func load(directory: URL, units: MLComputeUnits) throws -> (Nemotron3Models, CAMVoiceEmbedding) {
+        let key = directory.path + String(units.rawValue)
+        if cache.key == key, let models = cache.models, let embedder = cache.embedder {
+            ConversationDiagnostics.record("conversation.model.loaded", ["ms": 0, "compute": units.rawValue])
+            return (models, embedder)
+        }
+        let start = Date()
+        let config = Nemotron3Config.fast128
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = units
+        let model = try MLModel(contentsOf: directory.appendingPathComponent(config.modelFileName), configuration: configuration)
+        let silence = try Data(contentsOf: directory.appendingPathComponent("learnable_sil_emb.bin"))
+        guard silence.count == 512 * MemoryLayout<Float>.size else { throw ThoughtStoreError.unavailable }
+        let embedding = silence.withUnsafeBytes { bytes in
+            (0..<512).map { Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self))) }
+        }
+        let models = try Nemotron3Models(config: config, model: model, silenceEmbedding: embedding)
+        let embedder = try CAMVoiceEmbedding()
+        cache.models = models; cache.embedder = embedder; cache.key = key
+        ConversationDiagnostics.record("conversation.model.loaded", ["ms": Int(Date().timeIntervalSince(start) * 1000), "compute": units.rawValue])
+        return (models, embedder)
+    }
     private static var computeUnits: [MLComputeUnits] {
         #if os(iOS)
         var info = utsname(); uname(&info)
@@ -23,7 +67,7 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
             return [.cpuAndGPU, .cpuOnly]
         }
         #endif
-        return [.all, .cpuAndGPU, .cpuOnly]
+        return [.cpuAndNeuralEngine, .cpuAndGPU, .cpuOnly]
     }
     public init(directory: URL) { self.directory = directory }
 
@@ -63,16 +107,9 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
     private static func process(audio: URL, directory: URL, units: MLComputeUnits,
                                 progress: @Sendable (Double) -> Void) throws -> Diarization {
         try checkThermal()
+        cache.lock.lock(); defer { cache.lock.unlock() }
         let config = Nemotron3Config.fast128
-        let configuration = MLModelConfiguration()
-        configuration.computeUnits = units
-        let model = try MLModel(contentsOf: directory.appendingPathComponent(config.modelFileName), configuration: configuration)
-        let silence = try Data(contentsOf: directory.appendingPathComponent("learnable_sil_emb.bin"))
-        guard silence.count == 512 * MemoryLayout<Float>.size else { throw ThoughtStoreError.unavailable }
-        let embedding = silence.withUnsafeBytes { bytes in
-            (0..<512).map { Float(bitPattern: UInt32(littleEndian: bytes.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self))) }
-        }
-        let models = try Nemotron3Models(config: config, model: model, silenceEmbedding: embedding)
+        let (models, embedder) = try load(directory: directory, units: units)
         let engine = Nemotron3Diarizer(config: config, models: models)
         let file = try AVAudioFile(forReading: audio)
         guard file.processingFormat.sampleRate == 16_000, file.processingFormat.channelCount == 1,
@@ -97,7 +134,6 @@ public struct NemotronSpeakerDiarizer: SpeakerDiarizing {
         guard !segments.isEmpty else { throw ThoughtStoreError.unavailable }
         var seconds: [Int: Double] = [:]
         for segment in segments { seconds[segment.cluster, default: 0] += segment.end - segment.start }
-        let embedder = try CAMVoiceEmbedding()
         var centroids: [Int: [Float]] = [:]
         for cluster in seconds.keys.sorted() {
             var clean: [Range<Double>] = []

@@ -60,12 +60,13 @@ struct ConversationHardeningTests {
         #expect(cut >= 585 * 16000 && cut < 586 * 16000)
     }
 
-    @Test func contextPrioritizesNamedTopicsAndFits() {
+    @Test func contextExcludesTopicsAndFits() {
         var input = ConversationPipelineTests().input(URL(fileURLWithPath: "/tmp"))
         input.topics = (0..<300).map { .init(topicID: "t\($0)", name: "Projekt \($0)", count: 300 - $0, hint: [], about: String(repeating: "x", count: 10000)) }
         let context = ConversationSummarizer.context(input, speakers: [], raw: "Projekt 299")
         #expect(PartSplitter.estimateTokens(context) < 1200)
-        #expect(context.contains("t299: Projekt 299"))
+        #expect(!context.contains("Projekt"))
+        #expect(!context.contains("t299"))
     }
 
     @Test func invalidSpeakerReferencesAreCleaned() {

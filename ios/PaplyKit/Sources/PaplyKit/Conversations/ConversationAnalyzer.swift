@@ -23,6 +23,8 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
     }
     private func cachedDiarization(_ input: ConversationAnalysisInput,
                                   progress: @escaping @Sendable (ConversationProgress) -> Void) async throws -> Diarization {
+        let started = Date()
+        defer { ConversationDiagnostics.record("conversation.speakers.duration", ["ms": Int(Date().timeIntervalSince(started) * 1000)]) }
         let cache = input.workDirectory.appendingPathComponent("diarization.json")
         if let data = try? Data(contentsOf: cache), let saved = try? ThoughtJSON.decoder().decode(CachedDiarization.self, from: data) {
             FileSafety.excludeFromBackup(cache)
@@ -31,6 +33,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
         let value = try await diarizer.diarize(audio: input.audio, expectedSpeakers: input.expectedSpeakers) {
             progress(.init(stage: .speakers, fraction: $0))
         }
+        ConversationDiagnostics.record("conversation.speakers.count", ["count": value.speechSeconds.count])
         guard Self.valid(value) else { throw ThoughtStoreError.unavailable }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(CachedDiarization(value)), to: cache)
         FileSafety.excludeFromBackup(cache)
@@ -88,6 +91,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
             result.speakerPrints = aligned.prints; result.audioSeconds = partial.audioSeconds
             return .done(result)
         } catch {
+            ConversationDiagnostics.record("conversation.analysis.error", ["code": (error as NSError).code])
             let state: ConversationState, retry: Date?, message: String
             switch error {
             case TokenLedger.Refusal.budget(let date): state = .waitingBudget; retry = date; message = "Kontingent erreicht"
@@ -98,6 +102,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
             case is CancellationError, GroqFailure.cancelled: state = .captured; retry = nil; message = "Auswertung unterbrochen"
             default: return .failed(code: "analysis-failed")
             }
+            if let retry { ConversationDiagnostics.record("conversation.limit.wait", ["ms": max(0, Int(retry.timeIntervalSinceNow * 1000))]) }
             return partial.stagesDone.isEmpty ? .wait(state, retryAt: retry, message: message) : .partial(partial, waiting: state, retryAt: retry, message: message)
         }
     }

@@ -27,7 +27,7 @@ public enum TopicIndex {
     /// Je nicht zusammengeführtem Thema: Anzahl (ohne gelöschte), letzte Aktivität, Mitglieder.
     public static func summaries(topics: [Topic], thoughts: [Thought]) -> [Summary] {
         var members: [String: [Thought]] = [:]
-        for thought in thoughts where thought.deletedAt == nil && thought.state != .recording {
+        for thought in thoughts where thought.kind != ConversationKind.thoughtKind && thought.deletedAt == nil && thought.state != .recording {
             guard let resolved = ThoughtStore.resolve(thought.topicId, in: topics) else { continue }
             members[resolved.id, default: []].append(thought)
         }

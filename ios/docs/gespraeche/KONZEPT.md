@@ -310,3 +310,13 @@ Aufnahme auf Allans iPhone (2 Personen, 3+ Personen), keine Verschlechterung bei
 - Stimmprofile, Stimmabdrücke und Diarisierungs-Caches sind vom Backup ausgenommen; Texte bleiben sicherbar.
 - Lernen endet bei zehn Besitzer-Abdrücken. Defekte Lerndateien blockieren weitere Kandidaten nicht.
 - Groq erhält nur Pausendauer in Minuten, keine Pausen-Uhrzeiten.
+
+### Gerätefeedback: Trennung und Sprecherkorrekturen (29.10.2026)
+
+Gesprächs-Whisper erhält ausschließlich „Eigene Begriffe“, keine Themen- oder Personennamen.
+Gespräche besitzen kein Thema. Ihr interner verknüpfter Gedanke transportiert nur Aufgaben
+in Aufgaben-Reiter, Widgets und Erinnerungen; Gedankenlisten, Suche, Landkarte, Themen und
+Gedanken-KI berücksichtigen ihn nicht. Aufgaben zeigen „aus Gespräch: <Titel>“ und öffnen das Gespräch.
+Es gibt höchstens einen bestätigten Besitzer: Eine neue „Ich“-Zuordnung löst die vorherige.
+Die [S#]-Platzhalter bleiben gespeichert, sodass Namen sofort ohne erneute Auswertung wechseln.
+Aufgaben werden neu abgeleitet; abgehakte und selbst bearbeitete Aufgaben bleiben erhalten.

@@ -58,6 +58,71 @@ struct ConversationOwnerPauseTests {
         #expect(lines == ["Vorher", "Pause · 12 Min.", "Nachher", "Anruf · 3 Min."])
         #expect(ConversationText.render("[S2]", speakers: []) == "Person 2")
     }
+    @Test func ownerSwitchAndRenameRebuildLinkedThought() async throws {
+        let root = try ConversationCoreTests().root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ConversationStore(root: root)
+        let thoughts = try ThoughtStore(root: root.appendingPathComponent("thoughts"))
+        let (recording, writer) = try await store.beginRecording(trigger: .app, at: Date())
+        _ = writer.close()
+        var fixture = conversation()
+        fixture.summary?.taskCatalogVersion = 1
+        fixture.summary?.overview = "[S1] trifft [S2]"
+        fixture.summary?.points = ["[S2] hilft [S1]"]
+        fixture.summary?.commitments[1].text = "[S2] ruft [S1] an"
+        let value = fixture
+        try await store.update(recording.id) { item in
+            item.summary = value.summary; item.speakers = value.speakers
+            item.state = .done; item.stagesDone = [.speakers]
+        }
+        try await thoughts.save(Thought(id: recording.id, kind: ConversationKind.thoughtKind, trigger: .app, state: .done))
+        let processor = ConversationProcessor(store: store, thoughts: thoughts, profiles: VoiceProfileStore(root: root), analyzer: UnusedAnalyzer(), environment: .init(apiKey: { "" }))
+        try await processor.nameSpeaker(recording.id, speakerID: "S1", as: .newPerson("Alex"), rememberVoice: false)
+        try await processor.nameSpeaker(recording.id, speakerID: "S1", as: .owner, rememberVoice: false)
+        #expect(await thoughts.thought(recording.id)?.tasks.map(\.id) == ["a"])
+        try await processor.nameSpeaker(recording.id, speakerID: "S2", as: .owner, rememberVoice: false)
+        let switched = try #require(await store.conversation(recording.id))
+        #expect(switched.speakers.filter(\.isOwner).map(\.id) == ["S2"])
+        #expect(ConversationText.displayName(switched.speakers[0]) == "Alex")
+        #expect(await thoughts.thought(recording.id)?.tasks.map(\.id) == ["b"])
+        #expect(await thoughts.thought(recording.id)?.text?.contains("Alex trifft Ich") == true)
+        try await processor.nameSpeaker(recording.id, speakerID: "S1", as: .newPerson("Robin"), rememberVoice: false)
+        #expect(await thoughts.thought(recording.id)?.tasks.first?.text == "Ich ruft Robin an")
+        #expect(await thoughts.thought(recording.id)?.text?.contains("Ich hilft Robin") == true)
+    }
+
+    @Test func ownerChangePreservesDoneAndEditedTasks() {
+        var item = conversation()
+        item.speakers[0].nameSource = .owner
+        let old = ConversationTasks.derive(item, preserving: [])
+        item.speakers[0].nameSource = .none
+        item.speakers[1].nameSource = .owner
+        #expect(ConversationTasks.derive(item, preserving: old).map(\.id) == ["b"])
+        var done = old; done[0].done = true
+        #expect(ConversationTasks.derive(item, preserving: done).map(\.id) == ["a", "b"])
+        var edited = old; edited[0].owner = .user
+        #expect(ConversationTasks.derive(item, preserving: edited).map(\.id) == ["a", "b"])
+    }
+
+    @Test func conversationsNeverEnterThoughtCandidatesOrTopicCounts() async {
+        let topic = Topic(title: "Planung", icon: .messageCircle, owner: .user)
+        var thought = Thought(kind: ConversationKind.thoughtKind, trigger: .app, state: .done)
+        thought.title = "Planung"; thought.text = "Planung für morgen"; thought.topicId = topic.id
+        let summaries = TopicIndex.summaries(topics: [topic], thoughts: [thought])
+        #expect(summaries.first?.count == 0)
+        var options = CandidateFinder.Options(); options.models = []
+        let finder = CandidateFinder(thoughts: [thought], topics: [topic], options: options)
+        let candidates = await finder.candidates(forText: "Planung für morgen", languages: ["de"], excluding: "none")
+        #expect(candidates.isEmpty)
+    }
+
+    @Test func summarySchemaAndContextExcludeTopics() throws {
+        let schema = try #require(JSONSerialization.jsonObject(with: ConversationSummarizer.schema) as? [String: Any])
+        let properties = try #require(schema["properties"] as? [String: Any])
+        #expect(properties["topicID"] == nil)
+        #expect(properties["newTopic"] == nil)
+    }
+
     @Test func migrationAndMergeKeepAllTasks() async throws {
         let root = try ConversationCoreTests().root()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -25,7 +25,7 @@ public enum TopicHygieneRunner {
 
     package static func run(store: ThoughtStore, ledger: TokenLedger, apiKey: String?, force: Bool,
                             transport: GroqTransport, baseURL: URL, now: Date) async -> Outcome {
-        let thoughts = await store.all()
+        let thoughts = await store.all().filter { $0.kind != ConversationKind.thoughtKind }
         let topics = await store.topics()
         let info = await store.topicsInfo()
         let summaries = TopicIndex.summaries(topics: topics, thoughts: thoughts).filter(\.isActive)

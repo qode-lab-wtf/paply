@@ -18,9 +18,15 @@ public final class CAMVoiceEmbedding {
             // Xcode kompiliert auch die SwiftPM-Ressource beim App-Build.
             model = try MLModel(contentsOf: compiled, configuration: config)
         } else if let source = bundle.url(forResource: "CAMPlus", withExtension: "mlpackage") {
-            let compiled = try MLModel.compileModel(at: source)
-            defer { try? FileManager.default.removeItem(at: compiled) }
-            model = try MLModel(contentsOf: compiled, configuration: config)
+            let cache = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Gespraeche/compiled/" + Self.modelID + ".mlmodelc")
+            if !FileManager.default.fileExists(atPath: cache.path) {
+                let compiled = try MLModel.compileModel(at: source)
+                defer { try? FileManager.default.removeItem(at: compiled) }
+                try FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try FileManager.default.moveItem(at: compiled, to: cache)
+            }
+            model = try MLModel(contentsOf: cache, configuration: config)
         } else { throw ThoughtStoreError.unavailable }
     }
 

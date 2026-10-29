@@ -7,7 +7,8 @@ public enum ConversationTasks {
         encoder.outputFormatting = [.sortedKeys]
         let catalog = (try? encoder.encode(item.summary?.commitments ?? [])) ?? Data()
         let owners = item.speakers.filter(\.isOwner).map(\.id).sorted().joined(separator: ",")
-        return catalog.base64EncodedString() + ":" + owners
+        let speakers = (try? encoder.encode(item.speakers)) ?? Data()
+        return catalog.base64EncodedString() + ":" + owners + ":" + speakers.base64EncodedString()
     }
     public static func derive(_ conversation: Conversation, preserving existing: [ThoughtTask], now: Date = Date()) -> [ThoughtTask] {
         let owners = Set(conversation.speakers.filter(\.isOwner).map(\.id))

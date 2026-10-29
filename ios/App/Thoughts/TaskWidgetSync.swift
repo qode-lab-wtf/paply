@@ -73,7 +73,7 @@ final class TaskWidgetSync {
     private func track() {
         guard let model else { return }
         withObservationTracking {
-            _ = model.thoughts
+            _ = model.taskThoughts
             _ = model.topics
             _ = model.isLoaded
         } onChange: {
@@ -133,7 +133,7 @@ final class TaskWidgetSync {
     /// Momentaufnahme aus einem Modell (auch für die Debug-Vorschau mit Beispieldaten). `pending` gilt als erledigt.
     static func makeSnapshot(model: ThoughtsModel, pending: [TaskCompletion], now: Date) -> TaskSnapshot {
         let keys = Dictionary(pending.map { (TaskKey(thoughtID: $0.thoughtID, taskID: $0.taskID), $0.at) }, uniquingKeysWith: min)
-        let digest = TaskDigest(thoughts: model.thoughts, pending: keys, now: now, limit: TaskSnapshot.maxItems)
+        let digest = TaskDigest(thoughts: model.taskThoughts, pending: keys, now: now, limit: TaskSnapshot.maxItems)
         let items = digest.items.map { item -> TaskSnapshot.Item in
             let topic = model.topic(item.topicID)
             return TaskSnapshot.Item(
@@ -186,7 +186,7 @@ final class TaskWidgetSync {
         let requests = entries.map {
             TaskCompletionPlan.Request(id: $0.id, key: TaskKey(thoughtID: $0.thoughtID, taskID: $0.taskID), at: $0.at)
         }
-        let plan = TaskCompletionPlan.make(requests, thoughts: model.thoughts)
+        let plan = TaskCompletionPlan.make(requests, thoughts: model.taskThoughts)
         for request in plan.apply {
             model.completeTask(request.key.thoughtID, request.key.taskID, at: request.at)
         }

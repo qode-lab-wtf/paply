@@ -27,6 +27,7 @@ final class ThoughtsModel {
 
     /// ohne gelöschte, neueste zuerst
     private(set) var thoughts: [Thought] = []
+    var taskThoughts: [Thought] { byID.values.filter { $0.deletedAt == nil } }
     /// zuletzt gelöscht zuerst
     private(set) var deleted: [Thought] = []
     /// aufgelöst, ohne zusammengeführte; nach letzter Aktivität
@@ -44,7 +45,7 @@ final class ThoughtsModel {
     private var sources: [String: ThoughtSource] = [:]
 
     @ObservationIgnored private let backend: ThoughtsBackend?
-    @ObservationIgnored private var byID: [String: Thought] = [:]
+    private var byID: [String: Thought] = [:]
     @ObservationIgnored private var allTopics: [Topic] = []
     @ObservationIgnored private var topicByID: [String: Topic] = [:]
     @ObservationIgnored private var counts: [String: Int] = [:]
@@ -136,7 +137,7 @@ final class ThoughtsModel {
     }
 
     func openTasks(topicID: String?) -> [(task: ThoughtTask, thought: Thought)] {
-        thoughts
+        taskThoughts
             .filter { topicID == nil || resolvedTopic($0.topicId)?.id == topicID }
             .flatMap { thought in thought.tasks.filter { !$0.done }.map { (task: $0, thought: thought) } }
             .sorted { a, b in
@@ -152,20 +153,20 @@ final class ThoughtsModel {
     /// Erledigte der letzten `days` Tage (nil = alle), neueste zuerst
     func doneTasks(days: Int?) -> [(task: ThoughtTask, thought: Thought)] {
         let limit = days.map { Date().addingTimeInterval(-Double($0) * 86_400) } ?? .distantPast
-        return thoughts
+        return taskThoughts
             .flatMap { thought in thought.tasks.filter { $0.done && ($0.doneAt ?? .distantPast) >= limit }.map { (task: $0, thought: thought) } }
             .sorted { ($0.task.doneAt ?? .distantPast) > ($1.task.doneAt ?? .distantPast) }
     }
 
     /// Reiter „Aufgaben“: alle Aufgaben, gegliedert nach Fälligkeit (`TaskAgenda`, ohne Obergrenze)
     func taskAgenda(now: Date = Date()) -> TaskAgenda {
-        TaskAgenda(thoughts: thoughts, now: now)
+        TaskAgenda(thoughts: taskThoughts, now: now)
     }
 
     /// Lokal, sofort: ohne Groß/Klein und Akzente, UND, Wortanfänge; Ausschnitt mit Fundstellen.
     func search(_ query: String) -> [SearchHit] {
         track()
-        return searchIndex.search(query).filter { byID[$0.thoughtID]?.deletedAt == nil }
+        return searchIndex.search(query).filter { byID[$0.thoughtID]?.deletedAt == nil && byID[$0.thoughtID]?.kind != ConversationKind.thoughtKind }
     }
 
     func source(_ id: String) -> ThoughtSource? {
@@ -185,11 +186,11 @@ final class ThoughtsModel {
         var result: [(thought: Thought, link: ThoughtLink, incoming: Bool)] = []
         if let thought = byID[id] {
             for link in thought.links {
-                if let other = byID[link.target], other.deletedAt == nil { result.append((other, link, false)) }
+                if let other = byID[link.target], other.deletedAt == nil, other.kind != ConversationKind.thoughtKind { result.append((other, link, false)) }
             }
         }
         for (other, link) in incoming[id] ?? [] {
-            if let thought = byID[other], thought.deletedAt == nil { result.append((thought, link, true)) }
+            if let thought = byID[other], thought.deletedAt == nil, thought.kind != ConversationKind.thoughtKind { result.append((thought, link, true)) }
         }
         return result
     }
@@ -607,7 +608,7 @@ final class ThoughtsModel {
     private func replaceAll(_ all: [Thought], topics stored: [Topic]) {
         byID = [:]
         for thought in all where Self.isVisible(thought) { byID[thought.id] = thought }
-        thoughts = byID.values.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+        thoughts = byID.values.filter { $0.deletedAt == nil && $0.kind != ConversationKind.thoughtKind }.sorted { $0.createdAt > $1.createdAt }
         deleted = byID.values.filter { $0.deletedAt != nil }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
         allTopics = stored
         topicByID = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -649,10 +650,10 @@ final class ThoughtsModel {
                 if old.deletedAt == nil { thoughts.removeAll { $0.id == id } } else { deleted.removeAll { $0.id == id } }
             }
             if let new {
-                if new.deletedAt == nil {
+                if new.deletedAt == nil && new.kind != ConversationKind.thoughtKind {
                     let index = thoughts.firstIndex { $0.createdAt < new.createdAt } ?? thoughts.endIndex
                     thoughts.insert(new, at: index)
-                } else {
+                } else if new.deletedAt != nil {
                     let index = deleted.firstIndex { ($0.deletedAt ?? .distantPast) < (new.deletedAt ?? .distantPast) } ?? deleted.endIndex
                     deleted.insert(new, at: index)
                 }
@@ -693,6 +694,7 @@ final class ThoughtsModel {
     }
 
     private func indexForSearch(_ thought: Thought) {
+        guard thought.kind != ConversationKind.thoughtKind else { searchIndex.remove(thought.id); return }
         searchIndex.upsert(thought, topicName: resolvedTopic(thought.topicId)?.title, raw: sources[thought.id]?.text)
     }
 

@@ -66,7 +66,7 @@ enum TasksBadge {
     @MainActor
     static func count(_ model: ThoughtsModel) -> Int {
         _ = TaskDay.shared.today
-        return TaskAgenda.urgentCount(thoughts: model.thoughts)
+        return TaskAgenda.urgentCount(thoughts: model.taskThoughts)
     }
 }
 
@@ -145,7 +145,7 @@ struct TasksPage: View {
         ScrollViewReader { proxy in
             List {
                 // „Bei Uhrzeit erinnern?“ – nur mit offener Aufgabe mit Uhrzeit in der Zukunft, nie gefragt (TaskReminders)
-                TaskReminderPromptSection(thoughts: model.thoughts)
+                TaskReminderPromptSection(thoughts: model.taskThoughts)
                 if agenda.openCount == 0 {
                     allDone
                 }
@@ -587,7 +587,7 @@ struct TopicPlaque: View {
             if let topic {
                 TopicMark(topicID: topic.id, icon: topic.icon, size: 11, stroke: 2.1, relativeTo: .caption, imageScale: 1.45)
             }
-            Text(thought.displayTitle)
+            Text(thought.kind == ConversationKind.thoughtKind ? "aus Gespräch: " + thought.displayTitle : thought.displayTitle)
                 .lineLimit(1)
         }
         .font(.caption.weight(.medium))

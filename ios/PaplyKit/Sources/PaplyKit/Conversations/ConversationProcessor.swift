@@ -79,10 +79,10 @@ public actor ConversationProcessor: ConversationEditing {
             if await thoughts.thought(item.id) == nil {
                 try await thoughts.save(Thought(id: item.id, kind: ConversationKind.thoughtKind, createdAt: item.createdAt, trigger: item.trigger, state: .done))
             }
-            let topics = await thoughts.topics().filter { $0.mergedInto == nil }
+
             let input = ConversationAnalysisInput(id: item.id, audio: audio, workDirectory: store.workDirectory(item.id), recordedAt: item.createdAt,
                 expectedSpeakers: item.expectedSpeakers, gaps: item.gaps, mainLanguage: await environment.mainLanguage(), vocabulary: await environment.vocabulary(),
-                topics: topics.map { .init(topicID: $0.id, name: $0.title, count: 0, hint: [], about: $0.note) }, people: try await profiles.people(), previous: current)
+                topics: [], people: try await profiles.people(), previous: current)
             try await store.update(item.id) { $0.state = .analyzing }
             let broadcast = self.broadcast
             let store = self.store
@@ -210,20 +210,11 @@ public actor ConversationProcessor: ConversationEditing {
         if await thoughts.thought(id) == nil {
             try await thoughts.save(Thought(id: id, kind: ConversationKind.thoughtKind, createdAt: item.createdAt, durationMs: item.durationMs, trigger: item.trigger, state: .done))
         }
-        let topic: Topic?
-        switch result.topic {
-        case .existing(let id): topic = await thoughts.resolveTopic(id)
-        case .new(let name, let icon):
-            let all = await thoughts.topics()
-            let same = TopicHygiene.sameNamed(name, among: all)
-            topic = same.count == 1 ? same[0] : (same.isEmpty && TopicHygiene.isValidNewName(name) ? Topic(title: name, icon: icon, owner: .ai) : nil)
-        default: topic = nil
-        }
-        try await thoughts.update(id, topic: topic) { thought, topicID in
+        try await thoughts.update(id) { thought in
             guard thought.deletedAt == nil, thought.kind == ConversationKind.thoughtKind else { return }
             if thought.titleOwner != .user { thought.title = item.title.map { ConversationText.render($0, speakers: item.speakers) }; thought.titleOwner = .ai }
             if thought.textOwner != .user { thought.text = ConversationText.render(([summary.overview] + summary.points.map { "• " + $0 }).joined(separator: "\n"), speakers: item.speakers); thought.textOwner = .ai }
-            if thought.topicOwner != .user { thought.topicId = topicID; thought.topicOwner = .ai }
+            thought.topicId = nil; thought.topicOwner = .ai
             if item.taskDerivationKey != ConversationTasks.key(item) {
                 thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
             }
@@ -277,7 +268,7 @@ public actor ConversationProcessor: ConversationEditing {
         await lock()
         defer { unlock() }
         for item in try await store.all() {
-            if item.deletedAt == nil, item.taskDerivationKey != ConversationTasks.key(item) { try await renderThought(item.id) }
+            if item.deletedAt == nil { try await renderThought(item.id) }
             let journal = store.directory(item.id).appendingPathComponent("deletion.json")
             if FileSafety.exists(journal) {
                 let deleted = try JSONDecoder().decode(Bool.self, from: Data(contentsOf: journal))
@@ -334,6 +325,7 @@ public actor ConversationProcessor: ConversationEditing {
         }
         guard let item = try await store.conversation(id) else { return }
         try await thoughts.update(id) { thought in
+            thought.topicId = nil
             if thought.titleOwner != .user {
                 thought.title = item.title.map { ConversationText.render($0, speakers: item.speakers) }
             }
@@ -380,8 +372,15 @@ public actor ConversationProcessor: ConversationEditing {
         }
         try await store.update(conversationID) { item in
             guard let i = item.speakers.firstIndex(where: { $0.id == speakerID }) else { return }
+            if person.isOwner {
+                for other in item.speakers.indices where other != i && item.speakers[other].isOwner {
+                    item.speakers[other].personID = nil
+                    item.speakers[other].nameSource = item.speakers[other].name == nil ? .none : .user
+                    item.speakers[other].colorIndex = other + 1
+                }
+            }
             item.speakers[i].personID = person.id
-            item.speakers[i].name = person.isOwner ? nil : person.name
+            if !person.isOwner { item.speakers[i].name = person.name }
             item.speakers[i].nameSource = .user
             item.speakers[i].suggestion = nil
             if person.isOwner { item.speakers[i].colorIndex = 0 }
