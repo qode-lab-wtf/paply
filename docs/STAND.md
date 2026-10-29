@@ -47,10 +47,9 @@
     Kernfunktionen bestanden.
   - Die APK liegt mit Anleitung auf Allans MacBook unter `~/Desktop/Paply-Android/`, SHA-256 `1a00fd03…dae9`.
   - Der Signierschlüssel ist auf MacBook und Mac mini gesichert (`android/docs/RELEASE.md`).
-- **0.1.1 in Arbeit:**
-  - Whisper erfindet Text nach langem stillen Vorlauf in der Tastatur (F1).
-  - Drehen mit laufender Sprache auf Android 17 (F2).
-  - Kommt als Update über 0.1.0, die Daten bleiben.
+- **0.1.1 (2) fertig** (`android/docs/V011.md`): Lange Stille im Live-Diktat geht nicht mehr an Whisper. Drehen auf Android 17
+  sichert Gesprochenes (Zwischenablage + Hinweis). Update über 0.1.0 geprüft. APK `~/Desktop/Paply-Android/Paply-0.1.1.apk`
+  (SHA-256 `59d4862d…c522`). Rest-Grenze: Periodisches Emulator-Rauschen gilt bewusst nicht als Stille.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
