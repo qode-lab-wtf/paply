@@ -31,20 +31,12 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
     data class Step(val title: String, val detail: String, val done: Boolean, val action: String, val click: () -> Unit,
         val confirmTile: Boolean = false, val keyLink: Boolean = false)
     val context = LocalContext.current
-    var buttonEnabled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            buttonEnabled = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
-                .getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-                .any { android.content.ComponentName.unflattenFromString(it.id) == android.content.ComponentName(context, com.paply.android.button.PaplyButtonService::class.java) }
-            kotlinx.coroutines.delay(500)
-        }
-    }
+    val buttonEnabled = rememberButtonServiceEnabled()
     val steps = buildList {
         add(Step("Mikro erlauben", if (!status.microphone && status.microphoneDenied) "Ist aus. In den Android-Einstellungen bei Paply „Mikrofon“ erlauben." else if (prefs.betaThoughts) "Für Diktat und Gedanken." else "Fürs Diktat.", status.microphone, if (status.microphoneDenied) "Öffnen" else "Erlauben", microphone))
         add(Step("Benachrichtigungen erlauben", if (!status.notifications && status.notificationsDenied) "Ist aus. In den Android-Einstellungen bei Paply „Benachrichtigungen“ erlauben." else "Damit du laufende Aufnahmen immer siehst.", status.notifications, if (status.notificationsDenied) "Öffnen" else "Erlauben", notifications))
         add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }, keyLink = true))
-        add(Step("Paply-Knopf", "Neu: Diktieren mit einem Tipp neben deiner normalen Tastatur. In den Einstellungen einschalten.", prefs.paplyButton && buttonEnabled, "Einrichten", { navigate("settings") }))
+        add(Step("Paply-Knopf", "Diktiere neben deiner normalen Tastatur. Öffne die Einrichtung und tippe zuerst auf „Bedienungshilfe öffnen“.", prefs.paplyButton && buttonEnabled, "Einrichten", { navigate("settings") }))
         if (prefs.betaThoughts) add(Step("Gedanken-Knopf", "Als Kachel in den Schnelleinstellungen", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
     }
     val expandedType = LocalDensity.current.fontScale >= 1.5f

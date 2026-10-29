@@ -69,3 +69,30 @@ hintFieldPreservesClipboardApi30 und cursorAtEndPreservesClipboardApi30.
 Alle Einsetzfälle vergleichen den vollständigen Feldinhalt mit dem Verlauf;
 Fixture-Knopfbeschriftungen werden ohne Beachtung der Großschreibung gesucht.
 Version unverändert 0.2.0 (6).
+
+
+## 0.2.1 – Einrichtung
+
+Beim Samsung S22 (Android 16 / One UI 8, APK über WhatsApp) war die Anleitung
+verkehrt herum: Bei seitengeladenen Apps ab Android 13 erscheint „Eingeschränkte
+Einstellungen zulassen“ erst nach einem blockierten Einschaltversuch.
+
+Jetzt zuerst „Bedienungshilfe öffnen“ → bei Samsung „Installierte Apps“ → Paply
+→ einschalten (sonst meist „Heruntergeladene Apps“). Erst bei „Eingeschränkte
+Einstellung“ die App-Info öffnen → ⋮ oben rechts → „Eingeschränkte Einstellungen
+zulassen“, danach Schritt 1 wiederholen. Die Einstellungsseite hebt Paply nach
+Möglichkeit hervor; öffentliche Settings-Intents bleiben der Rückfall.
+
+Nach einem Versuch und Rückkehr mit ausgeschaltetem Dienst wird der App-Info-Knopf
+hervorgehoben (ab Android 13). Bei eingeschaltetem Dienst verschwinden die Schritte;
+Status-Haken und ein kurzer Fertig-Hinweis bleiben. Statusprüfung weiterhin alle
+500 ms, zusätzlich sofort bei Rückkehr. Freundetexte und Version: 0.2.1 (7).
+
+Prüfung ausschließlich über `scripts/mb.sh`, `PAPLY_WORK=work-setup021`
+(MacBook: `~/Android/work/work-setup021`):
+`:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug`
+grün. 401 Core + 433 Thoughts + 153 App bestanden, 1 bestehender Core-Test
+übersprungen; keine Testfehler. Lint: 0 Fehler, 78 Warnungen.
+Neue Tests: Samsung-/Standardtext, beide Hervorhebungs-Extras sowie Rückfälle auf
+Bedienungshilfe ohne Extras und allgemeine Einstellungen. Keine Emulator-UI und
+keine Groq-Aufrufe; Geräteabnahme der Einrichtung bleibt bei der Bauleitung.
