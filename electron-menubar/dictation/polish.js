@@ -1,5 +1,7 @@
-// Reine Prüfung der Modellantwort. Aufrufer behalten bei Ablehnung den Rohtext.
-const FILLERS = new Set(['also', 'sozusagen', 'quasi', 'halt', 'eben', 'irgendwie', 'äh', 'ähm', 'mhm', 'naja']);
+// Sicherheitsnetz auf PaplyKit-Stand. Bei Ablehnung behält der Aufrufer den Rohtext.
+const T = require('./polish-text');
+const E = require('./polish-edit-check');
+const { contentWords, negationCount } = T;
 
 function finalPolishText(content) {
   if (typeof content !== 'string') return '';
@@ -11,41 +13,40 @@ function finalPolishText(content) {
   return /<\|(?:channel\|>analysis|start\|>)/i.test(text) ? '' : text;
 }
 
-function contentWords(text) {
-  return (text.normalize('NFC').toLocaleLowerCase('de').match(/\p{L}{4,}/gu) || [])
-    .filter(word => !FILLERS.has(word));
-}
-
-const NEGATIONS = /^(?:nicht|nichts|nie|niemals|niemand|nirgends|kein|keine|keinen|keinem|keiner|keines|no|not|never)$/;
-
-function negationCount(text) {
-  return (text.normalize('NFC').toLocaleLowerCase('de').match(/\p{L}+/gu) || []).filter(word => NEGATIONS.test(word)).length;
-}
-
-function polishRejection(raw, result, { vocabulary = '' } = {}) {
+const PROFILES = Object.freeze({
+  dictation: Object.freeze({ lengthLow: 0.7, lengthHigh: 1.3, missingContent: 0.3, addedShare: 0.15 }),
+});
+const metaAnswer = new RegExp(T.lexicon.metaAnswer, 'iu');
+const wrappedInQuotes = new RegExp(T.lexicon.wrappedInQuotes, 'u');
+function polishRejection(raw, result, { vocabulary = '', strictEdits = true, profile } = {}) {
+  const limits = PROFILES[profile ?? 'dictation'];
+  if (!limits) throw new RangeError('Unbekanntes Polier-Profil');
+  if (profile) strictEdits = profile === 'dictation';
   if (!result) return 'empty';
-  if (/^(?:hier\s+(?:ist|sind|der|das)|(?:der\s+)?(?:poliert|korrigiert|überarbeitet)(?:er|e|es)\s+text\s*:|here\s+(?:is|are)|(?:polished|corrected)\s+text\s*:)/iu.test(result)
-    || /^(?:"[\s\S]*"|„[\s\S]*[“”]|“[\s\S]*”|«[\s\S]*»|'[\s\S]*'|‚[\s\S]*‘)$/u.test(result)) return 'meta';
-  const ratio = Array.from(result).length / Math.max(1, Array.from(raw.trim()).length);
-  if (ratio < 0.7 || ratio > 1.3) return 'length';
-  const before = contentWords(raw);
-  const remaining = new Map();
-  for (const word of contentWords(result)) remaining.set(word, (remaining.get(word) || 0) + 1);
-  let missing = 0;
-  for (const word of before) {
-    const count = remaining.get(word) || 0;
-    if (count) remaining.set(word, count - 1);
-    else missing++;
-  }
-  if (before.length && missing / before.length > 0.3) return 'content';
-  // Verneinung verschwunden oder hinzugekommen → Sinn gekippt, Rohtext behalten.
-  if (negationCount(raw) !== negationCount(result)) return 'negation';
-  // Neue Inhaltswörter (z. B. aus dem Hintergrund älterer Diktate) begrenzen; Wörter der
-  // eigenen Begriffsliste dürfen als Hörfehler-Korrektur auftauchen.
-  const allowed = new Set([...contentWords(raw), ...contentWords(vocabulary)]);
-  const added = contentWords(result).filter(word => !allowed.has(word)).length;
-  // Netto-Zuwachs zählt (Ersetzungen sind schon über „missing“ begrenzt).
-  return added - missing > Math.max(2, Math.ceil(before.length * 0.15)) ? 'added' : null;
+  if ((metaAnswer.test(result) && !metaAnswer.test(raw.trim())) || (wrappedInQuotes.test(result) && !wrappedInQuotes.test(raw.trim()))) return 'meta';
+  const reason = check(raw, result, vocabulary, strictEdits, raw, limits);
+  if (!reason) return null;
+  const resolved = E.resolvedSelfCorrection(raw);
+  if (resolved !== null && !check(resolved, result, vocabulary, strictEdits, raw, limits)) return null;
+  return reason;
 }
-
-module.exports = { finalPolishText, contentWords, polishRejection, negationCount };
+function check(raw, result, vocabulary, strictEdits, lengthReference, limits) {
+  const length = Array.from(result).length;
+  if (length / Math.max(1, Array.from(raw.trim()).length) < limits.lengthLow || length / Math.max(1, Array.from(lengthReference.trim()).length) > limits.lengthHigh) return 'length';
+  const [r, h] = E.compoundAligned(T.letterRuns(T.normalizedLower(raw)), T.letterRuns(T.normalizedLower(result)));
+  const before = contentWords(r.join(' ')), after = contentWords(h.join(' '));
+  const remaining = new Map();
+  for (const w of after) remaining.set(w, (remaining.get(w) || 0) + 1);
+  let missing = 0;
+  for (const w of before) {
+    if (remaining.get(w) > 0) remaining.set(w, remaining.get(w) - 1); else missing++;
+  }
+  if (before.length && missing / before.length > limits.missingContent) return 'content';
+  if (negationCount(raw) !== negationCount(result)) return 'negation';
+  if (!E.digitsPreserved(raw, result)) return 'digits';
+  if (strictEdits) { const reason = E.substitutionRejection(raw, result, vocabulary); if (reason) return reason; }
+  const allowed = new Set([...before, ...contentWords(vocabulary)]);
+  const added = after.filter(w => !allowed.has(w)).length;
+  return added - missing > Math.max(2, Math.ceil(before.length * limits.addedShare)) ? 'added' : null;
+}
+module.exports = { finalPolishText, contentWords, polishRejection, negationCount, PROFILES };

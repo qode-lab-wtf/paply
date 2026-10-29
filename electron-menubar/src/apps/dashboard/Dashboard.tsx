@@ -702,7 +702,7 @@ function StatsView({ stats, history, settings }: { stats: Stats | null; history:
               <div className="flex items-center gap-2 mb-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
               </div>
-              <p className="text-2xl font-bold">{stats.minutesTotal}<span className="text-sm font-normal ml-1">min</span></p>
+              <p className="text-2xl font-bold">{Math.round(stats.minutesTotal)}<span className="text-sm font-normal ml-1">min</span></p>
               <p className="text-xs text-muted-foreground">Aufnahmezeit</p>
             </div>
             <div className="p-4 rounded-lg bg-muted">
@@ -830,10 +830,10 @@ function StatsView({ stats, history, settings }: { stats: Stats | null; history:
                 Erfolgsquote
               </div>
               <p className="text-2xl font-bold text-green-500">
-                {stats.sessionsCount > 0 ? Math.round(((stats.sessionsCount - stats.errorsCount) / stats.sessionsCount) * 100) : 100}%
+                {stats.sessionsCount + stats.errorsCount > 0 ? Math.round((stats.sessionsCount / (stats.sessionsCount + stats.errorsCount)) * 100) : 100}%
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {stats.sessionsCount - stats.errorsCount} erfolgreich, {stats.errorsCount} Fehler
+                {stats.sessionsCount} erfolgreich, {stats.errorsCount} Fehler
               </p>
             </div>
           </div>

@@ -43,6 +43,15 @@ app.on('second-instance', () => { app.whenReady().then(() => { const win = creat
 
 const path = require('node:path');
 const fs = require('node:fs');
+// Diagnose-Protokoll so früh wie möglich: nach Sperre und (Test-)userData, vor allen Modulen.
+// Kein Diktat-/Notiztext darin (nur mit PAPLY_DEBUG_TEXT=1); Tray: „Protokoll anzeigen“.
+const diagnosticLog = require('./diagnostics/log-file').installLogFile({
+  directory: path.join(app.getPath('userData'), 'logs'), console, process,
+});
+console.log('[Start] paply', require('./package.json').version, `${process.platform}/${process.arch}`,
+  `OS ${require('node:os').release()}`, `Electron ${process.versions.electron}`);
+app.on('render-process-gone', (_event, _contents, details) => console.error('[Absturz] Fenster:', details.reason, details.exitCode));
+app.on('child-process-gone', (_event, details) => console.error('[Absturz] Hilfsprozess:', details.type, details.reason, details.exitCode));
 const { createNotes } = require('./notes');
 let notesApp = null;
 // Native macOS updater closes windows before app.before-quit.
@@ -51,7 +60,7 @@ const notesBridge = { dictationState() {}, meetingStarted() {} };
 protocol.registerSchemesAsPrivileged([{ scheme: 'paply-notes', privileges: { standard: true, secure: true, stream: true } }]);
 const { createDictationJobs } = require('./dictation/jobs');
 const { isBackupAtOrBefore, compareBackups } = require('./dictation/backup-order');
-const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut } = require('./dictation/policies');
+const { friendlyError, explainDictationStatus, readResponse, replaceShortcut, ensureGlobeReady, sameShortcut, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs } = require('./dictation/policies');
 const { captureMacApp, pasteMac } = require('./dictation/mac-paste');
 const { createWindowsFocus, pasteWindows } = require('./dictation/windows-paste');
 const { buildPolishMessages, recentRawDictations, uncertainSegments, vocabularyPrompt, isVocabularyEcho } = require('./dictation/polish-prompt');
@@ -192,7 +201,10 @@ function getStore() {
         geminiApiKey: '',
         llmProvider: 'auto', // 'auto' | 'groq' | 'gemini'
       },
+      // Enthält API-Schlüssel: nur für den eigenen Benutzer lesbar (wirkt ab dem nächsten Speichern).
+      configFileMode: 0o600,
     });
+    try { if (!isWin) fs.chmodSync(store.path, 0o600); } catch { /* Datei kommt beim ersten Speichern */ }
     migrateMeetingModel(store);
   }
   return store;
@@ -480,6 +492,8 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
   if (!apiKey) {
     throw new Error('Groq API Key nicht konfiguriert');
   }
+  // Alle Versuche zusammen dauern höchstens so lange wie bisher (4 × 60 s) bzw. ein großer Upload + 60 s.
+  const budgetEnd = Date.now() + transcriptionBudgetMs(audioBuffer.length);
 
   for (let i = 0; i <= retries; i++) {
     try {
@@ -500,7 +514,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
           Authorization: `Bearer ${apiKey}`,
         },
         body: formData,
-      }, 60000);
+      }, Math.max(1000, Math.min(transcriptionTimeoutMs(audioBuffer.length), budgetEnd - Date.now())));
 
       if (!res.ok) {
         const errText = res.body;
@@ -508,9 +522,11 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
 
         // If it's a rate limit or server error, maybe retry
         if (res.status >= 500 || res.status === 429) {
-          if (i < retries) {
+          // Nennt Groq eine lange Wartezeit (z. B. Tageslimit), nicht stur wiederholen.
+          const wait = res.status === 429 ? retryAfterMs(res.retryAfter) : null;
+          if (i < retries && !(wait > 10000)) {
             console.log(`Retrying due to status ${res.status}...`);
-            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            await new Promise(r => setTimeout(r, Math.max(wait ?? 0, 1000 * (i + 1))));
             continue;
           }
         }
@@ -567,9 +583,9 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         causeMessage.includes('ECONNRESET') ||
         error.name === 'AbortError';
 
-      if (isNetworkError && i < retries) {
-        // Exponentielles Backoff: 1s, 2s, 4s
-        const delay = Math.min(1000 * Math.pow(2, i), 8000);
+      // Exponentielles Backoff: 1s, 2s, 4s – nur solange das Gesamtbudget reicht.
+      const delay = Math.min(1000 * Math.pow(2, i), 8000);
+      if (isNetworkError && i < retries && budgetEnd - Date.now() > delay + 5000) {
         console.log(`Network error detected (${causeCode || error.name}), retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -1163,12 +1179,19 @@ function updateTrayMenu() {
     { type: 'separator' },
     { label: 'Einstellungen...', click: createSettingsWindow },
     { label: 'Nach Updates suchen...', click: () => checkForUpdates(false) },
+    { label: 'Protokoll anzeigen', click: showDiagnosticLog },
     { label: 'Über paply', click: showAboutDialog },
     { type: 'separator' },
     { label: 'Beenden', accelerator: getQuitAccelerator(), click: () => app.quit() },
   ];
 
   tray.setContextMenu(Menu.buildFromTemplate(template));
+}
+
+// Markiert paply.log im Finder/Explorer, damit man sie direkt weiterschicken kann.
+function showDiagnosticLog() {
+  if (fs.existsSync(diagnosticLog.path)) shell.showItemInFolder(diagnosticLog.path);
+  else shell.openPath(path.dirname(diagnosticLog.path));
 }
 
 function setupTray() {
@@ -1290,6 +1313,11 @@ async function beginRecording() {
     positionRecordingWindow(win);
     win.showInactive();
     win.webContents.send('recording:start', { jobId: job.id });
+    // Modellliste fürs Polieren während der Aufnahme vorladen; darf den Start nie stören.
+    try {
+      const store = getStore();
+      if (store.get('enablePolish')) runPolish.prefetch(store.get('groqApiKey'));
+    } catch { /* nur Tempo */ }
   } catch { failRecording(job, 'Aufnahme nicht gestartet'); }
 }
 
@@ -1713,6 +1741,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     await job.turn;
     addToHistory({
       transcript, polished, language,
+      durationMinutes: measurement ? measurement.durationMs / 60000 : 0,
       level: measurement ? {
         speechMs: Math.round(measurement.speechMs), durationMs: Math.round(measurement.durationMs),
         peakDbfs: Math.round(measurement.peakDbfs), floorDbfs: Math.round(measurement.floorDbfs),
@@ -1766,6 +1795,8 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     });
 
     hideRecordingWindow(5000, job);
+    // Fehler einmal je Aufnahme zählen (Dashboard: Erfolgsquote), nach der Anzeige.
+    try { if (!isRetry) updateStats(0, 0, true); } catch { /* nur Statistik */ }
 
     return { success: false, error };
   } finally {

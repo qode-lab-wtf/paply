@@ -11,9 +11,16 @@ import Foundation
 ///   bleiben unangetastet, schon aufgenommene Gedanken werden weiter geordnet. Eine gerade beginnende Aufnahme bricht
 ///   ab (`ThoughtStartGate`), verschobene Erinnerungen („In 1 Stunde“) bleiben gespeichert.
 enum BetaFeatures {
+    /// Beta „Gespräche“: fehlt der Wert, gilt im Debug AN und in TestFlight/Release AUS, bis Allans Gerätetest
+    /// bestanden ist (29.10.: Zusammenführung in `feat/ios-v1`, Tester sollen es nicht ungefragt sehen).
     static let conversationsKey = "paply.beta.conversations"
+    #if DEBUG
+    static let conversationsDefault = true
+    #else
+    static let conversationsDefault = false
+    #endif
     static func conversationsEnabled(_ defaults: UserDefaults?) -> Bool {
-        defaults?.object(forKey: conversationsKey) as? Bool ?? true
+        defaults?.object(forKey: conversationsKey) as? Bool ?? conversationsDefault
     }
 
     static let thoughtsKey = "paply.beta.thoughts"

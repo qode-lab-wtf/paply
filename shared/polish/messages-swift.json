@@ -1,0 +1,5 @@
+[
+  "{\n  \"background_do_not_edit\" : [\n    \"eins\",\n    \"zwei\",\n    \"drei\"\n  ],\n  \"current_dictation\" : \"Hallo / Welt\\n\\\"Zitat\\\" 😀\",\n  \"custom_terms\" : \"Paply, Müller, OS11\",\n  \"uncertain_segments\" : [\n    {\n      \"avg_logprob\" : -0.7,\n      \"end\" : 2.5,\n      \"start\" : 1,\n      \"text\" : \"Papli / App\"\n    },\n    {\n      \"avg_logprob\" : -0.8,\n      \"text\" : \"ohne Zeit\"\n    }\n  ]\n}",
+  "{\n  \"background_do_not_edit\" : [\n\n  ],\n  \"current_dictation\" : \"Hallo\",\n  \"uncertain_segments\" : [\n\n  ]\n}",
+  "{\n  \"background_do_not_edit\" : [\n\n  ],\n  \"current_dictation\" : \"Zahlen\",\n  \"uncertain_segments\" : [\n    {\n      \"avg_logprob\" : -1.00001,\n      \"end\" : 1e-07,\n      \"start\" : -0,\n      \"text\" : \"klein\"\n    },\n    {\n      \"avg_logprob\" : -0.7,\n      \"end\" : 1e+20,\n      \"start\" : 1e+16,\n      \"text\" : \"groß\"\n    }\n  ]\n}"
+]
