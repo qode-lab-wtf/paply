@@ -82,7 +82,7 @@ struct ConversationPipelineTests {
         await processor.kick(); await processor.waitUntilIdle()
         let thought = await thoughts.thought(item.id)
         #expect(thought?.title == "Nutzertitel"); #expect(thought?.text == "Nutzertext")
-        #expect(thought?.tasks.count == 1); #expect(thought?.kind == ConversationKind.thoughtKind)
+        #expect(thought?.tasks.isEmpty == true); #expect(thought?.kind == ConversationKind.thoughtKind)
         try await processor.delete(item.id)
         #expect(await thoughts.thought(item.id)?.deletedAt != nil)
         try await processor.restore(item.id)

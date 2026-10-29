@@ -61,10 +61,14 @@ public struct ConversationGap: Codable, Sendable, Equatable {
     public var at: Double
     /// Dauer der Unterbrechung in Echtzeit (in der Datei fehlt dieser Ton)
     public var seconds: Double
-    /// "call", "interruption", "dictation" – nie Inhalt
+    /// "pause" oder "call"; ältere Dateien auch "interruption"/"dictation". Nie Inhalt.
     public var reason: String
+    public var startedAt: Date?
+    public var endedAt: Date?
 
-    public init(at: Double, seconds: Double, reason: String) {
+    public init(at: Double, seconds: Double, reason: String, startedAt: Date? = nil, endedAt: Date? = nil) {
+        self.startedAt = startedAt
+        self.endedAt = endedAt
         self.at = at
         self.seconds = seconds
         self.reason = reason
@@ -74,7 +78,7 @@ public struct ConversationGap: Codable, Sendable, Equatable {
 // MARK: - Sprecher
 
 public enum SpeakerNameSource: String, Codable, Sendable {
-    /// Unbekannt → Anzeige „Sprecher n“
+    /// Unbekannt → Anzeige „Person n“
     case none
     /// Stimmprofil des iPhone-Besitzers erkannt
     case owner
@@ -113,7 +117,7 @@ public struct SpeakerSuggestion: Codable, Sendable, Equatable {
 public struct ConversationSpeaker: Codable, Sendable, Identifiable, Equatable {
     /// "S1", "S2" … – stabil innerhalb des Gesprächs, nach Sprechanteil absteigend vergeben
     public var id: String
-    /// Anzeigename; nil → „Sprecher n“. Für den Besitzer nil + `personID == VoicePerson.ownerID` (Anzeige „Ich“).
+    /// Anzeigename; nil → „Person n“. Für den Besitzer nil + `personID == VoicePerson.ownerID` (Anzeige „Ich“).
     public var name: String?
     public var personID: String?
     public var nameSource: SpeakerNameSource
@@ -133,7 +137,7 @@ public struct ConversationSpeaker: Codable, Sendable, Identifiable, Equatable {
         self.colorIndex = colorIndex
     }
 
-    public var isOwner: Bool { personID == VoicePerson.ownerID }
+    public var isOwner: Bool { nameSource == .owner || (personID == VoicePerson.ownerID && nameSource == .user) }
 }
 
 /// Ein Redebeitrag: zusammenhängende Sätze eines Sprechers.
@@ -178,7 +182,10 @@ public struct ConversationTranscript: Codable, Sendable, Equatable {
 
 // MARK: - Zusammenfassung
 
-/// Zusage einer anderen Person („Ich schicke Ihnen das Angebot bis Freitag“) – steht im Gespräch, nicht im Aufgaben-Reiter.
+/// Alle belegten Aufgaben des Gesprächs, unabhängig von der Besitzer-Zuordnung.
+/// Der bestehende JSON-Schlüssel `commitments` bleibt für alte Dateien erhalten.
+/// speakerID ist S1 … oder "shared" (gemeinsam/unklar); alte Zusagen bleiben unverändert lesbar.
+/// Die stabile id wird auch für die Aufgabe im verknüpften Gedanken verwendet.
 public struct ConversationCommitment: Codable, Sendable, Identifiable, Equatable {
     public var id: String
     public var speakerID: String
@@ -200,11 +207,14 @@ public struct ConversationSummary: Codable, Sendable, Equatable {
     public var overview: String
     /// Kernpunkte und Entscheidungen, je ein kurzer Satz (höchstens 8)
     public var points: [String]
+    /// nil in alten Dateien: Aufgaben des verknüpften Gedankens werden einmal als unklar übernommen.
+    public var taskCatalogVersion: Int?
     public var commitments: [ConversationCommitment]
 
     public init(overview: String, points: [String], commitments: [ConversationCommitment] = []) {
         self.overview = overview
         self.points = points
+        self.taskCatalogVersion = 1
         self.commitments = commitments
     }
 }
@@ -407,7 +417,7 @@ public struct ConversationAnalysis: Sendable, Equatable {
     public var transcript: ConversationTranscript?
     public var title: String?
     public var summary: ConversationSummary?
-    /// Aufgaben des Besitzers (bzw. ohne klaren Zuständigen) → Gedanke → Reiter „Aufgaben“
+    /// Legacy-Transportfeld; neue Auswertungen lassen es leer. Alle Aufgaben stehen in summary.commitments.
     public var tasks: [TaskDraft]
     public var topic: TopicDecision?
     public var audioSeconds: Double
@@ -481,7 +491,7 @@ public enum SpeakerIdentity: Sendable, Equatable {
 /// aktuellen Namen). Stimmabdrücke gehen nur bei `rememberVoice` in das Profil der Person.
 public protocol ConversationEditing: Sendable {
     func nameSpeaker(_ conversationID: String, speakerID: String, as identity: SpeakerIdentity, rememberVoice: Bool) async throws
-    /// „Nein“ auf „Ist das …?“ – Vorschlag weg, kommt für diesen Sprecher nicht wieder
+    /// „Nein“ auf „Ist das …?“ – Vorschlag weg, kommt für diesen Person nicht wieder
     func rejectSuggestion(_ conversationID: String, speakerID: String) async throws
     /// Alle Beiträge von `from` gehören zu `into`; `from` verschwindet
     func mergeSpeakers(_ conversationID: String, from: String, into: String) async throws
@@ -493,14 +503,14 @@ public protocol ConversationEditing: Sendable {
 /// Personen stehen in Zusammenfassung, Punkten, Aufgaben und Zusagen als Platzhalter „[S2]“ (Sprecher-ID in eckigen
 /// Klammern). Angezeigt wird immer der aktuelle Name – Umbenennen braucht keinen neuen KI-Lauf.
 public enum ConversationText {
-    /// „Ich“ für den Besitzer, sonst Name bzw. „Sprecher n“
+    /// „Ich“ für den Besitzer, sonst Name bzw. „Person n“
     public static func displayName(_ speaker: ConversationSpeaker) -> String {
         if speaker.isOwner { return "Ich" }
         if let name = speaker.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
-        return "Sprecher " + speaker.id.drop(while: { !$0.isNumber })
+        return "Person " + speaker.id.drop(while: { !$0.isNumber })
     }
 
-    /// Ersetzt „[S2]“ durch den Anzeigenamen. Unbekannte IDs bleiben als „Sprecher n“ lesbar.
+    /// Ersetzt „[S2]“ durch den Anzeigenamen. Unbekannte IDs bleiben als „Person n“ lesbar.
     public static func render(_ text: String, speakers: [ConversationSpeaker]) -> String {
         guard text.contains("[S") else { return text }
         var result = ""
@@ -515,7 +525,7 @@ public enum ConversationText {
                 continue
             }
             let id = "S" + digits
-            result += speakers.first { $0.id == id }.map(displayName) ?? "Sprecher \(digits)"
+            result += speakers.first { $0.id == id }.map(displayName) ?? "Person \(digits)"
             rest = after.dropFirst(digits.count + 1)
         }
         return result + rest

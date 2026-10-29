@@ -22,6 +22,11 @@ danach festgezurrt). Schnittstellen: `PaplyKit/Sources/PaplyKit/Conversations/Co
 | Geräte | Muss auf jedem iPhone mit iOS 18 laufen (Neural Engine hat jedes; sonst CPU/GPU, langsamer). Kein Apple-Intelligence-Zwang. |
 | Android | Algorithmus plattformneutral in MESSUNG.md + §5 beschrieben; Android baut ihn mit sherpa-onnx nach. |
 
+Alle belegten Aufgaben bleiben am Gespräch (`summary.commitments`, Sprecher-ID oder `shared`).
+Nur sicher erkannte oder als „Ich“ bestätigte Personen liefern Aufgaben für den Reiter; gemeinsame/unklare
+Aufgaben erst, wenn ein Besitzer feststeht. Alte Zusagen bleiben lesbar, alte Gedanken-Aufgaben werden einmal
+als unklar in den Katalog übernommen (`taskCatalogVersion = 1`).
+
 ## 1. Erlebnis
 
 **In einem Satz:** Knopf drücken, iPhone hinlegen, reden. Danach steht da, wer was gesagt hat, was herauskam und was
@@ -29,7 +34,7 @@ du zu tun hast – am richtigen Thema.
 
 1. **Aufnehmen ist heilig.** Ton liegt auf der Platte, bevor etwas ins Netz geht. Anruf, Diktat, Netzverlust,
    Absturz verzögern höchstens die Auswertung.
-2. **Lieber „Sprecher 2“ als falsch.** Ein falscher Name ist schlimmer als kein Name. Feste Namen nur bei sicherem
+2. **Lieber „Person 2“ als falsch.** Ein falscher Name ist schlimmer als kein Name. Feste Namen nur bei sicherem
    Stimmtreffer oder nach Bestätigung; sonst Vorschlag mit Fragezeichen.
 3. **Ein Tipp korrigiert.** Name bestätigen, Sprecher zusammenlegen, einen Beitrag umhängen – je ein Tipp bzw. ein
    kurzes Menü. Was der Nutzer setzt, fasst die KI nie wieder an.
@@ -54,6 +59,12 @@ Der Reiter erscheint, wenn die Reiter-Leiste aktiv ist (Beta „Gedanken & Aufga
 
 ## 3. Bildschirme
 
+Unbekannte heißen Person 1, 2 …; das Detail zeigt alle Aufgaben nach Person, „Ich“ zuerst und abhakbar.
+Ohne sichere Besitzer-Zuordnung führt „Welche Person bist du?“ zur Auswahl. Zuordnen oder Zusammenlegen
+leitet den Aufgaben-Reiter neu ab; abgehakte und selbst bearbeitete Aufgaben bleiben erhalten.
+Aufnahme, Leiste und Live Activity bieten Pause / Weiter neben Fertig; die Zeit steht während Pausen.
+
+
 Akzent für Gespräche: **Himmelblau-Türkis** (z. B. `#5AC8FA` → `#3FD0C9`), damit man Gedanke (Mint-Gold), Diktat
 (Grün) und Gespräch (Blau) auf einen Blick unterscheidet. Sprecher-Palette: 8 gut unterscheidbare, gedämpfte Farben
 auf dunklem Grund; der Besitzer immer Paply-Grün.
@@ -68,7 +79,7 @@ Gespräche                                          ⋯  ⚙
  └──────────────────────────────────────────────┘
  Heute
   Angebot Dachanlage Müller            14:05 · 23 Min
-  ● ● ●  Ich, Herr Müller, Sprecher 3    ◆ RA Solartechnik
+  ● ● ●  Ich, Herr Müller, Person 3    ◆ RA Solartechnik
  Gestern
   Abstimmung Netzgrün                  09:30 · 48 Min
   ● ●    Ich, Testname                    ◆ Netzgrün      ✓ 3 Aufgaben
@@ -113,7 +124,7 @@ und 5 Min. vor der Grenze.
 Angebot Dachanlage Müller                       (Titel, antippen = umbenennen)
 Heute, 14:05 · 23 Min · ◆ RA Solartechnik        (Thema-Chip antippen = Thema wählen)
 
-[● Ich] [● Herr Müller ?] [● Sprecher 3]        Sprecher-Chips; „?“ = Vorschlag → Tipp öffnet Bestätigung
+[● Ich] [● Herr Müller ?] [● Person 3]        Sprecher-Chips; „?“ = Vorschlag → Tipp öffnet Bestätigung
 
 Zusammenfassung
   Kurz (1–3 Sätze) …
@@ -134,7 +145,7 @@ Gespräch                                         (Wortlaut, Beiträge nach Spre
 - **Sprecher-Chip antippen** → Blatt „Wer ist das?“: Vorschläge zuerst (Name aus dem Gespräch mit Beleg-Zitat, bekannte
   Stimmen, „Ich“), Eingabefeld für einen neuen Namen, „Mit anderem Sprecher zusammenlegen …“, „Stimme nicht merken“.
   Bestätigen speichert den Stimmabdruck dieser Person (lokal) → nächstes Mal ohne Frage.
-- **Vorschlag als Frage im Kopf**, wenn vorhanden: dezentes Band „Ist Sprecher 2 Herr Müller?  [Ja] [Nein]“ – höchstens
+- **Vorschlag als Frage im Kopf**, wenn vorhanden: dezentes Band „Ist Person 2 Herr Müller?  [Ja] [Nein]“ – höchstens
   eins gleichzeitig, das mit dem größten Sprechanteil zuerst.
 - **Beitrag lange drücken** → „Anderer Sprecher …“, „Text kopieren“, „Ab hier anhören“.
 - **Antippen eines Beitrags** spielt die Stelle ab (Ton bleibt 30 Tage, siehe §7), damit man prüfen kann, wer es war.
@@ -170,9 +181,13 @@ nicht erscheint: Share-Extension als eigenes Target nachrüsten.
   (Anrufe sollen klingeln).
 - Unterbrechung: Aufnahme pausiert, Lücke wird vermerkt (`ConversationGap`), nach Ende der Unterbrechung automatisch
   fortsetzen; geht das im Hintergrund nicht, Live Activity „Pausiert – zum Fortsetzen tippen“.
-- Grenze: 4 Std. (Live Activities leben höchstens 8 Std.), Hinweis 5 Min. vorher. Speicher: Start nur mit ≥ 500 MB frei;
+- Grenze: 4 Std. aufgenommener Ton oder 8 Std. insgesamt, jeweils Hinweis 5 Min. vorher. Speicher: Start nur mit ≥ 500 MB frei;
   bei < 200 MB während der Aufnahme sauber beenden und auswerten.
 - Gleichzeitig nur ein Gespräch. Gedanken-Knopf während eines Gesprächs: Gedanke läuft normal (eigener Empfänger).
+
+Eigene Pausen (`pause`) und Anrufe (`call`) speichern Tonposition, Dauer sowie Uhrzeit von/bis.
+Wortlaut und KI sehen eine Trennzeile („Pause · 12 Min. (14:32–14:44)“). Anrufe setzen automatisch fort,
+eine zusätzlich gesetzte eigene Pause bleibt bestehen.
 
 ## 5. Sprecher erkennen (plattformneutral)
 
@@ -199,7 +214,7 @@ Gerüst:
    (Lücken: nächstes Segment). Danach Beiträge bilden: Satzgrenzen aus Satzzeichen/Pausen, Sprecherwechsel innerhalb
    eines Satzes nur bei klarer Evidenz, sonst Mehrheit im Satz. Unsichere Stellen (Überlappung, Einwurf < 1 s) markieren.
 4. **Wer ist wer:** Cluster-Abdruck gegen bekannte Profile (Kosinus; mehrere Abdrücke je Person, bester bzw. Mittel der
-   besten). Über der festen Schwelle → Name fest (`owner`/`profile`). Im Graubereich → Vorschlag. Darunter → „Sprecher n“.
+   besten). Über der festen Schwelle → Name fest (`owner`/`profile`). Im Graubereich → Vorschlag. Darunter → „Person n“.
    Ein Profil höchstens einem Cluster zuordnen (Zuordnung global optimal, nicht gierig).
 5. **Namen aus dem Gespräch:** Die KI schlägt je Sprecher-ID einen Namen mit wörtlichem Beleg vor; der Code prüft, dass
    der Beleg im Wortlaut steht und der Name darin vorkommt. Nur Vorschlag, nie fester Name ohne Tipp.
@@ -210,7 +225,7 @@ Gerüst:
 ### Kurze Einwürfe — plattformneutrale Regeln
 
 Wörter werden an Satzzeichen (`.`, `!`, `?`) und Pausen über 0,8 Sekunden gruppiert.
-Glättung ändert einen Sprecher nur bei mindestens 70 % Wortmehrheit der Gruppe;
+Glättung ändert einen Person nur bei mindestens 70 % Wortmehrheit der Gruppe;
 eine normalisierte Überlappungsdifferenz `(beste − zweite) / Wortdauer` ab 0,6 bleibt geschützt
 (ohne Überlappung: 0). Gezählt werden Wörter, nicht ihre Dauer.
 Isolierte Beiträge ausschließlich aus Lautäußerungen (kleine de/en-Liste: mhm, hm, hmm,
@@ -232,8 +247,7 @@ Text erhalten; nur Sprecher und Eigentümerschaft werden übertragen.
   Er darf: Titel, Zusammenfassung, Kernpunkte, Aufgaben (mit Zitat), Zusagen anderer (mit Zitat), Thema (vorhandene ID,
   keins oder Vorschlag), Namensvorschläge je Sprecher (mit Zitat). Er darf **nichts** an Themen, anderen Gedanken oder vom
   Nutzer gesetzten Feldern ändern. Prompt knapp, Rechte im Code durchgesetzt.
-- Aufgaben nur für den Besitzer (Sprecher „Ich“) oder ohne klaren Zuständigen → Gedanke/Aufgaben-Reiter. Zusagen anderer
-  → nur im Gespräch. Zitate werden im Wortlaut geprüft (wie `ThoughtValidator`), Fälligkeiten über `SpokenTime`.
+- Alle Aufgaben mit Zuständigkeit → Gespräch; nur sichere Besitzer-Aufgaben sowie bei bekanntem Besitzer unklare/gemeinsame → Aufgaben-Reiter. Zitate werden im Wortlaut geprüft (wie `ThoughtValidator`), Fälligkeiten über `SpokenTime`.
 - **Free-Tier-Grenzen (gemessen 29.10.):** `gpt-oss-120b` und `-20b` je 8000 Tokens/Min., 1000 Anfragen/Tag; Whisper je
   Modell 7200 Audio-s/Std. Lange Gespräche: Wortlaut in Stücke (≤ ca. 4500 Tokens Eingabe), je Stück Kernpunkte,
   Aufgaben, Zusagen, Namenshinweise; danach ein Abschluss-Lauf über die Stück-Ergebnisse. Takt nach den

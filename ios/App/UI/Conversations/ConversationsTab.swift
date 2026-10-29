@@ -169,8 +169,9 @@ struct ConversationCapturePresentation: ViewModifier {
                 if let active = capture.active {
                     TimelineView(.periodic(from: .now, by: 1)) { time in
                         ConversationRecordingView(
-                            elapsed: time.date.timeIntervalSince(active.startedAt), paused: active.paused,
+                            elapsed: capture.elapsed, paused: active.paused,
                             showGuidance: AppSettings.shared.conversationRecordingCount < 3, level: { capture.level },
+                            onPause: { capture.setPaused(!active.paused) },
                             onFinish: {
                                 capture.finish()
                                 navigation.showCurrent = false
@@ -200,9 +201,9 @@ struct ConversationActiveBar: View {
         if let active = capture.active {
             TimelineView(.periodic(from: .now, by: 1)) { time in
                 ConversationRecordingBar(
-                    elapsed: time.date.timeIntervalSince(active.startedAt), paused: active.paused,
+                    elapsed: capture.elapsed, paused: active.paused,
                     level: { capture.level }, onOpen: { ConversationNavigation.shared.showCurrent = true },
-                    onFinish: { capture.finish() })
+                    onPause: { capture.setPaused(!active.paused) }, onFinish: { capture.finish() })
             }
         }
     }
