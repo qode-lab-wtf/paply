@@ -5,6 +5,7 @@ struct ConversationRecordingView: View {
     let paused: Bool
     let showGuidance: Bool
     let level: () -> Float
+    var onPause: () -> Void = {}
     let onFinish: () -> Void
     let onDiscard: () -> Void
     let onMinimize: () -> Void
@@ -23,7 +24,7 @@ struct ConversationRecordingView: View {
             }.padding(.horizontal, 24)
             ScrollView {
                 VStack(spacing: 26) {
-                    if paused { Text("Pausiert – Anruf").padding(12).paplyGlass(.bar) }
+                    if paused { Text("Pausiert").padding(12).paplyGlass(.bar) }
                     EchoOrb(size: 200, mode: paused ? .starting : .listening,
                             primary: ConversationTint.blue, secondary: ConversationTint.turquoise,
                             auraColors: [ConversationTint.blue, ConversationTint.turquoise], level: level)
@@ -40,6 +41,7 @@ struct ConversationRecordingView: View {
                     }
                 }.padding(24).frame(maxWidth: .infinity)
             }
+            Button(paused ? "Weiter" : "Pause", action: onPause).buttonStyle(.bordered).frame(minHeight: 44)
             Button(action: onFinish) {
                 Label("Fertig", systemImage: "checkmark").font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 56)
@@ -63,6 +65,7 @@ struct ConversationRecordingBar: View {
     let paused: Bool
     let level: () -> Float
     let onOpen: () -> Void
+    var onPause: () -> Void = {}
     let onFinish: () -> Void
     var body: some View {
         HStack(spacing: 12) {
@@ -71,12 +74,13 @@ struct ConversationRecordingBar: View {
                     EchoOrb(size: 28, mode: paused ? .starting : .listening, showsAura: false,
                             primary: ConversationTint.blue, secondary: ConversationTint.turquoise, level: level)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(paused ? "Pausiert – Anruf" : "Gespräch").font(.subheadline.weight(.semibold))
+                        Text(paused ? "Pausiert" : "Gespräch").font(.subheadline.weight(.semibold))
                         Text(ConversationTint.clock(elapsed)).font(.caption).monospacedDigit()
                     }
                     Spacer(minLength: 0)
                 }.frame(minHeight: 44).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("Gespräch öffnen, \(ConversationTint.clock(elapsed))")
+            Button(paused ? "Weiter" : "Pause", action: onPause).frame(minWidth: 44, minHeight: 44)
             Button("Fertig", action: onFinish).font(.subheadline.weight(.semibold))
                 .frame(minWidth: 64, minHeight: 44)
                 .foregroundStyle(Color.paplyForestDeep).background(ConversationTint.fill, in: Capsule())

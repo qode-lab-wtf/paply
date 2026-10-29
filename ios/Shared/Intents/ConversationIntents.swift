@@ -79,3 +79,23 @@ enum ConversationIntentForward {
         throw ThoughtIntentError.refused("Öffne Paply einmal, dann klappt der Knopf.")
     }
 }
+
+struct PauseConversationIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource { "Gespräch pausieren oder fortsetzen" }
+    static var isDiscoverable: Bool { false }
+    @Parameter(title: "Gespräch") var conversationID: String
+    @Parameter(title: "Pause") var paused: Bool
+    init() {}
+    init(id: String, paused: Bool) { conversationID = id; self.paused = paused }
+    func perform() async throws -> some IntentResult {
+        #if PAPLY_APP
+        await MainActor.run {
+            if ConversationCapture.shared.active?.id == conversationID { ConversationCapture.shared.setPaused(paused) }
+        }
+        #else
+        SharedStore.write(ConversationCommand(sequence: UUID(), finishID: conversationID, paused: paused), .conversationCommand)
+        DarwinBus.shared.post(.conversationToggle)
+        #endif
+        return .result()
+    }
+}

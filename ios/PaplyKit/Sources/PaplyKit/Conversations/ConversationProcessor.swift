@@ -205,23 +205,12 @@ public actor ConversationProcessor: ConversationEditing {
             topic = same.count == 1 ? same[0] : (same.isEmpty && TopicHygiene.isValidNewName(name) ? Topic(title: name, icon: icon, owner: .ai) : nil)
         default: topic = nil
         }
-        let drafts = result.tasks.map { draft in
-            let due = DueDate.resolved(draft.dueHint, reference: item.createdAt, now: Date())
-            return ThoughtTask(text: draft.text, quote: draft.quote, dueHint: draft.dueHint, dueAt: due?.date, dueHasTime: due?.hasTime, owner: .ai)
-        }
-        var templates = try readEdits(id)
-        for draft in drafts { templates.tasks[draft.id] = draft.text }
-        try writeEdits(templates, id)
         try await thoughts.update(id, topic: topic) { thought, topicID in
             guard thought.deletedAt == nil, thought.kind == ConversationKind.thoughtKind else { return }
             if thought.titleOwner != .user { thought.title = item.title.map { ConversationText.render($0, speakers: item.speakers) }; thought.titleOwner = .ai }
             if thought.textOwner != .user { thought.text = ConversationText.render(([summary.overview] + summary.points.map { "• " + $0 }).joined(separator: "\n"), speakers: item.speakers); thought.textOwner = .ai }
             if thought.topicOwner != .user { thought.topicId = topicID; thought.topicOwner = .ai }
-            let kept = thought.tasks.filter { $0.owner == .user || $0.done }
-            thought.tasks = kept + drafts.filter { draft in !kept.contains { RawText.sameTask($0, draft) } }
-            for i in thought.tasks.indices where thought.tasks[i].owner != .user && !thought.tasks[i].done {
-                thought.tasks[i].text = ConversationText.render(thought.tasks[i].text, speakers: item.speakers)
-            }
+            thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
             thought.ai = item.ai
             thought.state = .done
         }
@@ -271,6 +260,7 @@ public actor ConversationProcessor: ConversationEditing {
         await lock()
         defer { unlock() }
         for item in try await store.all() {
+            if item.deletedAt == nil { try await renderThought(item.id) }
             let journal = store.directory(item.id).appendingPathComponent("deletion.json")
             if FileSafety.exists(journal) {
                 let deleted = try JSONDecoder().decode(Bool.self, from: Data(contentsOf: journal))
@@ -304,8 +294,16 @@ public actor ConversationProcessor: ConversationEditing {
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(edits), to: store.directory(id).appendingPathComponent("edits.json"))
     }
     private func renderThought(_ id: String) async throws {
+        if let old = try await store.conversation(id), old.summary?.taskCatalogVersion == nil,
+           let linked = await thoughts.thought(id), old.summary != nil {
+            try await store.update(id) { item in
+                for task in linked.tasks where !(item.summary?.commitments.contains { $0.id == task.id } ?? false) {
+                    item.summary?.commitments.append(.init(id: task.id, speakerID: "shared", text: task.text, quote: task.quote, dueHint: task.dueHint))
+                }
+                item.summary?.taskCatalogVersion = 1
+            }
+        }
         guard let item = try await store.conversation(id) else { return }
-        let edits = try readEdits(id)
         try await thoughts.update(id) { thought in
             if thought.titleOwner != .user {
                 thought.title = item.title.map { ConversationText.render($0, speakers: item.speakers) }
@@ -313,11 +311,7 @@ public actor ConversationProcessor: ConversationEditing {
             if thought.textOwner != .user, let summary = item.summary {
                 thought.text = ConversationText.render(([summary.overview] + summary.points.map { "• " + $0 }).joined(separator: "\n"), speakers: item.speakers)
             }
-            for i in thought.tasks.indices where thought.tasks[i].owner != .user && !thought.tasks[i].done {
-                if let template = edits.tasks[thought.tasks[i].id] {
-                    thought.tasks[i].text = ConversationText.render(template, speakers: item.speakers)
-                }
-            }
+            thought.tasks = ConversationTasks.derive(item, preserving: thought.tasks)
         }
         broadcast.yield(.changed(id))
     }
@@ -414,7 +408,14 @@ public actor ConversationProcessor: ConversationEditing {
         try await store.saveVoiceprints(prints, for: conversationID)
         try await store.update(conversationID) { item in
             item.speakers.removeAll { $0.id == from }
-            if let i = item.speakers.firstIndex(where: { $0.id == into }) { item.speakers[i].speechSeconds += source.speechSeconds }
+            if let i = item.speakers.firstIndex(where: { $0.id == into }) {
+                item.speakers[i].speechSeconds += source.speechSeconds
+                if source.isOwner {
+                    item.speakers[i].personID = VoicePerson.ownerID
+                    item.speakers[i].nameSource = .user
+                    item.speakers[i].name = nil
+                }
+            }
             func replace(_ text: String) -> String { text.replacingOccurrences(of: "[\(from)]", with: "[\(into)]") }
             item.title = item.title.map(replace)
             if var summary = item.summary {

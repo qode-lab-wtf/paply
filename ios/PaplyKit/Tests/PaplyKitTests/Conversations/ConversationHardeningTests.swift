@@ -223,8 +223,8 @@ private struct EditingAnalyzer: ConversationAnalyzing {
         return .done(.init(stagesDone: ConversationStage.allCases, speakers: speakers, speakerPrints: [:],
             transcript: .init(utterances: [.init(id: "u0", speakerID: "S1", start: 0, end: 0.1, text: "Bitte anrufen.")],
                               languages: ["de"], model: "test", createdAt: input.recordedAt),
-            title: "[S1] plant", summary: .init(overview: "[S1] hilft [S2].", points: []),
-            tasks: [.init(text: "[S1] anrufen", quote: "Bitte anrufen.", dueHint: nil)], topic: nil,
+            title: "[S1] plant", summary: .init(overview: "[S1] hilft [S2].", points: [], commitments: [.init(id: "task1", speakerID: "S1", text: "[S1] anrufen", quote: "Bitte anrufen.")]),
+            tasks: [], topic: nil,
             audioSeconds: 0.2, usage: nil, model: nil))
     }
 }
@@ -246,7 +246,9 @@ extension ConversationHardeningTests {
         try await processor.rejectSuggestion(item.id, speakerID: "S2")
         try await processor.mergeSpeakers(item.id, from: "S1", into: "S2")
         try await processor.nameSpeaker(item.id, speakerID: "S2", as: .newPerson("Anna"), rememberVoice: false)
-        #expect(await thoughts.thought(item.id)?.tasks.first?.text == "Anna anrufen")
+        #expect(await thoughts.thought(item.id)?.tasks.isEmpty == true)
+        try await processor.nameSpeaker(item.id, speakerID: "S2", as: .owner, rememberVoice: false)
+        #expect(await thoughts.thought(item.id)?.tasks.first?.text == "Ich anrufen")
         try await thoughts.update(item.id) {
             $0.tasks[0].text = "Mein eigener Auftrag"
             $0.tasks[0].owner = .user
@@ -260,7 +262,7 @@ extension ConversationHardeningTests {
         #expect(try await store.conversation(item.id)?.speakers.map(\.id) == ["S2"])
         #expect(try await store.conversation(item.id)?.speakers.first?.suggestion == nil)
         #expect(try await store.transcript(item.id)?.utterances.first?.speakerID == "S2")
-        #expect(await thoughts.thought(item.id)?.text == "Anna hilft Anna.")
+        #expect(await thoughts.thought(item.id)?.text == "Ich hilft Ich.")
         #expect(await thoughts.thought(item.id)?.title == "Mein eigener Titel")
         #expect(await thoughts.thought(item.id)?.tasks.contains { $0.text == "Mein eigener Auftrag" && $0.owner == .user } == true)
     }

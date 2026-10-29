@@ -39,6 +39,10 @@ final class ConversationCapture {
     @ObservationIgnored private var gaps: [ConversationGap] = []
     @ObservationIgnored private var bootstrapped = false
     @ObservationIgnored private var lastCommand: UUID?
+    private var manualPause = false
+    private var interrupted = false
+    private var gapReason = "call"
+    var elapsed: Double { Double(writer?.durationMs ?? 0) / 1000 }
     var level: Float { sink?.level ?? 0 }
 
     func bootstrap() {
@@ -54,7 +58,9 @@ final class ConversationCapture {
             self.lastCommand = command.sequence
             Task {
                 if let id = command.finishID {
-                    if self.active?.id == id { self.finish() }
+                    if self.active?.id == id {
+                        if let paused = command.paused { self.setPaused(paused) } else { self.finish() }
+                    }
                 } else { _ = await self.toggle(trigger: .control) }
             }
         }
@@ -82,6 +88,8 @@ final class ConversationCapture {
             let prepared = try await store.beginRecording(trigger: trigger, at: Date())
             writer = prepared.audio
             gaps = []
+            manualPause = false
+            interrupted = false
             pauseAt = nil
             active = Active(id: prepared.conversation.id, startedAt: prepared.conversation.createdAt)
             startActivity()
@@ -159,24 +167,44 @@ final class ConversationCapture {
     }
     func discard() { finish(discard: true) }
 
+    func setPaused(_ paused: Bool) {
+        guard active != nil, !finishing else { return }
+        manualPause = paused
+        reconcilePause()
+    }
     func pause(needsTap: Bool = false) {
-        guard active != nil else { return }
-        if pauseAt == nil {
-            pauseAt = Date()
-            gapPosition = sink?.pause() ?? 0
-        }
-        active?.paused = true
-        update(.paused, note: needsTap ? "Pausiert – zum Fortsetzen tippen" : nil)
+        interrupted = true
+        reconcilePause()
+        if needsTap { update(.paused, note: "Pausiert – zum Fortsetzen tippen") }
     }
     func resume() {
-        guard active != nil, pauseAt != nil else { return }
-        closeGap()
-        sink?.resume()
-        active?.paused = false
-        update(.recording)
+        interrupted = false
+        reconcilePause()
+    }
+    private func reconcilePause() {
+        guard active != nil else { return }
+        let shouldPause = manualPause || interrupted
+        let reason = interrupted ? "call" : "pause"
+        if shouldPause {
+            if pauseAt != nil && gapReason != reason { closeGap() }
+            if pauseAt == nil {
+                gapPosition = sink?.pause() ?? elapsed
+                pauseAt = Date()
+                gapReason = reason
+            }
+        } else {
+            closeGap()
+            sink?.resume()
+        }
+        active?.paused = shouldPause
+        update(shouldPause ? .paused : .recording)
     }
     private func closeGap() {
-        if let pauseAt { gaps.append(ConversationGap(at: gapPosition, seconds: Date().timeIntervalSince(pauseAt), reason: "interruption")) }
+        if let pauseAt {
+            let end = Date()
+            gaps.append(ConversationGap(at: gapPosition, seconds: end.timeIntervalSince(pauseAt),
+                reason: gapReason, startedAt: pauseAt, endedAt: end))
+        }
         pauseAt = nil
     }
     func importAudio(_ url: URL) async {
@@ -206,16 +234,22 @@ final class ConversationCapture {
     private func startTicker() {
         ticker?.cancel()
         ticker = Task {
+            var warnedWall = false
             var warnedTwo = false
             var warnedLimit = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard !Task.isCancelled, let active else { return }
-                let seconds = Date().timeIntervalSince(active.startedAt)
-                if seconds >= 14_400 || freeBytes < 200_000_000 || writer?.hasFailed == true {
-                    notice = seconds >= 14_400 ? "Vier Stunden – Gespräch gesichert." : "Speicher knapp – Gespräch gesichert."
+                let seconds = elapsed
+                let wallSeconds = Date().timeIntervalSince(active.startedAt)
+                if seconds >= 14_400 || wallSeconds >= 28_800 || freeBytes < 200_000_000 || writer?.hasFailed == true {
+                    notice = wallSeconds >= 28_800 ? "Acht Stunden – Gespräch gesichert." : seconds >= 14_400 ? "Vier Stunden – Gespräch gesichert." : "Speicher knapp – Gespräch gesichert."
                     finish()
                     return
+                }
+                if wallSeconds >= 28_500, !warnedWall {
+                    warnedWall = true
+                    update(active.paused ? .paused : .recording, alert: "Noch 5 Min. bis zum Ende der Aufnahme.")
                 }
                 if seconds >= 14_100, !warnedLimit {
                     warnedLimit = true
@@ -259,7 +293,9 @@ final class ConversationCapture {
         state.phase = phase
         state.stage = stage
         state.note = note ?? alert
-        state.elapsed = Double(writer?.durationMs ?? 0) / 1000
+        state.elapsed = elapsed
+        state.pausedAt = pauseAt
+        if active != nil { state.startedAt = Date().addingTimeInterval(-elapsed) }
         Task {
             await activity.update(ActivityContent(state: state, staleDate: nil),
                 alertConfiguration: alert.map { AlertConfiguration(title: "Paply-Gespräch", body: LocalizedStringResource(stringLiteral: $0), sound: .default) })

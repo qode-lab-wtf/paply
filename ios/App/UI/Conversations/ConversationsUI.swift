@@ -22,7 +22,7 @@ enum ConversationTint {
     }
     static func name(_ speaker: ConversationSpeaker) -> String {
         if speaker.isOwner { return "Ich" }
-        return speaker.name ?? "Sprecher \(speaker.id.dropFirst())"
+        return ConversationText.displayName(speaker)
     }
     static func clock(_ seconds: Double) -> String {
         let s = max(0, Int(seconds))

@@ -7,13 +7,14 @@ struct ConversationActivityAttributes: ActivityAttributes {
         var phase: Phase
         var startedAt: Date
         var elapsed: Double = 0
+        var pausedAt: Date?
         var stage: String?
         var note: String?
         var caption: String {
             if let note { return note }
             switch phase {
             case .recording: return "Gespräch"
-            case .paused: return "Pausiert – Anruf"
+            case .paused: return pausedAt.map { "Pausiert seit " + $0.formatted(date: .omitted, time: .shortened) } ?? "Pausiert"
             case .processing: return stage ?? "Wird ausgewertet …"
             case .done: return "Fertig"
             case .waiting: return "Gesichert – geht später weiter"
@@ -31,4 +32,5 @@ struct ConversationStateFile: Codable, Sendable {
 struct ConversationCommand: Codable, Sendable {
     var sequence: UUID
     var finishID: String?
+    var paused: Bool? = nil
 }

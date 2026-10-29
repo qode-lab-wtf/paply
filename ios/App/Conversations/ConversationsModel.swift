@@ -58,9 +58,7 @@ final class ConversationsModel {
                 try await action()
                 await reload()
             } catch {
-                self.error =
-                    (error as? EditingPlaceholder.Unavailable)?.errorDescription
-                    ?? "Das hat nicht geklappt. Bitte erneut versuchen."
+                self.error = "Das hat nicht geklappt. Bitte erneut versuchen."
                 Diag.log("conversation.action.failed", ["code": .i((error as NSError).code)])
             }
         }
@@ -90,7 +88,7 @@ final class ConversationsModel {
                 } else if let name = speaker.name {
                     identity = .newPerson(name)
                 } else {
-                    throw EditingPlaceholder.Unavailable()
+                    throw ThoughtStoreError.unavailable
                 }
                 try await editing.nameSpeaker(id, speakerID: speaker.id, as: identity, rememberVoice: false)
             }
@@ -100,12 +98,17 @@ final class ConversationsModel {
         let summary = item.conversation.summary
         var parts = [item.conversation.title ?? "Gespräch", summary?.overview ?? ""]
         parts += summary?.points.map { "• " + $0 } ?? []
-        parts += item.tasks.map { ($0.done ? "☑ " : "☐ ") + $0.text }
-        parts += summary?.commitments.map { "[\($0.speakerID)]: \($0.text)" } ?? []
+        parts += summary?.commitments.map { task in
+            let linked = item.tasks.first { $0.id == task.id }
+            let person = task.speakerID == "shared" ? "Gemeinsam / unklar" : "[\(task.speakerID)]"
+            return (linked?.done == true ? "☑ " : "☐ ") + person + ": " + (linked?.text ?? task.text)
+        } ?? []
+        let catalogIDs = Set(summary?.commitments.map(\.id) ?? [])
+        parts += item.tasks.filter { !catalogIDs.contains($0.id) }.map { ($0.done ? "☑ " : "☐ ") + $0.text }
         return ConversationText.render(parts.joined(separator: "\n\n"), speakers: item.conversation.speakers)
     }
     func copyTranscript(_ item: ConversationDisplay) {
-        UIPasteboard.general.string = (transcripts[item.id] ?? []).map { utterance in
+        UIPasteboard.general.string = ConversationText.transcriptLines(transcripts[item.id] ?? [], gaps: item.conversation.gaps) { utterance in
             ConversationText.render("[\(utterance.speakerID)]: \(utterance.text)", speakers: item.conversation.speakers)
         }.joined(separator: "\n\n")
     }

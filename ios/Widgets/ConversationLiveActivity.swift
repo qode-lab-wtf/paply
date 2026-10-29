@@ -62,7 +62,7 @@ private struct ConversationTime: View {
             if state.phase == .recording {
                 Text(timerInterval: state.startedAt...Date.distantFuture, countsDown: false)
             } else if state.phase == .paused {
-                Image(systemName: "pause.fill")
+                Text(Duration.seconds(state.elapsed).formatted(.time(pattern: .minuteSecond)))
             } else {
                 Image(systemName: state.phase == .done ? "checkmark" : "ellipsis")
             }
@@ -74,9 +74,15 @@ private struct ConversationFinish: View {
     let state: ConversationActivityAttributes.ContentState
     var body: some View {
         if state.phase == .recording || state.phase == .paused {
+            HStack {
+            Button(intent: PauseConversationIntent(id: id, paused: state.phase != .paused)) {
+                Label(state.phase == .paused ? "Weiter" : "Pause", systemImage: state.phase == .paused ? "play.fill" : "pause.fill")
+                    .frame(maxWidth: .infinity).padding(.vertical, 6)
+            }.buttonStyle(.bordered).tint(conversationBlue)
             Button(intent: FinishConversationIntent(id: id)) {
                 Label("Fertig", systemImage: "checkmark").frame(maxWidth: .infinity).padding(.vertical, 6)
             }.buttonStyle(.borderedProminent).tint(conversationBlue).foregroundStyle(.black)
+            }
         }
     }
 }
