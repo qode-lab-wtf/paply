@@ -260,3 +260,10 @@ Zweige `codex/local-meeting-quality`, `claude/funny-hypatia-86wimp` (in main), `
 `fix/meeting-mic-quality`, `claude/add-issue-creation-KPFtg` (paply.dev-Planung → `~/Vibe/paply.dev/docs/`),
 `claude/evaluate-polishing-models-2MXQA` (überholter Windows-Signing-Fix). Codex-Unterlagen und
 Messprotokolle liegen in `docs/archiv/codex-lokalversuch-2026-09-21/`.
+
+## Ideen Android (Tester 29.10., noch nicht beauftragt)
+- Konto bzw. Abgleich: Transkripte vom Handy auch am Laptop (Desktop-Paply). Das braucht einen Server oder Sync und
+  widerspricht „Daten nur auf dem Gerät“. Allan entscheidet.
+- Paply-Knopf in der Werkzeugleiste von Gboard bzw. Samsung-Tastatur: Fremde Apps können das nicht. Die Systemtaste unten
+  in der Navigationsleiste ist der Weg.
+
