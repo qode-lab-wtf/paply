@@ -461,7 +461,7 @@ constructor(
         }
         currentCoroutineContext().ensureActive()
         val pieces =
-            synchronized(lock) { plan ?: makePlan(audio.size, measured).also { plan = it } }
+            synchronized(lock) { plan ?: makePlan(audio, measured).also { plan = it } }
         var failure: GroqFailure? = null
         for (index in pieces.indices) if (pieces[index].result?.succeeded != true) {
             val piece = pieces[index]
@@ -528,10 +528,23 @@ constructor(
         )
     }
 
+    private fun hasQuietVoice(audio: ShortArray, start: Int): Boolean {
+        var run = 0
+        val n = VoiceActivityDetector.frameLength
+        for (offset in start until audio.size step n) {
+            val frame = VoiceActivityDetector.analyze(
+                FloatArray(minOf(n, audio.size - offset)) { audio[offset + it] / 32768f }, -100.0)
+            run = if (frame.periodicity >= VoiceActivityDetector.voicedPeriodicity) run + 1 else 0
+            if (run >= VoiceActivityDetector.minRunFrames) return true
+        }
+        return false
+    }
+
     private fun makePlan(
-        sampleCount: Int,
+        audio: ShortArray,
         measured: VoiceActivityDetector,
     ): MutableList<PlanPiece> {
+        val sampleCount = audio.size
         val pieces = mutableListOf<PlanPiece>()
         fun addPending(start: Int, end: Int) {
             val last = pieces.lastOrNull()
@@ -546,7 +559,10 @@ constructor(
         if (tailStart < sampleCount) {
             val tail = tailStart / VoiceActivityDetector.frameLength until measured.frameCount
             val pendingBefore = pieces.lastOrNull()?.let { it.result == null } ?: false
-            if (chunks.isEmpty() || pendingBefore || measured.hasAnyActivity(tail))
+            // Recheck quiet voiced runs below the normal VAD energy gate.
+            // Stationary noise and isolated clicks still do not trigger an upload.
+            if (chunks.isEmpty() || pendingBefore || measured.hasAnyActivity(tail) ||
+                hasQuietVoice(audio, tailStart))
                 addPending(tailStart, sampleCount)
         }
         val bounded = if (options.removeLongSilence) pieces.flatMap { piece ->

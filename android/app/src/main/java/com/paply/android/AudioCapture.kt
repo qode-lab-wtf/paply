@@ -26,6 +26,7 @@ object MicrophoneLease {
 
 /** Only the DUMP-protected debug receiver/tests can set these. Never a product preference. */
 internal object CaptureDebug {
+    @Volatile var retainPcm = false
     @Volatile var silenced = false
     @Volatile var deadObject = false
     @Volatile var nudgeEveryMs = 120_000L
@@ -102,8 +103,11 @@ class AudioCapture(private val context: Context, val file: File, private val max
         var voiced = 0L; var frames = 0L; var firstVoiced = -1L; var lastVoiced = 0L
         var error: String? = null; var lastReport = 0L; var rebuilt = false
         var writer: WAVWriter? = null; var duration = 0
+        var debugPcm: WAVWriter? = null
         try {
             writer = thoughtWriter ?: WAVWriter(file.toPath())
+            if (BuildConfig.DEBUG && CaptureDebug.retainPcm && onSamples != null)
+                debugPcm = WAVWriter(File(context.filesDir, "debug-live.wav").toPath())
             val samples = ShortArray(320)
             while (running.get() && SystemClock.elapsedRealtime() - startedAt < maxMs) {
                 // After DEAD_OBJECT, rebuild once; Android alone decides whether the client is silenced.
@@ -132,7 +136,8 @@ class AudioCapture(private val context: Context, val file: File, private val max
                 if (count == 0) { Thread.sleep(10); continue }
                 // Exclude interrupted blocks from BOTH retained WAV and the IME pipeline.
                 if (silenced) continue
-                writer.append(FloatArray(count) { samples[it] / 32768f }); frames += count
+                debugPcm?.append(samples.copyOf(count))
+                writer.append(samples.copyOf(count)); frames += count
                 onSamples?.invoke(samples.copyOf(count))
                 var sum = 0.0
                 for (i in 0 until count) sum += samples[i].toDouble() * samples[i]
@@ -153,6 +158,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
         } catch (e: Exception) { error = e.javaClass.simpleName; Diag.event("audio.error type=$error")
         } finally {
             running.set(false); level = 0f
+            runCatching { debugPcm?.close() }
             // Free the microphone BEFORE disk finalization or any processing.
             releaseRecorder(); MicrophoneLease.release(this)
             duration = runCatching { writer?.close() ?: 0 }.getOrElse {

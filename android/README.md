@@ -92,3 +92,20 @@ Für die nächste Version `versionName` ändern und `versionCode` erhöhen (`app
 Release verwendet R8 und Ressourcenverkleinerung, keine Debug-Receiver oder Testdaten.
 Freundes-Anleitung: [FREUNDE.md](docs/FREUNDE.md), Begleittext: [FREUNDE-NACHRICHT.txt](docs/FREUNDE-NACHRICHT.txt).
 Prüfstand und offene Punkte: [RELEASE.md](docs/RELEASE.md).
+
+### PCM-Regression (Debug / lokale Fake-Server)
+
+Der DUMP-geschützte Debug-Befehl `retain-pcm-on` behält die nächste und folgende
+Live-IME-Aufnahmen als app-private `files/debug-live.wav` (jeweils überschrieben).
+Nach Aufnahmeende per `adb exec-out run-as com.paply.android cat files/debug-live.wav`
+abholen; `retain-pcm-off` deaktiviert und löscht die Datei. Standard ist aus.
+Keine echten Stimmen als Testressourcen einchecken.
+
+`RegressionAudioTest` prüft synthetische PCM mit MockWebServer. Optional führt
+`-Ppaply.regression.fixtures=/absoluter/pfad` zusätzlich `testname.wav` und `long.wav`
+aus (PCM16, mono, 16 kHz); explizit angegebene fehlende Dateien schlagen fehl.
+Die beiden WAVs werden auch in 320er-Blöcken mit 20-ms-Takt geprüft.
+`scripts/compare-capture.py quelle.wav aufnahme.wav` benötigt NumPy/SciPy und
+liefert globalen Kreuzkorrelationsversatz sowie lokale 20-ms-Fenster.
+Schwache Korrelation ist ein Hinweis auf verändertes Audio, kein alleiniger
+Beweis für fehlende Wörter; periodische Sprache kann mehrdeutige Treffer liefern.

@@ -26,7 +26,9 @@ class WAVWriter(val url: Path) {
         handle.write(header(0))
     }
 
-    fun append(samples: FloatArray) {
+    fun append(samples: FloatArray) = append(AudioEncoder.int16(samples))
+
+    fun append(samples: ShortArray) {
         if (samples.isEmpty()) return
         val copy = samples.copyOf()
         synchronized(lifecycle) {
@@ -34,7 +36,7 @@ class WAVWriter(val url: Path) {
             queue.execute {
                 if (!failed)
                     try {
-                        val pcm = AudioEncoder.int16(copy)
+                        val pcm = copy
                         val data = ByteBuffer.allocate(pcm.size * 2).order(ByteOrder.LITTLE_ENDIAN)
                         pcm.forEach { data.putShort(it) }
                         handle.write(data.array())

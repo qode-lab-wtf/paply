@@ -17,6 +17,8 @@ class DebugControlReceiver : BroadcastReceiver() {
                 finally { file.delete() }
                 Diag.event("debug.key.loaded")
             }
+            "retain-pcm-on" -> CaptureDebug.retainPcm = true
+            "retain-pcm-off" -> { CaptureDebug.retainPcm = false; File(context.filesDir, "debug-live.wav").delete() }
             "silence-on" -> CaptureDebug.silenced = true
             "silence-off" -> CaptureDebug.silenced = false
             "dead-object" -> CaptureDebug.deadObject = true

@@ -11,3 +11,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)
 }
+
+// Optional external synthetic WAV evidence; an explicitly supplied missing fixture fails.
+tasks.withType<Test>().configureEach {
+    providers.gradleProperty("paply.regression.fixtures").orNull?.let {
+        systemProperty("paply.regression.fixtures", it)
+    }
+}
