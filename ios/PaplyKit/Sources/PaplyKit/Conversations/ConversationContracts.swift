@@ -463,3 +463,61 @@ public protocol ConversationRecordingStore: Sendable {
     /// `expectedSpeakers` = 2, wenn die Datei zwei getrennte Kanäle hat.
     func importAudio(from url: URL, at: Date) async throws -> Conversation
 }
+
+// MARK: - Bearbeiten durch den Nutzer (Oberfläche ruft, PaplyKit setzt um)
+
+/// Wer ist dieser Sprecher? (Sprecher-Blatt „Wer ist das?“)
+public enum SpeakerIdentity: Sendable, Equatable {
+    /// „Das bin ich“
+    case owner
+    /// Bekannte Stimme
+    case person(String)
+    /// Neuer Name; legt eine Person an
+    case newPerson(String)
+}
+
+/// Alle Änderungen setzen `Owner.user` bzw. `SpeakerNameSource.user` (fasst die KI nie wieder an), schreiben
+/// `conversation.json`/`transcript.json` atomar und aktualisieren den verknüpften Gedanken (Titel, Text, Aufgaben mit
+/// aktuellen Namen). Stimmabdrücke gehen nur bei `rememberVoice` in das Profil der Person.
+public protocol ConversationEditing: Sendable {
+    func nameSpeaker(_ conversationID: String, speakerID: String, as identity: SpeakerIdentity, rememberVoice: Bool) async throws
+    /// „Nein“ auf „Ist das …?“ – Vorschlag weg, kommt für diesen Sprecher nicht wieder
+    func rejectSuggestion(_ conversationID: String, speakerID: String) async throws
+    /// Alle Beiträge von `from` gehören zu `into`; `from` verschwindet
+    func mergeSpeakers(_ conversationID: String, from: String, into: String) async throws
+    /// Ein Beitrag gehört einem anderen Sprecher
+    func reassignUtterance(_ conversationID: String, utteranceID: String, to speakerID: String) async throws
+    func rename(_ conversationID: String, title: String) async throws
+}
+
+/// Personen stehen in Zusammenfassung, Punkten, Aufgaben und Zusagen als Platzhalter „[S2]“ (Sprecher-ID in eckigen
+/// Klammern). Angezeigt wird immer der aktuelle Name – Umbenennen braucht keinen neuen KI-Lauf.
+public enum ConversationText {
+    /// „Ich“ für den Besitzer, sonst Name bzw. „Sprecher n“
+    public static func displayName(_ speaker: ConversationSpeaker) -> String {
+        if speaker.isOwner { return "Ich" }
+        if let name = speaker.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        return "Sprecher " + speaker.id.drop(while: { !$0.isNumber })
+    }
+
+    /// Ersetzt „[S2]“ durch den Anzeigenamen. Unbekannte IDs bleiben als „Sprecher n“ lesbar.
+    public static func render(_ text: String, speakers: [ConversationSpeaker]) -> String {
+        guard text.contains("[S") else { return text }
+        var result = ""
+        var rest = Substring(text)
+        while let open = rest.range(of: "[S") {
+            result += rest[..<open.lowerBound]
+            let after = rest[open.upperBound...]
+            let digits = after.prefix(while: \.isNumber)
+            guard !digits.isEmpty, after.dropFirst(digits.count).first == "]" else {
+                result += "[S"
+                rest = after
+                continue
+            }
+            let id = "S" + digits
+            result += speakers.first { $0.id == id }.map(displayName) ?? "Sprecher \(digits)"
+            rest = after.dropFirst(digits.count + 1)
+        }
+        return result + rest
+    }
+}
