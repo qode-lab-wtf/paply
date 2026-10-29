@@ -19,7 +19,7 @@ struct ConversationRecordingBridge: ConversationRecordingStore {
         let result = try await store.beginRecording(trigger: trigger, at: at)
         do { try await link(result.conversation) } catch {
             _ = result.audio.close()
-            try? await store.delete(result.conversation.id)
+            await store.discardRecording(result.conversation.id)
             throw error
         }
         return result
@@ -33,7 +33,7 @@ struct ConversationRecordingBridge: ConversationRecordingStore {
         {
             _ = try? await store.finishRecording(id, durationMs: duration, gaps: item.gaps)
         }
-        try? await store.delete(id)
+        await store.discardRecording(id)
         try? await thoughts.delete(id)
     }
     func importAudio(from url: URL, at: Date) async throws -> Conversation {

@@ -20,27 +20,33 @@ public actor ConversationStore: ConversationRecordingStore {
         for dir in try FileManager.default.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) where ThoughtStore.isValidID(dir.lastPathComponent) {
             let id = dir.lastPathComponent
             guard cache[id] == nil else { continue }
-            let file = dir.appendingPathComponent("conversation.json")
-            var item: Conversation
-            let data = FileSafety.exists(file) ? try Data(contentsOf: file) : nil
-            if let data, let decoded = try? ThoughtJSON.decoder().decode(Conversation.self, from: data) {
-                item = decoded
-            } else {
-                // Beschädigtes behalten; Ton ist die letzte verlässliche Quelle.
-                if FileSafety.exists(file) {
-                    try FileManager.default.moveItem(at: file, to: dir.appendingPathComponent("damaged-" + UUID().uuidString + ".json"))
+            do {
+                let file = dir.appendingPathComponent("conversation.json")
+                var item: Conversation
+                let data = FileSafety.exists(file) ? try Data(contentsOf: file) : nil
+                if let data, let decoded = try? ThoughtJSON.decoder().decode(Conversation.self, from: data) {
+                    item = decoded
+                } else {
+                    // Beschädigtes behalten; Ton ist die letzte verlässliche Quelle.
+                    if FileSafety.exists(file) {
+                        try FileManager.default.moveItem(at: file, to: dir.appendingPathComponent("damaged-" + UUID().uuidString + ".json"))
+                    }
+                    guard FileSafety.exists(wavURL(id)) else { throw ThoughtStoreError.notFound }
+                    item = Conversation(id: id, durationMs: try WAVWriter.repair(wavURL(id)), origin: .recording, trigger: .unknown, state: .captured, audio: .init(file: "audio.wav"))
+                    try write(item)
                 }
-                guard FileSafety.exists(wavURL(id)) else { continue }
-                item = Conversation(id: id, durationMs: try WAVWriter.repair(wavURL(id)), origin: .recording, trigger: .unknown, state: .captured, audio: .init(file: "audio.wav"))
-                try write(item)
+                guard item.id == id else { throw ThoughtStoreError.invalidID }
+                if item.state == .recording {
+                    item.durationMs = try WAVWriter.repair(wavURL(id)); item.state = .captured
+                    item.rev += 1; item.updatedAt = Date()
+                    try write(item)
+                } else if item.state == .analyzing { item.state = .captured; try write(item) }
+                cache[id] = item
+            } catch {
+                let quarantine = root.appendingPathComponent("quarantine")
+                try FileSafety.createDirectory(quarantine)
+                try? FileManager.default.moveItem(at: dir, to: quarantine.appendingPathComponent(id + "-" + UUID().uuidString))
             }
-            guard item.id == id else { throw ThoughtStoreError.invalidID }
-            if item.state == .recording {
-                item.durationMs = try WAVWriter.repair(wavURL(id)); item.state = .captured
-                item.rev += 1; item.updatedAt = Date()
-                try write(item)
-            } else if item.state == .analyzing { item.state = .captured; try write(item) }
-            cache[id] = item
         }
         loaded = true
     }
@@ -57,7 +63,7 @@ public actor ConversationStore: ConversationRecordingStore {
         var next = transcript
         if let old = try self.transcript(id) {
             for i in next.utterances.indices {
-                if next.utterances[i].speakerOwner != .user, let user = old.utterances.first(where: { $0.id == next.utterances[i].id && $0.speakerOwner == .user }) { next.utterances[i] = user }
+                if next.utterances[i].speakerOwner != .user, let user = old.utterances.first(where: { $0.speakerOwner == .user && ConversationUtteranceMatch.matches($0, next.utterances[i]) }) { next.utterances[i].speakerID = user.speakerID; next.utterances[i].speakerOwner = .user }
             }
         }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(next), to: directory(id).appendingPathComponent("transcript.json"))
@@ -92,62 +98,117 @@ public actor ConversationStore: ConversationRecordingStore {
         try load()
         guard !cache.values.contains(where: { $0.state == .recording }) else { throw ThoughtStoreError.unavailable }
         let item = Conversation(createdAt: at, origin: .recording, trigger: trigger, state: .recording, audio: .init(file: "audio.wav"))
-        try save(item)
-        let writer = try WAVWriter(url: wavURL(item.id))
-        return (cache[item.id]!, writer)
+        do {
+            try save(item)
+            let writer = try WAVWriter(url: wavURL(item.id))
+            return (cache[item.id]!, writer)
+        } catch {
+            cache[item.id] = nil
+            try? FileManager.default.removeItem(at: directory(item.id))
+            throw error
+        }
     }
     public func finishRecording(_ id: String, durationMs: Int, gaps: [ConversationGap]) throws -> Conversation? {
-        try update(id) { $0.durationMs = durationMs; $0.gaps = gaps; $0.state = .captured }
+        do {
+            return try update(id) { $0.durationMs = durationMs; $0.gaps = gaps; $0.state = .captured }
+        } catch {
+            cache[id]?.state = .needsAttention
+            if let item = cache[id] { try? write(item) }
+            throw error
+        }
     }
-    public func discardRecording(_ id: String) { try? delete(id) }
+    public func discardRecording(_ id: String) {
+        try? update(id) { $0.state = .captured; $0.deletedAt = Date() }
+    }
     public func delete(_ id: String) throws { try update(id) { if $0.deletedAt == nil { $0.deletedAt = Date() } } }
     public func restore(_ id: String) throws { try update(id) { $0.deletedAt = nil } }
-    public func purge(_ id: String) throws {
+    public func purge(_ id: String) async throws {
         try check(id); try load()
-        if FileSafety.exists(directory(id)) { try FileManager.default.removeItem(at: directory(id)) }
+        let trash = root.appendingPathComponent(".purge-" + UUID().uuidString)
+        if FileSafety.exists(directory(id)) { try FileManager.default.moveItem(at: directory(id), to: trash) }
         cache[id] = nil; broadcast.yield(id)
+        try await Task.detached(priority: .utility) {
+            if FileSafety.exists(trash) { try FileManager.default.removeItem(at: trash) }
+        }.value
     }
     public func audioURL(_ id: String) throws -> URL? {
         guard let item = try conversation(id), let file = item.audio?.file, ["audio.wav", "audio.m4a"].contains(file) else { return nil }
         let url = directory(id).appendingPathComponent(file)
         return FileSafety.exists(url) ? url : nil
     }
-    public func importAudio(from url: URL, at: Date) throws -> Conversation {
-        var item = Conversation(createdAt: at, origin: .imported, trigger: .app, state: .captured, audio: .init(file: "audio.wav"))
-        try load(); try FileSafety.createDirectory(directory(item.id))
-        let ext = url.pathExtension.lowercased().filter { $0.isLetter || $0.isNumber }
-        let original = directory(item.id).appendingPathComponent("import-original." + (ext.isEmpty ? "audio" : ext))
-        try FileManager.default.copyItem(at: url, to: original)
-        FileSafety.applyProtection(original); FileSafety.excludeFromBackup(original)
-        let converted = try ConversationAudio.convert(original, to: wavURL(item.id))
-        item.durationMs = converted.durationMs
-        if converted.distinctStereo { item.expectedSpeakers = 2 } else { try FileManager.default.removeItem(at: original) }
-        try save(item)
-        return cache[item.id]!
+    public func importAudio(from url: URL, at: Date) async throws -> Conversation {
+        try load()
+        let item = Conversation(createdAt: at, origin: .imported, trigger: .app, state: .captured, audio: .init(file: "audio.wav"))
+        let temporary = root.appendingPathComponent(".import-" + UUID().uuidString)
+        let destination = directory(item.id)
+        let volume = root
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let imported = try await Task.detached(priority: .utility) {
+            var item = item
+            let input = try AVAudioFile(forReading: url)
+            let required = Int64(Double(input.length) / input.processingFormat.sampleRate * 32000) + Int64((try url.resourceValues(forKeys: [.fileSizeKey])).fileSize ?? 0) + 200_000_000
+            let available = (try FileManager.default.attributesOfFileSystem(forPath: volume.path)[.systemFreeSize] as? NSNumber)?.int64Value ?? 0
+            guard available >= required else { throw ThoughtStoreError.unavailable }
+            try FileSafety.createDirectory(temporary)
+            let original = temporary.appendingPathComponent("import-original." + url.pathExtension)
+            try FileManager.default.copyItem(at: url, to: original)
+            FileSafety.applyProtection(original); FileSafety.excludeFromBackup(original)
+            let converted = try ConversationAudio.convert(original, to: temporary.appendingPathComponent("audio.wav"))
+            item.durationMs = converted.durationMs
+            if converted.distinctStereo { item.expectedSpeakers = 2 } else { try FileManager.default.removeItem(at: original) }
+            try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(item), to: temporary.appendingPathComponent("conversation.json"))
+            return item
+        }.value
+        try FileManager.default.moveItem(at: temporary, to: destination)
+        cache[imported.id] = imported; broadcast.yield(imported.id)
+        return imported
     }
-    public func prepareForAnalysis(_ id: String) throws -> URL? {
+    public func prepareForAnalysis(_ id: String) async throws -> URL? {
         guard let url = try audioURL(id) else { return nil }
         if url.pathExtension == "m4a" {
-            _ = try ConversationAudio.convert(url, to: wavURL(id))
+            let target = wavURL(id)
+            let temporary = root.appendingPathComponent(".prepare-" + UUID().uuidString + ".wav")
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            _ = try await Task.detached(priority: .utility) { try ConversationAudio.convert(url, to: temporary) }.value
+            guard cache[id]?.deletedAt == nil, cache[id] != nil else { return nil }
+            if FileSafety.exists(target) { try FileManager.default.removeItem(at: target) }
+            try FileManager.default.moveItem(at: temporary, to: target)
             try update(id) { $0.audio = .init(file: "audio.wav") }
         }
         return wavURL(id)
     }
-    public func compactAudio(_ id: String) throws {
+    public func compactAudio(_ id: String) async throws {
         guard let item = try conversation(id), item.state == .done, item.audio?.file == "audio.wav" else { return }
         let target = directory(id).appendingPathComponent("audio.m4a")
-        try ConversationAudio.compress(wavURL(id), to: target)
+        let source = wavURL(id)
+        let temporary = root.appendingPathComponent(".compact-" + UUID().uuidString + ".m4a")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try await Task.detached(priority: .utility) { try ConversationAudio.compress(source, to: temporary) }.value
+        guard cache[id]?.deletedAt == nil, cache[id] != nil else { return }
+        if FileSafety.exists(target) { try FileManager.default.removeItem(at: target) }
+        try FileManager.default.moveItem(at: temporary, to: target)
         try update(id) { $0.audio = .init(file: "audio.m4a") }
         try FileManager.default.removeItem(at: wavURL(id))
-        if FileSafety.exists(workDirectory(id)) { try FileManager.default.removeItem(at: workDirectory(id)) }
+        let work = workDirectory(id)
+        let trash = root.appendingPathComponent(".work-" + UUID().uuidString)
+        if FileSafety.exists(work) {
+            try FileManager.default.moveItem(at: work, to: trash)
+            try await Task.detached(priority: .utility) { try FileManager.default.removeItem(at: trash) }.value
+        }
     }
-    public func housekeeping(now: Date = Date()) throws {
+    public func housekeeping(now: Date = Date()) async throws {
         for item in try all() {
-            if let deleted = item.deletedAt, now.timeIntervalSince(deleted) >= 30 * 86400 { try purge(item.id); continue }
+            if let deleted = item.deletedAt, now.timeIntervalSince(deleted) >= 30 * 86400 { try await purge(item.id); continue }
             guard item.state == .done, now.timeIntervalSince(item.createdAt) >= 30 * 86400 else { continue }
+            guard cache[item.id]?.state == .done else { continue }
+            let trash = root.appendingPathComponent(".expired-" + UUID().uuidString)
+            try FileSafety.createDirectory(trash)
             for file in try FileManager.default.contentsOfDirectory(at: directory(item.id), includingPropertiesForKeys: nil)
-            where file.lastPathComponent.hasPrefix("audio.") || file.lastPathComponent.hasPrefix("import-original.") { try FileManager.default.removeItem(at: file) }
+            where file.lastPathComponent.hasPrefix("audio.") || file.lastPathComponent.hasPrefix("import-original.") {
+                try FileManager.default.moveItem(at: file, to: trash.appendingPathComponent(file.lastPathComponent))
+            }
             try update(item.id) { $0.audio = nil }
+            try await Task.detached(priority: .utility) { try FileManager.default.removeItem(at: trash) }.value
         }
     }
 }

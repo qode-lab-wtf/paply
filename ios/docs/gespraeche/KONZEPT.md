@@ -207,6 +207,24 @@ Gerüst:
    zu den übrigen) werden verworfen. Bestätigte Sprecher liefern Abdrücke für ihre Person. Obergrenze je Person
    (z. B. 20), vielfältige Lagen bevorzugt behalten.
 
+### Kurze Einwürfe — plattformneutrale Regeln
+
+Wörter werden an Satzzeichen (`.`, `!`, `?`) und Pausen über 0,8 Sekunden gruppiert.
+Glättung ändert einen Sprecher nur bei mindestens 70 % Wortmehrheit der Gruppe;
+eine normalisierte Überlappungsdifferenz `(beste − zweite) / Wortdauer` ab 0,6 bleibt geschützt
+(ohne Überlappung: 0). Gezählt werden Wörter, nicht ihre Dauer.
+Isolierte Beiträge ausschließlich aus Lautäußerungen (kleine de/en-Liste: mhm, hm, hmm,
+mm, äh, ähm, aha, uh, um, uhm, mmh) entfallen. Lexikalische Einwürfe aus höchstens zwei
+Wörtern (ja, genau, okay, ok, stimmt, klar, richtig, yes, yeah, right, sure, yep) bleiben
+sichtbar und sind unsicher, außer alle Wörter erreichen die Differenz 0,6.
+Im ohnehin laufenden Zusammenfassungs-Aufruf tragen unsichere Beiträge mit höchstens
+sechs Wörtern ihre ID und `UNSICHER`; `reassignments` enthält optionale Vorschläge
+`utteranceID` → `speakerID`. Der Code akzeptiert ausschließlich markierte, nicht vom
+Nutzer gesetzte Beiträge und vorhandene Sprecher, maximal abgerundet 15 % aller
+Beiträge; kein zusätzlicher KI-Aufruf. Bei Neuauswertung bleiben Nutzer-Zuordnungen
+nur bei mindestens 50 % Überlappung beider Zeitbereiche und gleichem oder ähnlichem
+Text erhalten; nur Sprecher und Eigentümerschaft werden übertragen.
+
 ## 6. KI-Rahmen
 
 - Modell `openai/gpt-oss-120b`, `reasoning_effort: low`, striktes JSON-Schema; Ausweich `openai/gpt-oss-20b`.

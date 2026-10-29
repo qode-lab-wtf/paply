@@ -5,6 +5,9 @@ struct ToggleConversationIntent: AudioRecordingIntent, LiveActivityIntent {
     static var title: LocalizedStringResource { "Paply-Gespräch an/aus" }
     func perform() async throws -> some IntentResult {
         #if PAPLY_APP
+        guard await AppSettings.shared.betaConversations else {
+            throw ThoughtIntentError.refused("Aktiviere Gespräche in den Beta-Einstellungen.")
+        }
         if !(await ConversationCapture.shared.toggle(trigger: .shortcut)) {
             try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
                 _ = await ConversationCapture.shared.toggle(trigger: .shortcut)
@@ -22,6 +25,9 @@ struct SetConversationRecordingIntent: SetValueIntent, AudioRecordingIntent, Liv
     init() {}
     func perform() async throws -> some IntentResult {
         #if PAPLY_APP
+        guard await AppSettings.shared.betaConversations else {
+            throw ThoughtIntentError.refused("Aktiviere Gespräche in den Beta-Einstellungen.")
+        }
         if !(await ConversationCapture.shared.toggle(trigger: .control)) {
             try await requestToContinueInForeground("Paply öffnet kurz das Mikro.") {
                 _ = await ConversationCapture.shared.toggle(trigger: .control)
@@ -61,6 +67,9 @@ enum ConversationIntentForward {
         DarwinBus.shared.post(.conversationToggle)
     }
     static func toggle() async throws {
+        guard BetaFeatures.conversationsEnabled(AppGroup.defaults) else {
+            throw ThoughtIntentError.refused("Aktiviere Gespräche in den Beta-Einstellungen.")
+        }
         let before = SharedStore.read(ConversationStateFile.self, .conversationState)?.recording ?? false
         send()
         for _ in 0..<20 {

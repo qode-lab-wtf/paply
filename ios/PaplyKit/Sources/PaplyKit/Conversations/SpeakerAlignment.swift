@@ -50,17 +50,17 @@ public enum SpeakerAlignment {
             guard best > 0 || distance < 0.5 else { continue }
             if best == 0, let nearest = segments.min(by: { min(abs($0.start - word.start), abs($0.end - word.end)) < min(abs($1.start - word.start), abs($1.end - word.end)) }) { winner = root(nearest.cluster) }
             let second = ranked.dropFirst().first.map { overlap[$0] ?? 0 } ?? 0
-            assigned.append(Assigned(word: word, cluster: winner, uncertain: best == 0 || second > best * 0.25, strength: best - second))
+            assigned.append(Assigned(word: word, cluster: winner, uncertain: best == 0 || second > best * 0.25, strength: word.end > word.start ? (best - second) / (word.end - word.start) : 0))
         }
         // Nur schwache Wechsel glätten; klare Wechsel mitten im Satz bleiben erhalten.
         var start = 0
         for i in assigned.indices {
-            let boundary = i == assigned.count - 1 || assigned[i].word.word.last.map { ".!?".contains($0) } == true || assigned[i + 1].word.start - assigned[i].word.end > 0.7
+            let boundary = i == assigned.count - 1 || assigned[i].word.word.last.map { ".!?".contains($0) } == true || assigned[i + 1].word.start - assigned[i].word.end > ConversationInterjections.groupPause
             guard boundary else { continue }
             var votes: [Int: Double] = [:]
-            for j in start...i { votes[assigned[j].cluster, default: 0] += assigned[j].word.end - assigned[j].word.start }
+            for j in start...i { votes[assigned[j].cluster, default: 0] += 1 }
             let majority = votes.keys.sorted { votes[$0] == votes[$1] ? $0 < $1 : votes[$0]! > votes[$1]! }.first!
-            for j in start...i where assigned[j].cluster != majority && assigned[j].strength <= 0 {
+            for j in start...i where assigned[j].cluster != majority && assigned[j].strength < ConversationInterjections.clearMargin && votes[majority]! / Double(i - start + 1) >= ConversationInterjections.majority {
                 assigned[j].cluster = majority; assigned[j].uncertain = true
             }
             start = i + 1
@@ -77,7 +77,11 @@ public enum SpeakerAlignment {
                 utterances.append(.init(id: "u\(utterances.count)", speakerID: id, start: a.word.start, end: a.word.end, text: a.word.word.trimmingCharacters(in: .whitespacesAndNewlines), uncertain: a.uncertain))
             }
         }
-        for i in utterances.indices where utterances[i].end - utterances[i].start < 1 { utterances[i].uncertain = true }
+        utterances.removeAll { ConversationInterjections.isSound($0.text) }
+        for i in utterances.indices where ConversationInterjections.isLexical(utterances[i].text) {
+            let words = assigned.filter { $0.word.start >= utterances[i].start && $0.word.end <= utterances[i].end }
+            utterances[i].uncertain = words.isEmpty || words.contains { $0.strength < ConversationInterjections.clearMargin }
+        }
         return Result(speakers: speakers, utterances: utterances, prints: prints)
     }
 }
