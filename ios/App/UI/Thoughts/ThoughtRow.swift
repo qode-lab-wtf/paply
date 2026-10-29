@@ -193,9 +193,14 @@ struct ThoughtListRow: View {
         Button {
             nav.path.append(.thought(thought.id))
         } label: {
-            ThoughtRow(thought: thought, topic: topic, showTopic: showTopic, time: time, snippet: snippet,
-                       highlightedTitle: highlightedTitle,
-                       raw: thought.state == .done ? nil : model.source(thought.id)?.text)
+            if thought.kind == ConversationKind.thoughtKind,
+               let item = ConversationsModel.shared.display(thought.id, thoughts: model) {
+                ConversationThoughtRow(item: item, time: time)
+            } else {
+                ThoughtRow(thought: thought, topic: topic, showTopic: showTopic, time: time, snippet: snippet,
+                           highlightedTitle: highlightedTitle,
+                           raw: thought.state == .done ? nil : model.source(thought.id)?.text)
+            }
         }
         .captureZoomSource(thought.id, in: zoomSource ? zoom : nil)
         .listRowBackground(Color.paplyRow)

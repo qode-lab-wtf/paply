@@ -108,6 +108,13 @@ final class AppSettings {
     /// neu laden, Erinnerungen abgleichen (aus = alle weg, Verschobenes bleibt gespeichert); aus beendet eine laufende
     /// Gedanken-Aufnahme (sie wird gesichert und geordnet) und bricht eine gerade beginnende ab (ohne Rest). Daten
     /// bleiben immer.
+    var betaConversations = BetaFeatures.conversationsEnabled(AppGroup.defaults) {
+        didSet { AppGroup.defaults?.set(betaConversations, forKey: BetaFeatures.conversationsKey) }
+    }
+    var conversationRecordingCount = UserDefaults.standard.integer(forKey: "conversationRecordingCount") {
+        didSet { UserDefaults.standard.set(conversationRecordingCount, forKey: "conversationRecordingCount") }
+    }
+
     var betaThoughts: Bool {
         didSet {
             guard betaThoughts != oldValue else { return }

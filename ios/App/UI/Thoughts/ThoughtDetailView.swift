@@ -39,7 +39,15 @@ struct ThoughtDetailView: View {
     private var thought: Thought? { model.thought(id) ?? (leaving ? lastKnown : nil) }
     private var isEditing: Bool { editingTitle || editingText || addingTask || editingTaskID != nil }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if model.thought(id)?.kind == ConversationKind.thoughtKind {
+            ConversationDetailHost(id: id)
+        } else {
+            thoughtBody
+        }
+    }
+
+    private var thoughtBody: some View {
         Group {
             if let thought {
                 document(thought)

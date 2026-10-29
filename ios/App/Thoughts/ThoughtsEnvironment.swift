@@ -126,6 +126,7 @@ enum ThoughtsEnvironment {
     private static func startStorage(deferred: Bool) {
         guard storageReady == nil else { return }
         storageReady = Task {
+            await store.setAudioReleaseHook(ConversationsEnvironment.profiles.learningHook())
             // Was vor dem Entsperren schon angefasst wurde, nachladen (meldet es über `changes`)
             if deferred { await store.reloadIfNeeded() }
             let repaired = (try? await store.recover()) ?? []

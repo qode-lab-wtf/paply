@@ -24,7 +24,7 @@ final class ConversationCapture {
     }
     private(set) var active: Active?
     private(set) var notice: String?
-    @ObservationIgnored var store: any ConversationRecordingStore = RecordingStoreStub()
+    @ObservationIgnored var store: any ConversationRecordingStore = ConversationRecordingBridge(store: ConversationsEnvironment.store, thoughts: ThoughtsEnvironment.store)
     /// Leitung verdrahtet hier die Auswertung; bis zur Rückkehr bleibt die Sitzung gehalten.
     @ObservationIgnored var onRecordingFinished: (@MainActor (Conversation) async -> Void)?
     @ObservationIgnored private var sink: ConversationAudioSink?
@@ -228,6 +228,10 @@ final class ConversationCapture {
         guard let active else { return }
         activity = try? Activity.request(attributes: ConversationActivityAttributes(conversationID: active.id),
             content: ActivityContent(state: .init(phase: .recording, startedAt: active.startedAt), staleDate: nil))
+    }
+    func updateProcessing(id: String, phase: ConversationActivityAttributes.ContentState.Phase, stage: String? = nil, note: String? = nil) {
+        guard activity?.attributes.conversationID == id, active == nil else { return }
+        update(phase, stage: stage, note: note)
     }
     func update(_ phase: ConversationActivityAttributes.ContentState.Phase, stage: String? = nil, note: String? = nil, alert: String? = nil) {
         if let alert {

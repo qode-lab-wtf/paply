@@ -26,7 +26,7 @@ struct ConversationsHome: View {
                         Image(systemName: "record.circle").font(.largeTitle)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Gespräch aufnehmen").font(.headline)
-                            Text("iPhone hinlegen – Paply erkennt, wer spricht").font(.caption)
+                            Text("iPhone hinlegen – Text und Aufgaben festhalten").font(.caption)
                         }
                         .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)

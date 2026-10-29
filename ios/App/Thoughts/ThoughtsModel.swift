@@ -311,6 +311,12 @@ final class ThoughtsModel {
                 $0.topicId = nil
             }
         }
+        if withThoughts {
+            for thought in byID.values where thought.kind == ConversationKind.thoughtKind && thought.deletedAt == now {
+                let id = thought.id
+                write(id) { _ in try await ConversationsEnvironment.processor.delete(id) }
+            }
+        }
         // Bild: wird nicht mehr angezeigt; die Datei geht erst, wenn der Speicher das Thema gespeichert entfernt hat
         // (`ThoughtStore.removedTopics` → `TopicImages`) – scheitert das Speichern, ist es samt Bild wieder da
         changeTopics { $0.removeAll { removed.contains($0.id) } }
@@ -405,6 +411,9 @@ final class ThoughtsModel {
         let token = UndoToken()
         let now = Date()
         change(id) { $0.deletedAt = now }
+        if byID[id]?.kind == ConversationKind.thoughtKind {
+            write(id) { _ in try await ConversationsEnvironment.processor.delete(id) }
+        }
         undoActions[token] = { [weak self] in self?.restore(id) }
         return token
     }
@@ -412,6 +421,13 @@ final class ThoughtsModel {
     /// Aus „Zuletzt gelöscht“ zurück. Nicht Geordnetes (z. B. in der Live Activity verworfen) wird danach geordnet.
     func restore(_ id: String) {
         change(id) { $0.deletedAt = nil }
+        if byID[id]?.kind == ConversationKind.thoughtKind {
+            write(id) { _ in
+                try await ConversationsEnvironment.processor.restore(id)
+                await ConversationsEnvironment.processor.kick(reason: "restore")
+            }
+            return
+        }
         guard let processor = backend?.processor, byID[id]?.state != .done else { return }
         write(id) { _ in await processor.kick(reason: "restore") } // nach dem Schreiben
     }
@@ -419,6 +435,11 @@ final class ThoughtsModel {
     /// Endgültig: Text, Cache, Embedding und ggf. noch nicht verschriftlichter Ton (§7.6). Themen, die danach
     /// keinen Gedanken mehr tragen, entfernt der Speicher mit (kommt über `store.changes` herein).
     func purge(_ id: String) {
+        if byID[id]?.kind == ConversationKind.thoughtKind {
+            apply(nil, id: id)
+            write(id) { _ in try await ConversationsEnvironment.processor.purge(id) }
+            return
+        }
         apply(nil, id: id)
         write(id) { await $0.purge(id) }
     }
