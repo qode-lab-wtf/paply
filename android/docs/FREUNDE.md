@@ -1,4 +1,4 @@
-# Paply Android · 0.1.3
+# Paply Android · 0.1.4
 
 1. Öffne die APK im Anhang. Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben. Installieren.
 2. Play Protect eingeschaltet lassen; bei Warnung oder Blockierung erst Allan einen Screenshot schicken.
@@ -9,3 +9,5 @@
 7. Gedanken-Knopf (Kachel „Paply-Gedanke“): herunterwischen → antippen → sprechen → „Fertig“. Gedanken & Aufgaben sind schon an.
 8. Samsung: Einstellungen → Allgemeine Verwaltung → Tastaturliste und Standard → „Tastaturschaltfläche auf Navigationsleiste“ einschalten.
 9. Datenschutz: Ton und Text gehen an Groq; Text bleibt hier, Ton bis zur Umschrift, bei Fehlern höchstens 30 Tage. Allan bekommt keine Inhalte.
+
+Paply einmal im Testfeld auswählen genügt für die Einrichtung. Zum Diktieren unten auf das Tastatur-Symbol tippen und Paply wählen.

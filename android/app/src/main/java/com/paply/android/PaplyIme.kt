@@ -111,6 +111,7 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
     }
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        com.paply.android.ui.KeyboardTrial.markAppeared(this)
         visible = true
         DictationClipboard.clearExpired(this)
         if (isPassword(info) && session?.state?.value?.phase == "recording") finish()

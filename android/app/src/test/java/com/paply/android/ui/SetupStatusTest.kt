@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SetupStatusTest {
+    @Test fun keyboardTrialSurvivesReturnToPreviousKeyboard() {
+        assertFalse(keyboardTried(true, false, false))
+        assertTrue(keyboardTried(true, true, false))
+        assertTrue(keyboardTried(true, false, true))
+        assertTrue(keyboardTried(true, true, true))
+    }
+    @Test fun disablingKeyboardReopensTrialIncludingAfterReenable() {
+        val cleared = keyboardTried(false, false, true)
+        assertFalse(cleared)
+        assertFalse(keyboardTried(true, false, cleared))
+        assertFalse(keyboardTried(false, true, true))
+    }
     private val app = "com.paply.android"
     @Test fun oldAndroidAcceptsManualConfirmationEvenWhenTheTileListOmitsPaply() {
         assertTrue(tileAdded("wifi,bt", app, true, 29))

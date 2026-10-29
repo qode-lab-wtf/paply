@@ -39,16 +39,16 @@ fun DictationScreen(entries: List<HistoryEntry>, status: SetupStatus, setup: @Co
         item("keyboard-status") {
             PaplyCard(radius = 22.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Glyph(PaplyIcons.Keyboard, tint = if (status.keyboardSelected) C.greenBright else C.tertiary, size = 28.dp)
+                    Glyph(PaplyIcons.Keyboard, tint = if (status.keyboardTried) C.greenBright else C.tertiary, size = 28.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(if (status.keyboardSelected) "Paply ist bereit" else if (status.keyboardEnabled) "Paply ist aktiviert" else "Paply ist aus", style = MaterialTheme.typography.titleLarge)
-                        Text(if (status.keyboardSelected) "Öffne ein Textfeld, wähle Paply als Tastatur und sprich."
-                            else if (status.keyboardEnabled) "Wähle Paply als Tastatur, um zu diktieren." else "Aktiviere Paply in den Tastatureinstellungen.",
+                        Text(if (status.keyboardTried) "Paply ist bereit" else if (status.keyboardEnabled) "Paply ist aktiviert" else "Paply ist aus", style = MaterialTheme.typography.titleLarge)
+                        Text(if (status.keyboardTried) "Zum Diktieren unten auf das Tastatur-Symbol tippen und Paply wählen."
+                            else if (status.keyboardEnabled) "Probiere Paply einmal in einem Textfeld aus." else "Aktiviere Paply in den Tastatureinstellungen.",
                             color = C.secondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-                Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
-                    Pill(if (status.keyboardSelected) "Tastatur einrichten" else if (status.keyboardEnabled) "Tastatur auswählen" else "Tastatur aktivieren", keyboard)
+                if (!status.keyboardTried) Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
+                    Pill(if (status.keyboardTried) "Tastatur einrichten" else if (status.keyboardEnabled) "Testfeld öffnen" else "Tastatur aktivieren", keyboard)
                 }
             }
         }

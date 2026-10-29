@@ -175,7 +175,7 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
         if (prefs.betaThoughts) TaskReminderSettingsSection(activity, message)
         Section {
             SettingsItem("Tastatur einrichten", icon = PaplyIcons.Keyboard,
-                value = if (status.keyboardSelected) "Paply ist ausgewählt" else if (status.keyboardEnabled) "aktiviert · noch nicht ausgewählt" else "fehlt noch",
+                value = if (status.keyboardTried) "eingerichtet" else if (status.keyboardEnabled) "aktiviert · einmal ausprobieren" else "fehlt noch",
                 onClick = { navigate("keyboard") })
             if (prefs.developerMode) {
                 Hairline()

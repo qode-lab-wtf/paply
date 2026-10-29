@@ -35,7 +35,7 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
         add(Step("Benachrichtigungen erlauben", if (!status.notifications && status.notificationsDenied) "Ist aus. In den Android-Einstellungen bei Paply „Benachrichtigungen“ erlauben." else "Damit du laufende Aufnahmen immer siehst.", status.notifications, if (status.notificationsDenied) "Öffnen" else "Erlauben", notifications))
         add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }, keyLink = true))
         add(Step("Tastatur aktivieren", "Paply in den Android-Tastatureinstellungen einschalten.", status.keyboardEnabled, "Einrichten", { navigate("keyboard") }))
-        add(Step("Tastatur auswählen", "Paply als aktuelle Tastatur auswählen.", status.keyboardSelected, "Auswählen", { navigate("keyboard") }))
+        add(Step("Paply einmal ausprobieren", "Öffne das Testfeld und wähle Paply über das Tastatur-Symbol.", status.keyboardTried, "Testfeld öffnen", { navigate("keyboard") }))
         if (prefs.betaThoughts) add(Step("Gedanken-Knopf", "Als Kachel in den Schnelleinstellungen", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
     }
     val context = LocalContext.current
@@ -82,10 +82,14 @@ fun KeyboardSetupScreen(activity: Activity, status: SetupStatus) {
         Text("Paply hat keine Buchstaben, nur Sprache. Nur deine Sprachaufnahme wird mit deinem Schlüssel an Groq gesendet.", color = C.secondary, style = MaterialTheme.typography.bodyMedium)
         PaplyCard {
             StatusLine("Paply als Tastatur aktiviert", status.keyboardEnabled)
-            StatusLine("Paply als Tastatur ausgewählt", status.keyboardSelected)
+            StatusLine("Paply einmal ausprobiert", status.keyboardTried)
         }
+        var testText by remember { mutableStateOf("") }
+        androidx.compose.material3.OutlinedTextField(value = testText, onValueChange = { testText = it },
+            label = { Text("Testfeld") }, modifier = Modifier.fillMaxWidth())
+        Pill("Paply wählen", { activity.chooseKeyboard() }, prominent = false)
         GuideCard("So geht’s", listOf("„Einstellungen öffnen“ tippen.", "„Paply“ in der Tastaturliste einschalten.",
-            "Zurück zu Paply und „Tastatur auswählen“ tippen.", "In einem Textfeld Paply auswählen und sprechen."))
+            "Zurück zu Paply und das Testfeld antippen.", "In einem Textfeld Paply auswählen und sprechen."))
         GuideCard("Aus Gboard zu Paply", listOf(
             "Öffne ein Textfeld. Tippe auf das Tastatur-Symbol unten rechts, außerhalb der Gboard-Tasten.",
             "Bei mehreren Gboard-Sprachen kann zuerst die nächste Sprache erscheinen. Tippe dann nochmals. Du kannst die Taste auch halten und Paply direkt auswählen.",
@@ -93,7 +97,6 @@ fun KeyboardSetupScreen(activity: Activity, status: SetupStatus) {
         Text("Je nach Handy öffnet ein Tipp direkt Paply oder eine Liste – dann „Paply“ wählen.",
             color = C.secondary, style = MaterialTheme.typography.bodySmall)
         Pill("Einstellungen öffnen", { activity.openKeyboardSettings() })
-        Pill("Tastatur auswählen", { activity.chooseKeyboard() }, prominent = false)
     }
 }
 

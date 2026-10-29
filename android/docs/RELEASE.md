@@ -53,3 +53,40 @@ APK SHA-256: `354011c083bde263104e174676a422e49b221988a1780cf78c6193429699c441`.
 MacBook: `~/Desktop/Paply-Android/Paply-0.1.3.apk`, `Paply-0.1.3.zip`,
 `FREUNDE.md`, `FREUNDE-NACHRICHT.txt`; 0.1.2-Ausgaben entfernt, keine
 Prüfsummendatei auf dem Schreibtisch. Signierschlüssel unverändert.
+
+## Einrichtungskorrektur 0.1.4 (5), 29.10.2026
+
+Der Tastatur-Test ist dauerhaft erledigt, sobald Paply einmal in `onStartInputView`
+erschienen oder aktuell ausgewählt ist. Der normale Rückwechsel zur vorherigen
+Tastatur öffnet keinen Einrichtungsschritt mehr. Wird Paply deaktiviert, löscht die
+Statusprüfung die Markierung. Einrichtung, Diktat-Karte, Gedanken-Fortschritt und
+Einstellungen verwenden denselben Status. Ein Testfeld steht in der Tastatureinrichtung;
+nach Abschluss bleibt nur der Hinweis auf das Tastatur-Symbol.
+
+- Ausschließlich auf dem MacBook: `PAPLY_WORK=v014 android/scripts/mb.sh sync`,
+  `build` mit `:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintRelease`,
+  danach `release`; alles erfolgreich, einschließlich Animal Sniffer und signiertem R8-Release.
+- 852 Unit-Tests, 0 Fehler, 1 übersprungen. Neue Tests: erste Auswahl,
+  Rückwechsel, wiederholte Auswahl, Deaktivieren und erneutes Aktivieren.
+- Android 11/API 30 (`paply30`, neu angelegt) und Android 17/API 37 (`paply`):
+  signierter Release als Update über 0.1.3 installiert; Schlüssel und Einrichtung erhalten.
+  Je einmal Paply über die Systemtaste gewählt, gRPC-Sprache eingespeist,
+  Diktat ins Kontakte-Textfeld eingesetzt und automatisch zu Gboard zurückgekehrt.
+- Auf beiden Versionen nach App-Kaltstart: Einrichtungskarte weg (6/6),
+  „Paply ist bereit“ mit ruhigem Nutzungshinweis und Einstellungen „eingerichtet“.
+  Nachfolgend auch das finale APK mit vorgezogenem Testfeld installiert und kalt geprüft.
+- Android 11 zusätzlich: Deaktivieren öffnet Aktivierung und Test erneut;
+  erneutes Aktivieren allein schließt den Test nicht. Keine weitere Sprache hochgeladen.
+- Groq: insgesamt 2 abgeschlossene Diktate, je eine Transkription und ein Polierlauf;
+  keine manuellen Neuversuche oder Gedanken-Aufrufe. Synthetische deutsche Sprache wurde
+  wegen der englischen Emulator-Sprache englisch ausgegeben; Einsetzen/Rückwechsel erfolgreich.
+- Android-17-Emulator 37.2.12 stürzte zweimal bei gRPC im nativen Audio-Code ab
+  (`Socket closed`, `Internal logic error voice 'unknown' has no hardware store`).
+  Beide vor Aufnahmeabschluss/Upload. Mit `-audio none` funktionierte die echte
+  gRPC-Einspeisung in den aktiven Paply-Recorder samt Transkription und Rückwechsel.
+- Belege auf dem MacBook: `~/Android/work/v014-evidence/` (XML, Screenshots, Emulator-Logs),
+  Build-/Release-Protokolle auf dem Mac mini: `/tmp/paply-v014-*-final.log`.
+- APK SHA-256: `977a8244910842cb4ce28287899cb902175c5ac6061b65af6d37048c64e34658`.
+- Auslieferung MacBook: `~/Desktop/Paply-Android/Paply-0.1.4.apk`, `Paply-0.1.4.zip`,
+  `FREUNDE.md`, `FREUNDE-NACHRICHT.txt`. 0.1.3-Artefakte entfernt; keine `.sha256` dort.
+  Signierschlüssel unverändert. Emulatoren nach der Prüfung gestoppt. Kein Commit/Push.

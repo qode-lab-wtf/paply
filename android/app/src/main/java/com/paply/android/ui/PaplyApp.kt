@@ -197,14 +197,14 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                                     if (!prefs.betaThoughts || tab == "dictation") DictationScreen(entries, status, setup, ::copy,
                                         detail = { detailId = it.id; navigate("detail") }, delete = { entry -> historyAction { history.delete(setOf(entry.id)) } },
                                         deleteAll = { historyAction { history.deleteAll() } }, keyboard = {
-                                            if (status.keyboardEnabled && !status.keyboardSelected) activity.chooseKeyboard() else navigate("keyboard")
+                                            navigate("keyboard")
                                         }, error = historyError, retryLoad = { historyAction { history.reload() } })
                                     else ThoughtsTab(thoughtRepository, thoughtActions, tasksTab = tab == "tasks", setup = setup,
                                         onSettings = { navigate("settings") }, onTileSetup = { navigate("tile") },
                                         taskDestination = taskDestination.takeIf { tab == "tasks" },
                                         focusID = activity.intent.getStringExtra("thoughtId").takeIf { tab == "thoughts" },
                                         onFocusConsumed = { consumeThoughtLink(activity.intent, it) },
-                                        setupProgress = listOf(status.microphone, status.notifications, hasKey, status.keyboardEnabled, status.keyboardSelected, status.tileAdded).count { it } to 6)
+                                        setupProgress = listOf(status.microphone, status.notifications, hasKey, status.keyboardEnabled, status.keyboardTried, status.tileAdded).count { it } to 6)
                                 }
                                 "settings" -> SettingsHome(activity, prefs, vault, hasKey, keyError, status, ::refreshKey, ::edit, ::navigate, ::message)
                                 "languages" -> LanguagesScreen(prefs, ::edit)

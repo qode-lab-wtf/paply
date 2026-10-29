@@ -20,6 +20,7 @@ import com.paply.android.settings.AppPreferences
 data class SetupStatus(val microphone: Boolean, val notifications: Boolean, val keyboardEnabled: Boolean,
     val keyboardSelected: Boolean, val tileAdded: Boolean,
     val microphoneDenied: Boolean = false, val notificationsDenied: Boolean = false,
+    val keyboardTried: Boolean = keyboardSelected,
 ) {
     companion object {
         fun read(context: Context, prefs: AppPreferences): SetupStatus {
@@ -32,6 +33,7 @@ data class SetupStatus(val microphone: Boolean, val notifications: Boolean, val 
             val tile = tileAdded(tiles, context.packageName, prefs.tileAdded, Build.VERSION.SDK_INT)
             return SetupStatus(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
                 context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(), enabled, selected, tile,
+                keyboardTried = KeyboardTrial.read(context, enabled, selected),
                 microphoneDenied = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED &&
                     (permissionAsked(context, Manifest.permission.RECORD_AUDIO) ||
                         (context as? Activity)?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == true),
@@ -69,5 +71,25 @@ fun Activity.requestThoughtTile(onResult: (Boolean) -> Unit) {
             mainExecutor,
         ) { result -> onResult(result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ||
             result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED) }
+    }
+}
+
+/** Selection is transient: Paply deliberately returns to the previous keyboard after dictation. */
+internal fun keyboardTried(enabled: Boolean, selected: Boolean, appeared: Boolean): Boolean =
+    enabled && (selected || appeared)
+
+object KeyboardTrial {
+    private fun storage(context: Context) = context.getSharedPreferences("setup-keyboard", Context.MODE_PRIVATE)
+    fun markAppeared(context: Context) {
+        val prefs = storage(context)
+        if (!prefs.getBoolean("appeared", false)) prefs.edit().putBoolean("appeared", true).commit()
+    }
+    fun read(context: Context, enabled: Boolean, selected: Boolean): Boolean {
+        val prefs = storage(context)
+        val appeared = prefs.getBoolean("appeared", false)
+        val tried = keyboardTried(enabled, selected, appeared)
+        // Only explicit disabling reopens this step, never returning to another keyboard.
+        if (tried != appeared) prefs.edit().putBoolean("appeared", tried).commit()
+        return tried
     }
 }
