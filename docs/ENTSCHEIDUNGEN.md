@@ -164,3 +164,20 @@ Nach Allans Gerätetest.
 Ein Konto, mit dem man sich von mehreren Geräten anmeldet und Transkripte vom Handy auch am Laptop sieht, ist der nächste
 große Schritt. Er kommt aber **später**. Erst müssen die einzelnen Geräte solide laufen. Bis dahin bleiben alle Daten nur
 auf dem jeweiligen Gerät.
+
+## 2026-10-29 — Paply Android: Ein-Tipp-Diktat über einen Paply-Knopf (von Allan entschieden)
+
+Echte Tester (Samsung, Xiaomi Android 11) fanden den Tastaturwechsel zu umständlich. Allan: Es „muss nativer wie bei
+iPhone laufen … 1 Klick …, reinreden, 1 Klick stopp fertig … und dann kommt meine alte Tastatur … wenn nicht Icon World
+oder Tastatur, dann eben ein Paply-Icon“.
+
+Entscheidung:
+- Ein **Paply-Knopf neben der normalen Tastatur**, wie bei Wispr Flow, über eine Bedienungshilfe.
+- Ablauf: 1 Tipp zum Aufnehmen, 1 Tipp für fertig, der Text kommt ins Feld. Die eigene Tastatur bleibt.
+- Die Paply-Tastatur bleibt als zweiter Weg erhalten.
+- Das ersetzt die Entscheidung „kein schwebender Knopf“ vom 28.10.
+- Bekannte Grenzen:
+  - Einmalig muss man die Bedienungshilfe einschalten, bei der Testdatei vorher „Eingeschränkte Einstellungen
+    zulassen“.
+  - In Apps mit eigenen bzw. geschützten Eingabefeldern landet der Text in der Zwischenablage.
+- Zusätzlich: Hinweise und Karten blenden sich nach wenigen Sekunden von selbst aus („smooth und clean, wie bei Apple“).
