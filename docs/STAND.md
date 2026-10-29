@@ -2,6 +2,17 @@
 
 **Zeitpunkt:** 28.10.2026 · **Phase:** v1.15.2 veröffentlicht (Robustheit Mac/Windows, Protokoll); Praxistest durch Allan
 
+## v1.15.3 — Gemeinsame Polier-Quelle (29.10.2026, lokal vorbereitet)
+
+- Einziger System-Prompt unter `shared/polish/system-prompt.txt`, bytegleich im Desktop eingebettet;
+  englisches JSON-Nachrichtenformat wie iOS/Android, eigene Begriffe normalisiert.
+- Mobiles Sicherheitsnetz inklusive Zahlen, Selbstkorrekturen, kleinen Ersetzungen und Profilgrenzen
+  portiert. Bei Ablehnung bleibt der Rohtext; Aufnahme, Cmd+X und Einfügen unverändert.
+- 753 automatische Tests grün; 99 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
+  Bekannte mobile Fehlablehnungen/heuristische Grenzen bleiben erhalten (siehe `shared/polish/README.md`).
+- Private Verlaufsauswertung nur lokal, ohne Groq-Aufrufe. Keine Veröffentlichung, kein Tag/Push;
+  mobile Prompt-Einbettungen und Gleichheitstests in den jeweiligen Branches nachziehen.
+
 ## v1.15.2 — Robustheit Mac/Windows nach Log-Sichtung und iOS-Abgleich (28.10.2026)
 
 Allan: „dass auf macOS und Windows alles neueste Version und korrekt läuft“.
