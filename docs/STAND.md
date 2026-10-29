@@ -61,7 +61,9 @@
   1 Tipp aufnehmen, 1 Tipp einsetzen, eigene Tastatur bleibt. Auf API 29–32 setzt er direkt ins Feld (ohne Zwischenablage), ab
   API 33 per `commitText`. Gedanken-Karte blendet nach dem Speichern aus. Polier-Prompt aus `shared/polish`. Emulator-Abnahme
   API 30/34/37 (`android/docs/KNOPF.md`). Codex darf seit dem T3-Update keine Emulator-UI steuern → Abnahmen macht die
-  Leitung per Claude-Helfer; Abhilfe: MacBook als T3-Gerätehost verknüpfen.
+  Leitung per Claude-Helfer. Seit 29.10. abends: MacBook (T3 0.1.4) als Umgebung verknüpft (Tailscale, bis 28.11.,
+  `t3 environment list`), SDK unter `~/Library/Android/sdk` verlinkt – Helfer können dort künftig selbst Emulatoren nutzen.
+  - Branch `feat/android-v1` liegt als Sicherung auf GitHub (kein PR, `main` unberührt).
   - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.2.0.apk`.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
