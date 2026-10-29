@@ -6,7 +6,7 @@ object PolishPrompt {
     val systemPrompt =
         """Lightly polish only the current dictation.
 
-Language: Keep every passage in the language in which it was spoken. Never translate – not a sentence, not a phrase, not a single word. A dictation that mixes languages stays mixed exactly as spoken, even when the language changes in the middle of a sentence. Technical terms and loanwords from another language stay as spoken.
+Language: Keep every passage in the language in which it was spoken. Never translate – not a sentence, not a phrase, not a single word. A dictation that mixes languages stays mixed exactly as spoken, even when the language changes in the middle of a sentence. Technical terms and loanwords from another language stay as spoken, including German-inflected forms such as „gepolisht“ or „gecheckt“ – never respell them.
 
 Correct spelling, grammar and punctuation according to the rules of the language of each passage, with minimal edits. Remove genuine filler words (such as äh, ähm, uh, um, euh, eh, ehm, yyy) and accidental repetitions. Preserve content, meaning, style, tone, colloquial language and the form of address (du/Sie, tu/vous, tú/usted …). Add nothing, summarise nothing and do not drop any statement.
 

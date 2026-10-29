@@ -14,12 +14,12 @@ import org.junit.Test
  */
 class PortParityTests {
     @Test
-    fun systemPromptMatchesSwiftBytes() {
+    fun systemPromptMatchesSharedBytes() {
         val sha =
             MessageDigest.getInstance("SHA-256")
                 .digest(PolishPrompt.systemPrompt.toByteArray())
                 .joinToString("") { "%02x".format(it.toInt() and 255) }
-        assertEquals("1411af3d229cd5633e8a7e482fcc96ec5d89a978847536cf1ebcb1ebb69b0adc", sha)
+        assertEquals("5e06a8abe41fd2c7ed4846bcfd22f24d3abfbc385985c25c399b486a3667b3ab", sha)
     }
 
     @Test

@@ -29,17 +29,58 @@ object PolishSafetyNet {
             (Lexicon.wrappedInQuotes.matches(result) &&
                 !Lexicon.wrappedInQuotes.matches(raw.trimmed()))
 
+    enum class Profile { dictation, thought }
+
+    private data class Limits(
+        val lengthLow: Double,
+        val lengthHigh: Double,
+        val missingContent: Double,
+        val addedShare: Double,
+        val spoken: Boolean = false,
+    )
+
+    private val dictationLimits = Limits(0.7, 1.3, 0.3, 0.15)
+    private val thoughtLimits = Limits(0.55, 1.15, 0.25, 0.10, spoken = true)
+
+    fun rejection(
+        raw: String,
+        result: String,
+        vocabulary: String = "",
+        profile: Profile,
+    ): String? = when (profile) {
+        Profile.dictation -> rejection(raw, result, vocabulary, true, dictationLimits)
+        Profile.thought -> rejection(raw, result, vocabulary, false, thoughtLimits)
+    }
+
+    fun spokenNegationCount(text: String): Int {
+        var stripped = text
+        for (run in TextAnalysis.runs(text) { TextAnalysis.isLetter(it) || TextAnalysis.isMark(it) }
+            .asReversed()) {
+            if (TextAnalysis.normalizedLower(run.word) in listOf("nee", "nein", "nö"))
+                stripped = stripped.removeRange(run.start, run.end)
+        }
+        return negationCount(stripped)
+    }
+
     fun rejection(
         raw: String,
         result: String,
         vocabulary: String = "",
         strictEdits: Boolean = true,
+    ): String? = rejection(raw, result, vocabulary, strictEdits, dictationLimits)
+
+    private fun rejection(
+        raw: String,
+        result: String,
+        vocabulary: String,
+        strictEdits: Boolean,
+        limits: Limits,
     ): String? {
         if (result.isEmpty()) return "empty"
         if (isMetaAnswer(result, raw)) return "meta"
-        val reason = check(raw, result, vocabulary, strictEdits, raw) ?: return null
+        val reason = check(raw, result, vocabulary, strictEdits, raw, limits) ?: return null
         val resolved = EditCheck.resolvedSelfCorrection(raw)
-        if (resolved != null && check(resolved, result, vocabulary, strictEdits, raw) == null)
+        if (resolved != null && check(resolved, result, vocabulary, strictEdits, raw, limits) == null)
             return null
         return reason
     }
@@ -50,34 +91,45 @@ object PolishSafetyNet {
         vocabulary: String,
         strictEdits: Boolean,
         lengthReference: String,
+        limits: Limits,
     ): String? {
-        val resultLength = result.scalarCount.toDouble()
+        val measured = if (limits.spoken) result.replace("• ", "").replace("\n", "") else result
+        val resultLength = measured.scalarCount.toDouble()
         val low = resultLength / maxOf(1, raw.trimmed().scalarCount)
         val high = resultLength / maxOf(1, lengthReference.trimmed().scalarCount)
-        if (low < 0.7 || high > 1.3) return "length"
+        if (low < limits.lengthLow || high > limits.lengthHigh) return "length"
         val (rawWords, resultWords) =
             EditCheck.compoundAligned(
                 TextAnalysis.letterRuns(TextAnalysis.normalizedLower(raw)),
                 TextAnalysis.letterRuns(TextAnalysis.normalizedLower(result)),
             )
-        val before = contentWords(rawWords.joinToString(" "))
-        val after = contentWords(resultWords.joinToString(" "))
+        val before = contentWords(rawWords.joinToString(" ")).let { words ->
+            if (limits.spoken) words.filterNot(SpokenNumbers::isNumberWord) else words
+        }
+        val after = contentWords(resultWords.joinToString(" ")).let { words ->
+            if (limits.spoken) words.filterNot(SpokenNumbers::isNumberWord) else words
+        }
         val remaining = after.groupingBy { it }.eachCount().toMutableMap()
         var missing = 0
         for (word in before) {
             val count = remaining[word] ?: 0
             if (count > 0) remaining[word] = count - 1 else missing++
         }
-        if (before.isNotEmpty() && missing.toDouble() / before.size > 0.3) return "content"
-        if (negationCount(raw) != negationCount(result)) return "negation"
-        if (!EditCheck.digitsPreserved(raw, result)) return "digits"
+        if (before.isNotEmpty() && missing.toDouble() / before.size > limits.missingContent) return "content"
+        if (limits.spoken) {
+            if (spokenNegationCount(raw) != spokenNegationCount(result)) return "negation"
+            if (!SpokenNumbers.preserved(raw, result)) return "digits"
+        } else {
+            if (negationCount(raw) != negationCount(result)) return "negation"
+            if (!EditCheck.digitsPreserved(raw, result)) return "digits"
+        }
         if (strictEdits)
             EditCheck.substitutionRejection(raw, result, vocabulary)?.let {
                 return it
             }
         val allowed = before.toSet() + contentWords(vocabulary)
         val added = after.count { it !in allowed }
-        val limit = maxOf(2, ceil(before.size * 0.15).toInt())
+        val limit = maxOf(2, ceil(before.size * limits.addedShare).toInt())
         return if (added - missing > limit) "added" else null
     }
 }

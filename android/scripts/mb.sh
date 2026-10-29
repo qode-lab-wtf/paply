@@ -12,7 +12,8 @@ serial="emulator-$port"
 case "${1:-}" in
   sync)
     ssh "$host" 'set -e; source ~/Android/env.sh; mkdir -p ~/Android/work/'"$work"
-    rsync -az --exclude build/ --exclude .gradle/ --exclude .kotlin/ --exclude .local/ --exclude local.properties --exclude "*.jks" --exclude "*.keystore" --exclude paply-release.properties "$root/" "$host:$remote/" ;;
+    rsync -az --exclude build/ --exclude .gradle/ --exclude .kotlin/ --exclude .local/ --exclude local.properties --exclude "*.jks" --exclude "*.keystore" --exclude paply-release.properties "$root/" "$host:$remote/"
+    rsync -az "$root/../shared/" "$host:~/Android/work/shared/" ;;
   build)
     ssh "$host" 'set -e; source ~/Android/env.sh; export GRADLE_USER_HOME="$HOME/Android/work/gradle-home"; export TMPDIR="$HOME/Android/work/tmp"; mkdir -p "$TMPDIR"; export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR -Djava.util.prefs.userRoot=$HOME/Android/work/java-prefs"; cd ~/Android/work/'"$work"'; mkdir -p .local; if [ ! -f .local/debug.keystore ]; then keytool -genkeypair -keystore .local/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000; fi; ./gradlew '"${GRADLE_TASKS:-:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintRelease}"' --console=plain' ;;
   release)

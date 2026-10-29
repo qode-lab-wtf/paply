@@ -17,6 +17,7 @@ dependencies {
 
 // Optional external synthetic WAV evidence; an explicitly supplied missing fixture fails.
 tasks.withType<Test>().configureEach {
+    systemProperty("paply.shared.polish", rootProject.file("../shared/polish").absolutePath)
     providers.gradleProperty("paply.regression.fixtures").orNull?.let {
         systemProperty("paply.regression.fixtures", it)
     }
