@@ -134,6 +134,19 @@ struct RootView: View {
     /// ausgeschalteter Beta). Ist die Beta „Gedanken & Aufgaben“ aus, zeigen alle diese Links nur den Hinweis.
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
+        if url.isFileURL {
+            Task { await ConversationCapture.shared.importAudio(url) }
+            return
+        }
+        if url.scheme == PaplyURL.scheme, url.host == "conversation" {
+            let id = url.lastPathComponent
+            ConversationNavigation.shared.showCurrent = id == "current"
+            ConversationNavigation.shared.requestedID = id == "current" ? ConversationCapture.shared.active?.id : id
+            if SessionController.shared.status == .interrupted {
+                SessionController.shared.attemptResume(trigger: "conversation-link", attempt: 1)
+            }
+            return
+        }
         guard url.scheme == PaplyURL.scheme else { return }
         let host = url.host ?? ""
         guard settings.betaThoughts else {

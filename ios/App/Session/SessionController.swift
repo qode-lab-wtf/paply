@@ -98,6 +98,11 @@ final class SessionController {
     @ObservationIgnored private var silenceRestarts: [UInt64] = []
     static let maxSilenceRestartsPerMinute = 2
 
+    @ObservationIgnored private var conversationID: String?
+    @ObservationIgnored private var startedForConversation = false
+    var isConversationActive: Bool { conversationID != nil }
+    private var conversationHeld: Bool { isConversationActive || ConversationBackground.shared.isRunning }
+
     private init() {}
 
     // MARK: Start der App
@@ -105,6 +110,7 @@ final class SessionController {
     func bootstrap() {
         guard !bootstrapped else { return }
         bootstrapped = true
+        ConversationCapture.shared.bootstrap()
         // Alter Stand aus einem früheren Prozess gilt nicht mehr.
         shared = SessionState()
         publish()
@@ -214,8 +220,13 @@ final class SessionController {
     }
 
     func stopSession(reason: String) {
+        if isConversationActive { ConversationCapture.shared.finish() }
         // „Ausschalten“ beendet auch einen laufenden Gedanken – gesichert, nie verworfen
         if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.app) }
+        if ConversationBackground.shared.isRunning {
+            cancelDictation(reason: "session-stop")
+            return
+        }
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
         micRestartCause = nil
@@ -553,7 +564,7 @@ final class SessionController {
         pauseTask?.cancel()
         pauseTask = Task {
             await Task.yield()
-            guard !Task.isCancelled, status == .ready, dictation == nil, !idlePaused, !isThoughtActive,
+            guard !Task.isCancelled, status == .ready, dictation == nil, !idlePaused, !isThoughtActive, !conversationHeld,
                   UIApplication.shared.applicationState != .active
             else { return }
             idlePaused = true
@@ -923,6 +934,7 @@ final class SessionController {
             // Ton kam von selbst zurück (z. B. nach Siri): Markierung aufheben
             guard micRestartCause == .silent, status == .interrupted, silenceRestartTask == nil else { return }
             micRestartCause = nil
+            ConversationCapture.shared.resume()
             status = dictation == nil ? .ready : .recording
             detail = nil
             publish()
@@ -959,6 +971,7 @@ final class SessionController {
                 micRestartCause = nil
                 idlePaused = false
                 if status != .off {
+                    ConversationCapture.shared.resume()
                     status = dictation == nil ? .ready : .recording
                     detail = nil
                 }
@@ -997,7 +1010,7 @@ final class SessionController {
         Diag.log("session.noSpeechStreak", fields)
         // Läuft schon die nächste Aufnahme, nicht dazwischenfunken: scharf lassen, die nächste
         // abgeschlossene Aufnahme ohne Sprache löst im Leerlauf aus.
-        if dictation != nil || isThoughtActive {
+        if dictation != nil || isThoughtActive || conversationHeld {
             noSpeechStreak.keepArmed(now: now)
             Diag.log("session.noSpeechStreak.deferred", ["kind": .s(kind)])
             return .none
@@ -1022,6 +1035,7 @@ final class SessionController {
     private func markMicSilent(reason: String, cause: MicRestartCause = .silent) {
         guard status != .off else { return }
         micRestartCause = cause
+        ConversationCapture.shared.pause(needsTap: true)
         status = .interrupted
         detail = reason == "restarts-exhausted" ? "Mikro hängt – Paply einmal schließen und neu öffnen"
             : cause == .silent ? "Mikro war stumm – Paply startet neu" : "Zweimal nichts verstanden – Paply startet das Mikro neu"
@@ -1066,7 +1080,7 @@ final class SessionController {
     /// ein Anruf-Banner bricht die Aufnahme dann nicht ab. Sonst aus: In Bereitschaft unterbricht ein
     /// Anruf die Sitzung normal, mit Klingelton und Vibration (Gerätefund 28.10.).
     func syncAlertShield(reason: String) {
-        let on = dictation != nil || isThoughtActive
+        let on = !isConversationActive && (dictation != nil || isThoughtActive)
         guard on != alertShieldOn else { return }
         alertShieldOn = on
         audio.setShieldFromAlerts(on)
@@ -1091,7 +1105,7 @@ final class SessionController {
                     Diag.log("app.wasSuspended", ["gapS": .d(gap.rounded()), "idlePaused": .b(idlePaused)])
                 }
                 SharedIO.async { Self.removeStalePending() }
-                if let until = holdUntil, Date() >= until, dictation == nil, processingCount == 0, !isThoughtActive, status != .off {
+                if let until = holdUntil, Date() >= until, dictation == nil, processingCount == 0, !isThoughtActive, !conversationHeld, status != .off {
                     stopSession(reason: "hold-expired")
                     return
                 }
@@ -1154,6 +1168,7 @@ final class SessionController {
         default: "raw\(reason ?? 0)"
         }
         if began {
+            ConversationCapture.shared.pause()
             // Stand vor dem Beenden der Aufnahme (danach ist der Schutz schon aus)
             let shieldWasOn = alertShieldOn
             // Gedanken-Haken: bei Unterbrechung sichern (anders als beim Diktat nie verwerfen)
@@ -1194,6 +1209,7 @@ final class SessionController {
             guard status == .interrupted else { return } // inzwischen anders gelöst (z. B. neu gestartet)
             switch outcome {
             case .success:
+                ConversationCapture.shared.resume()
                 status = dictation == nil ? .ready : .recording
                 detail = nil
                 idlePaused = false
@@ -1214,6 +1230,7 @@ final class SessionController {
                     attemptResume(trigger: trigger, attempt: attempt + 1)
                 } else {
                     detail = "Mikro aus – Paply einmal öffnen"
+                    ConversationCapture.shared.pause(needsTap: true)
                     publish()
                 }
             }
@@ -1240,6 +1257,7 @@ final class SessionController {
     private func handleMediaServicesReset() {
         Diag.log("audio.mediaServicesReset", ["status": .s(status.rawValue), "app": .s(Self.appState)])
         guard status != .off else { return }
+        ConversationCapture.shared.pause()
         cancelDictation(reason: "media-reset")
         Task {
             switch await audio.rebuildAndStart() {
@@ -1248,11 +1266,13 @@ final class SessionController {
                 detail = nil
                 idlePaused = false
                 micRestartCause = nil
+                ConversationCapture.shared.resume()
                 Diag.log("audio.mediaServicesReset.recovered")
                 schedulePauseIfIdle(reason: "after-reset")
             case .failure(let error):
                 status = .interrupted
                 detail = "Mikro aus – Paply einmal öffnen"
+                ConversationCapture.shared.pause(needsTap: true)
                 Diag.log("audio.mediaServicesReset.failed", ["stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC)])
             }
             publish()
@@ -1268,8 +1288,10 @@ final class SessionController {
             guard status == .ready || status == .recording, !audio.isRunning, !idlePaused else { return }
             switch await audio.restartEngine() {
             case .success:
+                ConversationCapture.shared.resume()
                 Diag.log("audio.engineRestart.ok")
             case .failure(let error):
+                ConversationCapture.shared.pause(needsTap: true)
                 Diag.log("audio.engineRestart.failed", ["stage": .s(error.stage), "code": .i(error.code), "fourCC": .s(error.fourCC)])
                 status = .interrupted
                 detail = "Mikro aus – Paply einmal öffnen"
@@ -1441,6 +1463,7 @@ extension SessionController {
         publish()
         schedulePauseIfIdle(reason: "thought-end")
         if startedForThought, !dictationInUse { scheduleThoughtSessionEnd() }
+        if startedForConversation { conversationWorkEnded() }
         return stats
     }
 
@@ -1454,11 +1477,11 @@ extension SessionController {
         thoughtSessionEnd?.cancel()
         thoughtSessionEnd = Task {
             try? await Task.sleep(for: .seconds(Self.thoughtOnlySessionSeconds))
-            guard !Task.isCancelled, startedForThought, !isThoughtActive, dictation == nil, status != .off else { return }
+            guard !Task.isCancelled, startedForThought, !isThoughtActive, !conversationHeld, dictation == nil, status != .off else { return }
             // Danach wird die App ausgesetzt: Wartet noch ein Gedanke (Netz, Kontingent), übernimmt ein
             // BGProcessingTask. In Fall B kam die App nie nach vorne, also gab es noch keinen.
             await ThoughtsEnvironment.scheduleBackgroundProcessing()
-            guard !Task.isCancelled, startedForThought, !isThoughtActive, dictation == nil, status != .off else { return }
+            guard !Task.isCancelled, startedForThought, !isThoughtActive, !conversationHeld, dictation == nil, status != .off else { return }
             stopSession(reason: "thought-session-end")
         }
         Diag.log("session.thoughtOnly.scheduledEnd", ["inS": .d(Self.thoughtOnlySessionSeconds)])
@@ -1498,5 +1521,66 @@ extension MicInputStats {
             "offsetBuffers": .i(offsetBuffers),
             "micRestarts": .i(restarts),
         ]
+    }
+}
+
+// MARK: Gespräch als unabhängiger Mithörer
+extension SessionController {
+    func attachConversation(id: String, sink: @escaping @Sendable ([Float]) -> Void) async -> Bool {
+        guard conversationID == nil else { return conversationID == id }
+        conversationID = id
+        pauseTask?.cancel()
+        thoughtSessionEnd?.cancel()
+        syncAlertShield(reason: "conversation")
+        let ready = (status == .ready || status == .recording) && (audio.isRunning || idlePaused)
+        if !ready {
+            guard await startSession(trigger: "conversation-intent") else {
+                conversationID = nil
+                syncAlertShield(reason: "conversation-failed")
+                return false
+            }
+            startedForConversation = !dictationInUse
+        }
+        if idlePaused {
+            idlePaused = false
+            if case .failure = await audio.resumeInput() {
+                conversationID = nil
+                syncAlertShield(reason: "conversation-failed")
+                return false
+            }
+        }
+        audio.processor.attachListener(owner: id, sink: sink)
+        lastActivityAt = Date()
+        return true
+    }
+
+    func detachConversation(id: String) {
+        audio.processor.detachListener(owner: id)
+        guard conversationID == id else { return }
+        conversationID = nil
+        lastActivityAt = Date()
+        syncAlertShield(reason: "conversation-end")
+        conversationWorkEnded()
+    }
+
+    /// iOS übernimmt die Auswertung: Mikro aus, solange kein anderer Empfänger es braucht.
+    func pauseConversationProcessingInput() async {
+        guard !isConversationActive, !isThoughtActive, dictation == nil,
+              ConversationBackground.shared.isRunning, !idlePaused else { return }
+        idlePaused = true
+        await audio.pauseInput(.stop)
+    }
+
+    func conversationWorkEnded() {
+        guard !conversationHeld else { return }
+        if startedForConversation, !dictationInUse, !isThoughtActive, dictation == nil {
+            startedForConversation = false
+            // Gleiche Nachlaufzeit wie beim Gedanken, erst nach Ende der Auswertung.
+            startedForThought = true
+            scheduleThoughtSessionEnd()
+        } else {
+            schedulePauseIfIdle(reason: "conversation-end")
+            if startedForThought, !dictationInUse { scheduleThoughtSessionEnd() }
+        }
     }
 }
