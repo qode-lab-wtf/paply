@@ -209,3 +209,35 @@ Prüfung: `PAPLY_WORK=work-knopf021 scripts/mb.sh sync`, anschließend über `mb
 Alle vier Aufgaben grün (`BUILD SUCCESSFUL`, 30 s).
 Keine Emulator-Steuerung und keine Groq-Aufrufe; Gerätetest nur kompiliert.
 Version bleibt 0.2.1 (7).
+
+## 0.2.1 – Korrekturen aus der Emulator-Endabnahme
+
+- API 33+: dieselbe reine Leerzeichenfunktion wie die IME; die Accessibility-
+  Verbindung bietet `getSurroundingText(1, 0, 0)` statt `getTextBeforeCursor`.
+  Das Zeichen vor dem kleineren Auswahlindex zählt (auch bei Rückwärtsauswahl).
+- Position: Feld rechts/links, Tastatur rechts/links, dann freie Randpositionen;
+  vollständige Overlayfläche gegen Feld und klickbare/editierbare Knoten prüfen.
+  Falls alles belegt ist: zuerst Feldüberdeckung, dann übrige Überdeckung minimieren.
+  Zieh-Offset ist bevorzugt, sichere Positionen haben Vorrang. Hindernisse nur nach
+  Fenster-/Inhalts-/Geometrieänderungen, höchstens alle 150 ms, max. 160 Knoten und
+  12 Ebenen; API 29–32 recycelt gelesene Knoten und Fenster.
+- Drehung: 1,8 s Übergangsfrist; dasselbe Feld wird anhand Knotenidentität oder
+  Paket + gemeldeter Ressourcen-ID wiedererkannt. Ohne sichere Zuordnung bleibt
+  das Sichern in Verlauf/Zwischenablage. Hinweise erscheinen auch ohne Tastatur
+  4 s unten über der Navigation, bei Hindernissen an einer freien Randposition.
+- Positionswechsel: 180 ms Ease-out; bei abgeschalteten Animationen oder einem
+  Hindernis im Bewegungsweg direkt zur sicheren Position. Kein dauernder Animator.
+- Zwischenablage-Hinweise genau einmal; keine Kürzung auf bloßes „Einfügen“.
+  Overlay ohne Tastaturfokus/Fokusrahmen, anklickbar und für TalkBack beschriftet.
+- Gerätetests: Rotation verlangt Fortsetzung im selben Feld; Fixture mit echten
+  Ressourcen-IDs, leeres Zielfeld erkennt auch API-34-Hinweistext. Fokusrahmen-
+  und Accessibility-Prüfung im View-Gerätetest ergänzt.
+
+Unit-Tests: Leerzeichen/Auswahl, fünf Platzierungsszenarien, Offset, volle Fläche,
+freie Animationswege, begrenzte Rotationsfrist und eindeutige Zustellnachrichten.
+Version bleibt 0.2.1 (7). Keine Emulatorsteuerung und keine Groq-Aufrufe;
+Gerätetests werden ausschließlich kompiliert, erneute Geräteabnahme steht aus.
+
+Abschlussprüfung ausschließlich über `scripts/mb.sh`, `PAPLY_WORK=work-knopf021`:
+`:core:test :thoughts:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+:app:assembleDebugAndroidTest` vollständig grün (`BUILD SUCCESSFUL`, 31 s).

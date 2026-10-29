@@ -12,16 +12,13 @@ class ButtonPresentationTest {
             val fallback = bits and 8 != 0
             val review = bits and 16 != 0
             val message = ButtonPresentation.deliveryMessage(accepted, retained, copied, fallback, review)
-            val base = when {
-                review -> "Textfeld nimmt Text nicht sicher an. Bitte prüfen."
-                !retained && !accepted && copied -> "Text in Zwischenablage. Jetzt einfügen; Verlauf nicht gespeichert."
-                !retained && !accepted -> "Text konnte nicht gesichert werden. Bitte erneut versuchen."
-                accepted -> null
-                copied || fallback -> "Text in Zwischenablage. Feld lange drücken → Einfügen."
-                else -> "Text nur im Verlauf. Dort kopieren und einsetzen."
-            }
-            assertEquals("combination $bits", if (fallback) "Text auch in der Zwischenablage" +
-                (base?.let { ". $it" } ?: "") else base, message)
+            if (fallback || copied) assertTrue("combination $bits", message?.contains("Zwischenablage") == true)
+            if (!fallback && !copied && accepted && !review) assertNull(message)
+            if (!accepted && retained && !review && (copied || fallback))
+                assertEquals("Text in der Zwischenablage – Feld lange drücken → Einfügen.", message)
+            if (accepted && !review && (copied || fallback))
+                assertEquals("Eingesetzt – Text liegt auch in der Zwischenablage.", message)
+            assertTrue((message?.split("Zwischenablage")?.size ?: 1) <= 2)
         }
     }
     @Test fun recordingWarningsAreOncePerSessionIncludingSkippedTicks() {

@@ -34,7 +34,8 @@ internal class PaplyButtonView(context: Context) : View(context) {
 
     init {
         isClickable = true
-        isFocusable = true
+        isFocusable = false
+        defaultFocusHighlightEnabled = false
         contentDescription = "Paply-Diktat starten"
     }
 

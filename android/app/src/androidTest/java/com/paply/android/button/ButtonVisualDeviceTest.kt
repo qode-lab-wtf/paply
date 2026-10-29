@@ -20,6 +20,9 @@ class ButtonVisualDeviceTest {
                 val view = PaplyButtonView(activity)
                 parent.addView(view, FrameLayout.LayoutParams(144, 144))
                 assertTrue(view.isAttachedToWindow)
+                assertFalse(view.isFocusable)
+                assertFalse(view.defaultFocusHighlightEnabled)
+                assertTrue(view.isImportantForAccessibility)
                 assertFalse(view.animationRunning)
                 repeat(3) { round ->
                     view.setPhase(ButtonPolicy.Phase.RECORDING)

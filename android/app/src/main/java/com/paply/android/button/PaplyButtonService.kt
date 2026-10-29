@@ -56,13 +56,51 @@ class PaplyButtonService : AccessibilityService() {
     private data class RenderKey(val model: ButtonPresentation.Render, val x: Int, val y: Int,
                                  val width: Int, val amber: Boolean)
     private var lastRender: RenderKey? = null
+    private var positionAnimator: ValueAnimator? = null
+    private var obstacles = emptyList<ButtonPosition.Box>()
+    private var obstaclesDirty = true
+    private var obstaclesReadAt = 0L
+    private var rotationUntil = 0L
+    private var missingSince: Long? = null
+    private var originId: String? = null
+    private var originPackage: String? = null
+
+    private fun Rect.box() = ButtonPosition.Box(left, top, right, bottom)
+    @Suppress("DEPRECATION")
+    private fun release(node: AccessibilityNodeInfo?) { if (Build.VERSION.SDK_INT < 33) node?.recycle() }
+    private fun collectObstacles(root: AccessibilityNodeInfo): List<ButtonPosition.Box> {
+        val result = mutableListOf<ButtonPosition.Box>()
+        var visited = 0
+        fun visit(node: AccessibilityNodeInfo, depth: Int) {
+            if (++visited > 160) return
+            if (node.isVisibleToUser && (node.isClickable || node.isEditable)) {
+                val rect = Rect().also(node::getBoundsInScreen)
+                if (!rect.isEmpty) result += rect.box()
+            }
+            if (depth < 12) for (i in 0 until node.childCount) {
+                if (visited >= 160) break
+                val child = node.getChild(i) ?: continue
+                try { visit(child, depth + 1) } finally { release(child) }
+            }
+        }
+        visit(root, 0)
+        return result
+    }
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        rotationUntil = SystemClock.elapsedRealtime() + 1800
+        obstaclesDirty = true
+        fieldStability.reset()
+        inspect()
+    }
 
     override fun onServiceConnected() {
         connected = this
         wm = getSystemService(WindowManager::class.java)
         offset = position.getInt("field-offset-v1", 0)
-        if (Build.VERSION.SDK_INT >= 33) serviceInfo = serviceInfo.apply {
-            flags = flags or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
+        serviceInfo = serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            if (Build.VERSION.SDK_INT >= 33) flags = flags or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
         }
         scope.launch { SettingsRepository.get(this@PaplyButtonService).state.collect { inspect() } }
         scope.launch {
@@ -82,8 +120,11 @@ class PaplyButtonService : AccessibilityService() {
         }
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (phase != ButtonPolicy.Phase.IDLE && event?.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED &&
-            event.source?.let { it != origin && it.isEditable } == true) changed = true
+        when (event?.eventType) {
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED, AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED, AccessibilityEvent.TYPE_VIEW_SCROLLED,
+            AccessibilityEvent.TYPE_VIEW_FOCUSED -> obstaclesDirty = true
+        }
         inspect()
     }
     // Inspection never reads field contents; only the explicit insertion attempt does.
@@ -94,17 +135,40 @@ class PaplyButtonService : AccessibilityService() {
             .map { Rect().also(it::getBoundsInScreen) }.filter { !it.isEmpty }
         keyboardStable = keyboardStability.observe(keyboard, SystemClock.elapsedRealtime())
         keyboardTop = keyboard.minOfOrNull { it.top } ?: resources.displayMetrics.heightPixels
-        val next = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isActive }
-            ?.root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val root = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isActive }
+            ?.root
+        val next = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val now = SystemClock.elapsedRealtime()
+        if (obstaclesDirty && now - obstaclesReadAt >= 150) {
+            val collected = root?.let(::collectObstacles).orEmpty()
+            if (collected != obstacles) { obstacles = collected; lastRender = null }
+            obstaclesDirty = false; obstaclesReadAt = now
+        }
+        release(root)
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT < 33) windows.forEach { it.recycle() }
         eligible = ButtonPolicy.visible(SettingsRepository.get(this).state.value.paplyButton,
             next?.isFocused == true, next?.isEditable == true, next?.isPassword == true, keyboard.isNotEmpty() &&
                 getSystemService(android.os.PowerManager::class.java).isInteractive &&
                 !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
         if (!eligible) fieldStability.reset()
         else if (next != field) fieldStability.reset(hold = bar != null)
-        fieldBounds = if (eligible) next?.let { Rect().also(it::getBoundsInScreen) } else null
+        val previousBounds = fieldBounds
+        fieldBounds = next?.takeIf { it.isFocused && it.isEditable }?.let { Rect().also(it::getBoundsInScreen) }
+        if (next != field || previousBounds != fieldBounds) { obstaclesDirty = true; lastRender = null }
+        release(field)
         field = next
-        if (phase != ButtonPolicy.Phase.IDLE && (changed || next != origin || !eligible)) {
+        if (now < rotationUntil && eligible && originId != null &&
+            next?.viewIdResourceName == originId && next?.packageName?.toString() == originPackage) {
+            release(origin)
+            @Suppress("DEPRECATION")
+            origin = next?.let { AccessibilityNodeInfo.obtain(it) }
+        }
+        val lost = !eligible || next != origin
+        if (lost && missingSince == null) missingSince = now
+        if (!lost) missingSince = null
+        val grace = ButtonTargetGrace.waiting(now, rotationUntil, missingSince, eligible, next == origin)
+        if (phase != ButtonPolicy.Phase.IDLE && (changed || (lost && !grace))) {
             changed = true
             if (phase == ButtonPolicy.Phase.STARTING) discard("Feld gewechselt. Aufnahme abgebrochen.")
             else if (phase == ButtonPolicy.Phase.RECORDING) { hint("Feld gewechselt. Text wird gesichert."); finish() }
@@ -120,7 +184,11 @@ class PaplyButtonService : AccessibilityService() {
         }
         if (MicrophoneLease.isBusy()) { hint("Das Mikrofon ist gerade belegt."); return }
         hintJob?.cancel(); hintText = null
-        origin = field; changed = false
+        release(origin)
+        @Suppress("DEPRECATION")
+        origin = field?.let { AccessibilityNodeInfo.obtain(it) }
+        originId = field?.viewIdResourceName; originPackage = field?.packageName?.toString()
+        missingSince = null; changed = false
         bar?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         transition(ButtonPolicy.Event.START)
         if (SettingsRepository.get(this).state.value.buttonForeground) requestForeground() else begin()
@@ -224,7 +292,16 @@ class PaplyButtonService : AccessibilityService() {
         val sent = ButtonPolicy.insert(Build.VERSION.SDK_INT, ::sameField, {
             if (Build.VERSION.SDK_INT >= 33) {
                 val connection = inputMethod?.currentInputConnection
-                if (connection != null) { connection.commitText(entry.text, 1, null); true } else false
+                if (connection != null) {
+                    val surrounding = connection.getSurroundingText(1, 0, 0)
+                    val before = surrounding?.let {
+                        ButtonTextInsertion.beforeSelection(it.text, it.selectionStart, it.selectionEnd)
+                    }
+                    if (sameField()) {
+                        connection.commitText(PaplyIme.spaced(entry.text, before), 1, null)
+                        true
+                    } else false
+                } else false
             } else false
         }, { ButtonTextInsertion.insert(field, entry.text).also { setTextResult = it } }, {
             clipboardFallback = Build.VERSION.SDK_INT in 29..32
@@ -275,7 +352,6 @@ class PaplyButtonService : AccessibilityService() {
             message.contains("Schlüssel", true) -> "Schlüssel fehlt oder ist ungültig"
             message.contains("Keine Sprache", true) -> "Keine Sprache erkannt. Bitte erneut versuchen."
             message.contains("belegt", true) -> "Mikrofon belegt"
-            message.contains("Einfügen") -> "Feld lange drücken → Einfügen"
             message.startsWith("Mikrofon wird") -> "Mikrofon startet neu …"
             message.startsWith("Feld gewechselt") -> "Feld gewechselt · Text wird gesichert"
             message.startsWith("Öffne Paply") || message.startsWith("Mikrofon nicht verfügbar") -> "Mikrofon in Paply freigeben"
@@ -299,21 +375,27 @@ class PaplyButtonService : AccessibilityService() {
         val bounds = fieldBounds?.takeUnless { it.isEmpty }
         val candidate = ButtonPosition.anchor(keyboardTop.coerceAtMost(screen.y), bounds?.top,
             bounds?.bottom, safeTop, dp(72), dp(8), dp(96), dp(200))
-        // Stabilize the anchor itself, including the transition to a large editor.
-        if (bounds != null) fieldStability.observe(candidate, SystemClock.elapsedRealtime())
+        // Stabilize the field's preferred top; actual bounds still veto unsafe positions immediately.
+        if (bounds != null) fieldStability.observe(bounds.top, SystemClock.elapsedRealtime())
         else fieldStability.reset()
-        val anchor = if (bounds != null) fieldStability.top else candidate
+        val anchor = if (bounds != null) fieldStability.top?.let {
+            ButtonPosition.anchor(keyboardTop.coerceAtMost(screen.y), it, bounds.bottom,
+                safeTop, dp(72), dp(8), dp(96), dp(200))
+        } else candidate
         maxOffset = anchor?.let { ButtonPosition.maxOffset(it, safeTop, dp(72), dp(8)) } ?: 0
         if (anchor != null) offset = offset.coerceIn(0, maxOffset)
-        val y = anchor?.let { ButtonPosition.top(it, safeTop, dp(72), dp(8), offset) }?.plus(inset)
-        val show = keyboardStable && y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
+        val anchoredY = anchor?.let { ButtonPosition.top(it, safeTop, dp(72), dp(8), offset) }?.plus(inset)
+        val fallbackHint = hintText != null && (!keyboardStable || anchoredY == null || !eligible)
+        val y = if (fallbackHint) screen.y - navigationBottom() - size - dp(8) else anchoredY
+        val show = y != null && !overlayFailed && (fallbackHint || (keyboardStable && eligible))
         if (!show) {
             lastRender = null
+            positionAnimator?.cancel(); positionAnimator = null
             bar?.let { view ->
                 logo?.stopAnimation()
                 bar = null
-                if (keyboardStable && ValueAnimator.areAnimatorsEnabled()) view.animate().alpha(0f).setDuration(140).withEndAction { runCatching { wm.removeView(view) } }.start()
-                else runCatching { wm.removeView(view) }
+                view.animate().cancel()
+                runCatching { wm.removeView(view) }
             }; return
         }
         val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, dp(8))
@@ -323,6 +405,7 @@ class PaplyButtonService : AccessibilityService() {
         if (bar == null) {
             val view = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
+                isFocusable = false; defaultFocusHighlightEnabled = false
             }
             logo = PaplyButtonView(this).apply {
                 level = { session?.recording?.level ?: 0f }
@@ -330,6 +413,7 @@ class PaplyButtonService : AccessibilityService() {
             }
             label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER_VERTICAL; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(8),0,dp(8),0) }
             cancel = TextView(this).apply { text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
+            listOfNotNull(label, cancel).forEach { it.isFocusable = false; it.defaultFocusHighlightEnabled = false }
             label?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); cornerRadius = dp(16).toFloat() }
             cancel?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); shape = GradientDrawable.OVAL }
             view.addView(label, LinearLayout.LayoutParams(-2,dp(48)))
@@ -375,11 +459,46 @@ class PaplyButtonService : AccessibilityService() {
         val previousHeight = layout.height; val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
         layout.width = (bar?.measuredWidth ?: size).coerceAtMost(horizontal.width)
         layout.height = size
-        layout.x = horizontal.rightMargin + inset
-        layout.y = y
+        val target = if (fallbackHint) {
+            val left = (screen.x - layout.width) / 2
+            val centered = ButtonPosition.Box(left, y, left + layout.width, y + size)
+            if (ButtonPosition.clearPath(centered, centered, bounds?.box(), obstacles)) centered
+            else ButtonPosition.choose(safeLeft + dp(8), screen.x - safeRight - dp(8), safeTop,
+                screen.y - navigationBottom(), layout.width, size, dp(8), bounds?.box(), obstacles)
+        } else ButtonPosition.choose(safeLeft + dp(8) + inset, screen.x - safeRight - dp(8) - inset, safeTop,
+            keyboardTop.coerceAtMost(screen.y), layout.width, size, dp(8) + inset,
+            bounds?.box(), obstacles, offset, fieldStability.top)
+        if (target == null) { bar?.visibility = View.INVISIBLE; lastRender = null; return }
+        bar?.visibility = View.VISIBLE
+        layout.x = screen.x - target.right
+        layout.y = target.top
         lastRender = key
-        if (layout.height != previousHeight || layout.width != previousWidth || layout.x != previousX || layout.y != previousY)
-            bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
+        if (layout.height != previousHeight || layout.width != previousWidth || layout.x != previousX || layout.y != previousY) {
+            positionAnimator?.cancel()
+            val targetX = layout.x; val targetY = layout.y
+            val from = ButtonPosition.Box(screen.x - previousX - layout.width, previousY,
+                screen.x - previousX, previousY + size)
+            if (previousWidth > 0 && previousHeight == size && ValueAnimator.areAnimatorsEnabled() &&
+                ButtonPosition.clearPath(from, target, bounds?.box(), obstacles)) {
+                positionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = 180
+                    interpolator = android.view.animation.DecelerateInterpolator()
+                    addUpdateListener {
+                        val fraction = it.animatedValue as Float
+                        layout.x = previousX + ((targetX - previousX) * fraction).toInt()
+                        layout.y = previousY + ((targetY - previousY) * fraction).toInt()
+                        bar?.let { view -> runCatching { wm.updateViewLayout(view, layout) } }
+                    }
+                    start()
+                }
+            } else bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
+        }
+    }
+    private fun navigationBottom(): Int {
+        if (Build.VERSION.SDK_INT >= 30) return wm.currentWindowMetrics.windowInsets
+            .getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()).bottom
+        val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (id == 0) dp(48) else resources.getDimensionPixelSize(id)
     }
     private fun screenInsets(): ButtonPosition.Insets {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -409,6 +528,8 @@ class PaplyButtonService : AccessibilityService() {
         if (phase == ButtonPolicy.Phase.RECORDING) { hint("Paply-Knopf beendet. Text wird gesichert."); session?.finish() }
         stopForeground(); scope.cancel()
         logo?.stopAnimation()
+        positionAnimator?.cancel()
+        release(field); release(origin); field = null; origin = null
         bar?.let { runCatching { wm.removeViewImmediate(it) } }; bar = null
         super.onDestroy()
     }

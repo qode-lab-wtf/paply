@@ -11,6 +11,11 @@ internal object ButtonTextInsertion {
     enum class Result { VERIFIED, REVIEW, UNAVAILABLE }
     data class Edit(val text: String, val cursor: Int)
 
+    fun beforeSelection(text: CharSequence, start: Int, end: Int): String? {
+        val from = minOf(start, end)
+        return if (from in 1..text.length) text[from - 1].toString() else null
+    }
+
     fun compose(text: String, start: Int, end: Int, hint: Boolean, dictated: String): Edit? {
         val current = if (hint) "" else text
         if (current.length > MAX_FIELD_LENGTH || dictated.isBlank()) return null

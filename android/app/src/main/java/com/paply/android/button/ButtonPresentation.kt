@@ -4,15 +4,16 @@ package com.paply.android.button
 internal object ButtonPresentation {
     fun deliveryMessage(accepted: Boolean, retained: Boolean, copied: Boolean,
                         clipboardFallback: Boolean, review: Boolean): String? {
-        val message = when {
-            review -> "Textfeld nimmt Text nicht sicher an. Bitte prüfen."
-            !retained && !accepted -> if (copied) "Text in Zwischenablage. Jetzt einfügen; Verlauf nicht gespeichert."
+        val clipboard = copied || clipboardFallback
+        return when {
+            review -> if (clipboard) "Textfeld bitte prüfen – Text liegt auch in der Zwischenablage."
+                else "Textfeld nimmt Text nicht sicher an. Bitte prüfen."
+            !retained && !accepted -> if (clipboard) "Text in Zwischenablage. Jetzt einfügen; Verlauf nicht gespeichert."
                 else "Text konnte nicht gesichert werden. Bitte erneut versuchen."
-            accepted -> null
-            copied || clipboardFallback -> "Text in Zwischenablage. Feld lange drücken → Einfügen."
+            accepted -> if (clipboard) "Eingesetzt – Text liegt auch in der Zwischenablage." else null
+            clipboard -> "Text in der Zwischenablage – Feld lange drücken → Einfügen."
             else -> "Text nur im Verlauf. Dort kopieren und einsetzen."
         }
-        return if (clipboardFallback) listOfNotNull("Text auch in der Zwischenablage", message).joinToString(". ") else message
     }
 
     data class Render(val sizeDp: Int, val hint: String?, val cancel: Boolean, val phase: ButtonPolicy.Phase)

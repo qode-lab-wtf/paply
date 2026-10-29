@@ -21,11 +21,11 @@ public class ImeFixtureActivity extends Activity {
         TextView title = new TextView(this);
         title.setText("Paply · IME-Abnahme (Test-APK)"); title.setTextSize(20);
         body.addView(title);
-        EditText first = field(1001, "Erstes Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
+        EditText first = field(com.paply.android.test.R.id.button_fixture_first, "Erstes Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
         if (getIntent().getBooleanExtra("emptyWithoutHint", false)) first.setHint(null);
-        field(1002, "Zweites Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
-        field(1003, "Passwort", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, false);
-        field(1004, "Editor lehnt Einsetzen ab", InputType.TYPE_CLASS_TEXT, true);
+        field(com.paply.android.test.R.id.button_fixture_second, "Zweites Textfeld", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
+        field(com.paply.android.test.R.id.button_fixture_password, "Passwort", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, false);
+        field(com.paply.android.test.R.id.button_fixture_reject, "Editor lehnt Einsetzen ab", InputType.TYPE_CLASS_TEXT, true);
         TextView clipboard = new TextView(this); clipboard.setTextSize(16);
         Button check = new Button(this); check.setText("Zwischenablage prüfen");
         check.setOnClickListener(v -> {
