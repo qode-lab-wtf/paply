@@ -1,8 +1,8 @@
 # Paply — Stand
 
-**Zeitpunkt:** 29.10.2026 · **Phase:** v1.15.2 veröffentlicht, v1.15.3 (gemeinsame Polier-Quelle) lokal vorbereitet · Paply iOS 0.1.0 bei TestFlight (Builds 1–8, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
+**Zeitpunkt:** 29.10.2026 · **Phase:** v1.15.3 (gemeinsame Polier-Quelle) veröffentlicht und auf Allans MacBook installiert · Paply iOS 0.1.0 bei TestFlight (Builds 1–8, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
 
-## Paply iOS — „Gespräche“ (29.10.2026, Branch `feat/ios-gespraeche`, Build 9)
+## Paply iOS — „Gespräche“ (29.10.2026, in `feat/ios-v1` zusammengeführt; Weiterbau auf `feat/ios-gespraeche`, Build 9)
 
 - **Was:** iPhone liegt beim Meeting, Gespräch vor Ort oder Telefonat (anderes Handy auf Lautsprecher) daneben und
   nimmt auf; danach Personen, Wortlaut, Zusammenfassung, Aufgaben, Thema. Bauplan `ios/docs/gespraeche/KONZEPT.md`,
@@ -18,8 +18,10 @@
   allen Befunden behoben, Bildschirmfotos im Simulator. Messung: deutsche Simulationen fast fehlerfrei, echte englische
   Meetings 12–19 % falsch zugeordnete Wörter (v. a. kurze Einwürfe; dafür Einwurf-Regeln und KI-Plausibilisierung).
 - **29.10., 16:23:** Debug-Build 9 drahtlos auf Allans iPhone (kein TestFlight-Upload). Offen: echte Aufnahmen von
-  Allan (Telefon über Lautsprecher, Runde mit 3+), Gerätemessung Tempo/Speicher/Hitze (auch iPhone 12 Pro), danach
-  Zusammenführen nach `feat/ios-v1` und TestFlight.
+  Allan (Telefon über Lautsprecher, Runde mit 3+), Gerätemessung Tempo/Speicher/Hitze (auch iPhone 12 Pro).
+- **29.10., abends:** auf Allans Wunsch in `feat/ios-v1` zusammengeführt, damit iOS beisammen ist. Beta „Gespräche“
+  ist in TestFlight/Release ohne gespeicherten Wert AUS (Debug AN), bis der Gerätetest bestanden ist; einschalten unter
+  Einstellungen → Beta. Neue Gespräche-Stände kommen per Merge aus `feat/ios-gespraeche` nach.
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
