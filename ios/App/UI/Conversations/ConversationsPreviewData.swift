@@ -53,3 +53,32 @@ enum ConversationsPreviewData {
 #Preview("Gedanken-Zeile") { ConversationThoughtRow(item: ConversationsPreviewData.phone, time: "14:05").padding().background(PaplyBackground()).preferredColorScheme(.dark) }
 #Preview("Zustandsband") { ConversationStatusBand(conversation: ConversationsPreviewData.analyzing.conversation, onRetry: {}).padding().background(PaplyBackground()).preferredColorScheme(.dark) }
 #Preview("Sprecher") { ConversationSpeakerLabel(speaker: ConversationsPreviewData.speakers[1], showSuggestion: true).padding().background(PaplyBackground()).preferredColorScheme(.dark) }
+
+#if DEBUG
+extension ConversationsPreviewData {
+    static var callUnknownOwner: ConversationDisplay {
+        var item = phone
+        item.conversation.speakers[0].personID = nil
+        item.conversation.speakers[0].nameSource = .none
+        return item
+    }
+
+    static var meetingWithTasks: ConversationDisplay {
+        var item = meeting
+        item.tasks = [.init(id: "garden-own", text: "Saatgut und Handschuhe besorgen", dueHint: "Freitag", owner: .ai)]
+        item.conversation.summary?.commitments = [
+            .init(id: "garden-nora", speakerID: "S2", text: "Jungpflanzen mitbringen", dueHint: "Samstag"),
+            .init(id: "garden-tarek", speakerID: "S3", text: "Schubkarre organisieren"),
+            .init(id: "garden-four", speakerID: "S4", text: "Wasseranschluss prüfen")
+        ]
+        item.conversation.gaps = [.init(at: 29, seconds: 300, reason: "pause")]
+        return item
+    }
+
+    static var partlyProcessed: ConversationDisplay {
+        var item = analyzing
+        item.conversation.stagesDone = [.speakers, .transcript]
+        return item
+    }
+}
+#endif

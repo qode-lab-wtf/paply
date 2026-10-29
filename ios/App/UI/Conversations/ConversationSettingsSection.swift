@@ -57,6 +57,7 @@ struct ConversationEnrollmentView: View {
     let onStart: () -> Void
     let onFinish: () -> Void
     let onCancel: () -> Void
+    var cancelTitle = "Abbrechen"
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
@@ -70,7 +71,7 @@ struct ConversationEnrollmentView: View {
                     .buttonStyle(.borderedProminent).tint(ConversationTint.blue).frame(minHeight: 44)
             }.padding(24).frame(maxWidth: .infinity)
         }.background(PaplyBackground()).foregroundStyle(Color.paplyText).navigationTitle("Meine Stimme")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Abbrechen", action: onCancel) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(cancelTitle, action: onCancel) } }
     }
 }
 

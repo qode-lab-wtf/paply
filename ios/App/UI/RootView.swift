@@ -27,6 +27,9 @@ struct RootView: View {
     @State private var flow: CaptureFlow
     /// Abhaken mit Wartezeit – eine für alle Reiter, damit dieselbe Aufgabe überall gleich aussieht
     @State private var checkoff = TaskCheckoff()
+    #if DEBUG
+    @State private var devPreview: ConversationDevPreviewRoute?
+    #endif
     @Namespace private var zoom
     @Environment(\.scenePhase) private var scenePhase
     private let session = SessionController.shared
@@ -102,6 +105,9 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         #if DEBUG
+        .fullScreenCover(item: $devPreview) { route in
+            ConversationDevPreview(route: route)
+        }
         .task { await ThoughtsDebug.apply(nav: nav, flow: flow, model: model) }
         #endif
     }
@@ -146,6 +152,36 @@ struct RootView: View {
     /// ausgeschalteter Beta). Ist die Beta „Gedanken & Aufgaben“ aus, zeigen alle diese Links nur den Hinweis.
     /// Sitzungs-Links (`session/…`) bearbeitet weiterhin SessionController.handleURL.
     private func open(_ url: URL) {
+        #if DEBUG
+        if url.scheme == PaplyURL.scheme, url.host == "dev" {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 2 else { return }
+            switch parts[0] {
+            case "preview":
+                if let route = ConversationDevPreviewRoute(rawValue: parts[1]) {
+                    devPreview = route
+                }
+            case "tab":
+                let tab: RootTab?
+                switch parts[1] {
+                case "gedanken": tab = .thoughts
+                case "gespraeche": tab = .conversations
+                case "aufgaben": tab = .tasks
+                case "diktat": tab = .dictation
+                default: tab = nil
+                }
+                if let tab {
+                    devPreview = nil
+                    nav.showSettings = false
+                    settings.betaThoughts = true
+                    settings.betaConversations = true
+                    nav.tab = tab
+                }
+            default: break
+            }
+            return
+        }
+        #endif
         if url.isFileURL {
             Task { await ConversationCapture.shared.importAudio(url) }
             return

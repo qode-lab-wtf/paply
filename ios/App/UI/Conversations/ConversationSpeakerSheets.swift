@@ -16,6 +16,7 @@ struct ConversationSpeakerSheet: View {
     let people: [VoicePerson]
     let onChoose: (ConversationSpeakerChoice) -> Void
     let onCancel: () -> Void
+    var cancelTitle = "Abbrechen"
     @State private var name = ""
     var body: some View {
         NavigationStack {
@@ -52,7 +53,7 @@ struct ConversationSpeakerSheet: View {
                 } footer: { Text("Bestätigte Stimmen merkt sich Paply nur auf diesem iPhone.") }.listRowBackground(Color.paplyRow)
             }
             .paplyList().navigationTitle("Wer ist das?").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Abbrechen", action: onCancel) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(cancelTitle, action: onCancel) } }
         }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible).tint(ConversationTint.blue)
     }
 }
@@ -63,6 +64,7 @@ struct ConversationUtteranceSpeakerSheet: View {
     var title = "Anderer Sprecher …"
     let onChoose: (String) -> Void
     let onCancel: () -> Void
+    var cancelTitle = "Abbrechen"
     var body: some View {
         List(speakers) { speaker in
             Button { onChoose(speaker.id) } label: {
@@ -74,7 +76,7 @@ struct ConversationUtteranceSpeakerSheet: View {
             }.listRowBackground(Color.paplyRow)
         }
         .paplyList().navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Abbrechen", action: onCancel) } }
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button(cancelTitle, action: onCancel) } }
         .presentationDetents([.medium]).presentationDragIndicator(.visible)
     }
 }
