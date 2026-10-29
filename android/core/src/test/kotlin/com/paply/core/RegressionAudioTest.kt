@@ -58,7 +58,9 @@ class RegressionAudioTest {
         val p = server.pipeline(PaplySettings(language = "de", chunkedUpload = chunked), PipelineOptions(uploadFormat = PipelineOptions.UploadFormat.wav, polish = false, codeSwitchPrimer = false))
         val out = p.use { for (i in src.indices step blockSize) { val b = src.copyOfRange(i, minOf(i + blockSize, src.size)); p.append(b); b.fill(0); if (paced) delay(20) }; withTimeout(10000) { p.finish() } }
         assertNull(out.error); assertTrue(hits.isNotEmpty()); if (case == 0 && chunked) assertEquals(3, hits.size)
-        var cursor = 0; val ordered = hits.sortedBy { it.first }
+        val ordered = hits.sortedBy { it.first }
+        var cursor = ordered.first().first
+        assertTrue("Only safe leading silence may be omitted", cursor in 0..(pad * 2))
         for ((start, w) in ordered) {
           val data = w.copyOfRange(44, w.size).toByteString(); assertTrue(data.size > 0); assertTrue(start >= 0); assertEquals(0, start % 2)
           assertEquals(listOf(start), positions(expected.toByteArray(), data.toByteArray())); assertEquals(cursor, start); assertArrayEquals(AudioEncoder.wav(pcm(data.toByteArray())), w)

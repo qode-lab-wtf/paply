@@ -65,7 +65,7 @@ constructor(
     private val deviceLanguages = deviceLanguages.toList()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val samples = PcmBuffer()
-    private var vad = VoiceActivityDetector(analyzeQuietFrames = options.removeLongSilence)
+    private var vad = VoiceActivityDetector(analyzeQuietFrames = true)
     private var planner = ChunkPlanner()
 
     private data class Chunk(
@@ -165,7 +165,7 @@ constructor(
             if (finished || cancelled || chunks.isNotEmpty() || vad.speechDetected)
                 return@synchronized false
             samples.clear()
-            vad = VoiceActivityDetector(analyzeQuietFrames = options.removeLongSilence)
+            vad = VoiceActivityDetector(analyzeQuietFrames = true)
             planner = ChunkPlanner()
             true
         }
@@ -215,7 +215,37 @@ constructor(
         measured: VoiceActivityDetector,
         previous: ChunkResult?,
     ): ChunkResult = try {
-        transcribeChecked(audio, startSample, measured, previous)
+        // Compact only confidently silent runs; preserve live scheduling and one request per piece.
+        val ranges = LongSilence.ranges(measured, startSample, startSample + audio.size)
+        if (ranges.isEmpty()) ChunkResult()
+        else if (ranges.size == 1 && ranges[0].first == startSample && ranges[0].last + 1 == startSample + audio.size)
+            transcribeChecked(audio, startSample, measured, previous)
+        else {
+            val compact = ShortArray(ranges.sumOf { it.last - it.first + 1 })
+            var cursor = 0
+            for (range in ranges) {
+                audio.copyInto(compact, cursor, range.first - startSample, range.last + 1 - startSample)
+                cursor += range.last - range.first + 1
+            }
+            val local = VoiceActivityDetector(analyzeQuietFrames = true)
+            local.process(AudioEncoder.floats(compact))
+            fun original(seconds: Double, end: Boolean): Double {
+                var sample = (seconds * AudioEncoder.sampleRate).toInt().coerceIn(0, compact.size)
+                for (range in ranges) {
+                    val size = range.last - range.first + 1
+                    if (sample < size || (end && sample == size))
+                        return (range.first + sample) / AudioEncoder.sampleRate
+                    sample -= size
+                }
+                return (ranges.last().last + 1) / AudioEncoder.sampleRate
+            }
+            transcribeChecked(compact, 0, local, previous).let { result ->
+                result.copy(segments = result.segments.map { segment ->
+                    segment.copy(start = segment.start?.let { original(it, false) },
+                        end = segment.end?.let { original(it, true) })
+                })
+            }
+        }
     } catch (error: Throwable) {
         ChunkResult(failure = error.asGroqFailure())
     }

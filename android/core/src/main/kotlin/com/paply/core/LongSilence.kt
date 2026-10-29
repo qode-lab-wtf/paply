@@ -1,6 +1,6 @@
 package com.paply.core
 
-/** File transcription only: omit confidently silent >= 2 s runs, keeping 240 ms word edges.
+/** Live and file transcription: omit confidently silent >= 2 s runs, keeping 240 ms word edges.
  * Uncertain, bright (whisper-like) or periodic (even quiet voiced) frames are always kept.
  * This does not stop capture and does not filter text or trust Whisper's no_speech_prob.
  */
