@@ -141,3 +141,20 @@ Es gibt eine eigene Korrekturrunde **„Fix-G“**. Sie läuft nach dem IME-Fix,
 14. Widget-PendingIntent mit `FLAG_UPDATE_CURRENT`.
 15. Bewusst so gelassen: Im Lautlos- bzw. DND-Modus vibriert der Hinweis nicht, die Wünsche des Nutzers gelten. Sichtbar
     bleiben Benachrichtigung, Chip und Mikro-Punkt.
+
+## Endreview vor Freigabe (Sonnet, Commit `f9323b9`): Entscheidungen
+Kein Blocker, kein Hoch. Endrunde **„Fix-Final“**:
+1. Erinnerung ohne Exakt-Recht: Das Fenster beginnt bei `fireAt`, also lieber etwas spät als zu früh. Nach „Erinnern“ öffnet
+   sich die Systemseite für exakte Alarme, falls das Recht fehlt, mit einem kurzen Satz dazu.
+2. Audio-Frist durchsetzen: Fehlgeschlagene Diktat- und Gedanken-Aufnahmen werden nach 30 Tagen gelöscht, auch bei
+   Beta aus. Das passt zum Text in App und Anleitung.
+3. Zwischenablage: Ist der Text gesendet, das Feld aber nicht lesbar, wird nicht kopiert. Er steht im Verlauf, und das
+   Panel sagt „Gesendet“. Kopiert wird nur, wenn nicht gesendet wurde bzw. bei Feldwechsel.
+4. KeyVault: Gelöscht und neu erzeugt wird nur bei dauerhaften Keystore-Fehlern. Sonst einmal erneut versuchen, ohne
+   etwas zu löschen. Der Schlüssel geht nie still verloren.
+5. Der Deep-Link `thoughtId` wird nach dem Verbrauchen aus dem Intent entfernt, damit Drehen nichts doppelt öffnet.
+6. Bewusst so gelassen: „Verwerfen“ ohne Entsperren unter API 31, weil die Plattform das nicht kann. Ist dokumentiert.
+7. FLAC: Lehnt Groq wegen des Audios ab (400), geht es einmal als WAV erneut. Das schützt vor Hersteller-Encodern.
+8. Unterer Abstand über WindowInsets statt fester 48 dp (CaptureBar, ImePanel). Blur unter API 31 bleibt Kosmetik.
+9. Gebaut wird aus einem sauberen Commit, `lintRelease` muss grün sein, Version 0.1.0 (1). Es ist die erste Ausgabe an
+   Freunde, deshalb gibt es keinen Versionssprung.
