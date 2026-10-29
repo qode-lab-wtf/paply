@@ -10,6 +10,7 @@ final class ConversationBackground {
     private var ids: Set<String> = []
     private var tasks: [String: BGTask] = [:]
     private var registered = false
+    private var continuedIdentifiers: Set<String> = []
     private var assertion: UIBackgroundTaskIdentifier = .invalid
     var isRunning: Bool { !ids.isEmpty }
     /// Warteschlange muss bei Ablauf abbrechen und ihren Stand sichern.
@@ -48,19 +49,21 @@ final class ConversationBackground {
         }
         if #available(iOS 26.0, *) {
             let key = Self.identifier + ".continued." + id
-            BGTaskScheduler.shared.register(forTaskWithIdentifier: key, using: .main) { task in
-                Task { @MainActor in
-                    guard self.ids.contains(id) else { task.setTaskCompleted(success: true); return }
-                    self.tasks[id] = task
-                    await SessionController.shared.pauseConversationProcessingInput()
-                    if let continued = task as? BGContinuedProcessingTask {
-                        continued.progress.totalUnitCount = 1000
+            if continuedIdentifiers.insert(key).inserted {
+                BGTaskScheduler.shared.register(forTaskWithIdentifier: key, using: .main) { task in
+                    Task { @MainActor in
+                        guard self.ids.contains(id) else { task.setTaskCompleted(success: true); return }
+                        self.tasks[id] = task
+                        await SessionController.shared.pauseConversationProcessingInput()
+                        if let continued = task as? BGContinuedProcessingTask {
+                            continued.progress.totalUnitCount = 1000
+                        }
+                        task.expirationHandler = { Task { @MainActor in
+                            self.onExpiration?(id)
+                            self.end(id: id, success: false)
+                            self.schedule()
+                        } }
                     }
-                    task.expirationHandler = { Task { @MainActor in
-                        self.onExpiration?(id)
-                        self.end(id: id, success: false)
-                        self.schedule()
-                    } }
                 }
             }
             let request = BGContinuedProcessingTaskRequest(identifier: key, title: "Gespräch auswerten", subtitle: "Paply ordnet deine Aufnahme")

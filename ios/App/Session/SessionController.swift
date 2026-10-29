@@ -223,10 +223,6 @@ final class SessionController {
         if isConversationActive { ConversationCapture.shared.finish() }
         // „Ausschalten“ beendet auch einen laufenden Gedanken – gesichert, nie verworfen
         if ThoughtCapture.shared.active != nil { ThoughtCapture.shared.finish(.app) }
-        if ConversationBackground.shared.isRunning {
-            cancelDictation(reason: "session-stop")
-            return
-        }
         guard status != .off || audio.isRunning else { return }
         cancelDictation(reason: "session-stop")
         micRestartCause = nil
@@ -234,6 +230,7 @@ final class SessionController {
         silenceRestartTask = nil
         silenceRestarts = []
         startedForThought = false
+        startedForConversation = false
         thoughtSessionEnd?.cancel()
         pauseTask?.cancel()
         idlePaused = false
@@ -1575,9 +1572,7 @@ extension SessionController {
         guard !conversationHeld else { return }
         if startedForConversation, !dictationInUse, !isThoughtActive, dictation == nil {
             startedForConversation = false
-            // Gleiche Nachlaufzeit wie beim Gedanken, erst nach Ende der Auswertung.
-            startedForThought = true
-            scheduleThoughtSessionEnd()
+            stopSession(reason: "conversation-end")
         } else {
             schedulePauseIfIdle(reason: "conversation-end")
             if startedForThought, !dictationInUse { scheduleThoughtSessionEnd() }

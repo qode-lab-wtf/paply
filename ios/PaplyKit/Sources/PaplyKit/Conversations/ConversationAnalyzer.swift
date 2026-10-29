@@ -20,7 +20,8 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                                   progress: @escaping @Sendable (ConversationProgress) -> Void) async throws -> Diarization {
         let cache = input.workDirectory.appendingPathComponent("diarization.json")
         if FileSafety.exists(cache) {
-            return try ThoughtJSON.decoder().decode(CachedDiarization.self, from: Data(contentsOf: cache)).value
+            let saved = try ThoughtJSON.decoder().decode(CachedDiarization.self, from: Data(contentsOf: cache))
+            if saved.model == diarizer.embeddingModel { return saved.value }
         }
         let value = try await diarizer.diarize(audio: input.audio, expectedSpeakers: input.expectedSpeakers) {
             progress(.init(stage: .speakers, fraction: $0))

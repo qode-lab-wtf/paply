@@ -28,6 +28,7 @@ public actor ConversationProcessor: ConversationEditing {
         if lockWaiters.isEmpty { locked = false }
         else { lockWaiters.removeFirst().resume() }
     }
+    private var analysis: (id: String, task: Task<ConversationAnalysisOutcome, Never>)?
     private var rerun = false
     private var timer: Task<Void, Never>?
     public init(store: ConversationStore, thoughts: ThoughtStore, profiles: VoiceProfileStore, analyzer: any ConversationAnalyzing, environment: Environment) {
@@ -39,7 +40,7 @@ public actor ConversationProcessor: ConversationEditing {
         running = Task { await drain() }
     }
     public func waitUntilIdle() async { while let running { await running.value } }
-    public func cancelRunning() { running?.cancel(); timer?.cancel() }
+    public func cancelRunning() { analysis?.task.cancel(); running?.cancel(); timer?.cancel() }
     public func retry(_ id: String) async throws {
         try await store.update(id) { $0.state = .captured; $0.status = .init() }
         kick(reason: "retry")
@@ -66,8 +67,6 @@ public actor ConversationProcessor: ConversationEditing {
         }
     }
     private func process(_ item: Conversation) async {
-        await lock()
-        defer { unlock() }
         do {
             guard let current = try await store.conversation(item.id), current.deletedAt == nil,
                   let audio = try await store.prepareForAnalysis(item.id) else { return }
@@ -81,22 +80,33 @@ public actor ConversationProcessor: ConversationEditing {
             try await store.update(item.id) { $0.state = .analyzing }
             let broadcast = self.broadcast
             let store = self.store
-            let outcome = await analyzer.analyze(input, apiKey: await environment.apiKey()) { progress in
+            let key = await environment.apiKey()
+            let analyzer = self.analyzer
+            guard try await store.conversation(item.id)?.deletedAt == nil,
+                  try await store.conversation(item.id) != nil else { return }
+            let task = Task { await analyzer.analyze(input, apiKey: key) { progress in
                 broadcast.yield(.progress(item.id, progress))
                 Task { try? await store.update(item.id) { if $0.state == .analyzing { $0.progress = progress } } }
+            } }
+            analysis = (item.id, task)
+            let outcome = await task.value
+            analysis = nil
+            do {
+                await lock()
+                defer { unlock() }
+                guard let latest = try await store.conversation(item.id), latest.deletedAt == nil else { return }
+                switch outcome {
+                case .done(let result):
+                    try await apply(result, id: item.id, state: .done, retryAt: nil, message: nil)
+                case .partial(let result, let state, let retry, let message): try await apply(result, id: item.id, state: state, retryAt: retry, message: message)
+                case .wait(let state, let retry, let message):
+                    try await store.update(item.id) { $0.state = state; $0.status.retryAt = retry; $0.status.message = message }
+                case .empty: try await store.update(item.id) { $0.state = .empty; $0.progress = nil }
+                case .failed(let code):
+                    try await store.update(item.id) { $0.status.attempts += 1; $0.state = $0.status.attempts >= 3 ? .needsAttention : .waitingNetwork; $0.status.retryAt = Date().addingTimeInterval(60); $0.status.message = code }
+                }
             }
-            guard let latest = try await store.conversation(item.id), latest.deletedAt == nil else { return }
-            switch outcome {
-            case .done(let result):
-                try await apply(result, id: item.id, state: .done, retryAt: nil, message: nil)
-                try await store.compactAudio(item.id)
-            case .partial(let result, let state, let retry, let message): try await apply(result, id: item.id, state: state, retryAt: retry, message: message)
-            case .wait(let state, let retry, let message):
-                try await store.update(item.id) { $0.state = state; $0.status.retryAt = retry; $0.status.message = message }
-            case .empty: try await store.update(item.id) { $0.state = .empty; $0.progress = nil }
-            case .failed(let code):
-                try await store.update(item.id) { $0.status.attempts += 1; $0.state = $0.status.attempts >= 3 ? .needsAttention : .waitingNetwork; $0.status.retryAt = Date().addingTimeInterval(60); $0.status.message = code }
-            }
+            if case .done = outcome { try await store.compactAudio(item.id) }
             broadcast.yield(.changed(item.id))
         } catch {
             _ = try? await store.update(item.id) { $0.state = .needsAttention; $0.status.message = "store-failed" }
@@ -116,9 +126,10 @@ public actor ConversationProcessor: ConversationEditing {
             let previous = try await store.transcript(id)
             for i in transcript.utterances.indices {
                 if let user = previous?.utterances.first(where: {
-                    $0.id == transcript.utterances[i].id && $0.speakerOwner == .user
+                    $0.speakerOwner == .user && ConversationUtteranceMatch.matches($0, transcript.utterances[i])
                 }) {
-                    transcript.utterances[i] = user
+                    transcript.utterances[i].speakerID = user.speakerID
+                    transcript.utterances[i].speakerOwner = .user
                     continue
                 }
                 let source = transcript.utterances[i].speakerID
@@ -222,6 +233,7 @@ public actor ConversationProcessor: ConversationEditing {
         try await store.housekeeping(now: now)
     }
     public func delete(_ id: String) async throws {
+        if analysis?.id == id { analysis?.task.cancel() }
         await lock()
         defer { unlock() }
         try await setDeleted(id, deleted: true)
@@ -232,6 +244,7 @@ public actor ConversationProcessor: ConversationEditing {
         try await setDeleted(id, deleted: false)
     }
     public func purge(_ id: String) async throws {
+        if analysis?.id == id { analysis?.task.cancel() }
         await lock()
         defer { unlock() }
         try await store.purge(id)
@@ -242,7 +255,10 @@ public actor ConversationProcessor: ConversationEditing {
         guard try await store.conversation(id) != nil else { return }
         let journal = store.directory(id).appendingPathComponent("deletion.json")
         try FileSafety.writeAtomically(try JSONEncoder().encode(deleted), to: journal)
-        if deleted { try await store.delete(id) } else { try await store.restore(id) }
+        if deleted {
+            if analysis?.id == id { analysis?.task.cancel() }
+            try await store.delete(id)
+        } else { try await store.restore(id) }
         if let thought = await thoughts.thought(id) {
             if deleted && thought.deletedAt == nil { try await thoughts.delete(id) }
             if !deleted && thought.deletedAt != nil { try await thoughts.restore(id) }

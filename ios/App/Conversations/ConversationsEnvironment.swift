@@ -26,6 +26,8 @@ enum ConversationsEnvironment {
                 return [own] + names + topics
             })
     }
+    // Anschlussstelle für die Bereitschaft des echten Motors.
+    static var voiceLearningAllowed: Bool { AppSettings.shared.betaConversations }
     private static var started = false
     private static var observers: [NSObjectProtocol] = []
     private static let network = NWPathMonitor()
@@ -50,6 +52,7 @@ enum ConversationsEnvironment {
             ) { _ in
                 Task { @MainActor in await run() }
             })
+        ConversationLearning.observe()
         observeKey()
         observePriority()
         Task {
@@ -57,7 +60,7 @@ enum ConversationsEnvironment {
         }
         ProtectedData.whenReadable { _ in
             ready = Task {
-                await ThoughtsEnvironment.store.setAudioReleaseHook(profiles.learningHook())
+                await ConversationLearning.refresh()
                 do { try await processor.housekeeping() } catch { Diag.log("conversation.housekeeping.failed") }
             }
             Task { await run() }
@@ -97,6 +100,7 @@ enum ConversationsEnvironment {
         guard !Task.isCancelled else { return }
         await processor.kick()
         await processor.waitUntilIdle()
+        await ConversationLearning.refresh()
         await ConversationsModel.shared.reload()
         await learnWhenIdle()
     }
@@ -119,7 +123,7 @@ enum ConversationsEnvironment {
     private static func learnWhenIdle() async {
         // Der Rückfall darf die begrenzte Warteschlange nicht ohne Lernergebnis leeren.
         let diarizer = makeDiarizer()
-        guard diarizer.embeddingModel != "fallback-vad-no-voiceprint", learning == nil,
+        guard voiceLearningAllowed, diarizer.embeddingModel != "fallback-vad-no-voiceprint", learning == nil,
             !ThoughtsEnvironment.isDictationBusy(), !SessionController.shared.isThoughtActive,
             !SessionController.shared.isConversationActive, !ConversationBackground.shared.isRunning
         else { return }

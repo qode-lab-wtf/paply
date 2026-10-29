@@ -67,9 +67,16 @@ public actor ConversationTranscriber {
         func normalized(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
         var used = Set<Int>()
         for word in incoming {
-            let duplicate = previous.indices.last { index in
+            var low = 0, high = previous.count
+            while low < high {
+                let mid = (low + high) / 2
+                if previous[mid].start < word.start - 0.5 { low = mid + 1 } else { high = mid }
+            }
+            let candidates = (low..<previous.count).prefix { previous[$0].start < word.start + 0.5 }
+            let duplicate = candidates.last { index in
                 guard !used.contains(index) else { return false }
                 let old = previous[index]
+                guard abs(old.start - word.start) < 0.5, min(old.end, word.end) - max(old.start, word.start) >= -0.1 else { return false }
                 let a = normalized(old.word)
                 let b = normalized(word.word)
                 let overlap = min(old.end, word.end) - max(old.start, word.start)
@@ -130,9 +137,11 @@ public actor ConversationTranscriber {
                 let client = GroqClient(apiKey: apiKey, transport: transport, baseURL: baseURL)
                 let response = await client.transcribeConversation(audio: encoded, language: cut - offset < 30 * 16000 ? mainLanguage : nil, vocabulary: vocabulary)
                 switch response {
-                case .success(let result):
+                case .success(var result):
                     let duration = Double(cut - offset) / 16000
-                    guard result.words.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end >= $0.start && $0.end <= duration + 0.1 }) else { throw GroqFailure.invalidResponse }
+                    guard result.words.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end >= $0.start }) else { throw GroqFailure.invalidResponse }
+                    result.words = result.words.map { .init(word: $0.word, start: min(duration, $0.start), end: min(duration, $0.end)) }
+                    result.segments = result.segments.map { .init(start: max(0, min(duration, $0.start)), end: max(0, min(duration, $0.end)), text: $0.text) }
                     await ledger.settle(reservation, actual: max(10, Int(ceil(Double(cut - offset) / 16000))))
                     return result
                 case .failure(let failure):

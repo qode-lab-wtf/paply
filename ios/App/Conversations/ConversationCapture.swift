@@ -65,8 +65,14 @@ final class ConversationCapture {
         bootstrap()
         if active != nil { finish(); return true }
         guard !starting, !finishing else { return true }
+        notice = nil
         guard ProtectedData.isReadable, freeBytes >= 500_000_000 else {
             notice = "Zum Aufnehmen brauchst du 500 MB freien Speicher und ein entsperrtes iPhone."
+            return true
+        }
+        guard AppSettings.shared.betaConversations else {
+            notice = "Aktiviere Gespräche in den Beta-Einstellungen."
+            ConversationNavigation.shared.error = notice
             return true
         }
         starting = true
@@ -127,22 +133,26 @@ final class ConversationCapture {
         let savedGaps = gaps
         Task {
             defer {
-                finishing = false
                 ConversationBackground.shared.end(id: current.id)
             }
             if discard {
                 await store.discardRecording(current.id)
+                finishing = false
                 endActivity()
                 self.activity = nil
                 return
             }
             do {
                 if let value = try await store.finishRecording(current.id, durationMs: duration, gaps: savedGaps) {
+                    finishing = false
                     if let onRecordingFinished { await onRecordingFinished(value) }
-                    else { update(.waiting) }
+                    else { updateProcessing(id: current.id, phase: .waiting) }
+                } else {
+                    finishing = false
                 }
             } catch {
-                update(.failed)
+                finishing = false
+                updateProcessing(id: current.id, phase: .failed)
                 Diag.log("conversation.finish.failed", ["code": .i((error as NSError).code)])
             }
         }
@@ -170,10 +180,16 @@ final class ConversationCapture {
         pauseAt = nil
     }
     func importAudio(_ url: URL) async {
+        guard AppSettings.shared.betaConversations else {
+            ConversationNavigation.shared.error = "Aktiviere Gespräche in den Beta-Einstellungen."
+            return
+        }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
             let value = try await store.importAudio(from: url, at: Date())
+            let inbox = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Inbox").standardizedFileURL
+            if url.standardizedFileURL.deletingLastPathComponent() == inbox { try? FileManager.default.removeItem(at: url) }
             ConversationNavigation.shared.requestedID = value.id
             ConversationBackground.shared.begin(id: value.id)
             await onRecordingFinished?(value)
