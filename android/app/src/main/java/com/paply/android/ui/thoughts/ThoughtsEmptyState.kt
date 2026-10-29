@@ -23,13 +23,14 @@ fun ThoughtsEmptyState(setup: @Composable () -> Unit, onGuide: () -> Unit, onCap
         AndroidThoughtIllustration()
         Text("Deine Gedanken", style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 16.dp).semantics { heading() })
-        Text("Drück die Paply-Kachel in den Schnelleinstellungen und sprich – wie in ein Diktiergerät. Paply räumt auf, findet das Thema und merkt sich Aufgaben.",
+        Text("Drück den Gedanken-Knopf (Kachel „Paply-Gedanke“) und sprich – wie in ein Diktiergerät. Paply räumt auf, findet das Thema und merkt sich Aufgaben.",
             style = MaterialTheme.typography.bodyLarge, color = C.secondary, textAlign = TextAlign.Center)
         Spacer(Modifier.height(12.dp))
         Button(onClick = onCapture, modifier = Modifier.widthIn(max = 300.dp).fillMaxWidth().heightIn(min = 52.dp), shape = CircleShape) {
             Text("Hier ausprobieren", style = MaterialTheme.typography.titleMedium)
         }
-        TextButton(onClick = onGuide) { Text("Knopf einrichten", style = MaterialTheme.typography.titleMedium) }
+        TextButton(onClick = onGuide) { Text("Gedanken-Knopf einrichten", style = MaterialTheme.typography.titleMedium) }
+        Text("Als Kachel in den Schnelleinstellungen", style = MaterialTheme.typography.bodySmall, color = C.secondary)
         setup()
     }
 }
@@ -61,7 +62,7 @@ fun ThoughtButtonGuide(onBack: () -> Unit, onTileSetup: () -> Unit, onCapture: (
         AndroidThoughtIllustration()
         Text("Ein Druck nimmt einen Gedanken auf, nochmal drücken beendet. Paply ordnet ihn danach in der App.", color = C.secondary, style = MaterialTheme.typography.bodyLarge)
         PaplyCard {
-            Text("Schnelleinstellungen", style = MaterialTheme.typography.titleLarge)
+            Text("Als Kachel in den Schnelleinstellungen", style = MaterialTheme.typography.titleLarge)
             listOf("Vom oberen Bildschirmrand zweimal nach unten wischen.", "Die Schnelleinstellungen bearbeiten (Stift-Symbol).",
                 "„Paply-Gedanke“ zu deinen Kacheln ziehen.", "Zum Aufnehmen die Kachel antippen. Nochmal tippen oder „Fertig“ beendet.").forEachIndexed { i, line ->
                 Text("${i+1}. $line", modifier = Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodyMedium)
@@ -69,13 +70,13 @@ fun ThoughtButtonGuide(onBack: () -> Unit, onTileSetup: () -> Unit, onCapture: (
             Spacer(Modifier.height(12.dp)); Pill("Kachel hinzufügen", onTileSetup)
         }
         PaplyCard {
-            Text("Auf dem Home-Bildschirm", style = MaterialTheme.typography.titleLarge)
-            listOf("Auf eine freie Stelle des Home-Bildschirms lange drücken.", "„Widgets“ öffnen und „Paply“ suchen.",
-                "„Paply-Gedanke“ auf den Home-Bildschirm ziehen.", "Ein Tipp aufs Widget nimmt auf, nochmal tippen beendet.").forEachIndexed { i, line ->
+            Text("Auf dem Startbildschirm", style = MaterialTheme.typography.titleLarge)
+            listOf("Auf eine freie Stelle des Startbildschirms lange drücken.", "„Widgets“ öffnen und „Paply“ suchen.",
+                "„Paply-Gedanke“ auf den Startbildschirm ziehen.", "Ein Tipp aufs Widget nimmt auf, nochmal tippen beendet.").forEachIndexed { i, line ->
                 Text("${i+1}. $line", modifier = Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        Text("Die laufende Aufnahme steht in der Benachrichtigung: mit Zeit, „Fertig“ und „Verwerfen“. Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben.", style = MaterialTheme.typography.bodySmall, color = C.secondary)
+        Text("Die Aufnahme läuft weiter – du siehst sie oben in der Benachrichtigung: mit Zeit, „Fertig“ und „Verwerfen“. Aufnahmen werden nach der Umschrift sofort gelöscht, bei Fehlern erst nach dem Neuversuch, spätestens nach 30 Tagen. Text und Aufgaben bleiben.", style = MaterialTheme.typography.bodySmall, color = C.secondary)
         Pill("Hier ausprobieren", onCapture)
     }
 }

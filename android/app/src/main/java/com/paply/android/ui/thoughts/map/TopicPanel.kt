@@ -85,7 +85,7 @@ internal fun TopicPanel(id:String,content:MapContent,collected:Set<String>,actio
                 CustomAccessibilityAction("Schließen") { onClose(); true })
         }) {
             Box(Modifier.fillMaxWidth().height(21.dp).clickable { onDetent(if(detent==0) 1 else if(detent==1) 2 else 1) }
-                .semantics { contentDescription=if(detent==2) "Panel verkleinern" else "Panel vergrößern" },contentAlignment=Alignment.Center) {
+                .semantics { contentDescription=if(detent==2) "Ansicht verkleinern" else "Ansicht vergrößern" },contentAlignment=Alignment.Center) {
                 Box(Modifier.size(36.dp,5.dp).background(Color.White.copy(alpha=.26f),RoundedCornerShape(3.dp)))
             }
             Row(Modifier.fillMaxWidth().padding(start=18.dp,end=10.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically,
@@ -100,7 +100,7 @@ internal fun TopicPanel(id:String,content:MapContent,collected:Set<String>,actio
                         style=MaterialTheme.typography.bodySmall,color=if(tasks.isNotEmpty()) C.thoughtGold else C.secondary)
                 }
                 if(topic!=null) IconButton(onClick={ onEdit(topic.id) }) { Glyph(PaplyIcons.More,"Thema bearbeiten",C.text) }
-                IconButton(onClick=onClose) { Glyph(PaplyIcons.Close,"Panel schließen",C.text,18.dp) }
+                IconButton(onClick=onClose) { Glyph(PaplyIcons.Close,"Ansicht schließen",C.text,18.dp) }
             }
         }
         if(detent!=0 || accessibility.spoken) LazyVerticalStaggeredGrid(columns=StaggeredGridCells.Fixed(columns),state=scroll,userScrollEnabled=detent==2 || accessibility.spoken,

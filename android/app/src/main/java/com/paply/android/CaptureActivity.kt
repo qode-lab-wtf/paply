@@ -109,7 +109,7 @@ class CaptureActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && !notificationAsked && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationAsked = true; missing += Manifest.permission.POST_NOTIFICATIONS
         }
-        if (missing.isNotEmpty()) { pendingStart = true; permissions.launch(missing.toTypedArray()) }
+        if (missing.isNotEmpty()) { missing.forEach { com.paply.android.ui.markPermissionAsked(this, it) }; pendingStart = true; permissions.launch(missing.toTypedArray()) }
         else startCapture()
     }
     private fun startCapture() {
@@ -120,12 +120,12 @@ class CaptureActivity : ComponentActivity() {
     }
     private fun dismissCard() {
         if (ThoughtState.active && !ThoughtNotifications.visible(this)) {
-            notice = "Ohne Benachrichtigungen bleibt diese Karte offen. Bitte Fertig oder Verwerfen wählen."
+            notice = "Benachrichtigungen sind für Paply aus, darum bleibt diese Karte offen. Tippe „Fertig“ oder „Verwerfen“. Einschalten: Einstellungen → Apps → Paply."
         } else finish()
     }
     override fun finish() {
         if (ThoughtState.active && !ThoughtNotifications.visible(this)) {
-            notice = "Bitte Fertig oder Verwerfen wählen – Benachrichtigungen sind aus."; return
+            notice = "Benachrichtigungen sind für Paply aus, darum bleibt diese Karte offen. Tippe „Fertig“ oder „Verwerfen“. Einschalten: Einstellungen → Apps → Paply."; return
         }
         super.finish()
     }
@@ -183,7 +183,7 @@ private fun CaptureCard(state: ThoughtState.State, notice: String?, canDismiss: 
                     Pill("Verwerfen", onDiscard, prominent = false, enabled = state.phase != "stopping")
                     Pill("Fertig", onFinish, enabled = state.phase != "stopping")
                 }
-                Text(if (canDismiss) "Nach unten wischen · Aufnahme läuft sichtbar weiter" else "Diese Karte bleibt offen, solange Benachrichtigungen aus sind.",
+                Text(if (canDismiss) "Nach unten wischen · Die Aufnahme läuft weiter – du siehst sie oben in der Benachrichtigung." else "Diese Karte bleibt offen, solange Benachrichtigungen aus sind.",
                     color = C.secondary, style = MaterialTheme.typography.bodySmall)
             } else {
                 Text(state.message.ifBlank { "Ein Gedanke beginnt mit deinen Worten." }, color = C.secondary)

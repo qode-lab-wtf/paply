@@ -138,7 +138,7 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
             var prepared: DictationSession? = null
             try {
                 val keyPresent = withContext(Dispatchers.IO) { try { !KeyVault(this@PaplyIme).read().isNullOrBlank() } catch (e: Exception) { throw KeyAccessException(e) } }
-                if (!keyPresent) { panel = ImePanelState("key", title = "Schlüssel neu eintragen", subtitle = "Trage deinen Groq-Schlüssel in Paply ein."); return@launch }
+                if (!keyPresent) { panel = ImePanelState("key", title = "Groq-Schlüssel fehlt", subtitle = "Groq-Schlüssel fehlt – trage ihn in Paply ein (kostenlos)."); return@launch }
                 prepared = DictationSession.prepare(this@PaplyIme)
                 if (token != generation || !visible || !isInputViewShown || isPassword(currentInputEditorInfo)) { prepared.discard(); return@launch }
                 session = prepared; origin = field; fieldChanged = false; handled = null; haptic = false; lastEntry = null
@@ -188,13 +188,13 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
     }
     private fun errorPanel(kind: HistoryFailure?, detail: String = "", canCopy: Boolean = false) = ImePanelState(
         phase = when (kind) { HistoryFailure.KEY -> "key"; HistoryFailure.STORAGE_FULL -> "storage"; HistoryFailure.AUDIO_MISSING -> "audioMissing"; else -> "error" },
-        title = kind?.message ?: "Das hat nicht geklappt",
-        subtitle = detail.ifBlank { when (kind) {
-            HistoryFailure.KEY -> "Öffne Paply und speichere deinen Groq-Schlüssel erneut."
-            HistoryFailure.MICROPHONE_BUSY -> "Beende zuerst die andere Aufnahme und versuche es erneut."
+        title = "Das hat nicht geklappt",
+        subtitle = detail.takeUnless { it.isBlank() || it == kind?.message || it == "Das hat nicht geklappt" } ?: when (kind) {
+            HistoryFailure.KEY -> "Öffne Paply und prüfe deinen Groq-Schlüssel."
+            HistoryFailure.MICROPHONE_BUSY, HistoryFailure.MICROPHONE -> "Ein anderes Programm nutzt das Mikro, oder es ist in den Schnelleinstellungen gesperrt."
             HistoryFailure.STORAGE_FULL -> "Schaffe Platz auf deinem Gerät."
             else -> "Bitte erneut versuchen."
-        } }, canCopy = canCopy)
+        }, canCopy = canCopy)
     private fun finish() { session?.finish() }
     private suspend fun deliver(entry: HistoryEntry, finishNs: Long) {
         if (delivering) return
@@ -225,19 +225,19 @@ class PaplyIme : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
             val copied = (!accepted || confirmed != true) && DictationClipboard.copy(this, entry.text, notify = !visible || destroyed, retained = retained)
             val updated = if (accepted) entry.copy(status = HistoryStatus.OK,
                 error = if (confirmed == true) entry.error?.takeIf { it == "Ohne Polieren gespeichert." }
-                    else if (copied) "An Textfeld gesendet; Einsetzen unbekannt. Text liegt auch in der Zwischenablage."
-                    else "An das Textfeld gesendet. Einsetzen konnte nicht bestätigt werden.")
+                    else if (copied) "Gesendet. Der Text liegt auch in der Zwischenablage. Steht im Feld nichts: Feld lange drücken → „Einfügen“."
+                    else "Gesendet. Steht im Feld nichts: Feld lange drücken → „Einfügen“.")
             else entry.copy(status = HistoryStatus.PENDING, error = if (copied)
-                "Einsetzen nicht bestätigt. Text liegt in Zwischenablage und Verlauf."
-                else "Einsetzen nicht bestätigt. Text ist im Verlauf gesichert.")
+                "Der Text liegt in der Zwischenablage und im Verlauf. Feld lange drücken → „Einfügen“."
+                else "Dein Text ist im Verlauf gesichert. Kopiere ihn dort und drücke im Feld lange → „Einfügen“.")
             lastEntry = updated
             runCatching { HistoryStore.get(this@PaplyIme).updateIfPresent(updated) }
                 .onFailure { Diag.event("ime.delivery.save.failed") }
             if (accepted && sameTarget()) {
                 val returning = ImePolicy.returnAfterDelivery(accepted, confirmed, copied)
                 panel = ImePanelState("inserted", title = if (confirmed == true) "Eingesetzt" else "An Textfeld gesendet",
-                    subtitle = if (confirmed == true) "" else if (copied) "Einsetzen nicht bestätigt. Text liegt auch in der Zwischenablage."
-                        else "Einsetzen nicht bestätigt. Dein Text bleibt im Verlauf gesichert.", canCopy = true,
+                    subtitle = if (confirmed == true) "" else if (copied) "Gesendet. Der Text liegt auch in der Zwischenablage. Steht im Feld nichts: Feld lange drücken → „Einfügen“."
+                        else "Gesendet. Steht im Feld nichts: Feld lange drücken → „Einfügen“.", canCopy = true,
                     returningToKeyboard = returning)
                 if (returning) autoReturn.schedule(
                     isCurrent = { sameTarget() && isInputViewShown && root?.isShown == true &&

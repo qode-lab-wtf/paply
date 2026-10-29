@@ -1,6 +1,9 @@
 package com.paply.android.ui
 
 import android.app.Activity
+import android.content.Intent
+import androidx.core.net.toUri
+import androidx.compose.material3.TextButton
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,15 +29,16 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
     notifications: () -> Unit, navigate: (String) -> Unit,
 ) {
     data class Step(val title: String, val detail: String, val done: Boolean, val action: String, val click: () -> Unit,
-        val confirmTile: Boolean = false)
+        val confirmTile: Boolean = false, val keyLink: Boolean = false)
     val steps = buildList {
-        add(Step("Mikro erlauben", if (prefs.betaThoughts) "Für Diktat und Gedanken." else "Fürs Diktat.", status.microphone, "Erlauben", microphone))
-        add(Step("Benachrichtigungen erlauben", "Damit du laufende Aufnahmen immer siehst.", status.notifications, "Erlauben", notifications))
-        add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }))
+        add(Step("Mikro erlauben", if (!status.microphone && status.microphoneDenied) "Ist aus. In den Android-Einstellungen bei Paply „Mikrofon“ erlauben." else if (prefs.betaThoughts) "Für Diktat und Gedanken." else "Fürs Diktat.", status.microphone, if (status.microphoneDenied) "Öffnen" else "Erlauben", microphone))
+        add(Step("Benachrichtigungen erlauben", if (!status.notifications && status.notificationsDenied) "Ist aus. In den Android-Einstellungen bei Paply „Benachrichtigungen“ erlauben." else "Damit du laufende Aufnahmen immer siehst.", status.notifications, if (status.notificationsDenied) "Öffnen" else "Erlauben", notifications))
+        add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }, keyLink = true))
         add(Step("Tastatur aktivieren", "Paply in den Android-Tastatureinstellungen einschalten.", status.keyboardEnabled, "Einrichten", { navigate("keyboard") }))
         add(Step("Tastatur auswählen", "Paply als aktuelle Tastatur auswählen.", status.keyboardSelected, "Auswählen", { navigate("keyboard") }))
-        if (prefs.betaThoughts) add(Step("Gedanken-Kachel hinzufügen", "In den Schnelleinstellungen – ein Tipp, und du sprichst.", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
+        if (prefs.betaThoughts) add(Step("Gedanken-Knopf", "Als Kachel in den Schnelleinstellungen", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
     }
+    val context = LocalContext.current
     val expandedType = LocalDensity.current.fontScale >= 1.5f
     val done = steps.count { it.done }
     if (done == steps.size) return
@@ -57,6 +61,9 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
                 if (!step.done && expandedType) Box(Modifier.fillMaxWidth().padding(start = 36.dp), contentAlignment = Alignment.CenterEnd) {
                     Pill(step.action, step.click, prominent = index == next)
                 }
+                if (!step.done && step.keyLink) TextButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, "https://console.groq.com/keys".toUri()))
+                }) { Text("Kostenlosen Schlüssel holen") }
                 if (!step.done && step.confirmTile && Build.VERSION.SDK_INT < 33) LegacyTileConfirmation()
             }
             if (index != steps.lastIndex) Hairline()
@@ -72,7 +79,7 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
 @Composable
 fun KeyboardSetupScreen(activity: Activity, status: SetupStatus) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Text("Die Tastatur merkt sich nichts, was du tippst. Nur deine Sprachaufnahme wird mit deinem Schlüssel an Groq gesendet.", color = C.secondary, style = MaterialTheme.typography.bodyMedium)
+        Text("Paply hat keine Buchstaben, nur Sprache. Nur deine Sprachaufnahme wird mit deinem Schlüssel an Groq gesendet.", color = C.secondary, style = MaterialTheme.typography.bodyMedium)
         PaplyCard {
             StatusLine("Paply als Tastatur aktiviert", status.keyboardEnabled)
             StatusLine("Paply als Tastatur ausgewählt", status.keyboardSelected)
@@ -80,10 +87,10 @@ fun KeyboardSetupScreen(activity: Activity, status: SetupStatus) {
         GuideCard("So geht’s", listOf("„Einstellungen öffnen“ tippen.", "„Paply“ in der Tastaturliste einschalten.",
             "Zurück zu Paply und „Tastatur auswählen“ tippen.", "In einem Textfeld Paply auswählen und sprechen."))
         GuideCard("Aus Gboard zu Paply", listOf(
-            "Öffne ein Textfeld. Tippe auf den System-Tastaturwechsler unten rechts, außerhalb der Gboard-Tasten.",
+            "Öffne ein Textfeld. Tippe auf das Tastatur-Symbol unten rechts, außerhalb der Gboard-Tasten.",
             "Bei mehreren Gboard-Sprachen kann zuerst die nächste Sprache erscheinen. Tippe dann nochmals. Du kannst die Taste auch halten und Paply direkt auswählen.",
-            "Sobald das grüne Paply-Panel erscheint, sprich. Tippen beendet das Diktat; danach geht es zurück zur vorherigen Tastatur."))
-        Text("Android bestimmt die Reihenfolge. Mit einer Gboard-Sprache reicht auf neueren Pixel-Systemen meist ein Tipp; bei älteren Systemen öffnet sich eine Auswahl. Deine Gboard-Sprachen bleiben erhalten. Paply erkennt die gesprochene Sprache unabhängig davon.",
+            "Sobald die grüne Paply-Fläche erscheint, sprich. Tippen beendet das Diktat; danach geht es zurück zur vorherigen Tastatur."))
+        Text("Je nach Handy öffnet ein Tipp direkt Paply oder eine Liste – dann „Paply“ wählen.",
             color = C.secondary, style = MaterialTheme.typography.bodySmall)
         Pill("Einstellungen öffnen", { activity.openKeyboardSettings() })
         Pill("Tastatur auswählen", { activity.chooseKeyboard() }, prominent = false)
@@ -94,14 +101,14 @@ fun KeyboardSetupScreen(activity: Activity, status: SetupStatus) {
 fun TileSetupScreen(activity: Activity, status: SetupStatus, addTile: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("Ein Tipp, und du sprichst. Der Gedanken-Knopf startet die Aufnahme direkt aus den Schnelleinstellungen.", color = C.secondary, style = MaterialTheme.typography.bodyMedium)
-        PaplyCard { StatusLine("Gedanken-Kachel hinzugefügt", status.tileAdded) }
-        GuideCard("So geht’s", if (Build.VERSION.SDK_INT >= 33) listOf("„Kachel hinzufügen“ tippen.", "Im Android-Dialog „Hinzufügen“ wählen.",
+        PaplyCard { StatusLine("Gedanken-Knopf eingerichtet", status.tileAdded) }
+        GuideCard("So geht’s", if (Build.VERSION.SDK_INT >= 33) listOf("„Kachel hinzufügen“ tippen.", "Im Android-Dialog das Hinzufügen der Kachel bestätigen.",
             "Vom oberen Bildschirmrand zweimal nach unten wischen und „Paply-Gedanke“ tippen.")
             else listOf("Vom oberen Bildschirmrand zweimal nach unten wischen.", "Die Schnelleinstellungen bearbeiten (Stift-Symbol).",
                 "„Paply-Gedanke“ zu deinen Kacheln ziehen.", "Zum Aufnehmen die Kachel antippen."))
         if (Build.VERSION.SDK_INT >= 33) Pill("Kachel hinzufügen", addTile)
         else if (!status.tileAdded) LegacyTileConfirmation()
-        Text("Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.", style = MaterialTheme.typography.bodySmall, color = C.secondary)
+        Text("Aufnahmen werden nach der Umschrift sofort gelöscht, bei Fehlern erst nach dem Neuversuch, spätestens nach 30 Tagen. Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.", style = MaterialTheme.typography.bodySmall, color = C.secondary)
     }
 }
 

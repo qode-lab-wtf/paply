@@ -42,7 +42,7 @@ fun DictationScreen(entries: List<HistoryEntry>, status: SetupStatus, setup: @Co
                     Glyph(PaplyIcons.Keyboard, tint = if (status.keyboardSelected) C.greenBright else C.tertiary, size = 28.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(if (status.keyboardSelected) "Paply ist bereit" else if (status.keyboardEnabled) "Paply ist aktiviert" else "Paply ist aus", style = MaterialTheme.typography.titleLarge)
-                        Text(if (status.keyboardSelected) "Tippe in einem Textfeld auf Paply und sprich."
+                        Text(if (status.keyboardSelected) "Öffne ein Textfeld, wähle Paply als Tastatur und sprich."
                             else if (status.keyboardEnabled) "Wähle Paply als Tastatur, um zu diktieren." else "Aktiviere Paply in den Tastatureinstellungen.",
                             color = C.secondary, style = MaterialTheme.typography.bodyMedium)
                     }
@@ -87,7 +87,7 @@ private fun HistoryRow(entry: HistoryEntry, copy: () -> Unit, detail: () -> Unit
                 Column(Modifier.fillMaxWidth().combinedClickable(onClick = copy, onLongClick = { menu = true },
                     onClickLabel = "Text kopieren", onLongClickLabel = "Aktionen")
                     .padding(start = 15.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(entry.text.ifEmpty { entry.error ?: if (entry.status == HistoryStatus.PENDING) "Wird verarbeitet …" else "(leer)" },
+                    Text(entry.text.ifEmpty { entry.error ?: if (entry.status == HistoryStatus.PENDING) "Wird verarbeitet …" else "Nichts gehört" },
                         maxLines = 2, style = MaterialTheme.typography.bodyLarge,
                         color = if (entry.status == HistoryStatus.FAILED && entry.text.isEmpty()) C.danger else C.text)
                     Text(historyDate(entry.createdAt) + " · " + duration(entry.durationMs), style = MaterialTheme.typography.bodySmall, color = C.text.copy(alpha = 0.45f))

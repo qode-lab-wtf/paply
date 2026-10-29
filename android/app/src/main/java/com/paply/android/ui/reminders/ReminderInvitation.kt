@@ -88,7 +88,7 @@ fun ReminderInvitation(task: ThoughtTask, thought: Thought, modifier: Modifier =
             Glyph(PaplyIcons.Bell, tint = C.thoughtMint)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Bei Uhrzeit erinnern?", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                Text("Hat eine Aufgabe eine Uhrzeit, meldet sich Paply dann – auch auf dem Sperrbildschirm. Abhaken geht direkt in der Mitteilung. Aufgaben ohne Uhrzeit bleiben still.",
+                Text("Hat eine Aufgabe eine Uhrzeit, meldet sich Paply dann – auch auf dem Sperrbildschirm. Abhaken geht direkt in der Benachrichtigung. Aufgaben ohne Uhrzeit bleiben still.",
                     style = MaterialTheme.typography.bodyMedium, color = C.secondary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Pill("Erinnern", actions.enable)

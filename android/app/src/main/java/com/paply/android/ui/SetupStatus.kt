@@ -19,6 +19,7 @@ import com.paply.android.settings.AppPreferences
 
 data class SetupStatus(val microphone: Boolean, val notifications: Boolean, val keyboardEnabled: Boolean,
     val keyboardSelected: Boolean, val tileAdded: Boolean,
+    val microphoneDenied: Boolean = false, val notificationsDenied: Boolean = false,
 ) {
     companion object {
         fun read(context: Context, prefs: AppPreferences): SetupStatus {
@@ -30,9 +31,22 @@ data class SetupStatus(val microphone: Boolean, val notifications: Boolean, val 
             val tiles = runCatching { Settings.Secure.getString(context.contentResolver, "sysui_qs_tiles") }.getOrNull()
             val tile = tileAdded(tiles, context.packageName, prefs.tileAdded, Build.VERSION.SDK_INT)
             return SetupStatus(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
-                context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(), enabled, selected, tile)
+                context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(), enabled, selected, tile,
+                microphoneDenied = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED &&
+                    (permissionAsked(context, Manifest.permission.RECORD_AUDIO) ||
+                        (context as? Activity)?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == true),
+                notificationsDenied = !context.getSystemService(NotificationManager::class.java).areNotificationsEnabled() &&
+                    (Build.VERSION.SDK_INT < 33 || permissionAsked(context, Manifest.permission.POST_NOTIFICATIONS) ||
+                        (context as? Activity)?.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) == true))
         }
     }
+}
+
+internal fun permissionAsked(context: Context, permission: String): Boolean =
+    context.getSharedPreferences("setup-permissions", Context.MODE_PRIVATE).getBoolean(permission, false)
+
+internal fun markPermissionAsked(context: Context, permission: String) {
+    context.getSharedPreferences("setup-permissions", Context.MODE_PRIVATE).edit().putBoolean(permission, true).apply()
 }
 
 internal fun tileAdded(tiles: String?, packageName: String, confirmed: Boolean, sdk: Int): Boolean {

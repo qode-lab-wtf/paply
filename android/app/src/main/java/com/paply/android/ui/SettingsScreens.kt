@@ -144,7 +144,7 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
                                 draft = pasted
                                 clipboard.clearPrimaryClip()
                                 saveKey()
-                            } else message("Die Zwischenablage ist leer.")
+                            } else message("Die Zwischenablage ist leer. Kopiere zuerst den Schlüssel bei Groq.")
                         }, enabled = !checking) { Text("Einsetzen") }
                         TextButton(onClick = { saveKey() }, enabled = draft.isNotBlank() && !checking) { Text("Sichern") }
                     }
@@ -165,11 +165,11 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
             val count = prefs.vocabulary.split(',', '\n').count { it.isNotBlank() }
             SettingsItem("Eigene Begriffe", icon = PaplyIcons.BookA, value = if (count == 0) "keine" else "$count", onClick = { navigate("vocabulary") })
         }
-        Section("Beta", "Neue Funktionen im Test: Gedanken per Knopf festhalten und Aufgaben. Aus heißt nur ausgeblendet – deine Gedanken und Aufgaben bleiben gespeichert.") {
+        Section("Beta", "Neue Funktionen im Test: Gedanken per Knopf festhalten, Aufgaben, Landkarte, Erinnerungen und Widgets. Aus heißt nur ausgeblendet – deine Gedanken und Aufgaben bleiben gespeichert.") {
             SettingsToggle("Gedanken & Aufgaben", prefs.betaThoughts,
                 { on -> edit { it.copy(betaThoughts = on) } }, icon = PaplyIcons.FlaskConical)
         }
-        if (prefs.betaThoughts) Section("Gedanken", "Aufnahmen werden nach der Umschrift sofort gelöscht, Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.") {
+        if (prefs.betaThoughts) Section("Gedanken", "Aufnahmen werden nach der Umschrift sofort gelöscht, bei Fehlern erst nach dem Neuversuch, spätestens nach 30 Tagen. Text und Aufgaben bleiben. Gesendet wird nur an Groq, mit deinem Schlüssel.") {
             SettingsItem("Gedanken-Knopf einrichten", icon = PaplyIcons.Lightbulb, value = if (status.tileAdded) "eingerichtet" else "fehlt noch", onClick = { navigate("tile") })
         }
         if (prefs.betaThoughts) TaskReminderSettingsSection(activity, message)
@@ -206,13 +206,13 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
 private fun TaskReminderSettingsSection(activity: Activity, message: (String) -> Unit) {
     val actions = com.paply.android.ui.reminders.rememberReminderActions(activity, message)
     val reminders = actions.state
-    Section("Aufgaben", "Hat eine Aufgabe eine Uhrzeit – etwa „morgen um 8“ –, meldet sich Paply dann. In der Mitteilung kannst du sie abhaken oder eine Stunde später erinnern lassen. Aufgaben nur mit Tag bleiben still.") {
+    Section("Aufgaben", "Hat eine Aufgabe eine Uhrzeit – etwa „morgen um 8“ –, meldet sich Paply dann. In der Benachrichtigung kannst du sie abhaken oder eine Stunde später erinnern lassen. Aufgaben nur mit Tag bleiben still.") {
         SettingsToggle("Erinnerungen zur Uhrzeit", reminders.isOn,
             { on -> if (on) actions.enable() else actions.disable() }, icon = PaplyIcons.Bell)
         if (!reminders.notificationsAllowed) {
             Hairline()
-            SettingsItem("Mitteilungen erlauben", icon = PaplyIcons.Bell,
-                value = "Mitteilungen für Paply sind aus. Ohne Erlaubnis werden keine Erinnerungen geplant.", onClick = actions.notificationSettings)
+            SettingsItem("Benachrichtigungen erlauben", icon = PaplyIcons.Bell,
+                value = "Benachrichtigungen für Paply sind aus. Schalte sie dort ein, dann meldet sich Paply zur Uhrzeit einer Aufgabe.", onClick = actions.notificationSettings)
         }
         if (!reminders.exactAllowed) {
             Hairline()

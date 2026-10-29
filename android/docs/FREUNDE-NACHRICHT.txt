@@ -1,7 +1,9 @@
-Hey! Hier ist Paply 0.1.0 für dein Android 😊
-Damit kannst du in anderen Apps diktieren und Gedanken mit Aufgaben festhalten.
-Öffne die APK im Anhang; die kurze Anleitung schicke ich dir dazu.
-Android braucht dafür „Unbekannte Apps installieren“ für Browser oder Dateien.
-Play Protect bitte eingeschaltet lassen; bei einer Warnung schick mir einen Screenshot.
-Beim ersten Öffnen hilft dir die Einrichtung; du brauchst einen kostenlosen Groq-Schlüssel.
+Hey! Hier ist Paply Android 0.1.0 😊
+Die APK kommt als Anhang; die kurze Anleitung ist dabei.
+Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben.
+Play Protect bitte eingeschaltet lassen; bei einer Warnung schick mir einen Screenshot, bevor du weitermachst.
+Öffne Paply und tippe auf der Karte „Einrichten“ jeweils den grünen Knopf, bis alles abgehakt ist.
+Du brauchst einen Groq-Schlüssel (kostenloser Zugang für die Spracherkennung): „Eintragen“ → „Kostenlosen Schlüssel holen“ → bei Groq anmelden → „Create API Key“ → kopieren → zurück zu Paply → „Einsetzen“.
+Beim Aktivieren der Tastatur ist die Android-Sicherheitswarnung normal, bitte bestätigen. Paply hat keine Buchstaben, nur Sprache. Nach dem Diktat springt es von selbst zurück.
+Gedanken & Aufgaben sind schon an. Nutze den Gedanken-Knopf (Kachel „Paply-Gedanke“).
 Es ist eine Testversion – sag mir gern, was klappt und was hakt. Danke! Allan

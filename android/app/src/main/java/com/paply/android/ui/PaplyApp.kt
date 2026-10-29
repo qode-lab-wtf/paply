@@ -118,17 +118,15 @@ fun PaplyApp(activity: Activity, onRetry: ((HistoryEntry) -> Unit)? = null) {
                 catch (_: Exception) { message("Verlauf konnte nicht gespeichert werden. Bitte erneut versuchen.") }
             }
         }
-        var microphoneAsked by rememberSaveable { mutableStateOf(false) }
-        var notificationAsked by rememberSaveable { mutableStateOf(false) }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
         fun microphone() {
-            if (microphoneAsked && !activity.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) activity.openAppSettings()
-            else { microphoneAsked = true; permission.launch(Manifest.permission.RECORD_AUDIO) }
+            if (status.microphoneDenied) activity.openAppSettings()
+            else { markPermissionAsked(activity, Manifest.permission.RECORD_AUDIO); permission.launch(Manifest.permission.RECORD_AUDIO) }
         }
         fun notifications() {
-            if (Build.VERSION.SDK_INT >= 33 && (!notificationAsked || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))) {
-                notificationAsked = true; permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName))
+            if (Build.VERSION.SDK_INT >= 33 && !status.notificationsDenied) {
+                markPermissionAsked(activity, Manifest.permission.POST_NOTIFICATIONS); permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else activity.openAppSettings()
         }
         fun addTile() {
             try { activity.requestThoughtTile { added ->

@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.util.Log
 import android.widget.*
 import androidx.core.content.edit
-import com.paply.core.GroqFailure
 
 object Brand {
     val green = Color.rgb(0x22, 0xB4, 0x5F)
@@ -74,12 +73,9 @@ class Settings(context: Context) {
 fun safeError(e: Throwable): String = when (e) {
     is MicrophoneBusyException -> "Mikro belegt · beende zuerst die andere Aufnahme."
     is SecurityException -> "Mikrofonzugriff nicht erlaubt. Bitte Paply einrichten."
-    is GroqFailure -> when(e.status) {
-        401, 403 -> "Groq-Schlüssel prüfen."
-        429 -> "Groq-Limit erreicht. Später erneut versuchen."
-        else -> "Verarbeitung fehlgeschlagen. Bitte erneut versuchen."
-    }
-    else -> "Aufnahme nicht möglich. Bitte Berechtigungen und Groq-Schlüssel prüfen."
+    is java.io.IOException -> "Speicher voll – schaffe Platz."
+    else -> if (generateSequence(e) { it.cause }.any { it is java.io.IOException || (it is android.system.ErrnoException && it.errno == android.system.OsConstants.ENOSPC) })
+        "Speicher voll – schaffe Platz." else "Aufnahme nicht möglich. Prüfe Mikrofon-Erlaubnis und freien Speicher."
 }
 fun Context.dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 fun Context.label(value: String, size: Float = 18f) = TextView(this).apply {

@@ -18,10 +18,10 @@ import org.json.JSONObject
 
 /** createdAt uses Unix epoch milliseconds, durationMs is audio duration, audioFile is an optional private path. */
 enum class HistoryFailure(val message: String) {
-    KEY("Schlüssel neu eintragen"), STORAGE_FULL("Speicher voll"),
+    KEY("Groq-Schlüssel prüfen"), STORAGE_FULL("Speicher voll"),
     STORAGE("Speichern nicht möglich. Bitte freien Speicher prüfen."),
     MICROPHONE_BUSY("Mikro belegt"), MICROPHONE("Mikrofon nicht verfügbar"),
-    AUDIO_MISSING("Audio fehlt"), CANCELLED("Neuversuch abgebrochen"), PROCESSING("Verarbeitung fehlgeschlagen"),
+    AUDIO_MISSING("Aufnahme nicht mehr vorhanden"), CANCELLED("Abgebrochen"), PROCESSING("Das hat nicht geklappt"),
 }
 enum class HistoryStatus { OK, FAILED, PENDING }
 data class HistoryEntry(
