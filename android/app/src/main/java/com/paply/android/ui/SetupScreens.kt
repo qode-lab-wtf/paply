@@ -34,13 +34,14 @@ fun SetupCard(prefs: AppPreferences, status: SetupStatus, hasKey: Boolean, micro
         add(Step("Mikro erlauben", if (!status.microphone && status.microphoneDenied) "Ist aus. In den Android-Einstellungen bei Paply „Mikrofon“ erlauben." else if (prefs.betaThoughts) "Für Diktat und Gedanken." else "Fürs Diktat.", status.microphone, if (status.microphoneDenied) "Öffnen" else "Erlauben", microphone))
         add(Step("Benachrichtigungen erlauben", if (!status.notifications && status.notificationsDenied) "Ist aus. In den Android-Einstellungen bei Paply „Benachrichtigungen“ erlauben." else "Damit du laufende Aufnahmen immer siehst.", status.notifications, if (status.notificationsDenied) "Öffnen" else "Erlauben", notifications))
         add(Step("Groq-Schlüssel", "Kostenlos bei Groq, in einer Minute erledigt.", hasKey, "Eintragen", { navigate("settings") }, keyLink = true))
-        add(Step("Tastatur aktivieren", "Paply in den Android-Tastatureinstellungen einschalten.", status.keyboardEnabled, "Einrichten", { navigate("keyboard") }))
+        add(Step("Alternativ: Paply-Tastatur", "Paply in den Android-Tastatureinstellungen einschalten.", status.keyboardEnabled, "Einrichten", { navigate("keyboard") }))
         add(Step("Paply einmal ausprobieren", "Öffne das Testfeld und wähle Paply über das Tastatur-Symbol.", status.keyboardTried, "Testfeld öffnen", { navigate("keyboard") }))
         if (prefs.betaThoughts) add(Step("Gedanken-Knopf", "Als Kachel in den Schnelleinstellungen", status.tileAdded, "Einrichten", { navigate("tile") }, confirmTile = true))
     }
     val context = LocalContext.current
     val expandedType = LocalDensity.current.fontScale >= 1.5f
     val done = steps.count { it.done }
+    ButtonSetupCard(prefs)
     if (done == steps.size) return
     PaplyCard {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {

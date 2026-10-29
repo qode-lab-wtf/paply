@@ -46,6 +46,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
     @Volatile var level = 0f; private set
     @Volatile var startedAt = 0L; private set
     @Volatile var interrupted = false; private set
+    @Volatile var hasSignal = false; private set
     @Volatile private var clientSilenced = false
     @Volatile private var recorder: AudioRecord? = null
     private var wasSilenced = false
@@ -136,6 +137,7 @@ class AudioCapture(private val context: Context, val file: File, private val max
                 if (count == 0) { Thread.sleep(10); continue }
                 // Exclude interrupted blocks from BOTH retained WAV and the IME pipeline.
                 if (silenced) continue
+                if (!hasSignal && (0 until count).any { samples[it] != 0.toShort() }) hasSignal = true
                 debugPcm?.append(samples.copyOf(count))
                 writer.append(samples.copyOf(count)); frames += count
                 onSamples?.invoke(samples.copyOf(count))

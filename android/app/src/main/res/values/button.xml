@@ -1,0 +1,3 @@
+<resources>
+    <string name="paply_button_description">Zeigt den Paply-Knopf neben deiner Tastatur. Paply erkennt nur, welches Feld aktiv und bearbeitbar ist, ob es ein Passwortfeld ist und wo die Tastatur liegt. Feldinhalte werden nicht gelesen, gespeichert oder protokolliert. Erst dein Tipp startet das Mikrofon. Dein fertiges Diktat wird in das ursprüngliche Feld eingesetzt.</string>
+</resources>

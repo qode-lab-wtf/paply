@@ -34,10 +34,11 @@ fun CaptureBar(repository: ThoughtsRepository, actions: ThoughtsActions, onCaptu
     navigationInsets: WindowInsets = WindowInsets.navigationBars, onOpen: (String) -> Unit) {
     val state by repository.recording.collectAsStateWithLifecycle()
     val active = state.phase in listOf("starting", "recording", "stopping")
+    val feedback = captureFeedback(state.phase, state.message)
     var transient by remember { mutableStateOf(false) }
-    LaunchedEffect(state.phase, state.id, state.message) {
-        transient = state.phase != "idle" && state.message.isNotBlank()
-        if (!active) { delay(3000); transient = false }
+    LaunchedEffect(feedback, state.id) {
+        transient = feedback.hideAfterMs != null
+        feedback.hideAfterMs?.let { delay(it); transient = false }
     }
     if (!active && !transient) return
     Surface(shape = CircleShape, color = C.forest, border = BorderStroke(.5.dp, C.thoughtMint.copy(alpha=.2f)),
@@ -45,13 +46,14 @@ fun CaptureBar(repository: ThoughtsRepository, actions: ThoughtsActions, onCaptu
         Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).clickable {
             if (active) onCapture() else state.id?.let(onOpen)
         }.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            EchoOrb(30.dp, state.level, active)
+            if (feedback.saved) Glyph(PaplyIcons.Check, tint = C.greenBright, size = 22.dp)
+            else EchoOrb(30.dp, state.level, active)
             Text(buildAnnotatedString {
                 if (active) {
                     append("Gedanke")
                     withStyle(SpanStyle(color = C.tertiary)) { append(" · ") }
                     withStyle(SpanStyle(color = C.secondary)) { append(clock(state.elapsedMs / 1000)) }
-                } else append(state.message)
+                } else append(feedback.text)
             }, style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
                 modifier = Modifier.weight(1f), color = if (state.interrupted) C.beak else C.text)
             if (active) Pill("Fertig", { actions.run { repository.finishRecording() } }, enabled = state.phase != "stopping")

@@ -118,6 +118,7 @@ fun SettingsHome(activity: Activity, prefs: AppPreferences, vault: KeyVault, has
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        ButtonSetupCard(prefs)
         Section("Groq-Schlüssel", "Der Schlüssel bleibt nur auf diesem Gerät. Gilt für Diktat und Gedanken.") {
             if (hasKey) {
                 SettingsItem("Schlüssel gespeichert", icon = PaplyIcons.KeyRound, value = "Verschlüsselt auf diesem Gerät")
@@ -293,6 +294,10 @@ fun DeveloperScreen(prefs: AppPreferences, edit: ((AppPreferences) -> AppPrefere
             SettingsItem("Transkription", value = if (prefs.transcriptionModel.endsWith("turbo")) "large-v3-turbo (schneller)" else "large-v3 (genauer)", onClick = { models = true })
             Hairline()
             SettingsToggle("Stücke-Upload", prefs.chunkUpload, { on -> edit { it.copy(chunkUpload = on) } })
+        }
+        Section("Paply-Knopf · Mikrofonvergleich") {
+            SettingsToggle("Immer mit Mikrofondienst", prefs.buttonForeground, { on -> edit { it.copy(buttonForeground = on) } },
+                description = "Aus: direkt, bei Sperre mit Mikrofondienst. Ein: immer mit Mikrofondienst.")
         }
         Section("Werkzeuge") { SettingsItem("Diagnose", icon = PaplyIcons.AudioLines, onClick = { navigate("diagnostics") }) }
     }

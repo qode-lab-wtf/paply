@@ -1,5 +1,6 @@
 package com.paply.android
 
+import android.animation.ValueAnimator
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.paply.android.settings.SettingsRepository
@@ -31,6 +39,7 @@ import com.paply.android.thoughts.ThoughtNotifications
 import com.paply.android.ui.components.*
 import com.paply.android.ui.theme.PaplyColors as C
 import com.paply.android.ui.theme.PaplyTheme
+import com.paply.android.ui.thoughts.captureFeedback
 import kotlinx.coroutines.*
 
 /** Visible permission/start surface. Intent consumption survives recreation; no lifecycle auto-start. */
@@ -65,7 +74,20 @@ class CaptureActivity : ComponentActivity() {
                 val canDismiss = !ThoughtState.active || ThoughtNotifications.visible(this)
                 SideEffect { setFinishOnTouchOutside(canDismiss) }
                 BackHandler { dismissCard() }
-                CaptureCard(state, notice, canDismiss, onFinish = { ThoughtService.command(this, ThoughtService.FINISH) },
+                val feedback = captureFeedback(state.phase, notice ?: state.message,
+                    requiresAction = (!permissionGranted && (notice != null || state.message.isNotBlank())) || notice == ThoughtService.BETA_OFF)
+                val opacity = remember { Animatable(1f) }
+                LaunchedEffect(feedback, state.id) {
+                    opacity.snapTo(1f)
+                    val timeout = feedback.hideAfterMs ?: return@LaunchedEffect
+                    delay(timeout - 220)
+                    if (ValueAnimator.areAnimatorsEnabled()) opacity.animateTo(0f, tween(220)) else delay(220)
+                    dismissCard()
+                    // The card owns its exit; avoid a second system-window transition.
+                    @Suppress("DEPRECATION")
+                    overridePendingTransition(0, 0)
+                }
+                CaptureCard(state, notice, feedback, canDismiss, Modifier.graphicsLayer { alpha = opacity.value }, onFinish = { ThoughtService.command(this, ThoughtService.FINISH) },
                     onDiscard = { ThoughtService.command(this, ThoughtService.DISCARD) }, onDismiss = ::dismissCard,
                     onStart = ::requestStart, onSetup = {
                         startActivity(Intent(this, MainActivity::class.java))
@@ -74,9 +96,15 @@ class CaptureActivity : ComponentActivity() {
             }
         }
         window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
-        scope.launch { ThoughtState.current.collect {
-            setFinishOnTouchOutside(!ThoughtState.active || ThoughtNotifications.visible(this@CaptureActivity))
-        } }
+        scope.launch {
+            var wasActive = ThoughtState.active
+            ThoughtState.current.collect {
+                val active = ThoughtState.active
+                if (wasActive && !active) notice = null
+                wasActive = active
+                setFinishOnTouchOutside(!active || ThoughtNotifications.visible(this@CaptureActivity))
+            }
+        }
     }
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("consumed", consumed); outState.putBoolean("notificationAsked", notificationAsked)
@@ -143,14 +171,23 @@ class CaptureActivity : ComponentActivity() {
 }
 
 @Composable
-private fun CaptureCard(state: ThoughtState.State, notice: String?, canDismiss: Boolean,
+private fun CaptureCard(state: ThoughtState.State, notice: String?, feedback: com.paply.android.ui.thoughts.CaptureFeedback, canDismiss: Boolean, modifier: Modifier = Modifier,
     onFinish: () -> Unit, onDiscard: () -> Unit, onDismiss: () -> Unit, onStart: () -> Unit, onSetup: () -> Unit) {
     val active = state.phase in listOf("starting", "recording", "stopping")
-    Surface(modifier = Modifier.fillMaxWidth().padding(10.dp), shape = RoundedCornerShape(28.dp), color = C.forestDeep,
+    Surface(modifier = modifier.fillMaxWidth().padding(10.dp), shape = RoundedCornerShape(24.dp), color = C.forestDeep,
         border = androidx.compose.foundation.BorderStroke(1.dp, C.thoughtMint.copy(alpha = .3f))) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (feedback.hideAfterMs != null) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Glyph(if (feedback.saved) PaplyIcons.Check else PaplyIcons.Lightbulb,
+                        tint = if (feedback.saved) C.greenBright else C.secondary, size = 22.dp)
+                    Text(feedback.text, style = MaterialTheme.typography.bodyMedium)
+                }
+                return@Column
+            }
             var dragged by remember { mutableFloatStateOf(0f) }
-            Box(Modifier.fillMaxWidth().height(24.dp).pointerInput(canDismiss) {
+            Box(Modifier.fillMaxWidth().height(12.dp).pointerInput(canDismiss) {
                 detectVerticalDragGestures(onDragStart = { dragged = 0f }, onDragEnd = { if (dragged > 35.dp.toPx()) onDismiss() }) { change, amount ->
                     dragged += amount; change.consume()
                 }
@@ -158,19 +195,18 @@ private fun CaptureCard(state: ThoughtState.State, notice: String?, canDismiss: 
                 Box(Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(C.tertiary))
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Glyph(PaplyIcons.Lightbulb, tint = C.thoughtMint, size = 27.dp)
-                Text("Gedanke", style = MaterialTheme.typography.titleLarge)
-                BetaBadge()
+                Glyph(PaplyIcons.Lightbulb, tint = C.thoughtMint, size = 20.dp)
+                Text("Gedanke", style = MaterialTheme.typography.bodyMedium, color = C.secondary)
             }
             if (active) {
                 val seconds = state.elapsedMs / 1000
-                Text("%02d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.displaySmall, color = C.thoughtMint)
+                Text("%02d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Light), color = C.text)
                 Text(when { state.interrupted -> "Unterbrochen · danach geht es weiter"
                     state.warnLimit -> "Noch 1 Min. · dann wird gespeichert"
                     state.phase == "starting" -> "Mikrofon startet …"
                     state.phase == "stopping" -> "Aufnahme wird gesichert …"
                     else -> "Sprich deinen Gedanken aus" }, color = if (state.interrupted || state.warnLimit) C.beak else C.secondary)
-                Canvas(Modifier.fillMaxWidth().height(42.dp)) {
+                Canvas(Modifier.fillMaxWidth().height(24.dp)) {
                     val bars = 32
                     for (i in 0 until bars) {
                         val shape = .25f + .75f * kotlin.math.abs(kotlin.math.sin(i * .8f))
