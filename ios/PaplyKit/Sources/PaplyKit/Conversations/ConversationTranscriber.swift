@@ -49,7 +49,45 @@ public actor ConversationTranscriber {
     public init(ledger: TokenLedger) { self.ledger = ledger; transport = .shared; baseURL = GroqClient.defaultBaseURL }
     init(ledger: TokenLedger, client: GroqClient) { self.ledger = ledger; transport = client.transport; baseURL = client.baseURL }
     private var busy = false
-    struct Piece: Codable { var start: Int; var end: Int; var result: ConversationWhisperResult }
+    struct Piece: Codable { var start: Int; var end: Int; var result: ConversationWhisperResult; var nextStart: Int? = nil }
+
+    static func quietCut(_ samples: [Int16]) -> Int {
+        let first = max(1, samples.count - 30 * 16000)
+        let last = max(first + 1, samples.count - 16000)
+        return stride(from: first, to: last, by: 480).min { a, b in
+            func energy(_ start: Int) -> Double {
+                samples[start..<min(samples.count, start + 480)].reduce(0) { $0 + Double($1) * Double($1) }
+            }
+            return energy(a) < energy(b)
+        } ?? samples.count
+    }
+
+    static func join(_ previous: [ConversationWord], _ incoming: [ConversationWord]) -> [ConversationWord] {
+        var result = previous
+        func normalized(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
+        var used = Set<Int>()
+        for word in incoming {
+            let duplicate = previous.indices.last { index in
+                guard !used.contains(index) else { return false }
+                let old = previous[index]
+                let a = normalized(old.word)
+                let b = normalized(word.word)
+                let overlap = min(old.end, word.end) - max(old.start, word.start)
+                let fragment = min(a.count, b.count) >= 2 && (a.hasPrefix(b) || b.hasPrefix(a)) &&
+                    overlap >= min(old.end - old.start, word.end - word.start) * 0.5
+                return (a == b || fragment) && abs(old.start - word.start) < 0.5 && overlap >= -0.1
+            }
+            if let duplicate {
+                if normalized(word.word).count >= normalized(result[duplicate].word).count {
+                    result[duplicate] = word
+                }
+                used.insert(duplicate)
+            } else {
+                result.append(word)
+            }
+        }
+        return result.sorted { $0.start < $1.start }
+    }
 
     /// `final == false`: nur bis zur letzten abgeschlossenen Sprechpause. Wiederholung liest fertige Stücke von Platte.
     public func transcribe(audio: URL, workDirectory: URL, apiKey: String, mainLanguage: String, vocabulary: [String], gaps: [ConversationGap] = [], final: Bool = true) async throws -> ConversationWhisperResult {
@@ -83,10 +121,11 @@ public actor ConversationTranscriber {
                 if final && offset + count == total { end = total }
                 else if lastCut > 0 { end = offset + lastCut }
                 else if !final { break }
-                else { end = offset + count }
+                else { end = offset + Self.quietCut(samples) }
                 let gap = gaps.map { Int($0.at * 16000) }.filter { $0 > offset && $0 < end }.min()
                 let cut = gap ?? end
                 let encoded = AudioEncoder.encode(samples.prefix(cut - offset)[...])
+                let result: ConversationWhisperResult = try await ConversationRetry.run {
                 let reservation = try await ledger.reserve(model: "whisper-large-v3", amount: max(10, (cut - offset + 15999) / 16000), unit: .audio)
                 let client = GroqClient(apiKey: apiKey, transport: transport, baseURL: baseURL)
                 let response = await client.transcribeConversation(audio: encoded, language: cut - offset < 30 * 16000 ? mainLanguage : nil, vocabulary: vocabulary)
@@ -94,19 +133,25 @@ public actor ConversationTranscriber {
                 case .success(let result):
                     let duration = Double(cut - offset) / 16000
                     guard result.words.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end >= $0.start && $0.end <= duration + 0.1 }) else { throw GroqFailure.invalidResponse }
-                    piece = Piece(start: offset, end: cut, result: result)
-                    try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(piece), to: cache)
                     await ledger.settle(reservation, actual: max(10, Int(ceil(Double(cut - offset) / 16000))))
+                    return result
                 case .failure(let failure):
                     if case .http(let status, _, _) = failure, [401,403,404,429].contains(status) { await ledger.settle(reservation, actual: 0) }
                     throw failure
                 }
+                }
+                let overlap = lastCut == 0 && gap == nil && cut < total
+                piece = Piece(start: offset, end: cut, result: result, nextStart: overlap ? cut - 32000 : nil)
+                try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(piece), to: cache)
             }
             let shift = Double(offset) / 16000
-            for var word in piece.result.words { word.start += shift; word.end += shift; words.append(word) }
+            let incoming = piece.result.words.map { word in
+                ConversationWord(word: word.word, start: word.start + shift, end: word.end + shift)
+            }
+            words = Self.join(words, incoming)
             for var segment in piece.result.segments { segment.start += shift; segment.end += shift; segments.append(segment) }
             if let language = piece.result.language, !languages.contains(language) { languages.append(language) }
-            offset = piece.end; index += 1
+            offset = piece.nextStart ?? piece.end; index += 1
         }
         return ConversationWhisperResult(words: words, segments: segments, language: languages.first, duration: Double(offset) / 16000)
     }

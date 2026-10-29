@@ -392,6 +392,9 @@ func probeChat(model: String) async {
 
 let args = Array(CommandLine.arguments.dropFirst())
 switch args.first {
+case "conversation":
+    guard args.count == 2 else { fail("conversation <audio.wav>") }
+    try await conversationsBench(args[1])
 case "gen":
     try generate()
 case "probe":
