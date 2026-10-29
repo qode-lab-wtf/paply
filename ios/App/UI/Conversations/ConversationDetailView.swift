@@ -1,17 +1,16 @@
 import PaplyKit
 import SwiftUI
 
-/// Alle Aktionen bleiben beim Aufrufer, auch Zwischenablage und Wiedergabe.
+/// Alle Aktionen bleiben beim Aufrufer, auch Zwischenablage.
 struct ConversationDetailActions {
     var rename: (String) -> Void
     var chooseTopic: () -> Void
     var speaker: (String) -> Void
+    var identifyOwner: (String) -> Void
     var suggestion: (String, Bool) -> Void
     var toggleTask: (String) -> Void
-    var play: (String) -> Void
     var reassign: (String) -> Void
     var copyUtterance: (String) -> Void
-    var playFrom: (String) -> Void
     var share: () -> Void
     var copyTranscript: () -> Void
     var retry: () -> Void
@@ -21,19 +20,18 @@ struct ConversationDetailActions {
 struct ConversationDetailView: View {
     let item: ConversationDisplay
     let utterances: [ConversationUtterance]
-    /// nil = keine Wiedergabe. Erneutes Tippen kann der Aufrufer als Pause behandeln.
-    let playingUtteranceID: String?
-    var audioAvailable = true
     var pendingTaskIDs: Set<String> = []
     let actions: ConversationDetailActions
     @State private var editingTitle = false
     @State private var titleDraft = ""
     @State private var confirmDelete = false
-    @State private var chooseOwner = false
 
     private var conversation: Conversation { item.conversation }
     private var speakers: [String: ConversationSpeaker] {
         Dictionary(conversation.speakers.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+    private var needsOwner: Bool {
+        !conversation.speakers.contains(where: \.isOwner) && !conversation.speakers.isEmpty
     }
     private var suggestion: ConversationSpeaker? {
         conversation.speakers.filter { $0.suggestion != nil && $0.name == nil && !$0.isOwner }
@@ -44,13 +42,14 @@ struct ConversationDetailView: View {
             LazyVStack(alignment: .leading, spacing: 22) {
                 header
                 ConversationStatusBand(conversation: conversation, onRetry: actions.retry)
-                if !conversation.speakers.contains(where: \.isOwner), !conversation.speakers.isEmpty {
-                    Button("Welche Person bist du? Ein Tipp – dann landen deine Aufgaben im Reiter Aufgaben.") { chooseOwner = true }
-                        .font(.footnote).padding(12).paplyCard()
+                if needsOwner || suggestion != nil {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ownerCard
+                        suggestionBand
+                    }
                 }
-                suggestionBand
                 summarySection
-                tasksAndCommitments
+                VStack(alignment: .leading, spacing: 12) { tasksAndCommitments }
                 transcriptSection
             }.padding(20).padding(.bottom, 30)
         }
@@ -61,15 +60,9 @@ struct ConversationDetailView: View {
                 Menu {
                     Button("Teilen", systemImage: "square.and.arrow.up", action: actions.share)
                     Button("Wortlaut kopieren", systemImage: "doc.on.doc", action: actions.copyTranscript)
-                    Button("Erneut auswerten", systemImage: "arrow.clockwise", action: actions.retry)
                     Button("Löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityLabel("Gesprächsaktionen")
-            }
-        }
-        .confirmationDialog("Welche Person bist du?", isPresented: $chooseOwner, titleVisibility: .visible) {
-            ForEach(conversation.speakers) { speaker in
-                Button(ConversationText.displayName(speaker)) { actions.speaker(speaker.id) }
             }
         }
         .alert("Gespräch umbenennen", isPresented: $editingTitle) {
@@ -82,9 +75,25 @@ struct ConversationDetailView: View {
             Button("Löschen", role: .destructive, action: actions.delete)
         } message: { Text("Es liegt danach 30 Tage unter „Zuletzt gelöscht“.") }
     }
+    @ViewBuilder private var ownerCard: some View {
+        if needsOwner {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Welche Person bist du?").font(.subheadline.weight(.semibold))
+                Text("Ich bin …").font(.footnote).foregroundStyle(Color.paplySecondaryText)
+                ConversationChipLayout {
+                    ForEach(conversation.speakers) { speaker in
+                        Button { actions.identifyOwner(speaker.id) } label: {
+                            ConversationSpeakerLabel(speaker: speaker)
+                                .font(.subheadline).padding(.horizontal, 12).frame(minHeight: 44).paplyGlass()
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel("Das bin ich: \(ConversationTint.name(speaker))")
+                    }
+                }
+            }.padding(14).frame(maxWidth: .infinity, alignment: .leading).paplyCard()
+        }
+    }
     @ViewBuilder private var transcriptSection: some View {
         Text("Wortlaut").font(.headline)
-        if !audioAvailable { Text("Der Ton ist nicht mehr verfügbar. Der Wortlaut bleibt.").font(.footnote).foregroundStyle(Color.paplySecondaryText) }
         ForEach(Array(utterances.enumerated()), id: \.element.id) { index, utterance in
             ForEach(Array(conversation.gaps.enumerated()).filter { _, gap in
                 let previous = index == 0 ? -1.0 : utterances[index - 1].start
@@ -93,9 +102,8 @@ struct ConversationDetailView: View {
                 Text(gap.label).font(.caption).foregroundStyle(Color.paplySecondaryText)
             }
             ConversationUtteranceRow(utterance: utterance, speaker: speakers[utterance.speakerID],
-                isPlaying: playingUtteranceID == utterance.id, audioAvailable: audioAvailable,
-                onPlay: { actions.play(utterance.id) }, onReassign: { actions.reassign(utterance.id) },
-                onCopy: { actions.copyUtterance(utterance.id) }, onPlayFrom: { actions.playFrom(utterance.id) })
+                onReassign: { actions.reassign(utterance.id) },
+                onCopy: { actions.copyUtterance(utterance.id) })
         }
         ForEach(Array(conversation.gaps.enumerated()).filter { $0.element.at > (utterances.last?.start ?? -1) }, id: \.offset) { _, gap in
             Text(gap.label).font(.caption).foregroundStyle(Color.paplySecondaryText)
@@ -106,7 +114,7 @@ struct ConversationDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Ist \(ConversationTint.name(speaker)) \(name)?")
                 HStack {
-                    Button("Ja") { actions.suggestion(speaker.id, true) }.frame(minWidth: 60, minHeight: 44)
+                    Button("Ja") { actions.suggestion(speaker.id, true) }.buttonStyle(.borderedProminent).foregroundStyle(Color.paplyForestDeep).frame(minWidth: 60, minHeight: 44)
                     Button("Nein") { actions.suggestion(speaker.id, false) }.frame(minWidth: 60, minHeight: 44)
                 }.buttonStyle(.bordered)
             }.font(.subheadline).padding(14).frame(maxWidth: .infinity, alignment: .leading).paplyCard()
@@ -123,17 +131,12 @@ struct ConversationDetailView: View {
                 }
             }
         }
-        if conversation.summary == nil && conversation.state != .done {
-            Text("Zusammenfassung").font(.headline)
-            Text(conversation.presentationStatus ?? "Entsteht nach der Aufnahme")
-                .font(.subheadline).foregroundStyle(Color.paplySecondaryText)
-                .shimmer(conversation.state == .analyzing)
-        }
+
     }
     @ViewBuilder private var tasksAndCommitments: some View {
         Text("Aufgaben").font(.headline)
         if !item.tasks.isEmpty {
-            Text(conversation.speakers.contains(where: \.isOwner) ? "Ich" : "Beibehaltene Aufgaben").font(.subheadline.weight(.medium))
+            if conversation.speakers.contains(where: \.isOwner) { Text("Ich").font(.subheadline.weight(.medium)) }
             ForEach(item.tasks.filter { task in !(conversation.summary?.commitments.contains { $0.id == task.id && $0.speakerID == "shared" } ?? false) }) { task in
                 ConversationTaskRow(task: task, recordedAt: conversation.createdAt,
                                     pendingDone: pendingTaskIDs.contains(task.id)) { actions.toggleTask(task.id) }
@@ -143,7 +146,10 @@ struct ConversationDetailView: View {
             let tasks = conversation.summary?.commitments.filter { $0.speakerID == speaker.id } ?? []
             if !tasks.isEmpty {
                 ConversationSpeakerLabel(speaker: speaker).font(.subheadline.weight(.medium))
-                ForEach(tasks) { task in Text(ConversationText.render(task.text, speakers: conversation.speakers)) }
+                ForEach(tasks) { task in
+                    Text(ConversationText.render(task.text, speakers: conversation.speakers))
+                        .foregroundStyle(Color.paplySecondaryText)
+                }
             }
         }
         let shared = conversation.summary?.commitments.filter { $0.speakerID == "shared" } ?? []
@@ -166,7 +172,8 @@ struct ConversationDetailView: View {
                 titleDraft = conversation.title ?? "Neues Gespräch"
                 editingTitle = true
             } label: {
-                Text(conversation.title ?? "Neues Gespräch").font(.paplyTitle(.largeTitle, weight: .bold))
+                Text(conversation.title ?? "Neues Gespräch").font(.title2.bold())
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }.buttonStyle(.plain).accessibilityHint("Titel umbenennen")
             Text("\(conversation.createdAt.formatted(date: .abbreviated, time: .shortened)) · \(ConversationTint.duration(conversation.durationMs))")
@@ -196,8 +203,10 @@ struct ConversationTaskRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Button(action: onToggle) {
-                TaskCheckCircle(done: done).frame(width: 44, height: 44).contentShape(Rectangle())
+                TaskCheckCircle(done: done).padding(11).contentShape(Rectangle())
             }.buttonStyle(PressScaleStyle(scale: 0.86))
+                .padding(-11)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
                 .accessibilityLabel(done ? "Wieder öffnen: \(task.text)" : "Abhaken: \(task.text)")
             VStack(alignment: .leading, spacing: 6) {
                 Text(task.text).strikethrough(done).foregroundStyle(done ? Color.paplySecondaryText : .paplyText)
@@ -214,38 +223,28 @@ struct ConversationTaskRow: View {
 struct ConversationUtteranceRow: View {
     let utterance: ConversationUtterance
     let speaker: ConversationSpeaker?
-    let isPlaying: Bool
-    let audioAvailable: Bool
-    let onPlay: () -> Void
     let onReassign: () -> Void
     let onCopy: () -> Void
-    let onPlayFrom: () -> Void
     var body: some View {
-        Button { if audioAvailable { onPlay() } } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(speaker.map(ConversationTint.name) ?? ConversationText.render("[\(utterance.speakerID)]", speakers: []))
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(speaker.map(ConversationTint.color) ?? ConversationTint.blue)
-                    Text(ConversationTint.clock(utterance.start)).font(.caption).foregroundStyle(Color.paplySecondaryText)
-                    if isPlaying { Label("Läuft", systemImage: "pause.circle.fill").font(.caption).foregroundStyle(ConversationTint.blue) }
-                }
-                Text(utterance.text).foregroundStyle(Color.paplyText).multilineTextAlignment(.leading)
-                if utterance.uncertain {
-                    Label("Sprecher nicht sicher", systemImage: "questionmark.circle").font(.caption).foregroundStyle(Color.paplySecondaryText)
-                }
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(speaker.map(ConversationTint.name) ?? ConversationText.render("[\(utterance.speakerID)]", speakers: []))
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(speaker.map(ConversationTint.color) ?? ConversationTint.blue)
+                Text(ConversationTint.clock(utterance.start)).font(.caption).foregroundStyle(Color.paplySecondaryText)
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(12)
-            .background(isPlaying ? ConversationTint.blue.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 14))
-            .contentShape(Rectangle())
+            Text(utterance.text).foregroundStyle(Color.paplyText).multilineTextAlignment(.leading)
+            if utterance.uncertain {
+                Label("Person nicht sicher", systemImage: "questionmark.circle").font(.caption).foregroundStyle(Color.paplySecondaryText)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityHint(audioAvailable ? (isPlaying ? "Wiedergabe anhalten" : "Diese Stelle anhören") : "Ton nicht mehr verfügbar")
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(12)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
         .contextMenu {
-            Button("Anderer Sprecher …", systemImage: "person.crop.circle", action: onReassign)
+            Button("Andere Person …", systemImage: "person.crop.circle", action: onReassign)
             Button("Text kopieren", systemImage: "doc.on.doc", action: onCopy)
-            Button("Ab hier anhören", systemImage: "play", action: onPlayFrom).disabled(!audioAvailable)
         }
-        .accessibilityAction(named: "Anderer Sprecher …", onReassign)
+        .accessibilityAction(named: "Andere Person …", onReassign)
         .accessibilityAction(named: "Text kopieren", onCopy)
     }
 }
@@ -253,6 +252,6 @@ struct ConversationUtteranceRow: View {
 #Preview("Detail") { NavigationStack { ConversationDetailPreview(item: ConversationsPreviewData.phone) }.preferredColorScheme(.dark) }
 #Preview("Aufgabe") { ConversationTaskRow(task: ConversationsPreviewData.phone.tasks[0], recordedAt: .now, onToggle: {}).padding().background(PaplyBackground()).preferredColorScheme(.dark) }
 #Preview("Beitrag") {
-    ConversationUtteranceRow(utterance: ConversationsPreviewData.utterances[0], speaker: ConversationsPreviewData.phone.conversation.speakers[0], isPlaying: true, audioAvailable: true, onPlay: {}, onReassign: {}, onCopy: {}, onPlayFrom: {})
+    ConversationUtteranceRow(utterance: ConversationsPreviewData.utterances[0], speaker: ConversationsPreviewData.phone.conversation.speakers[0], onReassign: {}, onCopy: {})
         .background(PaplyBackground()).preferredColorScheme(.dark)
 }

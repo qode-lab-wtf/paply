@@ -72,7 +72,6 @@ struct ConversationsPreviewHost: View {
 
 struct ConversationDetailPreview: View {
     @State var item: ConversationDisplay
-    @State private var playing: String?
     @State private var selectedSpeaker: ConversationSpeaker?
     @State private var selectedUtterance: ConversationUtterance?
     @State private var showTopic = false
@@ -89,30 +88,37 @@ struct ConversationDetailPreview: View {
             ] : ConversationsPreviewData.utterances
     }
     var body: some View {
-        ConversationDetailView(item: item, utterances: utterances, playingUtteranceID: playing, actions: .init(
+        ConversationDetailView(item: item, utterances: utterances, actions: .init(
             rename: { item.conversation.title = $0 }, chooseTopic: { showTopic = true },
             speaker: { id in selectedSpeaker = item.conversation.speakers.first { $0.id == id } },
+            identifyOwner: { id in
+                for i in item.conversation.speakers.indices {
+                    let isOwner = item.conversation.speakers[i].id == id
+                    item.conversation.speakers[i].personID = isOwner ? VoicePerson.ownerID : nil
+                    item.conversation.speakers[i].nameSource = isOwner ? .owner : .none
+                }
+            },
             suggestion: { id, yes in
                 guard let i = item.conversation.speakers.firstIndex(where: { $0.id == id }) else { return }
                 if yes { item.conversation.speakers[i].name = item.conversation.speakers[i].suggestion?.name }
                 item.conversation.speakers[i].suggestion = nil
             }, toggleTask: { id in if let i = item.tasks.firstIndex(where: { $0.id == id }) { item.tasks[i].done.toggle() } },
-            play: { playing = playing == $0 ? nil : $0 },
             reassign: { id in selectedUtterance = utterances.first { $0.id == id } },
-            copyUtterance: { _ in note = "Vorschau: Text kopieren" }, playFrom: { playing = $0 },
+            copyUtterance: { _ in note = "Vorschau: Text kopieren" },
             share: { showShare = true }, copyTranscript: { note = "Vorschau: Wortlaut kopieren" },
             retry: { note = "Vorschau: Auswertung erneut starten" }, delete: { dismiss() }))
         .sheet(item: $selectedSpeaker) { speaker in
             ConversationSpeakerSheet(speaker: speaker, speakers: item.conversation.speakers, people: ConversationsPreviewData.people,
-                onChoose: { choice in
+                onChoose: { choice, _ in
                     if let i = item.conversation.speakers.firstIndex(where: { $0.id == speaker.id }) {
                         switch choice {
                         case .suggestion(let suggestion): item.conversation.speakers[i].name = suggestion.name
                         case .person(let id):
                             item.conversation.speakers[i].personID = id
+                            item.conversation.speakers[i].nameSource = .user
                             item.conversation.speakers[i].name = ConversationsPreviewData.people.first { $0.id == id }?.name
                         case .newName(let name): item.conversation.speakers[i].name = name
-                        case .merge: note = "Vorschau: Sprecher zusammenlegen"
+                        case .merge: note = "Vorschau: Personen zusammenlegen"
                         case .doNotRemember: note = "Vorschau: Stimme wird nicht gemerkt"
                         }
                         item.conversation.speakers[i].suggestion = nil
@@ -139,7 +145,7 @@ struct ConversationDetailPreview: View {
 }
 
 struct ConversationRecordingPreview: View {
-    var paused = false
+    @State var paused = false
     @State private var minimized = false
     @Environment(\.dismiss) private var dismiss
     var body: some View {
@@ -149,11 +155,11 @@ struct ConversationRecordingPreview: View {
                     Text("Aufnahme-Vorschau").font(.title)
                     Text("Keine echte Aufnahme").foregroundStyle(Color.paplySecondaryText)
                     Spacer()
-                    ConversationRecordingBar(elapsed: 1421, paused: paused, level: { 0.25 }, onOpen: { minimized = false }, onFinish: { dismiss() })
+                    ConversationRecordingBar(elapsed: 1421, paused: paused, level: { 0.25 }, onOpen: { minimized = false }, onPause: { paused.toggle() }, onFinish: { dismiss() })
                 }.padding(.top, 40).background(PaplyBackground())
             } else {
-                ConversationRecordingView(elapsed: 1421, paused: paused, showGuidance: true, level: { 0.25 },
-                    onFinish: { dismiss() }, onDiscard: { dismiss() }, onMinimize: { minimized = true })
+                ConversationRecordingView(elapsed: 1421, paused: paused, pausedSince: paused ? .now.addingTimeInterval(-120) : nil, showGuidance: true, level: { 0.25 },
+                    onPause: { paused.toggle() }, onFinish: { dismiss() }, onDiscard: { dismiss() }, onMinimize: { minimized = true })
             }
         }
     }
@@ -173,11 +179,15 @@ struct ConversationSettingsPreview: View {
 }
 
 struct ConversationEnrollmentPreview: View {
-    @State private var recording = false
+    @State private var startedAt: Date?
     @Environment(\.dismiss) private var dismiss
     var body: some View {
-        ConversationEnrollmentView(elapsed: recording ? 8 : 0, isRecording: recording, level: { 0.25 },
-            onStart: { recording = true }, onFinish: { dismiss() }, onCancel: { dismiss() })
+        TimelineView(.periodic(from: .now, by: 1)) { time in
+            let elapsed = startedAt.map { time.date.timeIntervalSince($0) } ?? 0
+            ConversationEnrollmentView(elapsed: elapsed, isRecording: startedAt != nil, level: { 0.25 },
+                onStart: { startedAt = .now }, onFinish: { dismiss() }, onCancel: { dismiss() })
+                .onChange(of: elapsed) { _, value in if value >= 20 { dismiss() } }
+        }
     }
 }
 
@@ -241,7 +251,7 @@ struct ConversationDevPreview: View {
         case .speakerSheet:
             ConversationSpeakerSheet(speaker: ConversationsPreviewData.speakers[1],
                 speakers: ConversationsPreviewData.speakers, people: ConversationsPreviewData.people,
-                onChoose: { _ in }, onCancel: { dismiss() }, cancelTitle: "Schließen")
+                onChoose: { _, _ in }, onCancel: { dismiss() }, cancelTitle: "Schließen")
         case .utteranceSheet:
             ConversationUtteranceSpeakerSheet(speakers: ConversationsPreviewData.speakers,
                 selectedID: "S1", onChoose: { _ in }, onCancel: { dismiss() }, cancelTitle: "Schließen")
@@ -249,11 +259,7 @@ struct ConversationDevPreview: View {
             Form {
                 ConversationSettingsSection(learnedThoughtCount: route == .settings ? 4 : nil,
                     people: ConversationsPreviewData.people, onEnroll: {}, onForgetOwner: {}, onDeletePerson: { _ in })
-                if route == .settings {
-                    Section("Bekannte Stimmen") {
-                        ForEach(ConversationsPreviewData.people) { person in Text(person.name) }
-                    }.listRowBackground(Color.paplyRow)
-                }
+
             }.paplyList().navigationTitle("Einstellungen")
         case .enrollment:
             ConversationEnrollmentView(elapsed: 8, isRecording: true, level: { 0.25 },
@@ -269,7 +275,9 @@ struct ConversationDevPreview: View {
         case .modelsLoading:
             ConversationsPreviewHost(showPreviewHint: false)
                 .safeAreaInset(edge: .top) {
-                    Text("Sprechererkennung wird geladen …").font(.footnote).padding(8)
+                    Text("Sprechererkennung wird geladen … 42 %").font(.footnote)
+                        .foregroundStyle(Color.paplySecondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 8)
                 }
         case .licenses: ConversationLicenses()
         }

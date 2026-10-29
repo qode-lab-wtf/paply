@@ -14,18 +14,24 @@ struct ConversationSpeakerSheet: View {
     let speaker: ConversationSpeaker
     let speakers: [ConversationSpeaker]
     let people: [VoicePerson]
-    let onChoose: (ConversationSpeakerChoice) -> Void
+    let onChoose: (ConversationSpeakerChoice, Bool) -> Void
     let onCancel: () -> Void
     var cancelTitle = "Abbrechen"
     @State private var name = ""
+    @State private var rememberVoice = true
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Button { onChoose(.person(VoicePerson.ownerID), rememberVoice) } label: {
+                        Label("Das bin ich", systemImage: "person.crop.circle.badge.checkmark").frame(minHeight: 44)
+                    }
+                }.listRowBackground(Color.paplyRow)
                 if let suggestion = speaker.suggestion {
                     Section(speaker.suggestion?.source == .transcript ? "Aus dem Gespräch vorgeschlagen" : "Bekannte Stimme vorgeschlagen") {
-                        Button { onChoose(.suggestion(suggestion)) } label: {
+                        Button { onChoose(.suggestion(suggestion), rememberVoice) } label: {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("\(suggestion.name) ?").font(.headline)
+                                Text("\(suggestion.name)?").font(.headline)
                                 if let evidence = suggestion.evidence {
                                     Text("„\(evidence)“").font(.subheadline).foregroundStyle(Color.paplySecondaryText)
                                 } else { Text("Ähnelt einer bekannten Stimme").font(.caption) }
@@ -35,21 +41,20 @@ struct ConversationSpeakerSheet: View {
                 }
                 Section("Bekannte Stimmen") {
                     ForEach(people.filter { !$0.isOwner }) { person in
-                        Button(person.name) { onChoose(.person(person.id)) }.frame(minHeight: 44)
+                        Button(person.name) { onChoose(.person(person.id), rememberVoice) }.frame(minHeight: 44)
                     }
-                    Button("Das bin ich") { onChoose(.person(VoicePerson.ownerID)) }.frame(minHeight: 44)
                 }.listRowBackground(Color.paplyRow)
                 Section("Neuer Name") {
                     TextField("Wie heißt die Person?", text: $name).textContentType(.name)
-                    Button("Namen übernehmen") { onChoose(.newName(name.trimmingCharacters(in: .whitespacesAndNewlines))) }
+                    Button("Namen übernehmen") { onChoose(.newName(name.trimmingCharacters(in: .whitespacesAndNewlines)), rememberVoice) }
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }.listRowBackground(Color.paplyRow)
                 Section {
-                    NavigationLink("Mit anderem Sprecher zusammenlegen …") {
+                    NavigationLink("Mit anderer Person zusammenlegen …") {
                         ConversationUtteranceSpeakerSheet(speakers: speakers.filter { $0.id != speaker.id }, selectedID: nil,
-                            title: "Zusammenlegen", onChoose: { onChoose(.merge($0)) }, onCancel: onCancel)
+                            title: "Zusammenlegen", onChoose: { onChoose(.merge($0), rememberVoice) }, onCancel: onCancel)
                     }.disabled(speakers.count < 2)
-                    Button("Stimme nicht merken") { onChoose(.doNotRemember) }
+                    Toggle("Stimme fürs nächste Mal merken", isOn: $rememberVoice)
                 } footer: { Text("Bestätigte Stimmen merkt sich Paply nur auf diesem iPhone.") }.listRowBackground(Color.paplyRow)
             }
             .paplyList().navigationTitle("Wer ist das?").navigationBarTitleDisplayMode(.inline)
@@ -61,7 +66,7 @@ struct ConversationSpeakerSheet: View {
 struct ConversationUtteranceSpeakerSheet: View {
     let speakers: [ConversationSpeaker]
     let selectedID: String?
-    var title = "Anderer Sprecher …"
+    var title = "Andere Person …"
     let onChoose: (String) -> Void
     let onCancel: () -> Void
     var cancelTitle = "Abbrechen"
@@ -82,8 +87,8 @@ struct ConversationUtteranceSpeakerSheet: View {
 }
 
 #Preview("Wer ist das?") {
-    ConversationSpeakerSheet(speaker: ConversationsPreviewData.phone.conversation.speakers[1], speakers: ConversationsPreviewData.phone.conversation.speakers, people: ConversationsPreviewData.people, onChoose: { _ in }, onCancel: {}).preferredColorScheme(.dark)
+    ConversationSpeakerSheet(speaker: ConversationsPreviewData.phone.conversation.speakers[1], speakers: ConversationsPreviewData.phone.conversation.speakers, people: ConversationsPreviewData.people, onChoose: { _, _ in }, onCancel: {}).preferredColorScheme(.dark)
 }
-#Preview("Anderer Sprecher") {
+#Preview("Andere Person") {
     NavigationStack { ConversationUtteranceSpeakerSheet(speakers: ConversationsPreviewData.phone.conversation.speakers, selectedID: "S1", onChoose: { _ in }, onCancel: {}) }.preferredColorScheme(.dark)
 }

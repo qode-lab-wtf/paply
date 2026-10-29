@@ -45,9 +45,9 @@ struct ConversationsHome: View {
             .listRowBackground(Color.clear).listRowSeparator(.hidden)
             if items.isEmpty {
                 Section {
-                    ContentUnavailableView("Gespräche bleiben im Kopf. Und hier.", systemImage: "person.2.wave.2",
+                    ContentUnavailableView("Noch keine Gespräche", systemImage: "person.2.wave.2",
                         description: Text("Nimm ein Gespräch auf. Paply hält fest, wer was gesagt hat, und sammelt deine Aufgaben."))
-                    Text("Telefonate auf diesem iPhone: Anruf mit der iOS-Aufnahme mitschneiden, danach Teilen → Paply.")
+                    Text("Telefonate: anderes Handy auf Lautsprecher und Paply daneben legen.")
                         .font(.subheadline).foregroundStyle(Color.paplySecondaryText)
                 }.listRowBackground(Color.clear).listRowSeparator(.hidden)
             }
@@ -56,7 +56,7 @@ struct ConversationsHome: View {
                     ForEach(items.filter { Calendar.current.isDate($0.conversation.createdAt, inSameDayAs: day) }
                         .sorted { $0.conversation.createdAt > $1.conversation.createdAt }) { item in
                         Button { onOpen(item.id) } label: {
-                            ConversationThoughtRow(item: item, time: item.conversation.createdAt.formatted(date: .omitted, time: .shortened))
+                            ConversationThoughtRow(item: item, time: item.conversation.createdAt.formatted(date: .omitted, time: .shortened), showsIcon: false)
                         }.buttonStyle(.plain)
                     }
                 }.listRowBackground(Color.paplyRow)
