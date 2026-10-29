@@ -102,7 +102,7 @@ struct ConversationThoughtRow: View {
     private var openTasks: Int { item.tasks.filter { !$0.done }.count }
     private var metadata: String {
         var text = "\(time) · \(ConversationTint.duration(item.conversation.durationMs))"
-        if let topic = item.topic { text += " · ◆ \(topic)" }
+
         return text
     }
     private var footer: Text {
@@ -126,7 +126,7 @@ struct ConversationThoughtRow: View {
                     Image(systemName: "person.2.wave.2").font(.caption)
                         .foregroundStyle(ConversationTint.blue).accessibilityHidden(true)
                 }
-                Text(item.conversation.title ?? "Neues Gespräch").font(.headline)
+                Text(ConversationText.render(item.conversation.title ?? "Neues Gespräch", speakers: item.conversation.speakers)).font(.headline)
                     .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                     .shimmer(item.conversation.state == .analyzing)
             }

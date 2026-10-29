@@ -532,3 +532,12 @@ public enum ConversationText {
         return result + rest
     }
 }
+
+/// Ausschließlich technische Codes und Messwerte; keine Gesprächsinhalte oder Kennungen.
+public enum ConversationDiagnostics {
+    private static let channel = AsyncStream<(String, [String: Int])>.makeStream()
+    public static var events: AsyncStream<(String, [String: Int])> { channel.stream }
+    public static func record(_ code: String, _ values: [String: Int]) {
+        channel.continuation.yield((code, values))
+    }
+}

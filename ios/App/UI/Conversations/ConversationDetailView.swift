@@ -198,16 +198,12 @@ struct ConversationDetailView: View {
                 titleDraft = conversation.title ?? "Neues Gespräch"
                 editingTitle = true
             } label: {
-                Text(conversation.title ?? "Neues Gespräch").font(.title2.bold())
+                Text(ConversationText.render(conversation.title ?? "Neues Gespräch", speakers: conversation.speakers)).font(.title2.bold())
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }.buttonStyle(.plain).accessibilityHint("Titel umbenennen")
             Text("\(conversation.createdAt.formatted(date: .abbreviated, time: .shortened)) · \(ConversationTint.duration(conversation.durationMs))")
                 .font(.subheadline).foregroundStyle(Color.paplySecondaryText)
-            Button(action: actions.chooseTopic) {
-                Label(item.topic ?? "Thema wählen", systemImage: "tag")
-                    .font(.caption.weight(.medium)).padding(.horizontal, 12).frame(minHeight: 44).paplyGlass()
-            }.buttonStyle(.plain)
             ConversationChipLayout {
                 ForEach(conversation.speakers) { speaker in
                     Button { actions.speaker(speaker.id) } label: {

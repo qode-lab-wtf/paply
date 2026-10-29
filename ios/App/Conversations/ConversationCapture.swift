@@ -10,6 +10,7 @@ final class ConversationNavigation {
     static let shared = ConversationNavigation()
     var requestedID: String?
     var showCurrent = false
+    var voiceHintDismissed = false
     var error: String?
 }
 
@@ -88,6 +89,7 @@ final class ConversationCapture {
             return true
         }
         ConversationModels.shared.start()
+        ConversationsEnvironment.prewarm()
         starting = true
         pendingDiscard = nil
         defer { starting = false }
@@ -140,6 +142,7 @@ final class ConversationCapture {
         ConversationBackground.shared.begin(id: current.id)
         SessionController.shared.detachConversation(id: current.id)
         let duration = file.close()
+        Diag.log("conversation.recorded", ["ms": .i(duration)])
         active = nil
         writer = nil
         sink = nil
@@ -309,6 +312,13 @@ final class ConversationCapture {
                 AlertConfiguration(title: "Paply-Gespräch", body: LocalizedStringResource(stringLiteral: $0), sound: .default)
             }
             await activity.update(ActivityContent(state: state, staleDate: nil), alertConfiguration: configuration)
+            if phase == .done || phase == .waiting || phase == .failed {
+                try? await Task.sleep(for: .seconds(phase == .done ? 4 : 3))
+                // Ein neuer Zustand darf nicht durch einen alten Abschluss beendet werden.
+                if activity.content.state.phase == phase {
+                    await activity.end(nil, dismissalPolicy: .immediate)
+                }
+            }
         }
     }
 }

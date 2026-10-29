@@ -9,6 +9,7 @@ struct ConversationsTab: View {
     @State private var path: [String] = []
     @State private var voices = false
     @State private var deleted = false
+    @State private var enroll = false
     var body: some View {
         NavigationStack(path: $path) {
             ConversationsHome(
@@ -30,12 +31,25 @@ struct ConversationsTab: View {
                 }, onOpen: { path.append($0) }, onVoices: { voices = true }, onDeleted: { deleted = true },
                 onSettings: { nav.showSettings = true }
             )
+            .sheet(isPresented: $enroll) {
+                ConversationEnrollmentSheet()
+            }
             .safeAreaInset(edge: .top) {
-                if !ConversationModels.shared.ready {
-                    Button { ConversationModels.shared.start() } label: {
-                        Text(ConversationModels.shared.statusLine)
-                            .font(.footnote).foregroundStyle(Color.paplySecondaryText)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 8)
+                VStack(spacing: 0) {
+                    if !ConversationNavigation.shared.voiceHintDismissed && !model.people.contains(where: { $0.isOwner && !$0.prints.isEmpty }) {
+                        HStack {
+                            Button("Stimme einrichten – damit Paply dich erkennt") { enroll = true }
+                            Spacer()
+                            Button { ConversationNavigation.shared.voiceHintDismissed = true } label: { Image(systemName: "xmark") }
+                                .accessibilityLabel("Hinweis schließen")
+                        }.font(.footnote).padding(12).background(.thinMaterial, in: Capsule()).padding(.horizontal)
+                    }
+                    if !ConversationModels.shared.ready {
+                        Button { ConversationModels.shared.start() } label: {
+                            Text(ConversationModels.shared.statusLine)
+                                .font(.footnote).foregroundStyle(Color.paplySecondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 8)
+                        }
                     }
                 }
             }

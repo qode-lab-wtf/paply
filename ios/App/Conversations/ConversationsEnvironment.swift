@@ -21,9 +21,7 @@ enum ConversationsEnvironment {
             mainLanguage: { await MainActor.run { AppSettings.shared.effectivePrimaryLanguage ?? "de" } },
             vocabulary: {
                 let own = await MainActor.run { AppSettings.shared.effectivePaply.vocabulary }
-                let names = (try? await profiles.people().map(\.name)) ?? []
-                let topics = await ThoughtsEnvironment.store.topics().map(\.title)
-                return [own] + names + topics
+                return [own]
             })
     }
     // Anschlussstelle für die Bereitschaft des echten Motors.
@@ -36,6 +34,11 @@ enum ConversationsEnvironment {
     static func bootstrap() {
         guard !started else { return }
         started = true
+        Task {
+            for await (code, values) in ConversationDiagnostics.events {
+                Diag.log(code, values.mapValues { .i($0) })
+            }
+        }
         ConversationCapture.shared.onRecordingFinished = { item in
             if item.origin == .recording { AppSettings.shared.conversationRecordingCount += 1 }
             await run()
@@ -52,6 +55,9 @@ enum ConversationsEnvironment {
             ) { _ in
                 Task { @MainActor in await run() }
             })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
+        ) { _ in Task.detached(priority: .utility) { NemotronSpeakerDiarizer.releaseModels() } })
         ConversationLearning.observe()
         observeKey()
         observePriority()
@@ -83,7 +89,7 @@ enum ConversationsEnvironment {
                         ConversationCapture.shared.updateProcessing(
                             id: id,
                             phase: item.state == .done ? .done : item.state == .needsAttention ? .failed : .waiting,
-                            note: item.state == .done ? "Fertig · \(count) Aufgaben" : nil)
+                            note: item.state == .done ? (count == 0 ? "Fertig" : "Fertig · \(count) Aufgaben") : nil)
                         ConversationBackground.shared.end(id: id, success: item.state == .done)
                         if [.captured, .waitingNetwork, .waitingLimit, .waitingBudget].contains(item.state) {
                             ConversationBackground.shared.schedule()
@@ -94,10 +100,18 @@ enum ConversationsEnvironment {
         }
     }
 
+    static func prewarm() {
+        guard ConversationModels.isReady else { return }
+        Task(priority: .background) {
+            do { try await NemotronSpeakerDiarizer(directory: ConversationModels.directory).prewarm() }
+            catch { Diag.log("conversation.prewarm.failed", ["code": .i((error as NSError).code)]) }
+        }
+    }
     static func run() async {
         guard let ready else { return }
         await ready.value
         guard !Task.isCancelled else { return }
+        await ConversationEnrollment.processPending()
         await processor.kick()
         await processor.waitUntilIdle()
         await ConversationLearning.refresh()
@@ -169,7 +183,7 @@ private struct AvailableSpeakerDiarizer: SpeakerDiarizing {
         } catch SpeakerProcessingDeferred.thermal { throw SpeakerProcessingDeferred.thermal }
         catch is CancellationError { throw CancellationError() }
         catch {
-            await MainActor.run { ConversationModels.shared.invalidate() }
+            Diag.log("conversation.diarizer.failed", ["code": .i((error as NSError).code)])
             throw error
         }
     }

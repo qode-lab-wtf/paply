@@ -1524,7 +1524,10 @@ extension MicInputStats {
 // MARK: Gespräch als unabhängiger Mithörer
 extension SessionController {
     func attachConversation(id: String, sink: @escaping @Sendable ([Float]) -> Void) async -> Bool {
-        guard conversationID == nil else { return conversationID == id }
+        guard conversationID == nil else {
+            Diag.log("conversation.attach.rejected", ["same": .b(conversationID == id)])
+            return conversationID == id
+        }
         conversationID = id
         pauseTask?.cancel()
         thoughtSessionEnd?.cancel()
@@ -1545,6 +1548,10 @@ extension SessionController {
                 syncAlertShield(reason: "conversation-failed")
                 return false
             }
+        }
+        guard conversationID == id else {
+            Diag.log("conversation.attach.cancelled")
+            return false
         }
         audio.processor.attachListener(owner: id, sink: sink)
         lastActivityAt = Date()

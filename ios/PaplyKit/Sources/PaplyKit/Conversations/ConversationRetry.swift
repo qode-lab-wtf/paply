@@ -15,6 +15,7 @@ enum ConversationRetry {
                 }
                 guard delay <= 75, attempts < 3 else { throw error }
                 attempts += 1
+                ConversationDiagnostics.record("conversation.limit.wait", ["ms": Int(max(0, delay) * 1000), "attempt": attempts])
                 try await Task.sleep(for: .seconds(max(0.01, delay)))
             }
         }

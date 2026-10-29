@@ -98,6 +98,8 @@ public actor ConversationTranscriber {
 
     /// `final == false`: nur bis zur letzten abgeschlossenen Sprechpause. Wiederholung liest fertige Stücke von Platte.
     public func transcribe(audio: URL, workDirectory: URL, apiKey: String, mainLanguage: String, vocabulary: [String], gaps: [ConversationGap] = [], final: Bool = true) async throws -> ConversationWhisperResult {
+        let started = Date()
+        defer { ConversationDiagnostics.record("conversation.whisper.duration", ["ms": Int(Date().timeIntervalSince(started) * 1000)]) }
         guard !busy else { throw ThoughtStoreError.unavailable }
         busy = true; defer { busy = false }
         try FileSafety.createDirectory(workDirectory)

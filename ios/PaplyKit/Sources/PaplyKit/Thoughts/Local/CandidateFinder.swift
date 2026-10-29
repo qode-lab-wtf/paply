@@ -296,7 +296,7 @@ public actor CandidateFinder: CandidateFinding {
     }
 
     private func isIndexable(_ thought: Thought) -> Bool {
-        thought.deletedAt == nil && thought.state != .recording && !Self.document(thought).isEmpty
+        thought.kind != ConversationKind.thoughtKind && thought.deletedAt == nil && thought.state != .recording && !Self.document(thought).isEmpty
     }
 
     static func document(_ thought: Thought) -> String {
