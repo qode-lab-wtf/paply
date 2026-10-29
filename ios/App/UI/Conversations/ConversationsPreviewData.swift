@@ -43,9 +43,15 @@ enum ConversationsPreviewData {
         .init(id: "u2", speakerID: "S1", start: 29, end: 39, text: "Dann schicke ich das Angebot am Freitag. Ich rechne zwei Varianten für den Speicher."),
         .init(id: "u3", speakerID: "S2", start: 40, end: 42, text: "Das klingt gut.", uncertain: true)
     ]
-    static let longUtterances: [ConversationUtterance] = (0..<1200).map { index in
-        .init(id: "long-\(index)", speakerID: "S\(index % 4 + 1)", start: Double(index * 12), end: Double(index * 12 + 10),
-              text: ["Wir teilen die Arbeit auf und beginnen am Samstag mit den Beeten.", "Ich bringe die Werkzeuge mit. Wer kümmert sich um die Pflanzen?", "Die Liste ist vorbereitet, wir gehen sie gemeinsam durch."][index % 3], uncertain: index % 37 == 0)
+    private static let longTexts = [
+        "Wir teilen die Arbeit auf und beginnen am Samstag mit den Beeten.",
+        "Ich bringe die Werkzeuge mit. Wer kümmert sich um die Pflanzen?",
+        "Die Liste ist vorbereitet, wir gehen sie gemeinsam durch.",
+    ]
+    static let longUtterances: [ConversationUtterance] = (0..<1200).map { (index: Int) -> ConversationUtterance in
+        let start = Double(index * 12)
+        return ConversationUtterance(id: "long-\(index)", speakerID: "S\(index % 4 + 1)", start: start, end: start + 10,
+                                     text: longTexts[index % 3], uncertain: index % 37 == 0)
     }
     static let all = [phone, meeting, waiting, analyzing, failed, long]
 }

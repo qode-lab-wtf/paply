@@ -109,6 +109,13 @@ struct RootView: View {
             ConversationDevPreview(route: route)
         }
         .task { await ThoughtsDebug.apply(nav: nav, flow: flow, model: model) }
+        // Bildschirmfotos im Simulator ohne Rückfrage: `simctl launch … -PaplyDevRoute preview/home`
+        .task {
+            if let route = UserDefaults.standard.string(forKey: "PaplyDevRoute"),
+               let url = URL(string: "\(PaplyURL.scheme)://dev/\(route)") {
+                open(url)
+            }
+        }
         #endif
     }
 

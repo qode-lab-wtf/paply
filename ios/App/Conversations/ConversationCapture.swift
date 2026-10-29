@@ -48,8 +48,12 @@ final class ConversationCapture {
     func bootstrap() {
         guard !bootstrapped else { return }
         bootstrapped = true
-        let leftovers = Activity<ConversationActivityAttributes>.activities
-        Task { for old in leftovers { await old.end(nil, dismissalPolicy: .immediate) } }
+        // Übrig gebliebene Activities (Absturz) beenden – im eigenen Task nachschlagen, wie bei den Gedanken
+        Task.detached {
+            for old in Activity<ConversationActivityAttributes>.activities {
+                await old.end(nil, dismissalPolicy: .immediate)
+            }
+        }
         publish()
         ConversationBackground.shared.bootstrap()
         DarwinBus.shared.observe(.conversationToggle) {
@@ -297,9 +301,13 @@ final class ConversationCapture {
         state.elapsed = elapsed
         state.pausedAt = pauseAt
         if active != nil { state.startedAt = Date().addingTimeInterval(-elapsed) }
-        Task {
-            await activity.update(ActivityContent(state: state, staleDate: nil),
-                alertConfiguration: alert.map { AlertConfiguration(title: "Paply-Gespräch", body: LocalizedStringResource(stringLiteral: $0), sound: .default) })
+        let activityID = activity.id
+        Task.detached {
+            guard let activity = Activity<ConversationActivityAttributes>.activities.first(where: { $0.id == activityID }) else { return }
+            let configuration = alert.map {
+                AlertConfiguration(title: "Paply-Gespräch", body: LocalizedStringResource(stringLiteral: $0), sound: .default)
+            }
+            await activity.update(ActivityContent(state: state, staleDate: nil), alertConfiguration: configuration)
         }
     }
 }
