@@ -59,7 +59,15 @@ class ThoughtProcessor(
     private val liveOutcomes = ConcurrentHashMap<String, DictationOutcome>()
     private val expectedLive = ConcurrentHashMap<String, Instant>()
     private val pendingSources = ConcurrentHashMap<String, ThoughtSource>()
-    @Volatile private var rejectedKey: String? = null
+    private val rejectedKeyFile = store.root.resolve("rejected-key.sha256").toFile()
+    @Volatile private var rejectedKey: String? = if (rejectedKeyFile.exists()) rejectedKeyFile.readText() else null
+    private fun keyFingerprint(key: String): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(key.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    private fun rejectKey(key: String) {
+        val fingerprint = keyFingerprint(key)
+        rejectedKeyFile.writeText(fingerprint)
+        rejectedKey = fingerprint
+    }
     private val eventBroadcast = Broadcast<ProcessorEvent>()
     val events
         get() = eventBroadcast.stream
@@ -225,7 +233,7 @@ class ThoughtProcessor(
                         ThoughtState.waitingNetwork ->
                             if (due && online) 1 else return@mapNotNull null
                         ThoughtState.waitingKey ->
-                            if (!key.isNullOrEmpty() && key != rejectedKey) 1
+                            if (!key.isNullOrEmpty() && keyFingerprint(key) != rejectedKey) 1
                             else return@mapNotNull null
                         ThoughtState.waitingLimit,
                         ThoughtState.waitingBudget -> if (due) 1 else return@mapNotNull null
@@ -296,7 +304,7 @@ class ThoughtProcessor(
             wait(id, ThoughtState.waitingKey, message = message(ThoughtState.waitingKey))
             return null
         }
-        if (key == rejectedKey) {
+        if (keyFingerprint(key) == rejectedKey) {
             wait(id, ThoughtState.waitingKey, message = keyRejectedMessage)
             return null
         }
@@ -401,7 +409,7 @@ class ThoughtProcessor(
     ) {
         when (failure) {
             TranscriptionFailure.unauthorized -> {
-                rejectedKey = key
+                rejectKey(key)
                 wait(id, ThoughtState.waitingKey, message = keyRejectedMessage)
             }
             TranscriptionFailure.rateLimited -> {
@@ -455,7 +463,7 @@ class ThoughtProcessor(
             wait(id, ThoughtState.waitingKey, message = message(ThoughtState.waitingKey))
             return
         }
-        if (key == rejectedKey) {
+        if (keyFingerprint(key) == rejectedKey) {
             wait(id, ThoughtState.waitingKey, message = keyRejectedMessage)
             return
         }
@@ -525,7 +533,7 @@ class ThoughtProcessor(
                 apply(id, source, record)
             }
             is StructureOutcome.Wait -> {
-                if (outcome.state == ThoughtState.waitingKey) rejectedKey = key
+                if (outcome.state == ThoughtState.waitingKey) rejectKey(key)
                 structureWait(id, outcome)
             }
             is StructureOutcome.Unusable -> applyRaw(id, source, outcome.code)

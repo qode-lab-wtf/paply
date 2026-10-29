@@ -23,6 +23,7 @@ object ThoughtState {
     val active get() = current.value.phase in listOf("starting", "recording", "stopping")
     fun update(context: Context, value: State) {
         val previous = current.value
+        if (CaptureActivity.cardVisible && value.message.isNotBlank()) CaptureActivity.claimFeedback(value.id)
         current.value = value
         if (previous.phase != value.phase || previous.id != value.id) {
             android.service.quicksettings.TileService.requestListeningState(context, ComponentName(context, ThoughtTile::class.java))

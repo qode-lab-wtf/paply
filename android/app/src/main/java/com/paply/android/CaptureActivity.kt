@@ -74,6 +74,7 @@ class CaptureActivity : ComponentActivity() {
                 val canDismiss = !ThoughtState.active || ThoughtNotifications.visible(this)
                 SideEffect { setFinishOnTouchOutside(canDismiss) }
                 BackHandler { dismissCard() }
+                SideEffect { if (state.message.isNotBlank()) claimFeedback(state.id) }
                 val feedback = captureFeedback(state.phase, notice ?: state.message,
                     requiresAction = (!permissionGranted && (notice != null || state.message.isNotBlank())) || notice == ThoughtService.BETA_OFF)
                 val opacity = remember { Animatable(1f) }
@@ -167,7 +168,10 @@ class CaptureActivity : ComponentActivity() {
         super.onStop()
     }
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
-    companion object { @Volatile var cardVisible = false; private set }
+    companion object {
+        fun claimFeedback(id: String?) { feedbackOwnedId = id }
+        @Volatile var feedbackOwnedId: String? = null; private set
+        @Volatile var cardVisible = false; private set }
 }
 
 @Composable

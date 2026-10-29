@@ -43,6 +43,8 @@ class PaplyButtonService : AccessibilityService() {
     private lateinit var wm: WindowManager
     private lateinit var layout: WindowManager.LayoutParams
     private val position by lazy { getSharedPreferences("paply-button", MODE_PRIVATE) }
+    private var hintText: String? = null
+    private var hintJob: Job? = null
     private var offset = 0
 
     override fun onServiceConnected() {
@@ -224,12 +226,38 @@ class PaplyButtonService : AccessibilityService() {
         stopForeground(); transition(ButtonPolicy.Event.DISCARD); hint(message)
     }
     private fun hint(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show(); render()
+        hintJob?.cancel()
+        hintText = when {
+            message.contains("Schlüssel", true) -> "Schlüssel fehlt oder ist ungültig"
+            message.contains("Keine Sprache", true) -> "Keine Sprache erkannt"
+            message.contains("belegt", true) -> "Mikrofon belegt"
+            message.contains("Einfügen") -> "Feld lange drücken → Einfügen"
+            message.startsWith("An Textfeld") -> "Gesendet · im Verlauf gesichert"
+            message.startsWith("Mikrofon wird") -> "Mikrofon startet neu …"
+            message.startsWith("Feld gewechselt") -> "Feld gewechselt · Text wird gesichert"
+            message.startsWith("Öffne Paply") || message.startsWith("Mikrofon nicht verfügbar") -> "Mikrofon in Paply freigeben"
+            else -> message
+        }
+        label?.animate()?.cancel(); label?.alpha = 1f
+        render()
+        hintJob = scope.launch {
+            delay(2500)
+            if (ValueAnimator.areAnimatorsEnabled()) label?.animate()?.alpha(0f)?.setDuration(220)?.start()
+            delay(220)
+            hintText = null; label?.alpha = 1f; render()
+        }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun render() {
         if (!::wm.isInitialized || connected !== this) return
-        val show = !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE)
+        val screen = android.graphics.Point().also { @Suppress("DEPRECATION") wm.defaultDisplay.getRealSize(it) }
+        val insets = bar?.rootWindowInsets
+        @Suppress("DEPRECATION")
+        val safeTop = maxOf(insets?.stableInsetTop ?: dp(28), insets?.displayCutout?.safeInsetTop ?: 0)
+        val safeLeft = insets?.displayCutout?.safeInsetLeft ?: 0
+        val safeRight = maxOf(insets?.displayCutout?.safeInsetRight ?: 0, insets?.stableInsetRight ?: 0)
+        val y = ButtonPosition.top(keyboardTop.coerceAtMost(screen.y), safeTop, dp(44), dp(8), offset)
+        val show = y != null && !overlayFailed && (eligible || phase != ButtonPolicy.Phase.IDLE || hintText != null)
         if (!show) {
             bar?.let { view ->
                 bar = null
@@ -244,14 +272,17 @@ class PaplyButtonService : AccessibilityService() {
                 elevation = dp(6).toFloat()
             }
             logo = ImageView(this).apply { setImageResource(R.drawable.ic_paply); contentDescription = "Paply-Diktat starten"; setPadding(dp(10),dp(10),dp(10),dp(10)) }
-            label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; setPadding(dp(8),0,dp(8),0) }
+            label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER_VERTICAL; maxLines = 2; setPadding(dp(8),0,dp(8),0) }
             cancel = TextView(this).apply { text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
             view.addView(logo, LinearLayout.LayoutParams(dp(44),dp(44)))
             view.addView(label, LinearLayout.LayoutParams(-2,dp(44)))
             view.addView(cancel, LinearLayout.LayoutParams(dp(44),dp(44)))
             layout = WindowManager.LayoutParams(-2, dp(44), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.RIGHT; x = dp(8) }
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.START
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0) }
             bar = view
             view.setOnClickListener { if (phase == ButtonPolicy.Phase.IDLE) start() else if (phase == ButtonPolicy.Phase.RECORDING) finish() }
             var down = 0f; var initial = 0; var dragged = false
@@ -272,15 +303,19 @@ class PaplyButtonService : AccessibilityService() {
         val active = session
         val elapsed = active?.let { (SystemClock.elapsedRealtime() - it.recording.startedAt) / 1000 } ?: 0
         logo?.visibility = if (phase == ButtonPolicy.Phase.IDLE) View.VISIBLE else View.GONE
-        label?.visibility = if (phase == ButtonPolicy.Phase.IDLE) View.GONE else View.VISIBLE
+        label?.visibility = if (phase == ButtonPolicy.Phase.IDLE && hintText == null) View.GONE else View.VISIBLE
         cancel?.visibility = if (phase == ButtonPolicy.Phase.IDLE) View.GONE else View.VISIBLE
-        label?.text = when (phase) {
+        label?.text = hintText ?: when (phase) {
             ButtonPolicy.Phase.STARTING -> "Mikrofon …"
             ButtonPolicy.Phase.WORKING -> "schreibt …"
             ButtonPolicy.Phase.RECORDING -> "${"▮".repeat(1 + ((active?.recording?.level ?: 0f) * 5).toInt())}  ${elapsed / 60}:${(elapsed % 60).toString().padStart(2,'0')} · Fertig" + if (elapsed >= 540) " · noch ${600-elapsed}s" else ""
             else -> ""
         }
-        layout.y = (keyboardTop - dp(52) - offset).coerceAtLeast(dp(28))
+        label?.maxWidth = (screen.x - safeLeft - safeRight - dp(104)).coerceAtLeast(dp(44))
+        bar?.layoutDirection = View.LAYOUT_DIRECTION_LTR
+        bar?.measure(View.MeasureSpec.makeMeasureSpec(screen.x - safeLeft - safeRight - dp(16), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(44), View.MeasureSpec.EXACTLY))
+        layout.x = (screen.x - safeRight - dp(8) - (bar?.measuredWidth ?: dp(44))).coerceAtLeast(safeLeft)
+        layout.y = y ?: safeTop
         bar?.let { runCatching { wm.updateViewLayout(it, layout) } }
     }
     override fun onInterrupt() {

@@ -31,11 +31,18 @@ public class ImeFixtureActivity extends Activity {
             ClipData clip = getSystemService(ClipboardManager.class).getPrimaryClip();
             clipboard.setText(clip == null ? "Leer" : clip.getItemAt(0).getText());
         });
+        Button seed = new Button(this); seed.setText("Zwischenablage vorbelegen");
+        seed.setOnClickListener(v -> getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("Test", "Vorheriger Clip")));
+        body.addView(seed);
         body.addView(check); body.addView(clipboard); setContentView(body);
         if (savedInstanceState == null) first.requestFocus();
     }
     private EditText field(int id, String label, int type, boolean reject) {
         EditText edit = new EditText(this) {
+            @Override public boolean onTextContextMenuItem(int id) {
+                if (reject && id == android.R.id.paste) return false;
+                return super.onTextContextMenuItem(id);
+            }
             @Override public InputConnection onCreateInputConnection(EditorInfo info) {
                 InputConnection connection = super.onCreateInputConnection(info);
                 if (!reject || connection == null) return connection;

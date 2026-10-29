@@ -37,7 +37,8 @@ fun CaptureBar(repository: ThoughtsRepository, actions: ThoughtsActions, onCaptu
     val feedback = captureFeedback(state.phase, state.message)
     var transient by remember { mutableStateOf(false) }
     LaunchedEffect(feedback, state.id) {
-        transient = feedback.hideAfterMs != null
+        transient = feedback.hideAfterMs != null && !com.paply.android.CaptureActivity.cardVisible &&
+            state.id != com.paply.android.CaptureActivity.feedbackOwnedId
         feedback.hideAfterMs?.let { delay(it); transient = false }
     }
     if (!active && !transient) return
