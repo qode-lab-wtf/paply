@@ -3,6 +3,7 @@ import SwiftUI
 struct ConversationRecordingView: View {
     let elapsed: Double
     let paused: Bool
+    var pausedSince: Date? = nil
     let showGuidance: Bool
     let level: () -> Float
     var onPause: () -> Void = {}
@@ -10,6 +11,7 @@ struct ConversationRecordingView: View {
     let onDiscard: () -> Void
     let onMinimize: () -> Void
     @State private var confirmDiscard = false
+    @State private var observedPauseAt: Date?
     @ScaledMetric(relativeTo: .largeTitle) private var clockSize: CGFloat = 64
 
     var body: some View {
@@ -24,7 +26,11 @@ struct ConversationRecordingView: View {
             }.padding(.horizontal, 24)
             ScrollView {
                 VStack(spacing: 26) {
-                    if paused { Text("Pausiert").padding(12).paplyGlass(.bar) }
+                    if paused {
+                        Text((pausedSince ?? observedPauseAt).map {
+                            "Pausiert seit " + $0.formatted(date: .omitted, time: .shortened)
+                        } ?? "Pausiert").font(.subheadline).foregroundStyle(Color.paplySecondaryText)
+                    }
                     EchoOrb(size: 200, mode: paused ? .starting : .listening,
                             primary: ConversationTint.blue, secondary: ConversationTint.turquoise,
                             auraColors: [ConversationTint.blue, ConversationTint.turquoise], level: level)
@@ -41,15 +47,23 @@ struct ConversationRecordingView: View {
                     }
                 }.padding(24).frame(maxWidth: .infinity)
             }
-            Button(paused ? "Weiter" : "Pause", action: onPause).buttonStyle(.bordered).frame(minHeight: 44)
-            Button(action: onFinish) {
-                Label("Fertig", systemImage: "checkmark").font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .foregroundStyle(Color.paplyForestDeep).background(ConversationTint.fill, in: Capsule())
-                    .paplyGlass(.prominent(ConversationTint.blue), interactive: true)
-            }.buttonStyle(PressScaleStyle()).padding(24)
+            HStack(spacing: 12) {
+                Button(action: onPause) {
+                    Text(paused ? "Weiter" : "Pause").font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 56).paplyGlass(.bar, interactive: true)
+                }.buttonStyle(PressScaleStyle())
+                Button(action: onFinish) {
+                    Label("Fertig", systemImage: "checkmark").font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .foregroundStyle(Color.paplyForestDeep).background(ConversationTint.fill, in: Capsule())
+                        .paplyGlass(.prominent(ConversationTint.blue), interactive: true)
+                }.buttonStyle(PressScaleStyle())
+            }.padding(24)
         }
         .foregroundStyle(Color.paplyText).background(PaplyBackground())
+        .onChange(of: paused, initial: true) { _, value in
+            observedPauseAt = value ? (observedPauseAt ?? .now) : nil
+        }
         .accessibilityAction(.magicTap, onFinish)
         .tint(ConversationTint.blue)
         .confirmationDialog("Aufnahme verwerfen?", isPresented: $confirmDiscard, titleVisibility: .visible) {

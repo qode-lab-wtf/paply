@@ -22,11 +22,13 @@ struct ConversationSettingsSection: View {
             }
             Button("Jetzt einsprechen (20 s)", action: onEnroll)
             if learnedThoughtCount != nil { Button("Stimme vergessen", role: .destructive, action: onForgetOwner) }
-            NavigationLink("Bekannte Stimmen") {
+            NavigationLink {
                 ConversationKnownVoicesView(people: people, onDelete: onDeletePerson)
+            } label: {
+                Text("Bekannte Stimmen · \(people.filter { !$0.isOwner }.count)")
             }
         } header: { Text("Gespräche") } footer: {
-            Text("Alle Beteiligten müssen einer Aufnahme zustimmen (§ 201 StGB). Sprechererkennung und Stimmprofile bleiben auf deinem iPhone. Groq erhält den Ton zum Verschriftlichen und den Wortlaut für die Zusammenfassung.")
+            Text("Alle Beteiligten müssen einer Aufnahme zustimmen (§ 201 StGB). Sprechererkennung und Stimmprofile bleiben auf deinem iPhone. Groq erhält den Ton zum Verschriftlichen und den Wortlaut für die Zusammenfassung. Der Ton wird nach der Auswertung gelöscht.")
         }.listRowBackground(Color.paplyRow)
     }
 }
@@ -65,10 +67,18 @@ struct ConversationEnrollmentView: View {
                         primary: ConversationTint.blue, secondary: ConversationTint.turquoise,
                         auraColors: [ConversationTint.blue, ConversationTint.turquoise], level: level).padding(.top, 48)
                 Text("\(max(0, 20 - Int(elapsed))) s").font(.system(.largeTitle, design: .rounded).monospacedDigit())
+                ProgressView(value: min(20, max(0, elapsed)), total: 20)
+                    .tint(ConversationTint.blue)
+                    .accessibilityLabel("Einsprechen")
+                    .accessibilityValue("\(min(20, max(0, Int(elapsed)))) von 20 Sekunden")
                 Text("Erzähl kurz von deinem Tag. So erkennt Paply deine Stimme im nächsten Gespräch.")
                     .multilineTextAlignment(.center).foregroundStyle(Color.paplySecondaryText)
-                Button(isRecording ? "Fertig" : "Einsprechen starten", action: isRecording ? onFinish : onStart)
-                    .buttonStyle(.borderedProminent).tint(ConversationTint.blue).frame(minHeight: 44)
+                Button(action: isRecording ? onFinish : onStart) {
+                    Text(isRecording ? "Fertig" : "Einsprechen starten").font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .foregroundStyle(Color.paplyForestDeep).background(ConversationTint.fill, in: Capsule())
+                        .paplyGlass(.prominent(ConversationTint.blue), interactive: true)
+                }.buttonStyle(PressScaleStyle())
             }.padding(24).frame(maxWidth: .infinity)
         }.background(PaplyBackground()).foregroundStyle(Color.paplyText).navigationTitle("Meine Stimme")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(cancelTitle, action: onCancel) } }

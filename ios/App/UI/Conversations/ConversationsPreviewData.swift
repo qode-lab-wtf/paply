@@ -9,7 +9,7 @@ enum ConversationsPreviewData {
         .init(id: "S2", suggestion: .init(name: "Herr Müller", source: .transcript, evidence: "Guten Tag, Herr Müller. Passt es gerade?"), speechSeconds: 680, colorIndex: 1)
     ]
     static let phone = ConversationDisplay(conversation: Conversation(id: "preview-phone", durationMs: 1_420_000,
-        origin: .imported, trigger: .app, state: .done, title: "Angebot für die Dachanlage",
+        origin: .recording, trigger: .app, state: .done, title: "Angebot für die Dachanlage",
         summary: .init(overview: "Die Dachanlage soll im Frühjahr gebaut werden. Für das Angebot fehlen noch die Dachmaße.",
             points: ["Die Garage bleibt zunächst frei.", "Ein Speicher wird als zweite Variante angeboten."],
             commitments: [.init(id: "c1", speakerID: "S2", text: "Dachmaße per Mail schicken", dueHint: "Bis Donnerstag")]), speakers: speakers),
@@ -58,7 +58,7 @@ enum ConversationsPreviewData {
 
 #Preview("Gedanken-Zeile") { ConversationThoughtRow(item: ConversationsPreviewData.phone, time: "14:05").padding().background(PaplyBackground()).preferredColorScheme(.dark) }
 #Preview("Zustandsband") { ConversationStatusBand(conversation: ConversationsPreviewData.analyzing.conversation, onRetry: {}).padding().background(PaplyBackground()).preferredColorScheme(.dark) }
-#Preview("Sprecher") { ConversationSpeakerLabel(speaker: ConversationsPreviewData.speakers[1], showSuggestion: true).padding().background(PaplyBackground()).preferredColorScheme(.dark) }
+#Preview("Personen") { ConversationSpeakerLabel(speaker: ConversationsPreviewData.speakers[1], showSuggestion: true).padding().background(PaplyBackground()).preferredColorScheme(.dark) }
 
 #if DEBUG
 extension ConversationsPreviewData {

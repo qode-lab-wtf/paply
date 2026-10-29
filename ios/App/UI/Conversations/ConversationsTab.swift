@@ -18,7 +18,6 @@ struct ConversationsTab: View {
                 showPrivacyHint: AppSettings.shared.conversationRecordingCount < 3,
                 onRecord: {
                     Task {
-                        model.stopPlayback()
                         if ConversationCapture.shared.active == nil {
                             _ = await ConversationCapture.shared.toggle(trigger: .app)
                         }
@@ -35,7 +34,8 @@ struct ConversationsTab: View {
                 if !ConversationModels.shared.ready {
                     Button { ConversationModels.shared.start() } label: {
                         Text(ConversationModels.shared.failed ? "Fehler – erneut versuchen" : "Sprechererkennung wird geladen … \(Int(ConversationModels.shared.fraction * 100)) %")
-                            .font(.footnote).padding(8)
+                            .font(.footnote).foregroundStyle(Color.paplySecondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 8)
                     }
                 }
             }
@@ -75,16 +75,15 @@ struct ConversationDetailHost: View {
         Group {
             if let item = model.display(id, thoughts: thoughts), item.conversation.deletedAt == nil {
                 ConversationDetailView(
-                    item: item, utterances: model.transcripts[id] ?? [], playingUtteranceID: model.playingUtteranceID,
-                    audioAvailable: model.audioIDs.contains(id), pendingTaskIDs: checkoff.pending,
+                    item: item, utterances: model.transcripts[id] ?? [], pendingTaskIDs: checkoff.pending,
                     actions: actions(item)
                 )
                 .sheet(isPresented: Binding(get: { speakerID != nil }, set: { if !$0 { speakerID = nil } })) {
                     if let speaker = item.conversation.speakers.first(where: { $0.id == speakerID }) {
                         ConversationSpeakerSheet(
                             speaker: speaker, speakers: item.conversation.speakers, people: model.people,
-                            onChoose: {
-                                model.choose($0, speaker: speaker, id: id)
+                            onChoose: { choice, remember in
+                                choose(choice, remember: remember, speaker: speaker)
                                 speakerID = nil
                             }, onCancel: { speakerID = nil })
                     }
@@ -120,10 +119,36 @@ struct ConversationDetailHost: View {
             Text(model.error ?? "")
         }
     }
+    private func choose(_ choice: ConversationSpeakerChoice, remember: Bool, speaker: ConversationSpeaker) {
+        if remember {
+            model.choose(choice, speaker: speaker, id: id)
+            return
+        }
+        let identity: SpeakerIdentity
+        switch choice {
+        case .person(let person): identity = person == VoicePerson.ownerID ? .owner : .person(person)
+        case .newName(let name): identity = .newPerson(name)
+        case .suggestion(let suggestion):
+            if let person = suggestion.personID {
+                identity = person == VoicePerson.ownerID ? .owner : .person(person)
+            } else { identity = .newPerson(suggestion.name) }
+        case .merge, .doNotRemember:
+            model.choose(choice, speaker: speaker, id: id)
+            return
+        }
+        model.perform {
+            try await ConversationsEnvironment.editing.nameSpeaker(id, speakerID: speaker.id, as: identity, rememberVoice: false)
+        }
+    }
     private func actions(_ item: ConversationDisplay) -> ConversationDetailActions {
         ConversationDetailActions(
             rename: { title in model.perform { try await ConversationsEnvironment.editing.rename(id, title: title) } },
             chooseTopic: { nav.topicPicker = SheetID(id: id) }, speaker: { speakerID = $0 },
+            identifyOwner: { target in
+                model.perform {
+                    try await ConversationsEnvironment.editing.nameSpeaker(id, speakerID: target, as: .owner, rememberVoice: true)
+                }
+            },
             suggestion: { speakerID, yes in
                 guard let speaker = item.conversation.speakers.first(where: { $0.id == speakerID }) else { return }
                 if yes, let suggestion = speaker.suggestion {
@@ -138,10 +163,10 @@ struct ConversationDetailHost: View {
                 if let task = item.tasks.first(where: { $0.id == taskID }) {
                     checkoff.toggle(task, thoughtID: id, model: thoughts, reduceMotion: reduce)
                 }
-            }, play: { model.play(id, utterance: $0, continuing: false) }, reassign: { utteranceID = $0 },
+            }, reassign: { utteranceID = $0 },
             copyUtterance: { utteranceID in
                 UIPasteboard.general.string = model.transcripts[id]?.first { $0.id == utteranceID }?.text
-            }, playFrom: { model.play(id, utterance: $0, continuing: true) }, share: { share = true },
+            }, share: { share = true },
             copyTranscript: { model.copyTranscript(item) },
             retry: { model.perform { try await ConversationsEnvironment.processor.retry(id) } },
             delete: {
@@ -162,6 +187,7 @@ private struct ConversationShare: UIViewControllerRepresentable {
 struct ConversationCapturePresentation: ViewModifier {
     @State private var navigation = ConversationNavigation.shared
     private let capture = ConversationCapture.shared
+    @State private var pausedSince: Date?
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom) {
@@ -173,7 +199,7 @@ struct ConversationCapturePresentation: ViewModifier {
                 if let active = capture.active {
                     TimelineView(.periodic(from: .now, by: 1)) { time in
                         ConversationRecordingView(
-                            elapsed: capture.elapsed, paused: active.paused,
+                            elapsed: capture.elapsed, paused: active.paused, pausedSince: pausedSince,
                             showGuidance: AppSettings.shared.conversationRecordingCount < 3, level: { capture.level },
                             onPause: { capture.setPaused(!active.paused) },
                             onFinish: {
@@ -187,7 +213,10 @@ struct ConversationCapturePresentation: ViewModifier {
                     }
                 }
             }
-            .onChange(of: capture.active) { _, active in if active == nil { navigation.showCurrent = false } }
+            .onChange(of: capture.active, initial: true) { _, active in
+                if active == nil { navigation.showCurrent = false }
+                pausedSince = active?.paused == true ? (pausedSince ?? .now) : nil
+            }
             .alert(
                 "Gespräch",
                 isPresented: Binding(get: { navigation.error != nil }, set: { if !$0 { navigation.error = nil } })

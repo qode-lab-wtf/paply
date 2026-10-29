@@ -29,6 +29,9 @@ struct ConversationSettingsHost: View {
                     })
             }
         }
+        .onChange(of: enrollment.startedAt) { previous, current in
+            if previous != nil && current == nil { showEnrollment = false }
+        }
         .alert("Gespräche", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK") { model.error = nil }
         } message: {

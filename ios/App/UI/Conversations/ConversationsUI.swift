@@ -39,7 +39,7 @@ struct ConversationSpeakerLabel: View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Circle().fill(ConversationTint.color(speaker)).frame(width: 7, height: 7).accessibilityHidden(true)
             Text(showSuggestion && speaker.name == nil && !speaker.isOwner
-                 ? speaker.suggestion.map { "\($0.name) ?" } ?? ConversationTint.name(speaker)
+                 ? speaker.suggestion.map { "\($0.name)?" } ?? ConversationTint.name(speaker)
                  : ConversationTint.name(speaker))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -83,7 +83,8 @@ struct ConversationStatusBand: View {
                 }
                 if !conversation.stagesDone.isEmpty { Text("Fertige Teile stehen schon hier.").font(.caption) }
                 if conversation.state != .analyzing && conversation.state != .recording {
-                    Button("Erneut versuchen", action: onRetry).frame(minHeight: 44)
+                    Button("Erneut versuchen", action: onRetry)
+                        .buttonStyle(.bordered).tint(ConversationTint.blue).frame(minHeight: 44)
                 }
             }
             .font(.subheadline).foregroundStyle(Color.paplySecondaryText)
@@ -96,32 +97,46 @@ struct ConversationStatusBand: View {
 struct ConversationThoughtRow: View {
     let item: ConversationDisplay
     let time: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label {
-                Text(item.conversation.title ?? "Neues Gespräch").font(.headline)
-                    .shimmer(item.conversation.state == .analyzing)
-            } icon: { Image(systemName: "person.2.wave.2").foregroundStyle(ConversationTint.blue) }
-            Text("\(time) · \(ConversationTint.duration(item.conversation.durationMs))")
-                .font(.subheadline).foregroundStyle(Color.paplySecondaryText)
-            ConversationChipLayout(spacing: 6) { speakerNames }
-            .font(.caption)
-            if let topic = item.topic { Label(topic, systemImage: "tag").font(.caption).foregroundStyle(ConversationTint.turquoise) }
-            if !item.tasks.isEmpty {
-                Label("\(item.tasks.filter { !$0.done }.count) offene Aufgaben", systemImage: "checklist")
-                    .font(.caption).foregroundStyle(Color.paplySecondaryText)
-            }
-            if let status = item.conversation.presentationStatus {
-                Text(status).font(.caption).foregroundStyle(Color.paplySecondaryText)
-                    .shimmer(item.conversation.state == .analyzing)
-            }
+    var showsIcon = true
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var openTasks: Int { item.tasks.filter { !$0.done }.count }
+    private var metadata: String {
+        var text = "\(time) · \(ConversationTint.duration(item.conversation.durationMs))"
+        if let topic = item.topic { text += " · ◆ \(topic)" }
+        return text
+    }
+    private var footer: Text {
+        var text = Text("")
+        for (index, speaker) in item.conversation.speakers.enumerated() {
+            if index > 0 { text = text + Text("  ") }
+            text = text + Text("● \(ConversationTint.name(speaker))").foregroundColor(ConversationTint.color(speaker))
         }
-        .foregroundStyle(Color.paplyText).padding(.vertical, 6)
+        if let status = item.conversation.presentationStatus {
+            text = text + Text(" · " + status).foregroundColor(.paplySecondaryText)
+        } else if openTasks > 0 {
+            let label = openTasks == 1 ? " · 1 offene Aufgabe" : " · \(openTasks) offene Aufgaben"
+            text = text + Text(label).foregroundColor(.paplySecondaryText)
+        }
+        return text
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if showsIcon {
+                    Image(systemName: "person.2.wave.2").font(.caption)
+                        .foregroundStyle(ConversationTint.blue).accessibilityHidden(true)
+                }
+                Text(item.conversation.title ?? "Neues Gespräch").font(.headline)
+                    .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                    .shimmer(item.conversation.state == .analyzing)
+            }
+            Text(metadata).font(.subheadline).foregroundStyle(Color.paplySecondaryText)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+            footer.font(.caption).lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+        }
+        .foregroundStyle(Color.paplyText).padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-    @ViewBuilder private var speakerNames: some View {
-        ForEach(item.conversation.speakers) { ConversationSpeakerLabel(speaker: $0) }
     }
 }
 
