@@ -1,6 +1,8 @@
 import Foundation
 
 enum SharedFile: String, Sendable {
+    case conversationState = "conversation-state.json"
+    case conversationCommand = "conversation-command.json"
     case session = "session.json"
     case keyboardCommand = "keyboard-command.json"
     case pendingText = "pending-text.json"

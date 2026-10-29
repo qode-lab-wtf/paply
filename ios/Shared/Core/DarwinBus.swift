@@ -20,6 +20,7 @@ enum DarwinSignal: String, CaseIterable, Sendable {
     /// App → Widget-Prozess: Schnelltaste verarbeitet (`shortcut-ack.json`)
     case shortcutAck
     /// Widget-Prozess → App: Gedanken-Knopf gedrückt (`thought-command.json`)
+    case conversationToggle
     case thoughtToggle
     /// App → alle: `thought-state.json` hat sich geändert
     case thoughtState

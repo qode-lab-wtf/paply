@@ -33,6 +33,8 @@ final class AudioTapProcessor: @unchecked Sendable {
     private var consumedUpTo = 0
     private var sink: (@Sendable ([Float]) -> Void)?
     private var sinkOwner: String?
+    private var listener: (@Sendable ([Float]) -> Void)?
+    private var listenerOwner: String?
     private var levels: LevelChannel?
     private var levelSum: Float = 0
     private var levelCount = 0
@@ -89,6 +91,7 @@ final class AudioTapProcessor: @unchecked Sendable {
             if pendingDiscard { restart = onRestart }
         }
         pendingDiscard = false
+        listener?(samples) // Nur weiterreichen; kein eigener Puffer, unabhängig vom Diktat.
         lock.unlock()
         if let change { handler?(change) }
         restart?()
@@ -250,6 +253,22 @@ final class AudioTapProcessor: @unchecked Sendable {
         onRestart = nil
         pendingDiscard = false
         return recording
+    }
+
+    /// Dauerhafter Mithörer, auch über reset hinweg. Lösen wartet den letzten Aufruf ab.
+    func attachListener(owner: String, sink: @escaping @Sendable ([Float]) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        listenerOwner = owner
+        listener = sink
+    }
+
+    func detachListener(owner: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard listenerOwner == owner else { return }
+        listener = nil
+        listenerOwner = nil
     }
 
     /// Nach Engine-Neustart oder Formatwechsel: Wandler neu, Vorlauf leeren, Stille-Zählung neu.
