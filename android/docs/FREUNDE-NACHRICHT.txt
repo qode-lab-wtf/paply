@@ -1,11 +1,8 @@
-Hey! Hier ist Paply Android 0.1.4 😊
-Die APK kommt als Anhang; die kurze Anleitung ist dabei.
-Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben.
-Play Protect bitte eingeschaltet lassen; bei einer Warnung schick mir einen Screenshot, bevor du weitermachst.
+Hey! Hier ist Paply Android 0.2.0 😊
+Neu: Diktieren mit einem Tipp – über deiner normalen Tastatur erscheint ein kleines Paply-Symbol.
+Die APK kommt als Anhang. Beim Öffnen fragt Android, ob du diese Quelle erlaubst – bitte erlauben.
 Öffne Paply und tippe auf der Karte „Einrichten“ jeweils den grünen Knopf, bis alles abgehakt ist.
-Du brauchst einen Groq-Schlüssel (kostenloser Zugang für die Spracherkennung): „Eintragen“ → „Kostenlosen Schlüssel holen“ → bei Groq anmelden → „Create API Key“ → kopieren → zurück zu Paply → „Einsetzen“.
-Beim Aktivieren der Tastatur ist die Android-Sicherheitswarnung normal, bitte bestätigen. Paply hat keine Buchstaben, nur Sprache. Nach dem Diktat springt es von selbst zurück.
-Gedanken & Aufgaben sind schon an. Nutze den Gedanken-Knopf (Kachel „Paply-Gedanke“).
+Du brauchst einen kostenlosen Groq-Schlüssel – die App führt dich hin. Den Schlüssel bitte nirgends posten.
+Für den Paply-Knopf ab Android 13 zuerst: App-Info → ⋮ → „Eingeschränkte Einstellungen zulassen“, dann unter Bedienungshilfen „Paply“ einschalten.
+Wer schon eine ältere Paply-Version hat, installiert einfach drüber – nichts geht verloren.
 Es ist eine Testversion – sag mir gern, was klappt und was hakt. Danke! Allan
-
-Paply einmal im Testfeld auswählen genügt für die Einrichtung. Zum Diktieren unten auf das Tastatur-Symbol tippen und Paply wählen.

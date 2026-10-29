@@ -57,7 +57,12 @@
   - Seit 0.1.3 prüft Animal Sniffer `:core`/`:thoughts` gegen API 29 (`android/docs/API-29.md`), dabei wurde
     `readNBytes` gefunden und ersetzt.
   - 0.1.4: Die Einrichtung fordert „Tastatur auswählen“ nicht mehr nach jedem Diktat neu (Samsung-Tester).
-  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.1.4.apk`.
+- **0.2.0 (29.10., Allans Entscheidung nach Testerfeedback):** Paply-Knopf neben der normalen Tastatur (Bedienungshilfe):
+  1 Tipp aufnehmen, 1 Tipp einsetzen, eigene Tastatur bleibt. Auf API 29–32 setzt er direkt ins Feld (ohne Zwischenablage), ab
+  API 33 per `commitText`. Gedanken-Karte blendet nach dem Speichern aus. Polier-Prompt aus `shared/polish`. Emulator-Abnahme
+  API 30/34/37 (`android/docs/KNOPF.md`). Codex darf seit dem T3-Update keine Emulator-UI steuern → Abnahmen macht die
+  Leitung per Claude-Helfer; Abhilfe: MacBook als T3-Gerätehost verknüpfen.
+  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.2.0.apk`.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.

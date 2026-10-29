@@ -90,3 +90,7 @@ nach Abschluss bleibt nur der Hinweis auf das Tastatur-Symbol.
 - Auslieferung MacBook: `~/Desktop/Paply-Android/Paply-0.1.4.apk`, `Paply-0.1.4.zip`,
   `FREUNDE.md`, `FREUNDE-NACHRICHT.txt`. 0.1.3-Artefakte entfernt; keine `.sha256` dort.
   Signierschlüssel unverändert. Emulatoren nach der Prüfung gestoppt. Kein Commit/Push.
+
+## 0.2.0 (6) – 29.10.2026
+- Paply-Knopf (Bedienungshilfe) als Hauptweg; geprüft auf API 30/34/37 (Emulator), u. a. kein doppeltes Einsetzen, Zwischenablage bleibt auf API 29–32.
+- SHA-256 `29d83a3a5236f9bfd9b3b4317d1b1fc0a5639154302e54b32e7d9363bc142955`, Commit `51028d9`.
