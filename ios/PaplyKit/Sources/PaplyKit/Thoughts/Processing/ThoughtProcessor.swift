@@ -126,7 +126,7 @@ public actor ThoughtProcessor {
     }
 
     private func restart(_ id: String) async {
-        guard let thought = await store.thought(id), thought.deletedAt == nil, thought.state != .recording else { return }
+        guard let thought = await store.thought(id), thought.deletedAt == nil, thought.kind != ConversationKind.thoughtKind, thought.state != .recording else { return }
         await store.discardAIResult(id)
         let transcribed = await store.hasSource(id) || pendingSources[id] != nil
         _ = try? await store.update(id) { t in
@@ -153,7 +153,7 @@ public actor ThoughtProcessor {
     public func nextRetryDate() async -> Date? {
         let clock = now()
         return await store.all()
-            .filter { $0.deletedAt == nil && Self.isWaiting($0.state) }
+            .filter { $0.deletedAt == nil && $0.kind != ConversationKind.thoughtKind && Self.isWaiting($0.state) }
             .compactMap(\.status.retryAt)
             .filter { $0 > clock }
             .min()
@@ -162,7 +162,7 @@ public actor ThoughtProcessor {
     /// Gibt es Gedanken, die ohne Zutun des Nutzers noch geordnet werden können (nicht: Schlüssel fehlt)?
     public func hasPendingWork() async -> Bool {
         await store.all().contains { thought in
-            thought.deletedAt == nil && thought.state != .waitingKey && (Self.isInFlight(thought.state) || Self.isWaiting(thought.state))
+            thought.deletedAt == nil && thought.kind != ConversationKind.thoughtKind && thought.state != .waitingKey && (Self.isInFlight(thought.state) || Self.isWaiting(thought.state))
         }
     }
 
@@ -202,7 +202,7 @@ public actor ThoughtProcessor {
     }
 
     private func nextItem(excluding visited: Set<String>) async -> String? {
-        let thoughts = await store.all()
+        let thoughts = await store.all().filter { $0.kind != ConversationKind.thoughtKind }
         let clock = now()
         // Netz und Schlüssel nur abfragen, wenn ein wartender Gedanke sie braucht
         let needsNetwork = thoughts.contains { $0.deletedAt == nil && $0.state == .waitingNetwork }
@@ -241,7 +241,7 @@ public actor ThoughtProcessor {
     // MARK: Ein Gedanke
 
     private func process(_ id: String) async {
-        guard let thought = await store.thought(id), thought.deletedAt == nil, thought.state != .recording else { return }
+        guard let thought = await store.thought(id), thought.deletedAt == nil, thought.kind != ConversationKind.thoughtKind, thought.state != .recording else { return }
         var source = await store.source(id)
         if source == nil, let pending = pendingSources[id] {
             if (try? await store.saveSourceOnce(id, pending)) != nil { pendingSources[id] = nil }

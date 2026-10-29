@@ -60,6 +60,8 @@ public actor ThoughtStore {
     private let clock: @Sendable () -> Date
     /// true erst, wenn alles Vorhandene lesbar war. Vor dem ersten Entsperren nach einem Neustart
     /// (Data Protection) bleibt es false; jeder Zugriff und `reloadIfNeeded()` lädt dann nach.
+    private var audioReleaseHook: (@Sendable (URL) -> Void)?
+    public func setAudioReleaseHook(_ hook: (@Sendable (URL) -> Void)?) { audioReleaseHook = hook }
     private var loaded = false
     private var loadAttempts = 0
     private var cache: [String: Thought] = [:]
@@ -478,6 +480,7 @@ public actor ThoughtStore {
         guard Self.isValidID(id), let thought = cache[id], thought.audio != nil, thought.state != .recording,
               !activeCaptures.contains(id), let source = readSource(id) else { return false }
         sourceCache[id] = source
+        if thought.kind != ConversationKind.thoughtKind, FileSafety.exists(wavURL(id)) { audioReleaseHook?(wavURL(id)) }
         FileSafety.syncDirectory(directory(id)) // `source.json` samt Verzeichniseintrag auf der Platte
         for url in [wavURL(id), m4aURL(id)] where FileSafety.exists(url) {
             guard (try? FileManager.default.removeItem(at: url)) != nil else { return false }

@@ -175,6 +175,8 @@ package struct GroqClient: Sendable {
     var maxRetryAfterSeconds = 20.0
     /// Wartezeit vor dem Wiederholen ohne Retry-After.
     var retryDelaySeconds = 0.4
+    /// Optionaler Taktgeber für Gespräche; bestehende Aufrufer bleiben unverändert.
+    var responseHeaders: (@Sendable (HTTPURLResponse) -> Void)?
 
     package init(apiKey: String, transport: GroqTransport = .shared, baseURL: URL = GroqClient.defaultBaseURL) {
         self.apiKey = apiKey
@@ -574,6 +576,7 @@ extension GroqClient {
         do {
             let (data, response) = try await transport.withSession { try await $0.data(for: request) }
             guard let http = response as? HTTPURLResponse else { return (.failure(.invalidResponse), nil) }
+            responseHeaders?(http)
             guard (200..<300).contains(http.statusCode) else {
                 let failure = GroqFailure.http(status: http.statusCode, code: Self.errorCode(data),
                                                retryAfter: Self.retryAfter(http) ?? Self.retryAfter(message: Self.errorMessage(data)))
