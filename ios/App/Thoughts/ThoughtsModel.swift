@@ -314,7 +314,7 @@ final class ThoughtsModel {
         if withThoughts {
             for thought in byID.values where thought.kind == ConversationKind.thoughtKind && thought.deletedAt == now {
                 let id = thought.id
-                write(id) { _ in try await ConversationsEnvironment.processor.delete(id) }
+                write(id) { _ in try await ConversationsEnvironment.processor.synchronizeLinkedThought(id) }
             }
         }
         // Bild: wird nicht mehr angezeigt; die Datei geht erst, wenn der Speicher das Thema gespeichert entfernt hat
@@ -412,7 +412,7 @@ final class ThoughtsModel {
         let now = Date()
         change(id) { $0.deletedAt = now }
         if byID[id]?.kind == ConversationKind.thoughtKind {
-            write(id) { _ in try await ConversationsEnvironment.processor.delete(id) }
+            write(id) { _ in try await ConversationsEnvironment.processor.synchronizeLinkedThought(id) }
         }
         undoActions[token] = { [weak self] in self?.restore(id) }
         return token
@@ -423,7 +423,7 @@ final class ThoughtsModel {
         change(id) { $0.deletedAt = nil }
         if byID[id]?.kind == ConversationKind.thoughtKind {
             write(id) { _ in
-                try await ConversationsEnvironment.processor.restore(id)
+                try await ConversationsEnvironment.processor.synchronizeLinkedThought(id)
                 await ConversationsEnvironment.processor.kick(reason: "restore")
             }
             return

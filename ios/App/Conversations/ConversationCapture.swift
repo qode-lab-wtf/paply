@@ -62,6 +62,7 @@ final class ConversationCapture {
 
     /// false: Mikro braucht den Vordergrund; Speicherfehler werden als Hinweis sichtbar.
     func toggle(trigger: ThoughtTrigger = .app) async -> Bool {
+        ConversationModels.shared.start()
         bootstrap()
         if active != nil { finish(); return true }
         guard !starting, !finishing else { return true }

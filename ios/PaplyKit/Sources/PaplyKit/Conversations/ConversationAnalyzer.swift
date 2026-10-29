@@ -20,7 +20,8 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                                   progress: @escaping @Sendable (ConversationProgress) -> Void) async throws -> Diarization {
         let cache = input.workDirectory.appendingPathComponent("diarization.json")
         if FileSafety.exists(cache) {
-            return try ThoughtJSON.decoder().decode(CachedDiarization.self, from: Data(contentsOf: cache)).value
+            let cached = try ThoughtJSON.decoder().decode(CachedDiarization.self, from: Data(contentsOf: cache)).value
+            if cached.model != "fallback-vad-no-voiceprint" && cached.model != "pending" { return cached }
         }
         let value = try await diarizer.diarize(audio: input.audio, expectedSpeakers: input.expectedSpeakers) {
             progress(.init(stage: .speakers, fraction: $0))
@@ -58,7 +59,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                 let aligned = SpeakerAlignment.align(words: whisper.words, diarization: fallback, gaps: input.gaps)
                 partial.stagesDone = [.transcript]
                 partial.speakers = aligned.speakers
-                partial.transcript = .init(utterances: aligned.utterances, languages: [whisper.language ?? input.mainLanguage],
+                partial.transcript = .init(utterances: aligned.utterances.map { var item = $0; item.uncertain = true; return item }, languages: [whisper.language ?? input.mainLanguage],
                     model: "whisper-large-v3", createdAt: input.recordedAt)
                 partial.audioSeconds = whisper.duration ?? end
                 return .partial(partial, waiting: .waitingNetwork, retryAt: Date().addingTimeInterval(60),

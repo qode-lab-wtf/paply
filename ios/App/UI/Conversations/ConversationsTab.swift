@@ -32,10 +32,14 @@ struct ConversationsTab: View {
                 onSettings: { nav.showSettings = true }
             )
             .safeAreaInset(edge: .top) {
-                Text("Sprecher werden vorerst gemeinsam angezeigt.")
-                    .font(.footnote)
-                    .padding(8)
+                if !ConversationModels.shared.ready {
+                    Button { ConversationModels.shared.start() } label: {
+                        Text(ConversationModels.shared.failed ? "Fehler – erneut versuchen" : "Sprechererkennung wird geladen … \(Int(ConversationModels.shared.fraction * 100)) %")
+                            .font(.footnote).padding(8)
+                    }
+                }
             }
+            .task { ConversationModels.shared.start() }
             .navigationDestination(for: String.self) { ConversationDetailHost(id: $0) }
             .navigationDestination(isPresented: $deleted) { RecentlyDeletedView() }
             .sheet(isPresented: $voices) {

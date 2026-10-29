@@ -215,6 +215,10 @@ struct SettingsView: View {
                 if let devHint { Text(devHint) }
             }
             .paplyRows()
+            Section {
+                NavigationLink("Open-Source-Lizenzen") { ConversationLicenses() }
+            }
+            .paplyRows()
         }
         .paplyList()
         .navigationTitle("Einstellungen")
@@ -722,6 +726,7 @@ struct DeveloperView: View {
 
             Section("Gespräche") {
                 NavigationLink("Gespräche-Vorschau") { ConversationsPreviewPage() }
+                Button("Sprechererkennung messen") { Task { await ConversationMeasurement.run() } }
             }.paplyRows()
 
             ThoughtsDeveloperSection()

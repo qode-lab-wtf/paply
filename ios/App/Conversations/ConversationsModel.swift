@@ -16,10 +16,7 @@ final class ConversationsModel {
     @ObservationIgnored private var player: AVAudioPlayer?
     @ObservationIgnored private var playback: Task<Void, Never>?
     @ObservationIgnored private var loaded: Set<String> = []
-    var learnedThoughtCount: Int? {
-        let count = people.first(where: \.isOwner)?.prints.filter { $0.source == .thought }.count ?? 0
-        return count > 0 ? count : nil
-    }
+    private(set) var learnedThoughtCount: Int?
 
     init() {
         Task {
@@ -34,6 +31,8 @@ final class ConversationsModel {
         do {
             conversations = try await ConversationsEnvironment.store.all()
             people = try await ConversationsEnvironment.profiles.people()
+            let learning = try await ConversationsEnvironment.profiles.learningStatus()
+            learnedThoughtCount = learning.learnedThoughts > 0 ? learning.learnedThoughts : nil
             for id in loaded { await loadTranscript(id) }
         } catch { self.error = "Gespräche konnten nicht geladen werden." }
     }
@@ -59,8 +58,7 @@ final class ConversationsModel {
                 await reload()
             } catch {
                 self.error =
-                    (error as? EditingPlaceholder.Unavailable)?.errorDescription
-                    ?? "Das hat nicht geklappt. Bitte erneut versuchen."
+                    "Das hat nicht geklappt. Bitte erneut versuchen."
                 Diag.log("conversation.action.failed", ["code": .i((error as NSError).code)])
             }
         }
@@ -90,7 +88,7 @@ final class ConversationsModel {
                 } else if let name = speaker.name {
                     identity = .newPerson(name)
                 } else {
-                    throw EditingPlaceholder.Unavailable()
+                    throw ThoughtStoreError.unavailable
                 }
                 try await editing.nameSpeaker(id, speakerID: speaker.id, as: identity, rememberVoice: false)
             }

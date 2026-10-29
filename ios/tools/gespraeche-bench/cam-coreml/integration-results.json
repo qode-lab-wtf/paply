@@ -1,0 +1,75 @@
+{
+  "ami_full_local": {
+    "duration": 1049.3546875,
+    "rtf": 0.011280369954889733,
+    "seconds": 11.837109088897705,
+    "speakers": 4,
+    "peak_rss_bytes": 78266368
+  },
+  "german_local": {
+    "duration": 300,
+    "rtf": 0.013864790201187133,
+    "seconds": 4.15943706035614,
+    "speakers": 3,
+    "peak_rss_bytes": 114196480
+  },
+  "ami_e2e": {
+    "diarizationSeconds": 28.274641036987305,
+    "duration": 600,
+    "pieces": 1,
+    "speakers": 4,
+    "status": 0,
+    "summarySeconds": 1.2079070806503296,
+    "tokens": 2486,
+    "totalSeconds": 30.767091035842896,
+    "transcriptionSeconds": 29.558804035186768,
+    "words": 820,
+    "peak_rss_bytes": 417644544
+  },
+  "german_e2e": {
+    "diarizationSeconds": 3.461210012435913,
+    "duration": 300,
+    "pieces": 1,
+    "speakers": 3,
+    "status": 0,
+    "summarySeconds": 1.437904953956604,
+    "tokens": 1987,
+    "totalSeconds": 4.913601994514465,
+    "transcriptionSeconds": 3.4750189781188965,
+    "words": 521,
+    "peak_rss_bytes": 145358848
+  },
+  "ami_scorer_v4": [
+    {
+      "smooth": false,
+      "WDER": 0.19586840091813312,
+      "words": 2614
+    },
+    {
+      "smooth": true,
+      "WDER": 0.19472073450650346,
+      "words": 2614
+    }
+  ],
+  "groq_audio_seconds": 1200,
+  "groq_llm_tokens": 6393,
+  "notes": [
+    "Mac mini M1; warme CoreML-Caches; teilweise konkurrierende Build-Last.",
+    "AMI-E2E 600 s vor letzter Fbank-Randkorrektur; finaler lokaler AMI-Lauf 1049,35 s.",
+    "Keine belastbare iPhone-Laufzeit oder CoreML-Platzierungsmessung."
+  ],
+  "validation": {
+    "swift_tests": 698,
+    "swift_suites": 74,
+    "swift_no_parallel": true,
+    "app_debug": "passed",
+    "app_release": "passed",
+    "keyboard_fluid_symbols": false,
+    "widgets_fluid_symbols": false
+  },
+  "nemotron_download_bytes": 199096435,
+  "app_baseline_allocated_kib": 19332,
+  "app_allocated_kib": 53040,
+  "app_increase_mib": 32.91796875,
+  "app_size_note": "Unsigned Release .app, iphoneos arm64, Assets.xcassets excluded in both builds; not an IPA size."
+}

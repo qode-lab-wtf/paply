@@ -118,7 +118,11 @@ public enum SpeakerIdentifier {
         for j in 1...m where p[j] > 0 && j <= people.count {
             let i = p[j] - 1, person = people[j - 1], score = scores[i][j - 1]
             guard result[i].nameSource != .user else { continue }
-            if score >= SpeakerThresholds.match {
+            let nextProfile = scores[i].enumerated().filter { $0.offset != j - 1 }.map(\.element).max() ?? 0
+            let nextCluster = scores.indices.filter { $0 != i }.map { scores[$0][j - 1] }.max() ?? 0
+            if score >= SpeakerThresholds.match,
+               score - nextProfile >= SpeakerThresholds.margin,
+               score - nextCluster >= SpeakerThresholds.margin {
                 result[i].personID = person.id; result[i].name = person.isOwner ? nil : person.name
                 result[i].nameSource = person.isOwner ? .owner : .profile
                 if person.isOwner { result[i].colorIndex = 0 }
