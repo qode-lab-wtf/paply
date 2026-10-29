@@ -8,7 +8,7 @@
   englisches JSON-Nachrichtenformat wie iOS/Android, eigene Begriffe normalisiert.
 - Mobiles Sicherheitsnetz inklusive Zahlen, Selbstkorrekturen, kleinen Ersetzungen und Profilgrenzen
   portiert. Bei Ablehnung bleibt der Rohtext; Aufnahme, Cmd+X und Einfügen unverändert.
-- 753 automatische Tests grün; 99 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
+- 744 automatische Tests grün; 100 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
   Bekannte mobile Fehlablehnungen/heuristische Grenzen bleiben erhalten (siehe `shared/polish/README.md`).
 - Private Verlaufsauswertung nur lokal, ohne Groq-Aufrufe. Keine Veröffentlichung, kein Tag/Push;
   mobile Prompt-Einbettungen und Gleichheitstests in den jeweiligen Branches nachziehen.
