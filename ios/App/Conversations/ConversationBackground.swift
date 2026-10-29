@@ -79,7 +79,7 @@ final class ConversationBackground {
     }
 
     func end(id: String, success: Bool = true) {
-        ids.remove(id)
+        guard ids.remove(id) != nil else { return }
         tasks.removeValue(forKey: id)?.setTaskCompleted(success: success)
         if ids.isEmpty {
             endAssertion()

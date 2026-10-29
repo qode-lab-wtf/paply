@@ -16,17 +16,24 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
         init(_ d: Diarization) { segments = d.segments.map { .init(start: $0.start, end: $0.end, cluster: $0.cluster) }; centroids = d.centroids; speechSeconds = d.speechSeconds; model = d.model }
         var value: Diarization { .init(segments: segments.map { .init(start: $0.start, end: $0.end, cluster: $0.cluster) }, centroids: centroids, speechSeconds: speechSeconds, model: model) }
     }
+    static func valid(_ value: Diarization) -> Bool {
+        !value.segments.isEmpty && value.segments.allSatisfy { $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end > $0.start }
+            && value.centroids.values.allSatisfy { !$0.isEmpty && $0.allSatisfy(\.isFinite) }
+            && value.speechSeconds.values.allSatisfy { $0.isFinite && $0 >= 0 }
+    }
     private func cachedDiarization(_ input: ConversationAnalysisInput,
                                   progress: @escaping @Sendable (ConversationProgress) -> Void) async throws -> Diarization {
         let cache = input.workDirectory.appendingPathComponent("diarization.json")
-        if FileSafety.exists(cache) {
-            let saved = try ThoughtJSON.decoder().decode(CachedDiarization.self, from: Data(contentsOf: cache))
-            if saved.model == diarizer.embeddingModel { return saved.value }
+        if let data = try? Data(contentsOf: cache), let saved = try? ThoughtJSON.decoder().decode(CachedDiarization.self, from: data) {
+            FileSafety.excludeFromBackup(cache)
+            if saved.model == diarizer.embeddingModel && Self.valid(saved.value) { return saved.value }
         }
         let value = try await diarizer.diarize(audio: input.audio, expectedSpeakers: input.expectedSpeakers) {
             progress(.init(stage: .speakers, fraction: $0))
         }
+        guard Self.valid(value) else { throw ThoughtStoreError.unavailable }
         try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(CachedDiarization(value)), to: cache)
+        FileSafety.excludeFromBackup(cache)
         return value
     }
 
@@ -53,6 +60,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                 diarization = try await local
             } catch {
                 try Task.checkCancellation()
+                if error is SpeakerProcessingDeferred { return .wait(.waitingNetwork, retryAt: Date().addingTimeInterval(60), message: "Sprechererkennung wartet, bis das iPhone abgekühlt ist") }
                 let end = whisper.words.map(\.end).max() ?? 0
                 let fallback = Diarization(segments: [.init(start: 0, end: end, cluster: 0)],
                     centroids: [:], speechSeconds: [0: end], model: "pending")
@@ -67,10 +75,10 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
             }
             guard !diarization.segments.isEmpty else { return .empty }
             let aligned = SpeakerAlignment.align(words: whisper.words, diarization: diarization, gaps: input.gaps)
-            guard !aligned.utterances.isEmpty else { return .empty }
+            guard !aligned.utterances.isEmpty else { throw ThoughtStoreError.unavailable }
             var speakers = aligned.speakers
             for i in speakers.indices {
-                if let old = input.previous?.speakers.first(where: { $0.id == speakers[i].id && $0.nameSource == .user }) { speakers[i] = old }
+                if input.previous?.stagesDone.contains(.speakers) == true, let old = input.previous?.speakers.first(where: { $0.id == speakers[i].id && $0.nameSource == .user }) { speakers[i] = old }
             }
             speakers = SpeakerIdentifier.identify(speakers, prints: aligned.prints, people: input.people)
             let transcript = ConversationTranscript(utterances: aligned.utterances, languages: [whisper.language ?? input.mainLanguage], model: "whisper-large-v3", createdAt: input.recordedAt)

@@ -18,7 +18,6 @@ final class ConversationEnrollment {
         starting = true
         cancelled = false
         defer { starting = false }
-        ConversationsModel.shared.stopPlayback()
         do {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("paply-enroll-\(id).wav")
             let writer = try WAVWriter(url: url)

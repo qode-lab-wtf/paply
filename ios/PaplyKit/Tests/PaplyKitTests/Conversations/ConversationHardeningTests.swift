@@ -94,7 +94,7 @@ struct ConversationHardeningTests {
             analyzer: UnusedAnalyzer(), environment: .init(apiKey: { "" }))
         let speakers = [ConversationSpeaker(id: "S1", speechSeconds: 10, colorIndex: 1),
                         ConversationSpeaker(id: "S2", speechSeconds: 5, colorIndex: 2)]
-        try await store.save(.init(id: "test", origin: .recording, trigger: .app, state: .done,
+        try await store.save(.init(id: "test", origin: .recording, trigger: .app, state: .done, stagesDone: [.speakers],
             title: "[S2] hilft", summary: .init(overview: "[S1] fragt [S2].", points: []), speakers: speakers))
         try await thoughts.save(.init(id: "test", kind: ConversationKind.thoughtKind, trigger: .app, state: .done))
         try await store.saveVoiceprints(["S1": .init(vector: [1, 0], model: "m", seconds: 10, source: .conversation)], for: "test")

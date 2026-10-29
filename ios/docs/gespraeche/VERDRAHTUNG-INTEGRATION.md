@@ -78,3 +78,24 @@ Auf dem iPhone offen: Wiedergabe mit aktiver/ruhender Diktat-Bereitschaft und Bl
 - `ios/docs/gespraeche/VERDRAHTUNG-INTEGRATION.md`
 
 Gelöscht: `ios/App/Conversations/EditingPlaceholder.swift`. Neue Motor-, Download-, Lizenz-, Mess- und Testdateien stehen im Commit.
+
+## Review 2: Hintergrund und Übergabe (29.10.2026)
+
+iOS 18: `ConversationCapture.finish` ruft `ConversationBackground.begin` vor dem Abhängen des
+Aufnahme-Empfängers auf. `SessionController.conversationHeld` bleibt dadurch wahr; `conversationWorkEnded`
+beendet die Sitzung nicht. Der bestehende Audio-Engine-Eingang bleibt aktiv, ohne Gesprächsdaten zu speichern.
+Die Abschaltung über `pauseConversationProcessingInput` erfolgt ausschließlich bei einer von iOS 26
+angenommenen Continued-Processing-Aufgabe. Auf iOS 18 besteht zusätzlich eine UIBackgroundTask-Assertion;
+deren Ablauf bricht die Auswertung ab und plant BGProcessing. Diese Assertion ist zeitlich begrenzt,
+BGProcessing ist keine Zusage für sofortige Fortsetzung. Wiederanlauf nach App-Neustart hat keinen
+garantierten laufenden Mikro-Eingang. Der Codepfad ist geprüft; ein tatsächlicher langer Lauf auf einem
+gesperrten iOS-18-Gerät wurde in dieser Arbeitskopie nicht gemessen und bleibt Geräteabnahme.
+
+Thermal serious/critical wird vor und während Nemotron geprüft: keine Abschnitts-Zwischenstände,
+erneuter Versuch nach Abkühlung aus dem gespeicherten Wortlaut und Ton. Thermisches Zurückstellen
+verbraucht keinen Fehler-Versuch.
+
+UI-Anschluss: `ConversationsModel.takeTask(_:taskID:)` übernimmt eine gemeinsame/unklare Zusage als
+explizite Nutzer-Aufgabe. `display` liefert vor abgeschlossener Sprecherstufe keine benennbaren Sprecher.
+Die übrigen Views werden im parallelen UI-Paket angepasst; die temporären leeren Playback-Callbacks in
+`ConversationsTab` dienen nur dem noch bestehenden View-Vertrag und enthalten keine Wiedergabe.

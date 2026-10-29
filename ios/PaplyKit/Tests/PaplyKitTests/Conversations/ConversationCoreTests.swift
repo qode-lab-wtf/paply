@@ -42,14 +42,14 @@ struct ConversationCoreTests {
     @Test func transcriptKeepsUserAssignment() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let store = ConversationStore(root: root), id = "test"
-        try await store.save(.init(id: id, origin: .recording, trigger: .app, state: .captured))
+        try await store.save(.init(id: id, origin: .recording, trigger: .app, state: .captured, stagesDone: [.speakers]))
         var transcript = ConversationTranscript(utterances: [.init(id: "u0", speakerID: "S2", start: 0, end: 1, text: "Hallo", speakerOwner: .user)], languages: ["de"], model: "test", createdAt: Date())
         try await store.saveTranscript(transcript, for: id)
         transcript.utterances[0].speakerID = "S1"; transcript.utterances[0].speakerOwner = .ai
         try await store.saveTranscript(transcript, for: id)
         #expect(try await store.transcript(id)?.utterances[0].speakerID == "S2")
     }
-    @Test func importAndCompress() async throws {
+    @Test func importAndDeleteAfterDone() async throws {
         let root = try root(); defer { try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("source.wav"), writer = try WAVWriter(url: root.appendingPathComponent("source.wav"))
         writer.append(StoreSupport.tone(seconds: 0.2)); _ = writer.close()
@@ -59,7 +59,7 @@ struct ConversationCoreTests {
         #expect(item.durationMs == 200); #expect(item.expectedSpeakers == nil)
         try await store.update(item.id) { $0.state = .done }
         do { try await store.compactAudio(item.id) } catch { Issue.record("Komprimierung: \(error)"); return }
-        #expect(try await store.audioURL(item.id)?.pathExtension == "m4a")
+        #expect(try await store.audioURL(item.id) == nil)
         #expect(!FileSafety.exists(store.wavURL(item.id)))
         try await store.housekeeping(now: Date().addingTimeInterval(31 * 86400))
         #expect(try await store.audioURL(item.id) == nil)

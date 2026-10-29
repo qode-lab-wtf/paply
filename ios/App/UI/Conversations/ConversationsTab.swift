@@ -33,7 +33,7 @@ struct ConversationsTab: View {
             .safeAreaInset(edge: .top) {
                 if !ConversationModels.shared.ready {
                     Button { ConversationModels.shared.start() } label: {
-                        Text(ConversationModels.shared.failed ? "Fehler – erneut versuchen" : "Sprechererkennung wird geladen … \(Int(ConversationModels.shared.fraction * 100)) %")
+                        Text(ConversationModels.shared.statusLine)
                             .font(.footnote).foregroundStyle(Color.paplySecondaryText)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 8)
                     }
@@ -143,8 +143,9 @@ struct ConversationDetailHost: View {
     private func actions(_ item: ConversationDisplay) -> ConversationDetailActions {
         ConversationDetailActions(
             rename: { title in model.perform { try await ConversationsEnvironment.editing.rename(id, title: title) } },
-            chooseTopic: { nav.topicPicker = SheetID(id: id) }, speaker: { speakerID = $0 },
+            chooseTopic: { nav.topicPicker = SheetID(id: id) }, speaker: { if item.conversation.stagesDone.contains(.speakers) { speakerID = $0 } },
             identifyOwner: { target in
+                guard item.conversation.stagesDone.contains(.speakers) else { return }
                 model.perform {
                     try await ConversationsEnvironment.editing.nameSpeaker(id, speakerID: target, as: .owner, rememberVoice: true)
                 }
@@ -172,6 +173,9 @@ struct ConversationDetailHost: View {
             delete: {
                 _ = thoughts.delete(id)
                 dismiss()
+            },
+            takeTask: { taskID in
+                model.perform { try await ConversationsEnvironment.processor.takeTask(id, taskID: taskID) }
             })
     }
 }

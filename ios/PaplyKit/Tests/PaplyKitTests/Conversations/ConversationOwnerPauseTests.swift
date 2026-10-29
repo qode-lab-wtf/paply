@@ -4,7 +4,7 @@ import Testing
 
 struct ConversationOwnerPauseTests {
     func conversation() -> Conversation {
-        Conversation(origin: .recording, trigger: .app, state: .done,
+        Conversation(origin: .recording, trigger: .app, state: .done, stagesDone: [.speakers],
             summary: .init(overview: "[S1] plant", points: [], commitments: [
                 .init(id: "a", speakerID: "S1", text: "Anrufen"),
                 .init(id: "b", speakerID: "S2", text: "Schreiben"),
@@ -30,9 +30,9 @@ struct ConversationOwnerPauseTests {
         item.speakers[0].personID = VoicePerson.ownerID
         #expect(ConversationTasks.derive(item, preserving: []).isEmpty)
         item.speakers[0].nameSource = .owner
-        #expect(ConversationTasks.derive(item, preserving: []).map(\.id) == ["a", "c"])
+        #expect(ConversationTasks.derive(item, preserving: []).map(\.id) == ["a"])
         item.speakers[0].nameSource = .user
-        #expect(ConversationTasks.derive(item, preserving: []).count == 2)
+        #expect(ConversationTasks.derive(item, preserving: []).count == 1)
     }
     @Test func preservesCheckedAndEditedWithoutDuplicates() {
         var item = conversation()
@@ -69,7 +69,7 @@ struct ConversationOwnerPauseTests {
         item.summary?.taskCatalogVersion = nil
         let fixture = item
         try await store.update(recording.id) { value in
-            value.summary = fixture.summary; value.speakers = fixture.speakers; value.state = .done
+            value.summary = fixture.summary; value.speakers = fixture.speakers; value.state = .done; value.stagesDone = [.speakers]
         }
         var thought = Thought(id: recording.id, kind: ConversationKind.thoughtKind, trigger: .app, state: .done)
         thought.tasks = [.init(id: "old", text: "Alte Aufgabe", owner: .ai)]
@@ -79,9 +79,9 @@ struct ConversationOwnerPauseTests {
         #expect(await thoughts.thought(recording.id)?.tasks.isEmpty == true)
         #expect(try await store.conversation(recording.id)?.summary?.commitments.count == 4)
         try await processor.nameSpeaker(recording.id, speakerID: "S1", as: .owner, rememberVoice: false)
-        #expect(await thoughts.thought(recording.id)?.tasks.count == 3)
+        #expect(await thoughts.thought(recording.id)?.tasks.count == 1)
         try await processor.mergeSpeakers(recording.id, from: "S1", into: "S2")
-        #expect(await thoughts.thought(recording.id)?.tasks.count == 4)
+        #expect(await thoughts.thought(recording.id)?.tasks.count == 2)
         try await processor.reconcileDeletionStates()
         #expect(try await store.conversation(recording.id)?.summary?.commitments.count == 4)
     }

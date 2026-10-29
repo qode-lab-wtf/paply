@@ -1,4 +1,3 @@
-import AVFoundation
 import Observation
 import PaplyKit
 import UIKit
@@ -11,10 +10,6 @@ final class ConversationsModel {
     private(set) var transcripts: [String: [ConversationUtterance]] = [:]
     private(set) var audioIDs: Set<String> = []
     var error: String?
-    private(set) var playingUtteranceID: String?
-    @ObservationIgnored private var playbackGeneration = UUID()
-    @ObservationIgnored private var player: AVAudioPlayer?
-    @ObservationIgnored private var playback: Task<Void, Never>?
     @ObservationIgnored private var loaded: Set<String> = []
     private(set) var learnedThoughtCount: Int?
 
@@ -37,7 +32,8 @@ final class ConversationsModel {
         } catch { self.error = "Gespräche konnten nicht geladen werden." }
     }
     func display(_ id: String, thoughts: ThoughtsModel) -> ConversationDisplay? {
-        guard let conversation = conversations.first(where: { $0.id == id }) else { return nil }
+        guard var conversation = conversations.first(where: { $0.id == id }) else { return nil }
+        if !conversation.stagesDone.contains(.speakers) { conversation.speakers = [] }
         let thought = thoughts.thought(id)
         return ConversationDisplay(
             conversation: conversation, topic: thoughts.topic(thought?.topicId)?.title, tasks: thought?.tasks ?? [])
@@ -93,6 +89,9 @@ final class ConversationsModel {
             }
         }
     }
+    func takeTask(_ id: String, taskID: String) {
+        perform { try await ConversationsEnvironment.processor.takeTask(id, taskID: taskID) }
+    }
     func shareText(_ item: ConversationDisplay) -> String {
         let summary = item.conversation.summary
         var parts = [item.conversation.title ?? "Gespräch", summary?.overview ?? ""]
@@ -114,48 +113,5 @@ final class ConversationsModel {
     func unloadTranscript(_ id: String) {
         loaded.remove(id)
         transcripts.removeValue(forKey: id)
-        stopPlayback()
-    }
-    func stopPlayback() {
-        playbackGeneration = UUID()
-        playback?.cancel()
-        playback = nil
-        player?.stop()
-        player = nil
-        playingUtteranceID = nil
-    }
-    func play(_ id: String, utterance: String, continuing: Bool) {
-        if playingUtteranceID == utterance {
-            stopPlayback()
-            return
-        }
-        stopPlayback()
-        guard !SessionController.shared.isConversationActive, !SessionController.shared.isThoughtActive,
-            SessionController.shared.active == nil,
-            let segment = transcripts[id]?.first(where: { $0.id == utterance })
-        else { return }
-        let generation = playbackGeneration
-        playback = Task {
-            do {
-                guard let url = try await ConversationsEnvironment.store.audioURL(id), !Task.isCancelled else { return }
-                // Die bestehende Sitzung bleibt alleinige Besitzerin der Audio-Konfiguration.
-                let audio = try AVAudioPlayer(contentsOf: url)
-                player = audio
-                audio.currentTime = segment.start
-                guard audio.play() else { return }
-                while audio.isPlaying && !Task.isCancelled {
-                    if SessionController.shared.isConversationActive || SessionController.shared.isThoughtActive
-                        || SessionController.shared.active != nil
-                    {
-                        break
-                    }
-                    if !continuing && audio.currentTime >= segment.end { break }
-                    playingUtteranceID =
-                        transcripts[id]?.first { $0.start <= audio.currentTime && $0.end > audio.currentTime }?.id
-                    try await Task.sleep(for: .milliseconds(40))
-                }
-            } catch { if !Task.isCancelled { self.error = "Der Ton konnte nicht abgespielt werden." } }
-            if playbackGeneration == generation { stopPlayback() }
-        }
     }
 }

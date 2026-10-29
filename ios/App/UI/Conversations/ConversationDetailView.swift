@@ -15,6 +15,8 @@ struct ConversationDetailActions {
     var copyTranscript: () -> Void
     var retry: () -> Void
     var delete: () -> Void
+    /// Aufgabe einer anderen Person bzw. gemeinsame Aufgabe in den Reiter „Aufgaben“ übernehmen
+    var takeTask: (String) -> Void = { _ in }
 }
 
 struct ConversationDetailView: View {
@@ -30,11 +32,14 @@ struct ConversationDetailView: View {
     private var speakers: [String: ConversationSpeaker] {
         Dictionary(conversation.speakers.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
+    /// Personen erst benennen, wenn die Sprechertrennung fertig ist (nicht im vorläufigen Ein-Personen-Zustand)
+    private var speakersFinal: Bool { conversation.stagesDone.contains(.speakers) }
     private var needsOwner: Bool {
-        !conversation.speakers.contains(where: \.isOwner) && !conversation.speakers.isEmpty
+        speakersFinal && !conversation.speakers.contains(where: \.isOwner) && !conversation.speakers.isEmpty
     }
     private var suggestion: ConversationSpeaker? {
-        conversation.speakers.filter { $0.suggestion != nil && $0.name == nil && !$0.isOwner }
+        guard speakersFinal else { return nil }
+        return conversation.speakers.filter { $0.suggestion != nil && $0.name == nil && !$0.isOwner }
             .max { $0.speechSeconds < $1.speechSeconds }
     }
     var body: some View {
@@ -147,8 +152,7 @@ struct ConversationDetailView: View {
             if !tasks.isEmpty {
                 ConversationSpeakerLabel(speaker: speaker).font(.subheadline.weight(.medium))
                 ForEach(tasks) { task in
-                    Text(ConversationText.render(task.text, speakers: conversation.speakers))
-                        .foregroundStyle(Color.paplySecondaryText)
+                    takeableTask(task)
                 }
             }
         }
@@ -160,8 +164,30 @@ struct ConversationDetailView: View {
                     ConversationTaskRow(task: linked, recordedAt: conversation.createdAt,
                         pendingDone: pendingTaskIDs.contains(linked.id)) { actions.toggleTask(linked.id) }
                 } else {
-                    Text(ConversationText.render(task.text, speakers: conversation.speakers))
+                    takeableTask(task)
                 }
+            }
+        }
+    }
+
+    /// Aufgabe, die (noch) nicht im Reiter steht: Text plus „In meine Aufgaben“. Schon übernommen → normale Zeile.
+    @ViewBuilder private func takeableTask(_ task: ConversationCommitment) -> some View {
+        if let linked = item.tasks.first(where: { $0.id == task.id }) {
+            ConversationTaskRow(task: linked, recordedAt: conversation.createdAt,
+                                pendingDone: pendingTaskIDs.contains(linked.id)) { actions.toggleTask(linked.id) }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(ConversationText.render(task.text, speakers: conversation.speakers))
+                    .foregroundStyle(Color.paplySecondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button { actions.takeTask(task.id) } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(ConversationTint.blue)
+                .accessibilityLabel("In meine Aufgaben")
             }
         }
     }

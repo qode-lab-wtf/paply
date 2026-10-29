@@ -26,7 +26,16 @@ public enum SpeakerAlignment {
                     right.cluster == b && min(left.end, right.end) - max(left.start, right.start) > 0.1
                 }
             }
-            if !simultaneous && score >= (small ? SpeakerThresholds.fragmentMerge : SpeakerThresholds.merge) { parent[root(b)] = root(a) }
+            let leftMembers = clusters.filter { root($0) == root(a) }
+            let rightMembers = clusters.filter { root($0) == root(b) }
+            let compatible = leftMembers.allSatisfy { x in rightMembers.allSatisfy { y in
+                let threshold = min(diarization.speechSeconds[x] ?? 0, diarization.speechSeconds[y] ?? 0) < SpeakerThresholds.fragmentSeconds ? SpeakerThresholds.fragmentMerge : SpeakerThresholds.merge
+                return SpeakerThresholds.cosine(diarization.centroids[x]!, diarization.centroids[y]!) >= threshold
+                    && !diarization.segments.contains { l in l.cluster == x && diarization.segments.contains { r in
+                        r.cluster == y && min(l.end, r.end) - max(l.start, r.start) > 0.1
+                    } }
+            } }
+            if compatible && !simultaneous && score >= (small ? SpeakerThresholds.fragmentMerge : SpeakerThresholds.merge) { parent[root(b)] = root(a) }
         } }
         let segments = diarization.segments.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start }
         var totals: [Int: Double] = [:]

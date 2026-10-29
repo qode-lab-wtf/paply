@@ -224,3 +224,11 @@ Rohdaten, venv, Swift-Build, fremder Source-Checkout und eigene Download-/Buildc
 wurden gelöscht. Unter `~/paply-gsp-bench/` bleiben **379 MiB**: etwa 374 MiB Modelle
 und 5,1 MiB kleine JSON-Ergebnisse einschließlich Groq-Cache. Auf dem Datenvolume
 sind danach rund 19 GiB frei. Keine fremden Caches oder App-Dateien angefasst.
+
+## Implementierungsänderung nach Review 2
+
+Der iOS-Adapter verteilt nun höchstens fünf CAM-Ausschnitte über den gesamten Verlauf eines Sprechers,
+statt nur die längsten Turns auszuwählen. Paarweise zu stark abweichende Abdrücke liefern keinen automatisch
+zuordenbaren Schwerpunkt. Fragmentcluster müssen mit allen Mitgliedern kompatibel sein. Die obigen
+Pilotmesswerte wurden mit diesen Änderungen nicht erneut erhoben; eine neue Qualitätsmessung und der
+Laufzeit-/Thermal-Test auf iOS 18 stehen aus.

@@ -36,9 +36,4 @@ struct ConversationRecordingBridge: ConversationRecordingStore {
         await store.discardRecording(id)
         try? await thoughts.delete(id)
     }
-    func importAudio(from url: URL, at: Date) async throws -> Conversation {
-        let item = try await store.importAudio(from: url, at: at)
-        try await link(item)
-        return item
-    }
 }
