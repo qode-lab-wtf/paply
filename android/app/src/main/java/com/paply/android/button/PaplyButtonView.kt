@@ -16,6 +16,9 @@ import kotlin.math.sin
 
 /** One small display-list per frame; no layouts, audio work or allocations in onDraw. */
 internal class PaplyButtonView(context: Context) : View(context) {
+    var amber = false
+        set(value) { if (field != value) { field = value; invalidate() } }
+    internal val animationRunning get() = animator?.isRunning == true
     var level: () -> Float = { 0f }
     private var phase = ButtonPolicy.Phase.IDLE
     private val ink = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -56,6 +59,7 @@ internal class PaplyButtonView(context: Context) : View(context) {
 
     private fun startAnimation() {
         if (animator != null) return
+        if (phase == ButtonPolicy.Phase.IDLE) { radius = 24f; return }
         if (!ValueAnimator.areAnimatorsEnabled()) {
             radius = if (phase == ButtonPolicy.Phase.RECORDING) 28f else 24f
             return
@@ -100,7 +104,7 @@ internal class PaplyButtonView(context: Context) : View(context) {
         canvas.scale(density, density)
         if (phase == ButtonPolicy.Phase.RECORDING) {
             val breath = (sin(time * 2.6f) + 1f) * .5f
-            ink.color = Color.rgb(58, 216, 121)
+            ink.color = if (amber) Color.rgb(218, 170, 75) else Color.rgb(58, 216, 121)
             ink.style = Paint.Style.STROKE
             ink.strokeWidth = 1.5f
             for (i in 0..2) {

@@ -162,12 +162,15 @@ keine Groq-Aufrufe; Geräteabnahme der Einrichtung bleibt bei der Bauleitung.
 ## 0.2.1 – Knopf über dem Eingabefeld
 
 Die Oberkante des fokussierten editierbaren Feldes (`getBoundsInScreen`, ohne
-Textzugriff) bestimmt jetzt die Position: Liegt sie in der unteren Bildschirmhälfte
-und ist darüber genügend Platz bis `safeTop`, sitzt der Knopf über dem Feld.
+Textzugriff) bestimmt die Position bei kompakten Feldern: Feld-Unterkante höchstens
+96 dp über der Tastatur, Feldhöhe höchstens 200 dp und oberhalb genügend Platz
+bis `safeTop`. Dann sitzt der Knopf über dem Feld, auch im Querformat.
 Sonst bleibt er über der Tastatur, niemals tiefer als bisher. Der gespeicherte
 Zieh-Offset verschiebt ihn zusätzlich nach oben, begrenzt durch `safeTop`.
 Wachsende Felder werden nach 150 ms stabiler Lage übernommen; Änderungen bis
-4 dp werden ignoriert. Bei Fokuswechsel wird die alte Feldposition verworfen.
+4 dp werden ignoriert. Bei Fokuswechsel bleibt der bisherige Anker bis zur
+Stabilität erhalten; beim ersten Erscheinen bleibt der Knopf maximal 400 ms
+unsichtbar. Auch der Wechsel zum Tastatur-Anker bei großen Editoren wird stabilisiert.
 
 Ruhe: 56 × 56 dp Fenster mit 48-dp-Knopf, ohne unsichtbare 72-dp-Touchfläche.
 Start/Aufnahme: 120 × 72 dp einschließlich 48-dp-Abbrechen links; Verarbeitung
@@ -184,3 +187,25 @@ Neue Unit-Tests decken untere/obere Felder, mehrzeiliges Wachstum, Platzmangel,
 Zieh-Offset, Stabilisierung, 4-dp-Toleranz und das Verwerfen alter Grenzen ab.
 Keine Emulator-UI, keine Groq-Aufrufe. Geräteabnahme auf dem Samsung S22 bleibt
 offen. Version unverändert 0.2.1 (7).
+
+## 0.2.1 – Knopf-Reviewkorrekturen
+
+- Jeder Zwischenablage-Rückfall wird ausdrücklich angesagt, auch neben dem Erfolgshaken;
+  die reine Nachrichtenauswahl ist für alle 32 Kombinationen getestet.
+- Bei 9:00 einmal System-Haptik und „Noch 1 Minute“ für 4 s, danach bis zum Ende
+  dezente bernsteinfarbene Ringe; bei 10:00 nochmals Haptik und Verarbeitungshinweis.
+  Die bestehende automatische 10-Minuten-Verarbeitung bleibt unverändert.
+- Ziehen begrenzt den Offset auf den aktuellen Ankerbereich; neuer Schlüssel
+  `field-offset-v1` ignoriert den alten 0.2.0-Offset.
+- Unveränderte Renderdaten überspringen Layoutarbeit; Breiten setzen und Messen
+  erfolgen nur bei Änderungen. Insets stammen ab API 30 aus Bildschirmmetriken,
+  auf API 29 aus Display-Cutout und Systemressourcen (inklusive seitlicher Navigation).
+- Tests sichern Ankerfälle, Fokuswechsel, 400-ms-Ersteinblendung, Zeitwarnungen,
+  Insets und wiederholte Aufnahmerunden samt sichtbaren Renderzuständen ab.
+  Der Gerätetest prüft den Animator am angehängten View (Ruhe/Aufnahme/Entfernen).
+
+Prüfung: `PAPLY_WORK=work-knopf021 scripts/mb.sh sync`, anschließend über `mb.sh build`
+`:app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest`.
+Alle vier Aufgaben grün (`BUILD SUCCESSFUL`, 30 s).
+Keine Emulator-Steuerung und keine Groq-Aufrufe; Gerätetest nur kompiliert.
+Version bleibt 0.2.1 (7).

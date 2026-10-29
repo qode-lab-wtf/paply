@@ -6,14 +6,20 @@ internal object ButtonPosition {
     fun horizontal(screenWidth: Int, safeLeft: Int, safeRight: Int, margin: Int): Horizontal =
         Horizontal((screenWidth - safeLeft - safeRight - 2 * margin).coerceAtLeast(0), safeRight + margin)
 
-    /** Reserve the expanded footprint so changing phase never shifts the button centre. */
-    fun fieldTop(keyboardTop: Int, screenHeight: Int, fieldTop: Int?, safeTop: Int,
-                 height: Int, gap: Int, offset: Int): Int? {
-        val anchor = fieldTop?.takeIf {
-            it > screenHeight / 2 && it - gap - height >= safeTop
-        }?.coerceAtMost(keyboardTop) ?: keyboardTop
-        return top(anchor, safeTop, height, gap, offset)
-    }
+    /** Screen coordinates; only compact editors adjacent to the keyboard get a field anchor. */
+    fun anchor(keyboardTop: Int, fieldTop: Int?, fieldBottom: Int?, safeTop: Int,
+               height: Int, gap: Int, proximity: Int, maxFieldHeight: Int): Int =
+        if (fieldTop != null && fieldBottom != null &&
+            fieldBottom >= fieldTop && fieldBottom - fieldTop <= maxFieldHeight &&
+            keyboardTop - fieldBottom in 0..proximity && fieldTop - height - gap >= safeTop)
+            fieldTop else keyboardTop
+
+    fun maxOffset(anchor: Int, safeTop: Int, height: Int, gap: Int): Int =
+        (anchor - gap - height - safeTop).coerceAtLeast(0)
+
+    data class Insets(val top: Int, val left: Int, val right: Int)
+    fun safeInsets(top: Int, left: Int, right: Int, cutTop: Int, cutLeft: Int, cutRight: Int) =
+        Insets(maxOf(top, cutTop), maxOf(left, cutLeft), maxOf(right, cutRight))
 
     fun top(keyboardTop: Int, safeTop: Int, height: Int, gap: Int, offset: Int): Int? {
         val bottommost = keyboardTop - gap - height

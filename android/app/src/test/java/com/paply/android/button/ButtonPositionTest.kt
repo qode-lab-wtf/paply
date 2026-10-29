@@ -30,28 +30,29 @@ class ButtonPositionTest {
         }
         assertNull(ButtonPosition.top(100, 80, 44, 8, 0))
     }
-    @Test fun lowerEditorKeepsSendRowClear() {
-        assertEquals(620, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 0))
-        // A malformed field below the IME must never lower the button.
-        assertEquals(680, ButtonPosition.fieldTop(760, 1000, 900, 24, 72, 8, 0))
+    private fun anchor(top: Int?, bottom: Int?, keyboard: Int = 760, safe: Int = 24) =
+        ButtonPosition.anchor(keyboard, top, bottom, safe, 72, 8, 96, 200)
+    @Test fun compactFieldsUseFieldAnchorInPortraitAndLandscape() {
+        assertEquals(700, anchor(700, 750))
+        assertEquals(580, anchor(580, 750))
+        assertEquals(550, anchor(550, 750)) // exactly 200 dp
+        assertEquals(760, anchor(549, 750))
+        assertEquals(160, anchor(160, 220, keyboard = 260)) // landscape, keyboard at midpoint
+        assertEquals(760, anchor(40, 90)) // search bar
+        assertEquals(260, anchor(160, 220, keyboard = 260, safe = 100))
+        assertEquals(760, anchor(null, null))
+        assertEquals(760, anchor(900, 950))
+        assertEquals(600, anchor(600, 664)) // exactly 96 dp
+        assertEquals(760, anchor(600, 663))
     }
-    @Test fun upperEditorAndMissingBoundsUseKeyboard() {
-        for (field in listOf(null, 40, 400, 500)) {
-            assertEquals(680, ButtonPosition.fieldTop(760, 1000, field, 24, 72, 8, 0))
-        }
+    @Test fun dragUsesCurrentAnchorRange() {
+        assertEquals(596, ButtonPosition.maxOffset(700, 24, 72, 8))
+        assertEquals(24, ButtonPosition.top(700, 24, 72, 8, 596))
+        assertEquals(0, ButtonPosition.maxOffset(80, 24, 72, 8))
     }
-    @Test fun multilineGrowthRaisesButton() {
-        val single = ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 0)!!
-        val multiline = ButtonPosition.fieldTop(760, 1000, 580, 24, 72, 8, 0)!!
-        assertEquals(120, single - multiline)
-    }
-    @Test fun insufficientRoomAboveFieldFallsBackAndAboveKeyboardHides() {
-        assertEquals(180, ButtonPosition.fieldTop(260, 300, 160, 100, 72, 8, 0))
-        assertNull(ButtonPosition.fieldTop(170, 300, 160, 100, 72, 8, 0))
-    }
-    @Test fun dragOffsetAppliesAboveFieldAndClampsToSafeTop() {
-        assertEquals(520, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 100))
-        assertEquals(24, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, 9999))
-        assertEquals(620, ButtonPosition.fieldTop(760, 1000, 700, 24, 72, 8, -20))
+    @Test fun screenInsetsCombineBarsAndCutout() {
+        assertEquals(ButtonPosition.Insets(40, 60, 48), ButtonPosition.safeInsets(24, 0, 48, 40, 60, 0))
+        val safe = ButtonPosition.safeInsets(24, 48, 0, 0, 0, 60)
+        assertEquals(ButtonPosition.Horizontal(676, 68), ButtonPosition.horizontal(800, safe.left, safe.right, 8))
     }
 }

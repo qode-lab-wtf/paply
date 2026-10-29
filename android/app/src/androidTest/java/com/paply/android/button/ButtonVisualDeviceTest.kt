@@ -1,47 +1,44 @@
 package com.paply.android.button
 
+import android.animation.ValueAnimator
+import android.content.Intent
+import android.widget.FrameLayout
 import androidx.test.platform.app.InstrumentationRegistry
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.view.View
 import org.junit.Assert.*
 import org.junit.Test
 
 class ButtonVisualDeviceTest {
-    @Test fun repeatedRoundsKeepRecordingVisibleAndAccessible() {
+    @Test fun attachedViewStopsAnimatorBetweenRecordingRoundsAndOnRemoval() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.runOnMainSync {
-            val view = PaplyButtonView(instrumentation.targetContext)
-            val size = (72 * view.resources.displayMetrics.density).toInt()
-            view.layout(0, 0, size, size)
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            var phase = ButtonPolicy.Phase.IDLE
-            fun step(event: ButtonPolicy.Event) {
-                phase = ButtonPolicy.next(phase, event)
-                view.setPhase(phase)
-            }
-            repeat(3) { round ->
-                step(ButtonPolicy.Event.START)
-                step(ButtonPolicy.Event.READY)
-                assertEquals("Aufnahme beenden und einsetzen", view.contentDescription)
-                assertTrue(view.isClickable)
-                assertEquals(View.VISIBLE, view.visibility)
-                assertEquals(1f, view.alpha)
-                view.draw(canvas)
-                assertTrue(bitmap.getPixel(size / 2, size / 2) != 0)
-                if (round == 1) step(ButtonPolicy.Event.DISCARD)
-                else {
-                    step(ButtonPolicy.Event.FINISH)
-                    assertFalse(view.isClickable)
-                    step(ButtonPolicy.Event.SUCCESS)
-                    assertEquals("Text eingesetzt", view.contentDescription)
-                    step(ButtonPolicy.Event.RESULT)
+        val intent = Intent(instrumentation.targetContext, com.paply.android.MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val activity = instrumentation.startActivitySync(intent)
+        try {
+            instrumentation.runOnMainSync {
+                val parent = FrameLayout(activity)
+                activity.setContentView(parent)
+                val view = PaplyButtonView(activity)
+                parent.addView(view, FrameLayout.LayoutParams(144, 144))
+                assertTrue(view.isAttachedToWindow)
+                assertFalse(view.animationRunning)
+                repeat(3) { round ->
+                    view.setPhase(ButtonPolicy.Phase.RECORDING)
+                    assertEquals(ValueAnimator.areAnimatorsEnabled(), view.animationRunning)
+                    assertEquals("Aufnahme beenden und einsetzen", view.contentDescription)
+                    assertTrue(view.isClickable)
+                    if (round != 1) {
+                        view.setPhase(ButtonPolicy.Phase.WORKING)
+                        assertFalse(view.isClickable)
+                        view.setPhase(ButtonPolicy.Phase.SUCCESS)
+                        assertEquals("Text eingesetzt", view.contentDescription)
+                    }
+                    view.setPhase(ButtonPolicy.Phase.IDLE)
+                    assertFalse(view.animationRunning)
                 }
-                assertEquals("Paply-Diktat starten", view.contentDescription)
+                view.setPhase(ButtonPolicy.Phase.RECORDING)
+                parent.removeView(view)
+                assertFalse(view.animationRunning)
             }
-            view.stopAnimation()
-            bitmap.recycle()
-        }
+        } finally { instrumentation.runOnMainSync { activity.finish() } }
     }
 }
