@@ -25,3 +25,10 @@ Stand: 29.10.2026, 01:40 MEZ · signierte APK gebaut und geprüft.
 - Bauleitung, außerhalb meines Bereichs: `ui/SetupStatus.kt:54` (Kachel-Dialog) → `ic_stat_paply`; `res/layout/thought_widget.xml:5` → `ic_stat_paply` mit Tint oder `ic_paply` ohne Tint.
 - `paply3` nach der Prüfung gestoppt; `paply` und `paply2` laufen unverändert weiter.
 - Anleitung: `FREUNDE.md`; WhatsApp-Text: `FREUNDE-NACHRICHT.txt` (7 Zeilen). Kein Commit, Push oder Upload.
+
+## Sicherung des Signierschlüssels (29.10.)
+- Die Bauleitung verwaltet die Sicherung, Allan muss sich nicht darum kümmern.
+- Original: MacBook `~/Android/keys/` (`paply-release.jks`, `paply-release.properties`).
+- Kopie: Mac mini `~/Paply-Android-Schluessel/`, Rechte 700/600, SHA-256 gleich, nicht im Repo.
+- Ohne diesen Schlüssel lassen sich Updates nicht über bestehende Installationen spielen. Freunde müssten neu installieren
+  und verlören ihre lokalen Daten.
