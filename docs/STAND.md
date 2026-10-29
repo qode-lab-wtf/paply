@@ -50,6 +50,13 @@
 - **0.1.1 (2) fertig** (`android/docs/V011.md`): Lange Stille im Live-Diktat geht nicht mehr an Whisper. Drehen auf Android 17
   sichert Gesprochenes (Zwischenablage + Hinweis). Update über 0.1.0 geprüft. APK `~/Desktop/Paply-Android/Paply-0.1.1.apk`
   (SHA-256 `59d4862d…c522`). Rest-Grenze: Periodisches Emulator-Rauschen gilt bewusst nicht als Stille.
+- **0.1.2/0.1.3 (29.10.):**
+  - Der erste echte Nutzer (Xiaomi Mi 9, Android 11) meldete einen Absturz beim Start. Ursache: `Stream.toList()` gibt es
+    erst ab API 34. Behoben, Start auf API 29–37 geprüft (`android/docs/STARTUP-0.1.2.md`). Eine Fehlerseite ersetzt das
+    stille Schließen.
+  - Seit 0.1.3 prüft Animal Sniffer `:core`/`:thoughts` gegen API 29 (`android/docs/API-29.md`), dabei wurde
+    `readNBytes` gefunden und ersetzt.
+  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.1.3.apk`.
 - **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
