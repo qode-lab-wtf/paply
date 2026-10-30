@@ -5,8 +5,7 @@ Desktop betten ihn ein und sichern die Byte-Gleichheit jeweils mit einem Test ab
 Die Datei hat keinen abschließenden Zeilenumbruch; der Gleichheitstest vergleicht byte-genau.
 Änderungen nur hier vornehmen und anschließend in **allen drei Apps** übernehmen.
 Der Desktop braucht die eingebettete Konstante, weil Electron nur `electron-menubar/` packt.
-Die mobilen Einbettungen/Gleichheitstests müssen in ihren jeweiligen Branches mitgezogen werden;
-dieser Desktop-Commit verändert keine anderen Worktrees.
+`node shared/regeln-pruefen.mjs` vergleicht alle drei Einbettungen mit dieser Datei.
 
 `safety-cases.json` enthält ausschließlich künstliche, kurze Prüffälle aus den mobilen
 Sicherheitsnetz-Tests und zusätzliche Regressionen. `expected` ist der Ablehnungsgrund

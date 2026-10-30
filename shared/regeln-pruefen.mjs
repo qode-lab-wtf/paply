@@ -1,0 +1,154 @@
+#!/usr/bin/env node
+// Prüft, ob Mac/Windows, iOS und Android zu REGELN.md passen. Ändert nichts.
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const WURZEL = join(dirname(fileURLToPath(import.meta.url)), '..');
+const lies = datei => readFileSync(join(WURZEL, datei), 'utf8');
+
+const DESKTOP = 'electron-menubar';
+const IOS = 'ios/PaplyKit/Sources/PaplyKit';
+const ANDROID = 'android/core/src/main/kotlin/com/paply/core';
+const GEDANKEN = 'android/thoughts/src/main/kotlin/com/paply/thoughts';
+
+// Wert aus REGELN.md → wo er in den Apps steht.
+const WERTE = {
+  'sprache.kurz_sekunden': [
+    [`${IOS}/Text/LanguageGuard.swift`, /shortSpeechSeconds = ([\d.]+)/],
+    [`${ANDROID}/LanguageGuard.kt`, /shortSpeechSeconds = ([\d.]+)/],
+  ],
+  'diktat.whisper_modell': [
+    [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],
+    [`${ANDROID}/GroqModels.kt`, /const val whisper = "([^"]+)"/],
+  ],
+  'polieren.modell': [
+    [`${DESKTOP}/dictation/groq-models.js`, /POLISH_MODEL = '([^']+)'/],
+    [`${IOS}/Groq/GroqModels.swift`, /static let polish = "([^"]+)"/],
+    [`${ANDROID}/GroqModels.kt`, /const val polish = "([^"]+)"/],
+  ],
+  'polieren.ausweichmodell': [
+    [`${DESKTOP}/dictation/groq-models.js`, /POLISH_FALLBACK_MODEL = '([^']+)'/],
+    [`${IOS}/Groq/GroqModels.swift`, /static let polishFallback = "([^"]+)"/],
+    [`${ANDROID}/GroqModels.kt`, /const val polishFallback = "([^"]+)"/],
+  ],
+  'stille.no_speech_prob': [
+    [`${DESKTOP}/audio/silence-filter.js`, /NO_SPEECH_PROB = ([\d.-]+)/],
+    [`${IOS}/Audio/SilenceFilter.swift`, /static let noSpeechProb = ([\d.-]+)/],
+    [`${ANDROID}/SilenceFilter.kt`, /const val noSpeechProb = ([\d.-]+)/],
+  ],
+  'stille.avg_logprob': [
+    [`${DESKTOP}/audio/silence-filter.js`, /LOW_LOGPROB = ([\d.-]+)/],
+    [`${IOS}/Audio/SilenceFilter.swift`, /static let lowLogprob = ([\d.-]+)/],
+    [`${ANDROID}/SilenceFilter.kt`, /const val lowLogprob = ([\d.-]+)/],
+  ],
+  'gedanken.modell': [
+    [`${IOS}/Thoughts/AI/ThoughtStructurer.swift`, /primaryModel = "([^"]+)"/],
+    [`${GEDANKEN}/ai/ThoughtStructurer.kt`, /primaryModel = "([^"]+)"/],
+  ],
+  'gedanken.ausweichmodell': [
+    [`${IOS}/Thoughts/AI/ThoughtStructurer.swift`, /fallbackModel = "([^"]+)"/],
+    [`${GEDANKEN}/ai/ThoughtStructurer.kt`, /fallbackModel = "([^"]+)"/],
+  ],
+  'gedanken.regel_version': [
+    [`${IOS}/Thoughts/AI/ThoughtPrompt.swift`, /static let version = (\d+)/],
+    [`${GEDANKEN}/ai/ThoughtPrompt.kt`, /const val version = (\d+)/],
+  ],
+  'gedanken.grenze_sekunden': [
+    ['ios/App/Session/ThoughtCapture.swift', /static let limit: TimeInterval = (\d+ \* \d+)/],
+    ['android/app/src/main/java/com/paply/android/AudioCapture.kt', /maxMs: Long = ([\d_ *]+)L/],
+  ],
+};
+
+// Ausnahme aus REGELN.md → woran man im Code erkennt, dass sie noch besteht.
+const AUSNAHMEN = {
+  A1: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('language', language)"),
+  A2: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('model', 'whisper-large-v3-turbo')"),
+  A3: () => !lies(`${DESKTOP}/audio/silence-filter.js`).includes('Merci'),
+  A4: () => /!userLanguages\.map\(CodeSwitchPrimer\.baseCode\)\.contains\(detected\)/.test(lies(`${IOS}/Text/LanguageGuard.swift`))
+    && /code !in userLanguages/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
+  A5: () => /const PROMPT = /.test(lies(`${DESKTOP}/notes/plan.js`)),
+  A6: () => lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: false'),
+  A7: () => /RETENTION_MS = 7 \* 24/.test(lies(`${DESKTOP}/meeting/audio-retention.js`)),
+};
+
+const zahl = text => Number(String(text).replace(/_/g, '').split('*').reduce((a, b) => a * Number(b), 1));
+const gleich = (a, b) => (Number.isFinite(zahl(a)) && Number.isFinite(zahl(b)) ? zahl(a) === zahl(b) : a === b);
+// AudioCapture zählt Millisekunden, alle anderen Grenzen Sekunden.
+const inRegelEinheit = (datei, wert) => (datei.endsWith('AudioCapture.kt') ? zahl(wert) / 1000 : wert);
+
+function pruefeWerte(regeln, fehler) {
+  const werte = Object.fromEntries([...regeln.matchAll(/^\| `([a-z_.]+)` \| `([^`]+)` \|/gm)].map(m => [m[1], m[2]]));
+  for (const [schluessel, stellen] of Object.entries(WERTE)) {
+    if (!(schluessel in werte)) { fehler.push(`${schluessel} fehlt in REGELN.md`); continue; }
+    for (const [datei, muster] of stellen) {
+      const treffer = lies(datei).match(muster);
+      if (!treffer) fehler.push(`${schluessel}: in ${datei} nicht gefunden`);
+      else if (!gleich(inRegelEinheit(datei, treffer[1]), werte[schluessel])) {
+        fehler.push(`${schluessel}: ${datei} hat ${treffer[1]}, REGELN.md sagt ${werte[schluessel]}`);
+      }
+    }
+  }
+  for (const schluessel of Object.keys(werte)) {
+    if (!(schluessel in WERTE)) fehler.push(`${schluessel} steht in REGELN.md, wird aber nicht geprüft`);
+  }
+}
+
+function pruefeAusnahmen(regeln, fehler) {
+  const eingetragen = new Set([...regeln.matchAll(/^\| (A\d+) \|/gm)].map(m => m[1]));
+  for (const [nummer, bestehtNoch] of Object.entries(AUSNAHMEN)) {
+    if (!eingetragen.has(nummer)) {
+      if (bestehtNoch()) fehler.push(`${nummer} besteht im Code, fehlt aber in REGELN.md`);
+    } else if (!bestehtNoch()) fehler.push(`${nummer} ist behoben: aus REGELN.md streichen`);
+  }
+  for (const nummer of eingetragen) {
+    if (!(nummer in AUSNAHMEN)) fehler.push(`${nummer} steht in REGELN.md, wird aber nicht geprüft`);
+  }
+  return eingetragen.size;
+}
+
+function pruefePolierPrompt(fehler) {
+  const quelle = lies('shared/polish/system-prompt.txt');
+  const desktop = lies(`${DESKTOP}/dictation/polish-prompt.js`).match(/POLISH_SYSTEM_PROMPT = ("(?:[^"\\]|\\.)*");/);
+  const ios = lies(`${IOS}/Text/PolishPrompt.swift`).match(/systemPrompt = """\n([\s\S]*?)\n\s*"""/);
+  const android = lies(`${ANDROID}/PolishPrompt.kt`).match(/"""([\s\S]*?)"""/);
+  const kopien = {
+    'Mac/Windows': desktop && JSON.parse(desktop[1]),
+    iOS: ios && ios[1].replace(/^ {4}/gm, ''),
+    Android: android && android[1],
+  };
+  for (const [app, text] of Object.entries(kopien)) {
+    if (text !== quelle) fehler.push(`Polier-Prompt in ${app} weicht von shared/polish/system-prompt.txt ab`);
+  }
+}
+
+function pruefeStilleListe(fehler) {
+  const saetze = (text, anfang) => {
+    const start = text.indexOf(anfang);
+    const ende = text.indexOf('artifact', start);
+    return [...text.slice(start, ende).split('\n').filter(z => !z.trim().startsWith('//')).join('\n').matchAll(/"([^"]+)"/g)]
+      .map(m => m[1]).sort();
+  };
+  const ios = saetze(lies(`${IOS}/Audio/SilenceFilter.swift`), 'silencePhrases');
+  const android = saetze(lies(`${ANDROID}/SilenceFilter.kt`), 'silencePhrases');
+  if (ios.length === 0 || ios.join('|') !== android.join('|')) fehler.push('Stille-Liste von iOS und Android weicht ab');
+}
+
+function pruefeProjektregeln(fehler) {
+  if (lies('CLAUDE.md') !== lies('AGENTS.md')) fehler.push('CLAUDE.md und AGENTS.md müssen gleich sein');
+}
+
+const regeln = lies('REGELN.md');
+const fehler = [];
+pruefeWerte(regeln, fehler);
+const ausnahmen = pruefeAusnahmen(regeln, fehler);
+pruefePolierPrompt(fehler);
+pruefeStilleListe(fehler);
+pruefeProjektregeln(fehler);
+
+if (fehler.length) {
+  console.error(`Regeln verletzt (${fehler.length}):`);
+  for (const zeile of fehler) console.error(`- ${zeile}`);
+  process.exit(1);
+}
+console.log(`Regeln eingehalten: ${Object.keys(WERTE).length} Werte, 3 Polier-Prompts, Stille-Liste. Offene Ausnahmen: ${ausnahmen}.`);

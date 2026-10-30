@@ -181,3 +181,14 @@ Entscheidung:
     zulassen“.
   - In Apps mit eigenen bzw. geschützten Eingabefeldern landet der Text in der Zwischenablage.
 - Zusätzlich: Hinweise und Karten blenden sich nach wenigen Sekunden von selbst aus („smooth und clean, wie bei Apple“).
+
+## 2026-10-30 — Ein Repository, `main` als einzige Wahrheit
+
+Allans Auftrag: zentralisieren, einfach halten, Verhalten an einer Stelle festlegen.
+
+- Mac/Windows, iOS und Android bleiben ein Repository und liegen auf `main`. Keine getrennten Projekte, weil sich die
+  Apps Regeln, KI-Texte und Prüffälle teilen.
+- Kein gemeinsamer App-Code über Swift, Kotlin und JavaScript hinweg. Gemeinsam sind `REGELN.md`, `shared/` und der
+  Wächter `shared/regeln-pruefen.mjs`, der jede Abweichung meldet.
+- Der Zusammenschluss ändert keine App. Abweichungen stehen als Ausnahmen in `REGELN.md`, bis Allan sie entscheidet.
+- Für jede Aufgabe ein kurzer Branch von `main`, keine langlebigen Plattform-Branches.

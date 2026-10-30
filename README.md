@@ -1,8 +1,10 @@
-# paply — Diktat und Gesprächsaufnahme für den Mac
+# paply — Diktat, Gedanken und Gespräche
 
-Menüleisten-App: **Cmd+X** diktieren (Groq Whisper, optional Groq-Llama-Polishing),
+Für Mac, Windows, iPhone und Android.
+
+Mac und Windows: **Cmd+X** diktieren (Groq Whisper, optional Polieren), **Cmd+Y** Gedanken,
 **Cmd+Shift+X** Gespräch aufnehmen → Gemini-Audio-Auswertung mit Sprechern, Wortlaut, Bericht und
-Nachhören (Original-Ton 7 Tage). Windows-Build vorhanden.
+Nachhören (Original-Ton 7 Tage).
 
 ## Download
 
@@ -12,9 +14,11 @@ Rechtsklick → Öffnen. Installierte Apps aktualisieren sich danach selbst.
 
 ## Projektaufbau
 
-- `electron-menubar/` — die App (Electron, React/Vite, Tests mit Vitest)
+- `electron-menubar/` — Mac und Windows (Electron, React/Vite, Tests mit Vitest)
+- `ios/` — iPhone (Swift), `android/` — Android (Kotlin)
+- `REGELN.md` — Verhalten aller Apps, `shared/` — gemeinsame KI-Texte, Prüffälle und der Regel-Wächter
 - `docs/STAND.md` — kanonischer Stand · `docs/ENTSCHEIDUNGEN.md` · `docs/instinct/` — Wegweiser und Zielnotiz
-- `docs/RELEASE.md` — Release auslösen (Tag `v*` → GitHub Action baut Mac + Windows)
+- `docs/RELEASE.md` — Release Mac und Windows (Tag `v*` → GitHub Action baut beide)
 - `docs/archiv/` — Historie, keine Wahrheit
 - Meeting-Architektur: `electron-menubar/docs/superpowers/specs/2026-09-21-meeting-gemini-audio-design.md`
 

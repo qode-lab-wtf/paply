@@ -1,12 +1,13 @@
 # Paply — Wegweiser
 
-Mac-/Windows-Menüleisten-App für Diktat (Cmd+X) und Gesprächsaufnahmen (Cmd+Shift+X).
-Es gibt genau EIN Paply: dieses Repository, Branch `main`, App-Code unter `electron-menubar/`.
-Repository: https://github.com/qode-lab-wtf/paply · lokal: `~/Vibe/paply-main` (MacBook) bzw. `~/Vibe/paply` (Mac mini)
+Diktat, Gedanken und Gespräche für Mac, Windows, iPhone und Android.
+Es gibt genau EIN Paply: dieses Repository, Branch `main`. App-Code: `electron-menubar/` (Mac, Windows), `ios/`, `android/`.
+Repository: https://github.com/qode-lab-wtf/paply · lokal: `~/Vibe/paply` (Mac mini)
 (`paply.dev` ist ein anderes Produkt — Chrome-Plugin — und gehört nicht hierher.)
 
 - Bestätigte Richtung (Allans Worte): [ZIEL.md](ZIEL.md)
-- Kanonischer Stand: [../STAND.md](../STAND.md)
+- Verhalten aller Apps: [../../REGELN.md](../../REGELN.md)
+- Kanonischer Stand: [../STAND.md](../STAND.md), Verlauf je App unter `docs/stand/`
 - Entscheidungen: [../ENTSCHEIDUNGEN.md](../ENTSCHEIDUNGEN.md)
 - Aktuelle Meeting-Architektur: `electron-menubar/docs/superpowers/specs/2026-09-21-meeting-gemini-audio-design.md`
 - Release-Ablauf: [../RELEASE.md](../RELEASE.md)
