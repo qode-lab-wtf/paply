@@ -1,0 +1,393 @@
+@preconcurrency import AVFoundation
+import Foundation
+import PaplyKit
+
+/// AVAudioSession + AVAudioEngine mit dauerhaftem Input-Tap.
+///
+/// Alle Aufrufe an Sitzung und Engine laufen auf einer eigenen seriellen Queue:
+/// `setActive`, `setCategory`, `setPreferredInput` und `engine.start()` können je
+/// 50–500 ms blockieren und gehören nicht auf den Main-Thread. Der Main-Thread sieht
+/// nur einen Schnappschuss (`isRunning`).
+///
+/// Sitzungs-Entscheidung (im Testplan geprüft):
+/// - `.playAndRecord`, Modus `.default`, `.mixWithOthers`: Musik anderer Apps läuft weiter.
+/// - Bluetooth NUR `.allowBluetoothA2DP`, kein HFP: AirPods bleiben für Musik in voller
+///   Qualität (A2DP kann kein Mikro, also nimmt das eingebaute Mikro auf). Mit HFP würde
+///   iOS beim Aktivieren der Sitzung auf Telefonqualität umschalten – den ganzen Tag.
+/// - `.defaultToSpeaker`: Ohne Kopfhörer liefe sonst auch fremde Musik über die Hörmuschel.
+/// - bevorzugter Eingang: eingebautes Mikro.
+/// - IO-Puffer fest ~100 ms: wenig Aufwachen im Leerlauf (Akku). Ein Wechsel beim Aufnehmen
+///   könnte die Engine umkonfigurieren; die Pegel laufen trotzdem flüssig (Zeitstempel,
+///   leicht verzögert gezeichnet). Wirksamer Puffer und Tap-Abstand stehen im Protokoll.
+/// - Schutz vor Systemhinweisen (`setPrefersNoInterruptionsFromSystemAlerts`) NUR während einer
+///   Aufnahme (`setShieldFromAlerts`, gesteuert vom SessionController): Ein Anruf-Banner bricht
+///   dann ein Diktat oder einen Gedanken nicht ab. In Bereitschaft bleibt er aus – sonst erschien
+///   ein Anruf nur als stummes Banner, ohne Klingelton und Vibration (Gerätefund 28.10.). Ein Anruf
+///   unterbricht die Sitzung dort normal; danach nimmt `attemptResume` sie wieder auf.
+final class AudioEngineHost: @unchecked Sendable {
+    static let ioBuffer: TimeInterval = 0.1
+
+    let processor = AudioTapProcessor()
+
+    private let queue = DispatchQueue(label: "paply.audio-engine", qos: .userInitiated)
+    // Nur auf `queue` benutzt
+    private var engine = AVAudioEngine()
+    private var tapInstalled = false
+    /// Gewünschter Schutz vor Systemhinweisen; `configureSession()` übernimmt ihn bei jedem
+    /// Neuaufbau (ein Neustart mitten in einer Aufnahme behält ihn also).
+    private var shieldFromAlerts = false
+    // Schnappschuss für den Main-Thread
+    private let snapshotLock = NSLock()
+    private var runningSnapshot = false
+    /// Meldung nach jedem erfolgreichen Motorstart (auf der Audio-Queue): Anlass, Eingangsformat
+    private var engineStarted: (@Sendable (_ reason: String, _ rate: Double, _ channels: Int) -> Void)?
+
+    enum StartError: Error {
+        case noInput
+        case session(NSError)
+        case engine(NSError)
+        /// AVAudioEngine warf eine Objective-C-Ausnahme (Name), z. B. Tap-Format passt nach
+        /// einem Anruf nicht zur Hardware. Abgefangen statt Absturz; der Aufrufer versucht es später.
+        case exception(String)
+
+        var code: Int {
+            switch self {
+            case .noInput: -1
+            case .exception: -2
+            case .session(let e), .engine(let e): e.code
+            }
+        }
+
+        var fourCC: String {
+            let value = UInt32(truncatingIfNeeded: code)
+            let bytes = [24, 16, 8, 0].map { UInt8((value >> UInt32($0)) & 0xFF) }
+            guard bytes.allSatisfy({ $0 >= 32 && $0 < 127 }) else { return "" }
+            return String(decoding: bytes, as: UTF8.self)
+        }
+
+        var stage: String {
+            switch self {
+            case .noInput: "input"
+            case .session: "session"
+            case .engine: "engine"
+            case .exception(let name): "exception:\(name)"
+            }
+        }
+    }
+
+    typealias Outcome = Result<Void, StartError>
+
+    /// Letzter bekannter Zustand der Engine (nach jedem Ablauf aktualisiert).
+    var isRunning: Bool {
+        snapshotLock.lock()
+        defer { snapshotLock.unlock() }
+        return runningSnapshot
+    }
+
+    // MARK: Abläufe (laufen auf der Audio-Queue, der Aufrufer wartet nur asynchron)
+
+    /// Wird einmal beim Start der App gesetzt (vor dem ersten Motorstart).
+    func onEngineStarted(_ handler: @escaping @Sendable (_ reason: String, _ rate: Double, _ channels: Int) -> Void) {
+        snapshotLock.lock()
+        engineStarted = handler
+        snapshotLock.unlock()
+    }
+
+    /// Sitzung einrichten, aktivieren und Engine mit frischem Tap starten.
+    /// `fresh`: wie `restartFresh()` – nach einem stummen Mikro alles neu aufbauen.
+    func start(fresh: Bool = false) async -> Outcome {
+        if fresh { return await restartFresh(reason: "start-fresh", discardRecording: false) }
+        return await onQueue { host in
+            do throws(StartError) {
+                try host.configureSession()
+                try host.activateSession()
+                try host.startEngine(reason: "start")
+                return .success(())
+            } catch {
+                host.stopEngine()
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Mikro lieferte nur digitale Stille: Engine anhalten, Sitzung einmal ab- und wieder
+    /// anmelden, neue Engine mit frischem Tap. Nur im Vordergrund (iOS erlaubt den Neustart
+    /// einer Aufnahme im Hintergrund nicht). `discardRecording`: Eine angehängte Aufnahme
+    /// verwirft ihren bisherigen (stummen) Ton, bevor der erste neue Block kommt.
+    func restartFresh(reason: String = "silence", discardRecording: Bool = true) async -> Outcome {
+        await onQueue { host in
+            host.stopEngine()
+            try? AVAudioSession.sharedInstance().setActive(false)
+            host.engine = AVAudioEngine()
+            if discardRecording { host.processor.prepareSilenceRestart() }
+            do throws(StartError) {
+                try host.configureSession()
+                try host.activateSession()
+                try host.startEngine(reason: reason)
+                return .success(())
+            } catch {
+                host.stopEngine()
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Nach Unterbrechung: Sitzung wieder aktivieren, Engine neu starten, falls sie steht.
+    func resume() async -> Outcome {
+        await onQueue { host in
+            do throws(StartError) {
+                try host.activateSession()
+                if !host.engine.isRunning {
+                    // Frische Engine: Nach einem Anruf hielte die alte das Hardwareformat von vor
+                    // dem Anruf fest, und der Tap passte nicht mehr (Absturz Build 5, 28.10.).
+                    host.stopEngine()
+                    host.engine = AVAudioEngine()
+                    try host.startEngine(reason: "resume")
+                }
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Nach Konfigurationswechsel (Format/Route): Tap mit neuem Format, dann wieder starten.
+    func restartEngine() async -> Outcome {
+        await onQueue { host in
+            do throws(StartError) {
+                try host.startEngine(reason: "config-change")
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Nach „Media Services were reset“: Engine neu bauen, alles neu einrichten.
+    func rebuildAndStart() async -> Outcome {
+        await onQueue { host in
+            host.stopEngine()
+            host.engine = AVAudioEngine()
+            do throws(StartError) {
+                try host.configureSession()
+                try host.activateSession()
+                try host.startEngine(reason: "media-reset")
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Stoppen ohne zu warten. Wird sofort in die Queue gestellt, damit ein direkt
+    /// folgender `start()` sicher danach läuft.
+    func stop() {
+        queue.async { [self] in
+            stopEngine()
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            snapshotLock.lock()
+            runningSnapshot = false
+            snapshotLock.unlock()
+        }
+    }
+
+    func preferBuiltInMic() async {
+        await onQueue { host in host.applyBuiltInMic() }
+    }
+
+    /// Schutz vor Systemhinweisen an (Aufnahme läuft) bzw. aus (Bereitschaft). Wird wie `stop()`
+    /// sofort in die Queue gestellt: Schnelle Wechsel (aus → an) kommen in Aufrufreihenfolge an.
+    /// Hat die Sitzung den Wert schon, passiert nichts.
+    func setShieldFromAlerts(_ on: Bool) {
+        queue.async { [self] in
+            shieldFromAlerts = on
+            applyShieldFromAlerts()
+        }
+    }
+
+    // MARK: Experiment „Mikro im Leerlauf pausieren“ (Sitzung bleibt aktiv, kein setActive(false))
+
+    /// Engine anhalten. `.pause`: `engine.pause()` – IO-Einheit bleibt eingerichtet, Tap bleibt;
+    /// das hat die besten Chancen, im Hintergrund wieder anzulaufen (kein Neuaufbau, kein
+    /// Formatwechsel). `.stop`: `engine.stop()` und Tap entfernen – gibt alles frei, der
+    /// Wiederanlauf baut neu auf. Der Vorlauf wird geleert (er wäre beim nächsten Diktat alt).
+    func pauseInput(_ mode: IdlePauseMode) async {
+        await onQueue { host in
+            switch mode {
+            case .off: return
+            case .pause: host.engine.pause()
+            case .stop: host.stopEngine()
+            }
+            host.processor.reset()
+        }
+    }
+
+    /// Engine nach dem Anhalten wieder starten – ohne die Sitzung neu zu aktivieren.
+    func resumeInput() async -> Outcome {
+        await onQueue { host in
+            do throws(StartError) {
+                if host.tapInstalled {
+                    host.engine.prepare()
+                    do {
+                        try host.engine.start()
+                    } catch {
+                        throw .engine(error as NSError)
+                    }
+                    host.reportStart(reason: "idle-resume")
+                } else {
+                    try host.startEngine(reason: "idle-resume")
+                }
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    /// Nur den Schnappschuss auffrischen (z. B. nach einer Unterbrechung).
+    func refresh() async {
+        await onQueue { _ in }
+    }
+
+    private func onQueue<T: Sendable>(_ body: @escaping @Sendable (AudioEngineHost) -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                let value = body(self)
+                let running = engine.isRunning
+                snapshotLock.lock()
+                runningSnapshot = running
+                snapshotLock.unlock()
+                continuation.resume(returning: value)
+            }
+        }
+    }
+
+    // MARK: Auf der Queue
+
+    private func configureSession() throws(StartError) {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .allowBluetoothA2DP, .defaultToSpeaker])
+        } catch {
+            throw .session(error as NSError)
+        }
+        // Vorgabe aus (iOS-Standard: Anrufe unterbrechen, klingeln und vibrieren); an nur während einer Aufnahme
+        applyShieldFromAlerts()
+        try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
+        try? session.setPreferredIOBufferDuration(Self.ioBuffer)
+    }
+
+    private func applyShieldFromAlerts() {
+        let session = AVAudioSession.sharedInstance()
+        guard session.prefersNoInterruptionsFromSystemAlerts != shieldFromAlerts else { return }
+        do {
+            try session.setPrefersNoInterruptionsFromSystemAlerts(shieldFromAlerts)
+        } catch {
+            Diag.log("audio.alertShield.failed", ["on": .b(shieldFromAlerts), "code": .i((error as NSError).code)])
+        }
+    }
+
+    private func activateSession() throws(StartError) {
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            throw .session(error as NSError)
+        }
+        applyBuiltInMic()
+    }
+
+    private func applyBuiltInMic() {
+        let session = AVAudioSession.sharedInstance()
+        guard let mic = session.availableInputs?.first(where: { $0.portType == .builtInMic }) else { return }
+        if session.preferredInput?.uid != mic.uid {
+            try? session.setPreferredInput(mic)
+        }
+    }
+
+    /// Startet die Engine immer mit frisch ermitteltem Eingangsformat: Ein vorhandener Tap
+    /// (z. B. nach einer Unterbrechung oder Routenwechsel) wird ersetzt.
+    private func startEngine(reason: String) throws(StartError) {
+        if engine.isRunning { engine.stop() }
+        let input = engine.inputNode
+        if tapInstalled {
+            input.removeTap(onBus: 0)
+            tapInstalled = false
+        }
+        // Kurz nach einem Anruf kann der Eingang noch fehlen (0 Hz) – dann später erneut
+        let hardware = input.inputFormat(forBus: 0)
+        let format = input.outputFormat(forBus: 0)
+        guard hardware.sampleRate > 0, hardware.channelCount > 0, format.sampleRate > 0, format.channelCount > 0
+        else { throw .noInput }
+        processor.reset()
+        // Passt das Format nicht zur Hardware, wirft AVAudioEngine eine Objective-C-Ausnahme, die
+        // Swift nicht fangen kann – ohne den Umweg beendete iOS die App (nach Anrufen, Build 5).
+        let processor = processor
+        if let exception = ObjCException.catching({ Self.installTap(on: input, processor: processor) }) {
+            throw .exception(exception.name.rawValue)
+        }
+        tapInstalled = true
+        engine.prepare()
+        var startError: NSError?
+        let engine = engine
+        if let exception = ObjCException.catching({
+            do { try engine.start() } catch { startError = error as NSError }
+        }) {
+            throw .exception(exception.name.rawValue)
+        }
+        if let startError { throw .engine(startError) }
+        reportStart(reason: reason)
+    }
+
+    private func reportStart(reason: String) {
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        snapshotLock.lock()
+        let handler = engineStarted
+        snapshotLock.unlock()
+        handler?(reason, format.sampleRate, Int(format.channelCount))
+    }
+
+    private func stopEngine() {
+        engine.stop()
+        if tapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
+    }
+
+    /// Der Tap-Block läuft auf einem Audio-Thread; er entsteht hier in nicht isoliertem
+    /// Kontext und greift nur auf den thread-sicheren Prozessor zu.
+    /// Ohne festes Format (`nil`): Der Tap übernimmt das aktuelle Format des Knotens; der
+    /// Prozessor wandelt jedes Format selbst auf 16 kHz mono.
+    private static func installTap(on node: AVAudioInputNode, processor: AudioTapProcessor) {
+        node.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
+            processor.process(buffer, arrivalNs: MonoClock.now())
+        }
+    }
+
+    // MARK: Diagnose (thread-sicher lesbar)
+
+    var routeFields: DiagFields {
+        let session = AVAudioSession.sharedInstance()
+        let route = session.currentRoute
+        return [
+            "in": .s(route.inputs.map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")),
+            "out": .s(route.outputs.map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")),
+            "ioBufMs": .ms(session.ioBufferDuration * 1000),
+            "rate": .d(session.sampleRate),
+            "otherAudio": .b(session.isOtherAudioPlaying),
+        ]
+    }
+
+    var tapFields: DiagFields {
+        let stats = processor.currentStats
+        return [
+            "tapBuffers": .i(stats.buffers),
+            "tapFrames": .i(stats.lastFrames),
+            "tapIntervalMs": .ms(stats.meanIntervalMs),
+            "inRate": .d(stats.inputSampleRate),
+            "inCh": .i(stats.inputChannels),
+            "convErrors": .i(stats.conversionErrors),
+            "engine": .b(isRunning),
+        ]
+    }
+}

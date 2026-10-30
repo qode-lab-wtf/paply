@@ -1,0 +1,1 @@
+../../../../Shared/Core/TaskSnapshot.swift

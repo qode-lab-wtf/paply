@@ -1,0 +1,85 @@
+import Foundation
+import Testing
+@testable import PaplyKit
+
+// Beta „Gedanken & Aufgaben“: `BetaFeatures` aus Shared/Core (über den Verweis `Shared/BetaFeatures.swift` mitübersetzt,
+// damit genau die Datei geprüft wird, die App, Tastatur und Widgets benutzen) und die Kennung der Erinnerung, die das
+// Aufgaben-Widget beim Abhaken entfernt (`TaskReminderID` aus Shared/Core/TaskSnapshot.swift).
+
+@Suite("Beta Gedanken & Aufgaben")
+struct BetaFeaturesTests {
+    private func withDefaults(_ body: (UserDefaults) -> Void) {
+        let suite = "paply.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        body(defaults)
+    }
+
+    @Test func defaultsToOn() {
+        #expect(BetaFeatures.thoughtsKey == "paply.beta.thoughts")
+        // ohne App Group (Tastatur ohne Vollzugriff) und ohne gespeicherten Wert: an
+        #expect(BetaFeatures.thoughtsEnabled(nil))
+        withDefaults { defaults in
+            #expect(BetaFeatures.thoughtsEnabled(defaults))
+            defaults.set(false, forKey: BetaFeatures.thoughtsKey)
+            #expect(!BetaFeatures.thoughtsEnabled(defaults))
+            defaults.set(true, forKey: BetaFeatures.thoughtsKey)
+            #expect(BetaFeatures.thoughtsEnabled(defaults))
+            // fremder Typ unter dem Schlüssel: Standard
+            defaults.set("aus", forKey: BetaFeatures.thoughtsKey)
+            #expect(BetaFeatures.thoughtsEnabled(defaults))
+        }
+    }
+
+    @Test func launchArgumentShowsOffWithoutSaving() {
+        withDefaults { defaults in
+            #expect(BetaFeatures.thoughtsAtLaunch(defaults, arguments: ["Paply"]))
+            #if DEBUG
+            #expect(!BetaFeatures.thoughtsAtLaunch(defaults, arguments: ["Paply", "-PaplyBetaOff"]))
+            #expect(BetaFeatures.thoughtsOffArgument == "-PaplyBetaOff")
+            #endif
+            // nichts gespeichert: Widgets und Tastatur lesen weiter „an“
+            #expect(defaults.object(forKey: BetaFeatures.thoughtsKey) == nil)
+            defaults.set(false, forKey: BetaFeatures.thoughtsKey)
+            #expect(!BetaFeatures.thoughtsAtLaunch(defaults, arguments: ["Paply"]))
+        }
+    }
+
+    @Test func widgetUsesTheSameReminderIdentifierAsTheApp() {
+        for (thought, task) in [("s_1", "k_1"), ("s_8F2A", "k_x-y"), ("s_a b", "k_ü")] {
+            let id = TaskReminderID.identifier(thoughtID: thought, taskID: task)
+            #expect(id == TaskReminderPlan.identifier(thoughtID: thought, taskID: task))
+            let parsed = TaskReminderPlan.parse(id)
+            #expect(parsed?.thoughtID == thought)
+            #expect(parsed?.taskID == task)
+        }
+    }
+
+    /// So prüft `ThoughtCapture.toggle`: vor dem Start und nach jedem `await` (Speicher, Mikro, Warteschlange)
+    @Test func startCheckAfterEveryAwait() {
+        var gate = ThoughtStartGate()
+        // AN: Start läuft durch alle Prüfpunkte
+        gate.begin()
+        #expect(gate.allows(betaOn: true)) // vor dem Start
+        #expect(gate.allows(betaOn: true)) // nach dem Speicher
+        #expect(gate.allows(betaOn: true)) // nach dem Mikro, direkt vor dem Start
+        // schon AUS beim Druck: kein Start
+        gate.begin()
+        #expect(!gate.allows(betaOn: false))
+        // während des Wartens auf das Mikro ausgeschaltet: der nächste Prüfpunkt bricht ab …
+        gate.begin()
+        #expect(gate.allows(betaOn: true))
+        gate.abort()
+        #expect(!gate.allows(betaOn: false))
+        // … und bleibt abgebrochen, auch wenn Beta inzwischen wieder an ist
+        #expect(!gate.allows(betaOn: true))
+        #expect(gate.aborted)
+        // Wert inzwischen AUS, ohne dass der Schalter-Weg lief (z. B. nach dem Entsperren neu gelesen): auch Abbruch
+        gate.begin()
+        #expect(!gate.allows(betaOn: false))
+        // der nächste Start beginnt frisch
+        gate.begin()
+        #expect(!gate.aborted)
+        #expect(gate.allows(betaOn: true))
+    }
+}

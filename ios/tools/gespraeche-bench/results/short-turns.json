@@ -1,0 +1,290 @@
+[
+  {
+    "meeting": "ES2004a",
+    "engine": "fluid",
+    "smooth": false,
+    "subset": "short",
+    "words": 160,
+    "errors": 146
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "fluid",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 174,
+    "errors": 129
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "fluid",
+    "smooth": true,
+    "subset": "short",
+    "words": 160,
+    "errors": 146
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "fluid",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 174,
+    "errors": 127
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-fp16",
+    "smooth": false,
+    "subset": "short",
+    "words": 160,
+    "errors": 106
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-fp16",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 174,
+    "errors": 99
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-fp16",
+    "smooth": true,
+    "subset": "short",
+    "words": 160,
+    "errors": 108
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-fp16",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 174,
+    "errors": 98
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-short",
+    "smooth": false,
+    "subset": "short",
+    "words": 160,
+    "errors": 104
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-short",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 174,
+    "errors": 98
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-short",
+    "smooth": true,
+    "subset": "short",
+    "words": 160,
+    "errors": 107
+  },
+  {
+    "meeting": "ES2004a",
+    "engine": "nemotron-short",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 174,
+    "errors": 97
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "fluid",
+    "smooth": false,
+    "subset": "short",
+    "words": 280,
+    "errors": 257
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "fluid",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 313,
+    "errors": 243
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "fluid",
+    "smooth": true,
+    "subset": "short",
+    "words": 280,
+    "errors": 257
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "fluid",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 313,
+    "errors": 243
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-fp16",
+    "smooth": false,
+    "subset": "short",
+    "words": 280,
+    "errors": 180
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-fp16",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 313,
+    "errors": 178
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-fp16",
+    "smooth": true,
+    "subset": "short",
+    "words": 280,
+    "errors": 190
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-fp16",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 313,
+    "errors": 184
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-short",
+    "smooth": false,
+    "subset": "short",
+    "words": 280,
+    "errors": 173
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-short",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 313,
+    "errors": 176
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-short",
+    "smooth": true,
+    "subset": "short",
+    "words": 280,
+    "errors": 186
+  },
+  {
+    "meeting": "ES2004b",
+    "engine": "nemotron-short",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 313,
+    "errors": 182
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "fluid",
+    "smooth": false,
+    "subset": "short",
+    "words": 103,
+    "errors": 94
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "fluid",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 158,
+    "errors": 115
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "fluid",
+    "smooth": true,
+    "subset": "short",
+    "words": 103,
+    "errors": 93
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "fluid",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 158,
+    "errors": 113
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-fp16",
+    "smooth": false,
+    "subset": "short",
+    "words": 103,
+    "errors": 63
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-fp16",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 158,
+    "errors": 85
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-fp16",
+    "smooth": true,
+    "subset": "short",
+    "words": 103,
+    "errors": 60
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-fp16",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 158,
+    "errors": 82
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-short",
+    "smooth": false,
+    "subset": "short",
+    "words": 103,
+    "errors": 58
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-short",
+    "smooth": false,
+    "subset": "backchannel",
+    "words": 158,
+    "errors": 78
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-short",
+    "smooth": true,
+    "subset": "short",
+    "words": 103,
+    "errors": 56
+  },
+  {
+    "meeting": "IS1009a",
+    "engine": "nemotron-short",
+    "smooth": true,
+    "subset": "backchannel",
+    "words": 158,
+    "errors": 77
+  }
+]

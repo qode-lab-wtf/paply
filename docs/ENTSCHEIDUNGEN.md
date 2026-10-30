@@ -56,3 +56,91 @@ Windows-Signing-Fix vom Feb. 2026 ist überholt (Windows-Build läuft).
 ## 2026-10-26 — Notes veröffentlichen (von Allan bestätigt)
 
 Nach dem MacBook-Test und der Y/Z-Korrektur in `1.15.0-notes.2`: „ok passt … kannst das ganze pushen, auf github etc und meine version updaten. ich werds testen.“ Damit sind Commit/Push auf `main`, Release-Tag `v1.15.0`, Veröffentlichung über den vorhandenen GitHub-Workflow und Aktualisierung der installierten MacBook-App beauftragt. Die vorhandenen Test-Notes werden zusätzlich ins normale Profil übernommen; bestehende Einstellungen, Diktatverlauf und Meetings bleiben erhalten.
+
+## 2026-10-27 — Paply iOS V1: Rahmen (von Allan bestätigt)
+
+Übernahme aus dem UX-Thread „Paply iOS – UX“ (26./27.10.2026). Native iPhone-App (Swift/SwiftUI) plus
+Paply-Tastatur unter `ios/`, Branch `feat/ios-v1`. V1 kann nur Diktieren und Einsetzen; kein Notes-Canvas,
+keine Recherche. Global gedacht, auch für Mehrsprachige. Vorgehen: Phase 0 Machbarkeit auf dem echten
+iPhone, Phase 1 V1 bauen, Phase 2 TestFlight erst auf Allans Wunsch.
+
+- **Apples Tastaturen bleiben unangetastet** (Sprachen, Autokorrektur, Tippgefühl). Eine eigene Taste in
+  Apples Tastatur erlaubt iOS nicht; einen Nachbau der Apple-Tastatur hat Allan verworfen.
+- **Paply ist eine schlanke Sprach-Tastatur in der 🌐-Liste.** 🌐 antippen startet die Aufnahme sofort,
+  ohne extra Knopf; 🌐 halten bleibt Apples Liste. Wer nur durchschaltet, bekommt keine Aufnahme: still
+  verwerfen, nichts senden oder speichern; Haptik erst bei echter Sprache.
+- **Gleiche Höhe wie Apples Tastatur**, große grüne Fläche mit Wellenform und Zeit. Tipp irgendwo = fertig,
+  nach links wischen = verwerfen.
+- **Einsetzen** per `textDocumentProxy`, danach `advanceToNextInputMode()` zurück. Rückgängig über Apples
+  Drei-Finger-Wisch (auf dem Gerät prüfen).
+- **Sprache erkennt Paply selbst** (Deutsch, Englisch, gemischt), ohne Tastatursprache umzustellen.
+- **Kein Live-Text**; der Text kommt am Ende auf einmal.
+- **Sitzung:** Tastaturen haben kein Mikro, Aufnahmen starten nur im Vordergrund. Paply blitzt einmal nach
+  Neustart kurz auf (ab iOS 26.4 wischt der Nutzer selbst zurück) und hält das Mikro danach bereit,
+  Standard „bis Neustart“ (8 Std, 1 Std, 15 Min wählbar). Oben nur der orange Mikro-Punkt, kein
+  dauerhaftes Paply-Symbol, keine Live Activity im Leerlauf.
+- **Die App ist nur Einstellungen und Verlauf**, kein Aufnahme-Bildschirm. Verlauf: Liste, Antippen kopiert.
+  Sitzung anzeigen, beenden, starten.
+- **Einstellungen:** Groq-Schlüssel im Schlüsselbund; Sprache automatisch; Mikro bereit halten; „Eigene
+  Begriffe“ (Whisper-`prompt` bis 224 Tokens und erlaubte Hörfehler-Korrekturen beim Polieren);
+  Schnelltasten-Einrichtung je nach Gerät (Aktionstaste ab iPhone 15 Pro, sonst Rückseite, Kontrollzentrum
+  für alle) über App Shortcuts und Control-Widget mit Sprung in die Einstellungen. Snippets vom Mac später.
+- **Schnelltasten** starten und stoppen die Aufnahme; der Text wartet auf 🌐 oder liegt in der
+  Zwischenablage. Ob das im Hintergrund geht, klärt Phase 0.
+- **Bewusst nicht in V1:** automatisches Senden, Stopp bei Sprechpause, Sprachbefehle.
+- **Qualität:** Groq Whisper `whisper-large-v3` als Standard (gegen `-turbo` messen), Apples
+  SpeechAnalyzer nur als Offline-Ersatz. Immer leicht polieren wie am Mac (`qwen/qwen3.8-27b`, Ausweich
+  `openai/gpt-oss-120b`), Prompt mehrsprachig („in der gesprochenen Sprache“), Sicherheitsnetz vom Mac
+  portiert. **Kein Zeitlimit beim Polieren** („Tempo geht nicht vor Perfektion“); Rohtext nur bei echtem
+  Fehler nach einem Neuversuch.
+- **Tempo aus der Architektur:** Stücke schon beim Sprechen hochladen, Verbindung vorwärmen, 16 kHz mono,
+  ~0,5 s Vorlauf nur im Speicher, winzige Tastatur ohne Netz, Arbeit in der App; Tastatur ↔ App über
+  App Group und Darwin-Notifications.
+- **Groq-Zugang:** V1 mit Allans eigenem Schlüssel in den Einstellungen; für globale Nutzer später ein
+  Paply-Zugang über eigenen Server.
+
+## 2026-10-27 — Paply iOS: „Gedanken“ als zweiter Weg (von Allan bestätigt)
+
+Erweiterung von V1 (vorher „nur Diktat“), nachdem Phase 0 den Hauptweg 🌐 → Diktat → Text ins Feld auf
+Allans iPhone bestätigt hat.
+
+- **Zwei klare Wege:** 🌐 = Diktat (Text ins aktuelle Feld). Paply-Knopf auf Sperrbildschirm,
+  im Kontrollzentrum, per Siri (Aktionstaste ab iPhone 15 Pro) = **Gedanke**.
+- **Auslöser:** Ein Druck nimmt sofort auf, ohne Entsperren und ohne App, wie ein Diktiergerät. Oben bzw. auf
+  dem Sperrbildschirm erscheint eine schöne Paply-Anzeige mit Zeit; Antippen öffnet die große Ansicht.
+- **Beenden:** gleicher Knopf nochmal oder „Fertig“ in der Anzeige; kein Auto-Stopp.
+- **KI (Groq-Schlüssel):** Titel und aufgeräumter Text (Original bleibt abrufbar), Themen automatisch,
+  Aufgaben erkennen, verwandte Gedanken verbinden. Mit festem, kleinem Regelrahmen, damit es sich
+  durchdacht anfühlt.
+- **Gestaltung und Mac-Abgleich** überlässt Allan der Bauleitung: hochwertig, einfach, wenige Optionen,
+  „wie eine Apple-App, die eine 10 von 10 ist“; nichts muss vom Mac übernommen werden.
+- **Hardware-Tasten:** Laut/Leise und Seitentaste sind für Apps nicht belegbar, Rückseite-Tippen gefällt
+  Allan nicht; Hauptersatz ist der Sperrbildschirm- bzw. Kontrollzentrum-Knopf.
+- **Text aus der Schnelltaste:** Direkt ins Feld darf nur die gerade offene Tastatur einsetzen; ist Paply
+  offen, wird eingesetzt, sonst Verlauf, Zwischenablage und Angebot beim nächsten 🌐.
+
+## 2026-10-27 — Paply iOS: nur Transkripte, Themen gehen mit, Widget unter der Uhr (von Allan bestätigt)
+
+Nach Allans Gerätetest.
+
+- **Kein Ton behalten:** „Ich will nichts mit Audiospuren, ich will einfach nur Transkripte haben … verbraucht
+  zu viel Platz.“ Die Aufnahme lebt nur, bis der Rohtext dauerhaft gespeichert ist, dann wird sie gelöscht.
+  Ohne Rohtext (offline, ohne Schlüssel, Fehler) bleibt sie für den Neuversuch. Keine AAC-Umwandlung, kein
+  Player; „Original“ zeigt nur den Rohtext. Vorhandene Aufnahmen mit Rohtext räumt die App beim Start weg.
+- **Themen gehen mit ihren Gedanken:** Endgültig gelöschte Gedanken nehmen ihr Thema mit, sobald kein Gedanke
+  (auch nicht im Papierkorb) mehr daran hängt – auch Nutzer-Themen. Ein von Hand angelegtes, noch leeres Thema
+  bleibt. Themen, deren Gedanken alle im Papierkorb liegen, erscheinen nicht als Chip.
+- **Widget „Paply-Gedanke“ unter der Uhr** (wie ChatGPT/Claude): Tippen nimmt wie das Steuerelement auf,
+  nochmal tippen beendet; Einrichtungshilfe laienfest.
+
+## 2026-10-27 — Paply iOS: Landkarte als Startseite, Aufgaben-Reiter, Themenbilder (von Allan gewählt, auf `feat/ios-v1`)
+
+- **Landkarte als Startseite:** Der Reiter „Gedanken“ öffnet eine Landkarte der Themen – feste Plätze, gemerkte
+  Anker, Fokus-Zoom, Linien nur für echte Verknüpfungen; ein Themen-Panel zeigt offene Aufgaben und die Gedanken des
+  Themas.
+- **Aufgaben als eigener Reiter:** Die Leiste lautet Gedanken | Aufgaben | Diktat. Alle Aufgaben aus allen Gedanken
+  stehen auf einer Seite (Überfällig · Heute · Demnächst · Irgendwann · Erledigt). Das ersetzt den Chip „Aufgaben“
+  und die Regel „Aufgaben sind kein Tab“ (`ios/docs/gedanken/KONZEPT.md` §2, §3.3); Paply bleibt kein
+  Aufgabenmanager.
+- **Themenbilder:** Ein Thema kann statt des Symbols ein eigenes Bild tragen (quadratisch, höchstens 512 px, JPEG
+  ohne Metadaten). Die Bilder bleiben auf dem Gerät und gehen nie an die KI oder ins Netz.

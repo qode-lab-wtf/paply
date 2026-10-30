@@ -1,0 +1,245 @@
+import SwiftUI
+import UIKit
+
+// Leerer Zustand = Onboarding (KONZEPT §3.1) und die Anleitung zum Gedanken-Knopf (§3.9).
+
+struct ThoughtsEmptyState: View {
+    let setup: () -> Void
+    let tryIt: () -> Void
+    @Environment(ThoughtsModel.self) private var model
+
+    var body: some View {
+        let showSetup = SetupGuide.shared.isVisible(model: model)
+        GeometryReader { geo in
+            ScrollView {
+                VStack(spacing: 0) {
+                    if showSetup {
+                        // Die Karte erklärt den Knopf schon – die Illustration kommt danach
+                        SetupCard()
+                            .padding(.bottom, 30)
+                    } else {
+                        LockScreenIllustration()
+                            .frame(height: 236)
+                            .padding(.bottom, 26)
+                    }
+                    Text("Deine Gedanken")
+                        .font(.paplyTitle(.title))
+                        .foregroundStyle(Color.paplyText)
+                        .multilineTextAlignment(.center)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Drück den Paply-Knopf auf dem Sperrbildschirm und sprich – wie in ein Diktiergerät. Paply räumt auf, findet das Thema und merkt sich Aufgaben.")
+                        .font(.body)
+                        .foregroundStyle(Color.paplySecondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 10)
+                    // Zuerst ausprobieren: dabei fragt iOS nach dem Mikro
+                    VStack(spacing: 6) {
+                        Button(action: tryIt) {
+                            Text("Hier ausprobieren")
+                                .font(.headline)
+                                .foregroundStyle(Color.paplyForest)
+                                .frame(maxWidth: 300)
+                                .frame(minHeight: 52)
+                                .background(Capsule().fill(Color.paplyGreenBright))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(PressScaleStyle(scale: 0.97))
+                        Button(action: setup) {
+                            Text("Knopf einrichten")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Color.paplyGreenBright)
+                                .frame(minHeight: 44)
+                                .padding(.horizontal, 16)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 26)
+                }
+                .padding(.horizontal, showSetup ? 16 : 32)
+                .padding(.vertical, 24)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity, minHeight: geo.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+}
+
+/// Sperrbildschirm mit Paply-Widget in der Reihe unter der Uhr (nur SwiftUI-Formen, kein Bild).
+struct LockScreenIllustration: View {
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    @State private var press = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let height = geo.size.height
+            let width = height * 0.6
+            ZStack {
+                // Gerät
+                RoundedRectangle(cornerRadius: width * 0.2, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(uiColor: UIColor(hex: 0x23503A)), Color(uiColor: UIColor(hex: 0x0B1F16))],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: width * 0.2, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.22), lineWidth: 1.5)
+                    )
+                    .shadow(color: .black.opacity(0.45), radius: 24, y: 14)
+                VStack(spacing: 0) {
+                    Capsule()
+                        .fill(Color.black)
+                        .frame(width: width * 0.3, height: width * 0.085)
+                        .padding(.top, width * 0.06)
+                    Text("Dienstag, 27. Oktober")
+                        .font(.system(size: width * 0.055, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                        .padding(.top, width * 0.1)
+                    Text("9:41")
+                        .font(.system(size: width * 0.27, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .monospacedDigit()
+                    // Widget-Reihe unter der Uhr: zwei fremde Widgets, dann Paply
+                    HStack(spacing: width * 0.07) {
+                        widgetDot(width)
+                        widgetDot(width)
+                        paplyButton(width)
+                    }
+                    .padding(.top, width * 0.03)
+                    Spacer()
+                    HStack {
+                        cornerButton(width, symbol: "flashlight.off.fill")
+                        Spacer()
+                        cornerButton(width, symbol: "camera.fill")
+                    }
+                    .padding(.horizontal, width * 0.11)
+                    Capsule()
+                        .fill(Color.white.opacity(0.6))
+                        .frame(width: width * 0.36, height: 3)
+                        .padding(.top, width * 0.08)
+                        .padding(.bottom, width * 0.05)
+                }
+            }
+            .frame(width: width, height: height)
+            .frame(maxWidth: .infinity)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sperrbildschirm mit Paply-Widget in der Reihe unter der Uhr")
+        .onAppear { press = true }
+    }
+
+    /// Platzhalter für fremde Widgets in der Reihe (z. B. WhatsApp, ChatGPT)
+    private func widgetDot(_ width: CGFloat) -> some View {
+        Circle()
+            .fill(Color.white.opacity(0.16))
+            .frame(width: width * 0.17, height: width * 0.17)
+    }
+
+    private func paplyButton(_ width: CGFloat) -> some View {
+        let size = width * 0.17
+        return ZStack {
+            Circle()
+                .fill(AngularGradient(colors: ThoughtTint.aura, center: .center))
+                .frame(width: size * 1.5, height: size * 1.5)
+                .blur(radius: size * 0.28)
+                .opacity(press && !reduce ? 0.75 : 0.45)
+            Circle()
+                .fill(Color.black.opacity(0.45))
+                .overlay(Circle().strokeBorder(AngularGradient(colors: ThoughtTint.aura, center: .center), lineWidth: 2))
+                .frame(width: size, height: size)
+            PaplyMark(monochrome: .white)
+                .frame(width: size * 0.42, height: size * 0.46)
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(press && !reduce ? 0.94 : 1)
+        .animation(reduce ? nil : .easeInOut(duration: 1.3).repeatForever(autoreverses: true), value: press)
+    }
+
+    private func cornerButton(_ width: CGFloat, symbol: String) -> some View {
+        let size = width * 0.24
+        return Image(systemName: symbol)
+            .font(.system(size: size * 0.36, weight: .semibold))
+            .foregroundStyle(Color.white.opacity(0.9))
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color.black.opacity(0.45)))
+    }
+}
+
+// MARK: - Anleitung Gedanken-Knopf (§3.9)
+
+struct ThoughtButtonGuideView: View {
+    @State private var confirmed = 0
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                LockScreenIllustration()
+                    .frame(height: 210)
+                    .padding(.vertical, 8)
+                Text("Ein Druck nimmt einen Gedanken auf, nochmal drücken beendet. Paply ordnet ihn danach in der App – auch wenn das iPhone gesperrt ist.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.paplyText.opacity(0.75))
+                    .padding(.horizontal, 4)
+
+                GuideCard(title: "Unter der Uhr", symbol: "clock", glyph: .clock, steps: [
+                    "iPhone sperren und wieder aufwecken. Kurz draufschauen, bis oben das Schloss aufgeht – nicht hochwischen.",
+                    "Auf den Sperrbildschirm lange drücken, bis er kleiner wird → „Anpassen“ → „Sperrbildschirm“.",
+                    "Auf die Widget-Reihe unter der Uhr tippen. Ist sie voll, bei einem Widget erst auf „–“ tippen.",
+                    "In der Liste nach unten bis „Paply“ scrollen → „Paply-Gedanke“ antippen.",
+                    "Liste schließen, oben rechts „Fertig“. Ein Tipp aufs Widget nimmt auf, nochmal tippen beendet.",
+                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+
+                GuideCard(title: "Oder unten statt Taschenlampe", symbol: "lock.fill", glyph: .lock, steps: [
+                    "Wie oben bis „Sperrbildschirm“.",
+                    "Bei der Taschenlampe auf „–“ tippen, dann an derselben Stelle auf „+“ → „Paply-Gedanke“.",
+                    "Oben rechts „Fertig“.",
+                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+
+                Text("Taucht Paply in der Liste nicht auf: Paply einmal öffnen und das iPhone neu starten – iOS zeigt neue Widgets manchmal erst danach.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.paplyText.opacity(0.6))
+                    .padding(.horizontal, 4)
+
+                GuideCard(title: "Kontrollzentrum", symbol: "switch.2", glyph: .toggleRight, steps: [
+                    "Kontrollzentrum öffnen → oben links „+“ → „Steuerelement hinzufügen“.",
+                    "„Paply-Gedanke“ suchen und antippen.",
+                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+
+                if DeviceInfo.hasActionButton {
+                    GuideCard(title: "Aktionstaste", symbol: "button.programmable", glyph: .circleDot, steps: [
+                        "Einstellungen → Aktionstaste → Steuerelement.",
+                        "„Paply-Gedanke“ wählen.",
+                    ], buttons: [
+                        ("Einstellungen öffnen", URL(string: UIApplication.openSettingsURLString)),
+                    ], tint: AnyShapeStyle(ThoughtTint.fill))
+                }
+
+                GuideCard(title: "Siri", symbol: "waveform", glyph: .audioLines, steps: [
+                    "„Hey Siri, Gedanke mit Paply“.",
+                    "Beenden: nochmal sagen oder „Fertig“ tippen.",
+                ], buttons: [], tint: AnyShapeStyle(ThoughtTint.fill))
+
+                if !SetupGuide.shared.buttonConfirmed {
+                    Button {
+                        SetupGuide.shared.confirmButton()
+                        confirmed += 1
+                    } label: {
+                        Text("Ist eingerichtet")
+                            .font(.headline)
+                            .foregroundStyle(Color.paplyForest)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 50)
+                            .background(Capsule().fill(Color.paplyGreenBright))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressScaleStyle(scale: 0.97))
+                    .padding(.top, 8)
+                }
+            }
+            .padding(16)
+        }
+        .sensoryFeedback(.success, trigger: confirmed)
+        .background(PaplyBackground())
+        .navigationTitle("Gedanken-Knopf")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
