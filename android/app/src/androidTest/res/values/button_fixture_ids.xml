@@ -1,0 +1,6 @@
+<resources>
+    <item name="button_fixture_first" type="id" />
+    <item name="button_fixture_second" type="id" />
+    <item name="button_fixture_password" type="id" />
+    <item name="button_fixture_reject" type="id" />
+</resources>

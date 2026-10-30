@@ -1,27 +1,77 @@
 # Paply — Stand
 
-**Zeitpunkt:** 29.10.2026 · **Phase:** v1.15.3 (gemeinsame Polier-Quelle) veröffentlicht und auf Allans MacBook installiert · Paply iOS 0.1.0 bei TestFlight (Builds 1–8, Branch `feat/ios-v1`, eigener Worktree) · Promo-Film fertig (Branch `feat/promo-video`, nur intern)
+**Zeitpunkt:** 29.10.2026 · **Phase:** Paply Android 0.2.0 (Paply-Knopf) in Abnahme (Branch `feat/android-v1`) · Desktop v1.15.3 mit gemeinsamer Polier-Quelle lokal auf `main` · Paply iOS 0.1.0 bei TestFlight (Branch `feat/ios-v1`)
 
-## Paply iOS — „Gespräche“ (29.10.2026, in `feat/ios-v1` zusammengeführt; Weiterbau auf `feat/ios-gespraeche`, Build 9)
+## Paply Android — V1 im Aufbau (28.10.2026, Branch `feat/android-v1`, Ordner `android/`)
 
-- **Was:** iPhone liegt beim Meeting, Gespräch vor Ort oder Telefonat (anderes Handy auf Lautsprecher) daneben und
-  nimmt auf; danach Personen, Wortlaut, Zusammenfassung, Aufgaben, Thema. Bauplan `ios/docs/gespraeche/KONZEPT.md`,
-  Messung `ios/docs/gespraeche/MESSUNG.md`.
-- **Allans Vorgaben (29.10.):** nur Mikro dieses iPhones (keine iOS-Anrufaufnahme, kein Import); Ton nach fertiger
-  Auswertung löschen, kein „Erneut auswerten“, kein Anhören; „Person 1/2/3“, bis der Besitzer sicher erkannt oder per
-  Tipp bestätigt ist – erst dann landen seine Aufgaben im Reiter; Pause/Weiter wie Sprachmemos, Pausen im Wortlaut.
-- **Technik:** Sprechererkennung auf dem Gerät (FluidAudio Nemotron-3 fast128 FP16 + CAM++-Stimmabdrücke, Modelle
-  199 MB werden beim ersten Gebrauch geladen), Text Groq `whisper-large-v3` (eigenes Kontingent, Diktat behält turbo),
-  Auswertung `gpt-oss-120b`/`-20b` (nie qwen). Eigene Stimme lernt Paply nebenbei aus Gedanken (≥ 3 stimmige Clips),
-  Rückfall „Jetzt einsprechen (20 s)“.
-- **Geprüft:** 723 PaplyKit-Tests, App Debug/Release (Xcode 26.0.1 Mac mini, 26.5 MacBook), zwei Sonnet-Reviews mit
-  allen Befunden behoben, Bildschirmfotos im Simulator. Messung: deutsche Simulationen fast fehlerfrei, echte englische
-  Meetings 12–19 % falsch zugeordnete Wörter (v. a. kurze Einwürfe; dafür Einwurf-Regeln und KI-Plausibilisierung).
-- **29.10., 16:23:** Debug-Build 9 drahtlos auf Allans iPhone (kein TestFlight-Upload). Offen: echte Aufnahmen von
-  Allan (Telefon über Lautsprecher, Runde mit 3+), Gerätemessung Tempo/Speicher/Hitze (auch iPhone 12 Pro).
-- **29.10., abends:** auf Allans Wunsch in `feat/ios-v1` zusammengeführt, damit iOS beisammen ist. Beta „Gespräche“
-  ist in TestFlight/Release ohne gespeicherten Wert AUS (Debug AN), bis der Gerätetest bestanden ist; einschalten unter
-  Einstellungen → Beta. Neue Gespräche-Stände kommen per Merge aus `feat/ios-gespraeche` nach.
+- **Ziel:** gleiche Qualität, gleiches Design und gleiche UX wie Paply iOS V1, als APK-Testversion für Freunde.
+  Kotlin + Jetpack Compose, nativ. `ios/` ist nur Vorlage.
+- **Arbeitsteilung:** Claude (Opus 5.5) plant und entscheidet, Codex setzt um, Sonnet 5.5 prüft jedes Ergebnis.
+- **Rechner:** Gebaut und getestet wird nur auf dem MacBook (M5, 32 GB, 136 GB frei). Dort liegen Java, Android-Werkzeuge
+  und der Emulator `paply` in `~/Android`; mit `rm -rf ~/Android` ist alles wieder weg. Allan hat das am 28.10.
+  freigegeben. Der Mac mini ist knapp an Platz, dort entsteht nur Quelltext; nach dem T3-Update kann das MacBook
+  direkt als Umgebung verknüpft werden.
+- **Phase 0 bestanden (28.10., Emulator Android 17/API 37, `android/docs/PHASE0.md`):**
+  - Die Paply-Tastatur nimmt beim Erscheinen sofort selbst auf, ohne Bereitschafts-Mikro, und setzt polierten Text
+    (de/en) in ein fremdes Feld (Kontakte) ein. Danach geht es zurück zu Gboard, links wischen verwirft.
+  - Die Gedanken-Kachel startet eine Aufnahmekarte und einen Mikro-Vordergrunddienst. Die Benachrichtigung zeigt
+    einen Zähler sowie „Fertig“ und „Verwerfen“. Ein Live-Update-Chip mit Zähler steht in der Statusleiste.
+  - Das klappt auch bei gesperrtem Gerät. Nach 10 Min. ist automatisch Schluss.
+  - Der Mikro-Punkt erscheint nur während der Aufnahme.
+  - Groq: 8 Aufrufe.
+- **Review Phase 0** (Sonnet): 18 Funde mit Zuordnung in `android/docs/REVIEW-P0.md`. Vor Gerätetests Pflicht:
+  - Mikro-Recht vor dem Dienststart
+  - kein Auto-Start nach Drehen
+  - kein Datenverlust bei Lesefehler oder Anruf
+- **Einstieg** (`android/docs/EINSTIEG.md`): Auf Pixel mit Android 16/17 wechselt ein Tipp auf die Systemtaste unten rechts
+  direkt zur nächsten Tastatur. Das ist ein Ein-Tipp-Start wie 🌐 bei iOS (im Emulator noch zu bestätigen).
+  Samsung: Navigations-Tastaturtaste. Eine schwebende Taste wie bei Wispr Flow ist erst nach V1 eine Option
+  (Overlay + Bedienungshilfe).
+- **Etappe 1 (Diktat komplett), im Emulator abgenommen (`android/docs/E1-IME.md`):**
+  - Der Diktat-Kern aus iOS ist portiert (`android/docs/E1-CORE.md`, 284 Tests).
+  - Die App-Oberfläche ist in Compose gebaut, der Schlüssel liegt im Keystore.
+  - Die Tastatur lädt Stücke schon beim Sprechen hoch (FLAC −36 bis −57 %).
+  - Tempo: Tipp → Text im Feld in 0,9 s (kurz) bzw. 1,1 s (26 s langes Diktat).
+  - Richtig erkannt: „Testname“ über die Eigenen Begriffe, „Hi, wie geht's?“ auf Deutsch, Englisch unübersetzt.
+  - Bei Stille gibt es keinen Groq-Aufruf. In Passwortfeldern nimmt Paply nicht auf.
+  - Im Flugmodus wird das Diktat als fehlgeschlagen gespeichert, „Erneut versuchen“ klappt danach.
+  - Ein Tipp auf die Systemtaste genügt, bei Gboard mit zwei Sprachen teils zwei Tipps.
+  - Offen: ein gebündeltes Review samt Korrekturrunde.
+- **Etappen 2 und 3 gebaut (29.10. nachts):**
+  - Gedanken: Kern `:thoughts`, E0 10/11, Aufnahme-Dienst, WorkManager, Oberfläche, Landkarte
+  - Aufgaben-Reiter, Erinnerungen, Aufgaben-Widgets
+  - Release-Vorbereitung: Icon, R8, signierte APK 0.1.0, `android/docs/FREUNDE.md`
+  - Endreviews: kein Blocker. Endkorrekturen (`REVIEW-P0.md`, „Endreview“) laufen.
+- **0.1.0 freigabefähig (29.10. vormittags):**
+  - Abschlussprüfung der Release-APK auf Android 17 und 14 (`android/docs/E2E-FINAL.md`): kein Blocker, kein Absturz,
+    Kernfunktionen bestanden.
+  - Die APK liegt mit Anleitung auf Allans MacBook unter `~/Desktop/Paply-Android/`, SHA-256 `1a00fd03…dae9`.
+  - Der Signierschlüssel ist auf MacBook und Mac mini gesichert (`android/docs/RELEASE.md`).
+- **0.1.1 (2) fertig** (`android/docs/V011.md`): Lange Stille im Live-Diktat geht nicht mehr an Whisper. Drehen auf Android 17
+  sichert Gesprochenes (Zwischenablage + Hinweis). Update über 0.1.0 geprüft. APK `~/Desktop/Paply-Android/Paply-0.1.1.apk`
+  (SHA-256 `59d4862d…c522`). Rest-Grenze: Periodisches Emulator-Rauschen gilt bewusst nicht als Stille.
+- **0.1.2/0.1.3 (29.10.):**
+  - Der erste echte Nutzer (Xiaomi Mi 9, Android 11) meldete einen Absturz beim Start. Ursache: `Stream.toList()` gibt es
+    erst ab API 34. Behoben, Start auf API 29–37 geprüft (`android/docs/STARTUP-0.1.2.md`). Eine Fehlerseite ersetzt das
+    stille Schließen.
+  - Seit 0.1.3 prüft Animal Sniffer `:core`/`:thoughts` gegen API 29 (`android/docs/API-29.md`), dabei wurde
+    `readNBytes` gefunden und ersetzt.
+  - 0.1.4: Die Einrichtung fordert „Tastatur auswählen“ nicht mehr nach jedem Diktat neu (Samsung-Tester).
+- **0.2.0 (29.10., Allans Entscheidung nach Testerfeedback):** Paply-Knopf neben der normalen Tastatur (Bedienungshilfe):
+  1 Tipp aufnehmen, 1 Tipp einsetzen, eigene Tastatur bleibt. Auf API 29–32 setzt er direkt ins Feld (ohne Zwischenablage), ab
+  API 33 per `commitText`. Gedanken-Karte blendet nach dem Speichern aus. Polier-Prompt aus `shared/polish`. Emulator-Abnahme
+  API 30/34/37 (`android/docs/KNOPF.md`). Codex darf seit dem T3-Update keine Emulator-UI steuern → Abnahmen macht die
+  Leitung per Claude-Helfer. Seit 29.10. abends: MacBook (T3 0.1.4) als Umgebung verknüpft (Tailscale, bis 28.11.,
+  `t3 environment list`), SDK unter `~/Library/Android/sdk` verlinkt – Helfer können dort künftig selbst Emulatoren nutzen.
+  - Branch `feat/android-v1` liegt als Sicherung auf GitHub (kein PR, `main` unberührt).
+- **0.2.1 (29.10., nach S22-Test von Allan):** Einrichtung führt in richtiger Reihenfolge durch die Android-Sperre
+  (Freigabe-Menü erscheint erst nach blockiertem Versuch; Samsung: „Installierte Apps“). Knopf mit Pegelringen statt Pille,
+  Tipp = einsetzen, X = verwerfen, nur Haken statt Erfolgstext; sitzt über der Eingabezeile (Senden frei), bleibt während
+  der Aufnahme immer sichtbar. Emulator-Abnahme API 30/34/36 bestanden (`android/docs/RELEASE.md`).
+  - Aktuell zum Verschicken: `~/Desktop/Paply-Android/Paply-0.2.1.apk`.
+- **Offen ohne echtes Gerät:** Pixel bzw. Samsung real, Anrufe, Bluetooth, Hersteller-Sperrbildschirm.
+- **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
+  Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
 ## Paply iOS — Version 1 für TestFlight (27.10.2026, Branch `feat/ios-v1`)
 
@@ -54,8 +104,6 @@
   (ohne Dynamic Island, z. B. iPhone 12 Pro) bzw. klappt die Dynamic Island auf – mit Sekundenzähler, „Fertig“
   und „Verwerfen“, dazu eine Vibration; alle 2 Min. wieder, „noch 1 Min.“ ebenso. Grenze bleibt 10 Min. (Allan).
   Hochgeladen und auf alle drei iPhones gespielt.
-- **Build 8 (28.10., lokal):** Eigene Themen mit + vorab anlegen (auch leer als Chip); einzelne oder mehrere
-  Themen wahlweise samt Gedanken nach „Zuletzt gelöscht“ verschieben. Noch nicht auf dem Gerät getestet oder hochgeladen.
 - **TestFlight extern:** Gruppe „Testing“ mit öffentlichem Link <TestFlight-Link>
   (bis 10 Tester). Build 5 liegt bei Apple zur ersten Prüfung (eingereicht 28.10. mittags); Apple schickt eine
   E-Mail, wenn sie durch ist. **Danach (Allan):** neuesten Build (7) der Gruppe „Testing“ hinzufügen, Link
@@ -85,13 +133,14 @@
 - Nebenwirkung 27.10.: Die Mac-Latenzmessung hat das Free-Tier-Polierkontingent (qwen) von Allans Groq-Schlüssel
   fast aufgebraucht; das Desktop-Diktat setzte bis zur Erholung Rohtext ein.
 
+
 ## v1.15.3 — Gemeinsame Polier-Quelle (29.10.2026, lokal vorbereitet)
 
 - Einziger System-Prompt unter `shared/polish/system-prompt.txt`, bytegleich im Desktop eingebettet;
   englisches JSON-Nachrichtenformat wie iOS/Android, eigene Begriffe normalisiert.
 - Mobiles Sicherheitsnetz inklusive Zahlen, Selbstkorrekturen, kleinen Ersetzungen und Profilgrenzen
   portiert. Bei Ablehnung bleibt der Rohtext; Aufnahme, Cmd+X und Einfügen unverändert.
-- 744 automatische Tests grün; 99 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
+- 744 automatische Tests grün; 100 gemeinsame künstliche Testvektoren und Swift-JSON-Referenz sichern den Abgleich.
   Bekannte mobile Fehlablehnungen/heuristische Grenzen bleiben erhalten (siehe `shared/polish/README.md`).
 - Private Verlaufsauswertung nur lokal, ohne Groq-Aufrufe. Keine Veröffentlichung, kein Tag/Push;
   mobile Prompt-Einbettungen und Gleichheitstests in den jeweiligen Branches nachziehen.
@@ -270,3 +319,10 @@ Zweige `codex/local-meeting-quality`, `claude/funny-hypatia-86wimp` (in main), `
 `fix/meeting-mic-quality`, `claude/add-issue-creation-KPFtg` (paply.dev-Planung → `~/Vibe/paply.dev/docs/`),
 `claude/evaluate-polishing-models-2MXQA` (überholter Windows-Signing-Fix). Codex-Unterlagen und
 Messprotokolle liegen in `docs/archiv/codex-lokalversuch-2026-09-21/`.
+
+## Ideen Android (Tester 29.10., noch nicht beauftragt)
+- Konto bzw. Abgleich: Transkripte vom Handy auch am Laptop (Desktop-Paply). Das braucht einen Server oder Sync und
+  widerspricht „Daten nur auf dem Gerät“. Allan entscheidet.
+- Paply-Knopf in der Werkzeugleiste von Gboard bzw. Samsung-Tastatur: Fremde Apps können das nicht. Die Systemtaste unten
+  in der Navigationsleiste ist der Weg.
+

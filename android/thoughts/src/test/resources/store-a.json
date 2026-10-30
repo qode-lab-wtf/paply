@@ -1,0 +1,1406 @@
+{
+  "schemaVersion": 1,
+  "fixture": "store-a",
+  "about": "Erfundene Ablage eines Gründers (App „Fluxo“, Umzug von Köln-Ehrenfeld nach Bonn-Beuel, Familie mit Jana, Mila (7) und Ben (3)). Keine echten Personendaten. Felder nah an KONZEPT §7.3; „n“, „active“ und „_createdAtLocal“ sind abgeleitete Hilfsfelder.",
+  "timezone": "Europe/Berlin",
+  "uiLanguage": "de",
+  "now": 1793093400000,
+  "nowLocal": "2026-10-27T10:30:00+01:00",
+  "vocabulary": [
+    "Fluxo",
+    "Supabase",
+    "RevenueCat",
+    "TestFlight",
+    "SwiftUI",
+    "Sentry",
+    "Inés",
+    "Rømø",
+    "Rheinzug",
+    "Kowalski",
+    "Albrecht",
+    "Northbridge",
+    "Beuel",
+    "Ehrenfeld"
+  ],
+  "topics": {
+    "schemaVersion": 1,
+    "rev": 41,
+    "topics": [
+      {
+        "id": "t_74ec4c869cf42c7078032ba1c52971bd",
+        "title": "Fluxo",
+        "icon": "code",
+        "owner": "ai",
+        "createdAt": 1789587609000,
+        "mergedInto": null,
+        "n": 9,
+        "active": true
+      },
+      {
+        "id": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+        "title": "Umzug",
+        "icon": "home",
+        "owner": "ai",
+        "createdAt": 1789661109000,
+        "mergedInto": null,
+        "n": 5,
+        "active": true
+      },
+      {
+        "id": "t_74078bb4106effe322cbe335a2401426",
+        "title": "Familie",
+        "icon": "heart",
+        "owner": "ai",
+        "createdAt": 1789999209000,
+        "mergedInto": null,
+        "n": 3,
+        "active": true
+      },
+      {
+        "id": "t_cc95f53150ace35d8ceff41d8258564b",
+        "title": "Fitness",
+        "icon": "zap",
+        "owner": "ai",
+        "createdAt": 1789449609000,
+        "mergedInto": null,
+        "n": 3,
+        "active": true
+      },
+      {
+        "id": "t_4ea94921c2bcdbeca766236296375504",
+        "title": "Finanzen",
+        "icon": "wallet",
+        "owner": "ai",
+        "createdAt": 1790058609000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_613cbc14b6a254e150fa0d5009bed956",
+        "title": "Fundraising",
+        "icon": "briefcase",
+        "owner": "ai",
+        "createdAt": 1790872809000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_8ccdfe939c45d8ad350ec11ae4ede149",
+        "title": "Urlaub",
+        "icon": "plane",
+        "owner": "ai",
+        "createdAt": 1790620209000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_7977212fdafaaf448395636c119c5a37",
+        "title": "Lesen",
+        "icon": "book",
+        "owner": "user",
+        "createdAt": 1789408800000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_083f6ec46df64af08ac254f55d57f454",
+        "title": "Freunde",
+        "icon": "users",
+        "owner": "ai",
+        "createdAt": 1790435409000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_6d345ce1d8b43ffe845cb4caca0b7826",
+        "title": "Ideen",
+        "icon": "lightbulb",
+        "owner": "ai",
+        "createdAt": 1790163909000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_f6653378f830f15a17583e5a18af3012",
+        "title": "Garten",
+        "icon": "leaf",
+        "owner": "user",
+        "createdAt": 1791106200000,
+        "mergedInto": null,
+        "n": 1,
+        "active": true
+      },
+      {
+        "id": "t_6cfeff4850239999d9b72e9781b97a09",
+        "title": "Gitarre",
+        "icon": "music",
+        "owner": "user",
+        "createdAt": 1790708400000,
+        "mergedInto": null,
+        "n": 1,
+        "active": true
+      },
+      {
+        "id": "t_826b882d1656de93ab958deb3dc64370",
+        "title": "Auto",
+        "icon": "map-pin",
+        "owner": "ai",
+        "createdAt": 1790503209000,
+        "mergedInto": null,
+        "n": 2,
+        "active": true
+      },
+      {
+        "id": "t_7037e7a0447ebe63e1ac4caf9d153c74",
+        "title": "Hochzeit Felix",
+        "icon": "calendar",
+        "owner": "ai",
+        "createdAt": 1792848609000,
+        "mergedInto": null,
+        "n": 1,
+        "active": false
+      }
+    ],
+    "declinedMerges": [],
+    "lastHygieneAt": null
+  },
+  "thoughts": [
+    {
+      "schemaVersion": 1,
+      "id": "s_c4a7911852c894486bc407f49906eed9",
+      "kind": "voice",
+      "createdAt": 1789449600000,
+      "durationMs": 19200,
+      "trigger": "control",
+      "state": "done",
+      "title": "Halbmarathon im April als Ziel",
+      "titleOwner": "ai",
+      "text": "Ziel für das Frühjahr: der Bonner Halbmarathon im April. Bis dahin dreimal pro Woche laufen, dienstags und donnerstags kurz, sonntags lang. Unter zwei Stunden wäre schön, Hauptsache ankommen ohne Verletzung. Ich muss noch schauen, ab wann die Anmeldung offen ist.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_cc95f53150ace35d8ceff41d8258564b",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_8fa952e2fe74f0d9733e161f7836c9d6",
+          "text": "Anmeldung für den Halbmarathon prüfen",
+          "quote": "ich muss noch schauen ab wann die Anmeldung offen ist",
+          "dueHint": null,
+          "dueAt": null,
+          "done": true,
+          "doneAt": 1789754400000,
+          "owner": "ai",
+          "createdAt": 1789449609000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1789449609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-15T07:20:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_fbd5392a437fbc4b913b90953bf1739e",
+      "kind": "voice",
+      "createdAt": 1789587600000,
+      "durationMs": 20900,
+      "trigger": "app",
+      "state": "done",
+      "title": "Familien-Abo: 4,99 € statt 2,99 €",
+      "titleOwner": "ai",
+      "text": "Entscheidung zum Preis: Das Familien-Abo kostet 4,99 € im Monat, nicht 2,99 €. Das Jahresabo kostet 39 €. Bei 2,99 € bleibt nach Apples Anteil zu wenig übrig, und die Interviews zeigen, dass Familien für weniger Streit ums Geld gern zahlen. Marek ist einverstanden.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1789587609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-16T21:40:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_fd2fa87a6789b36f93dffc7fee3678bb",
+      "kind": "voice",
+      "createdAt": 1789661100000,
+      "durationMs": 22200,
+      "trigger": "control",
+      "state": "done",
+      "title": "Zusage für die Wohnung in Beuel",
+      "titleOwner": "ai",
+      "text": "Wir haben die Zusage für die Wohnung in Beuel! Vier Zimmer, Balkon, 1.450 € kalt. Mietbeginn ist der 1. Dezember, die Schlüssel bekommen wir schon am 27. November. Die Vermieterin heißt Frau Brandt. Der Mietvertrag kommt nächste Woche per Post, den lese ich dann in Ruhe gegen.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_9fb898e5242d86d0aaa09ec68e355e79",
+          "text": "Mietvertrag gegenlesen",
+          "quote": "den Mietvertrag les ich dann in Ruhe gegen",
+          "dueHint": null,
+          "dueAt": null,
+          "done": true,
+          "doneAt": 1790276400000,
+          "owner": "ai",
+          "createdAt": 1789661109000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1789661109000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-17T18:05:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_fbc143999fc7305b65fdc08914c93e14",
+      "kind": "voice",
+      "createdAt": 1789752600000,
+      "durationMs": 9200,
+      "trigger": "app",
+      "state": "done",
+      "title": "Kürbis-Pasta mit Salbei",
+      "titleOwner": "ai",
+      "text": "Kürbis-Pasta mit Salbei und brauner Butter war richtig gut. Die Kinder haben sogar nachgenommen. Merken: weniger Muskat.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": null,
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1789752609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-18T19:30:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_13fd23622a5d77138fcb40ebee5bd6a1",
+      "kind": "voice",
+      "createdAt": 1789809300000,
+      "durationMs": 17000,
+      "trigger": "shortcut",
+      "state": "done",
+      "title": "Onboarding auf drei Schritte gekürzt",
+      "titleOwner": "ai",
+      "text": "Inés hat das Onboarding auf drei Schritte gekürzt: Haushalt anlegen, Partner einladen, erstes Budget. Die Kontoverbindung fällt aus dem Onboarding raus und kommt später. Das gefällt mir, weil die meisten bei Schritt fünf abgebrochen sind.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1789809309000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-19T11:15:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_53a8cc243d7b09ed47874734689aa614",
+      "kind": "voice",
+      "createdAt": 1789935000000,
+      "durationMs": 17000,
+      "trigger": "app",
+      "state": "done",
+      "title": "Notes on „The Mom Test“",
+      "titleOwner": "ai",
+      "text": "Finished „The Mom Test“. Key idea: ask about past behaviour, not hypothetical futures. Don't pitch during interviews. For the Fluxo interviews: ask how they split costs last month, not whether they would use an app.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_7977212fdafaaf448395636c119c5a37",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1789935009000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-20T22:10:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_c7f051cfb35dbee3dbf2e86b45f692b6",
+      "kind": "voice",
+      "createdAt": 1789999200000,
+      "durationMs": 13100,
+      "trigger": "control",
+      "state": "done",
+      "title": "Milas siebter Geburtstag",
+      "titleOwner": "ai",
+      "text": "Mila wird am 10. Oktober sieben. Sie wünscht sich eine Feier im Kletterwald mit acht Kindern. Jana kümmert sich um die Einladungen, ich reserviere den Kletterwald.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74078bb4106effe322cbe335a2401426",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_595921db6c51831bebf48b4f8a5edea8",
+          "text": "Kletterwald reservieren",
+          "quote": "ich reservier den Kletterwald",
+          "dueHint": null,
+          "dueAt": null,
+          "done": true,
+          "doneAt": 1790071200000,
+          "owner": "ai",
+          "createdAt": 1789999209000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1789999209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-21T16:00:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_221d22269ee0d5c2223574e9d7442581",
+      "kind": "voice",
+      "createdAt": 1790058600000,
+      "durationMs": 17000,
+      "trigger": "control",
+      "state": "done",
+      "title": "Unterlagen für die Steuererklärung 2025",
+      "titleOwner": "ai",
+      "text": "Frau Albrecht braucht die Unterlagen für die Steuererklärung 2025 bis Ende Oktober: Belege fürs Arbeitszimmer, die Kita-Rechnungen und die Spendenquittungen. Die Kita-Rechnungen liegen in Janas Ordner. Die Unterlagen muss ich ihr bis Ende Oktober schicken.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_4ea94921c2bcdbeca766236296375504",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_8e4d8fbf55f3fa362aca2b7c1e7c14c4",
+          "text": "Unterlagen an Frau Albrecht schicken",
+          "quote": "die Unterlagen muss ich ihr bis Ende Oktober schicken",
+          "dueHint": "bis Ende Oktober",
+          "dueAt": 1793466000000,
+          "done": false,
+          "doneAt": null,
+          "owner": "ai",
+          "createdAt": 1790058609000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790058609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-22T08:30:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_7308cf968aaf6cc2fb0b4004e2fca193",
+      "kind": "voice",
+      "createdAt": 1790163900000,
+      "durationMs": 13100,
+      "trigger": "liveActivity",
+      "state": "done",
+      "title": "Brettspiel über Haushaltsgeld für Kinder",
+      "titleOwner": "ai",
+      "text": "Idee: ein Brettspiel, bei dem Kinder ein Monatsbudget verwalten. Jede Runde ist eine Woche, dazu Ereigniskarten wie „Waschmaschine kaputt“. Könnte auch als Begleitmaterial zu Fluxo funktionieren.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_6d345ce1d8b43ffe845cb4caca0b7826",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790163909000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-23T13:45:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_f359dc21f0ffdf61d37c91902524db27",
+      "kind": "voice",
+      "createdAt": 1790238000000,
+      "durationMs": 21800,
+      "trigger": "app",
+      "state": "done",
+      "title": "Sync bug: offline edits get overwritten",
+      "titleOwner": "ai",
+      "text": "Dan found the sync bug: when two phones edit the same budget offline, the later sync overwrites the earlier one. Supabase realtime doesn't merge. We need per-entry timestamps, last writer wins per entry instead of per budget. I'll ask Dan how long per-entry merge would take.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_e4f78f41d38821f02d81fa3b1203bdd8",
+          "text": "Ask Dan how long per-entry merge would take",
+          "quote": "I'll ask Dan how long per entry merge would take",
+          "dueHint": null,
+          "dueAt": null,
+          "done": true,
+          "doneAt": 1790254800000,
+          "owner": "ai",
+          "createdAt": 1790238009000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1790238009000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-24T10:20:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_3af238b8c3bb6981431554c3d8d210ca",
+      "kind": "voice",
+      "createdAt": 1790358600000,
+      "durationMs": 15300,
+      "trigger": "control",
+      "state": "done",
+      "title": "Alte Wohnung zum 31. Dezember gekündigt",
+      "titleOwner": "ai",
+      "text": "Die Kündigung für die Wohnung in Ehrenfeld ist raus, per Einschreiben an Herrn Kowalski. Drei Monate Frist, also Ende zum 31. Dezember. Im Dezember zahlen wir doppelt Miete, das ist eingeplant.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_fd2fa87a6789b36f93dffc7fee3678bb",
+          "kind": "same_matter",
+          "reason": "Neue Wohnung zugesagt, alte gekündigt",
+          "origin": "ai",
+          "createdAt": 1790358609000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790358609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-25T19:50:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_921c721c41841acf97b8d4466f61b2dd",
+      "kind": "voice",
+      "createdAt": 1790435400000,
+      "durationMs": 13500,
+      "trigger": "control",
+      "state": "done",
+      "title": "Tobi zieht nach Hamburg",
+      "titleOwner": "ai",
+      "text": "Tobi zieht im November nach Hamburg, er hat einen neuen Job bei einer Reederei. Die Abschiedsfeier ist am 17. Oktober bei ihm. Ich bringe den Kartoffelsalat mit.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_083f6ec46df64af08ac254f55d57f454",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790435409000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-26T17:10:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_8ef43f573650e76ea7bc17a94910ebff",
+      "kind": "voice",
+      "createdAt": 1790503200000,
+      "durationMs": 15700,
+      "trigger": "app",
+      "state": "done",
+      "title": "Brauchen wir in Beuel zwei Autos?",
+      "titleOwner": "ai",
+      "text": "Brauchen wir in Beuel noch zwei Autos? Eher nicht: Die Straßenbahn hält direkt vor der Tür, und für die Kita reicht das Lastenrad. Den Golf vor dem Umzug verkaufen, den Zafira behalten.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_826b882d1656de93ab958deb3dc64370",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790503209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-27T12:00:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_4de93141daa550e1ac28d4eb7baa207a",
+      "kind": "voice",
+      "createdAt": 1790620200000,
+      "durationMs": 16100,
+      "trigger": "control",
+      "state": "done",
+      "title": "Ostern in Dänemark",
+      "titleOwner": "ai",
+      "text": "Für Ostern haben wir uns auf Dänemark festgelegt: ein Ferienhaus auf Rømø, zusammen mit Felix und Lena, eine Woche. Jana schaut nach Häusern mit Sauna und Platz für sechs Erwachsene und vier Kinder.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_8ccdfe939c45d8ad350ec11ae4ede149",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790620209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-28T20:30:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_6cfeff4850239999d9b72e9781b97a09",
+      "kind": "voice",
+      "createdAt": 1790709300000,
+      "durationMs": 12200,
+      "trigger": "app",
+      "state": "done",
+      "title": "Wieder Gitarre spielen",
+      "titleOwner": "ai",
+      "text": "Ich will wieder Gitarre spielen, 15 Minuten am Abend reichen. Erstes Ziel: „Blackbird“ sauber durchspielen. Die Saiten sind alt, ich muss neue Saiten kaufen.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_6cfeff4850239999d9b72e9781b97a09",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_4cf684fe6c25aa3926c713c9f4994049",
+          "text": "Neue Gitarrensaiten kaufen",
+          "quote": "neue Saiten kaufen",
+          "dueHint": null,
+          "dueAt": null,
+          "done": false,
+          "doneAt": null,
+          "owner": "ai",
+          "createdAt": 1790709309000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790709309000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-29T21:15:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_638b1d4a6e0507074f6d4d62bddb8e90",
+      "kind": "voice",
+      "createdAt": 1790751900000,
+      "durationMs": 15700,
+      "trigger": "shortcut",
+      "state": "done",
+      "title": "TestFlight-Beta mit 20 Familien",
+      "titleOwner": "ai",
+      "text": "Plan für die Beta: 20 Familien über TestFlight, angefragt über die Elternliste der Kita und über Mareks Netzwerk. Laufzeit vier Wochen, danach mit jeder Familie ein kurzes Interview. Den Einladungstext schreibe ich.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_ec481164ae639cc083d90a49f464bda7",
+          "text": "Einladungstext für die Beta schreiben",
+          "quote": "den Einladungstext schreib ich",
+          "dueHint": null,
+          "dueAt": null,
+          "done": true,
+          "doneAt": 1790841600000,
+          "owner": "ai",
+          "createdAt": 1790751909000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790751909000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-09-30T09:05:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_1fd4eaa1198d96a1307afab381b59971",
+      "kind": "voice",
+      "createdAt": 1790872800000,
+      "durationMs": 24400,
+      "trigger": "control",
+      "state": "done",
+      "title": "Call with Priya about the pre-seed",
+      "titleOwner": "ai",
+      "text": "Call with Priya from Northbridge Angels. She likes the problem but wants to see traction before committing: around 500 weekly active households and retention after four weeks. A pre-seed of 400k is realistic if the beta numbers hold. She suggested a follow-up call once the beta has run for a few weeks.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_613cbc14b6a254e150fa0d5009bed956",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1790872809000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-01T18:40:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_2f1f273784b9d9b09f2a09939b827313",
+      "kind": "voice",
+      "createdAt": 1790920200000,
+      "durationMs": 14800,
+      "trigger": "control",
+      "state": "done",
+      "title": "Knie zwickt beim langen Lauf",
+      "titleOwner": "ai",
+      "text": "Beim langen Lauf am Sonntag hat das rechte Knie ab Kilometer 12 gezwickt. Die nächsten zwei Wochen laufe ich nur bis 10 Kilometer und mache einen Termin bei der Physio.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_cc95f53150ace35d8ceff41d8258564b",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_60cc33363785a4ade67175d49344d55a",
+          "text": "Termin bei der Physio machen",
+          "quote": "einen Termin bei der Physio machen",
+          "dueHint": null,
+          "dueAt": null,
+          "done": true,
+          "doneAt": 1790935200000,
+          "owner": "ai",
+          "createdAt": 1790920209000
+        }
+      ],
+      "links": [
+        {
+          "target": "s_c4a7911852c894486bc407f49906eed9",
+          "kind": "same_matter",
+          "reason": "Training für den Halbmarathon",
+          "origin": "ai",
+          "createdAt": 1790920209000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1790920209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-02T07:50:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_fb54c8679903834c5a833a4e52946e3e",
+      "kind": "voice",
+      "createdAt": 1791033600000,
+      "durationMs": 15700,
+      "trigger": "app",
+      "state": "done",
+      "title": "Ben wacht nachts auf",
+      "titleOwner": "ai",
+      "text": "Ben wacht seit einer Woche jede Nacht gegen drei auf. Vielleicht die Zähne, vielleicht beschäftigt ihn der Kita-Wechsel. Jana und ich wechseln uns ab, ich übernehme die Nächte von Freitag auf Samstag.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74078bb4106effe322cbe335a2401426",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791033609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-03T15:20:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_e4d1c5ee99391a9d73b301b09b8ed169",
+      "kind": "voice",
+      "createdAt": 1791106800000,
+      "durationMs": 13100,
+      "trigger": "control",
+      "state": "done",
+      "title": "Balkon winterfest machen",
+      "titleOwner": "ai",
+      "text": "Balkon winterfest machen: Olivenbaum rein ins Treppenhaus, Lavendel mit Vlies abdecken, die Erde in den Kübeln nicht mehr düngen. Beim Umzug die Kübel als Erstes einpacken.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_f6653378f830f15a17583e5a18af3012",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791106809000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-04T11:40:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_3bff63e96ce7805bcc1762ccb1bd19ea",
+      "kind": "voice",
+      "createdAt": 1791223200000,
+      "durationMs": 21400,
+      "trigger": "app",
+      "state": "done",
+      "title": "Umzugsfirma: Wir nehmen Rheinzug",
+      "titleOwner": "ai",
+      "text": "Drei Angebote für den Umzug verglichen: Rheinzug 2.300 €, Möbel-Krüger 2.900 €, Selbermachen mit Transporter etwa 600 € plus Pizza für die Helfer. Wir nehmen Rheinzug für den 28. November, der Einpackservice für die Küche kommt extra dazu. Selbermachen ist mit zwei Kindern zu viel.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_fd2fa87a6789b36f93dffc7fee3678bb",
+          "kind": "same_matter",
+          "reason": "Umzug nach Beuel",
+          "origin": "ai",
+          "createdAt": 1791223209000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791223209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-05T20:00:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_e2d72ae1545dd6ba071e84422e01f0d7",
+      "kind": "voice",
+      "createdAt": 1791289500000,
+      "durationMs": 14800,
+      "trigger": "shortcut",
+      "state": "done",
+      "title": "Paywall-Varianten mit RevenueCat testen",
+      "titleOwner": "ai",
+      "text": "Paywall-Test über RevenueCat Experiments: Variante A zeigt zuerst das Jahresabo, Variante B den Monatspreis. Laufzeit zwei Wochen, Metrik ist trial-to-paid. Marek meint, B konvertiert besser – I'm not so sure.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de",
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1791289509000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-06T14:25:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_75fa3d571a0e22fd1da0e84e24523d5b",
+      "kind": "voice",
+      "createdAt": 1791492300000,
+      "durationMs": 8800,
+      "trigger": "control",
+      "state": "done",
+      "title": "Wann sich ein Ort nach Zuhause anfühlt",
+      "titleOwner": "ai",
+      "text": "Komisch, wie schnell sich ein Ort nach Zuhause anfühlt, wenn die Kinder dort einmal gelacht haben.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": null,
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791492309000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-08T22:45:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_582cad7146c50af07952458b0ec23fe9",
+      "kind": "voice",
+      "createdAt": 1791540600000,
+      "durationMs": 16100,
+      "trigger": "app",
+      "state": "done",
+      "title": "Newsletter for founders with small kids",
+      "titleOwner": "ai",
+      "text": "Idea: a monthly newsletter for indie founders with small kids. Honest numbers, how we split the week, what we dropped. Could double as a launch channel for Fluxo. Not now, maybe next year.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_6d345ce1d8b43ffe845cb4caca0b7826",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1791540609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-09T12:10:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_b60c7a20c0ff2e07cf9388c6e7c1a494",
+      "kind": "voice",
+      "createdAt": 1791747000000,
+      "durationMs": 14800,
+      "trigger": "control",
+      "state": "done",
+      "title": "Leseliste für den Winter",
+      "titleOwner": "ai",
+      "text": "Leseliste für den Winter: „Die Wand“ von Marlen Haushofer, „Shoe Dog“ und „Atlas eines ängstlichen Mannes“. Mit „Die Wand“ fange ich an, das Buch liegt schon seit Jahren im Regal.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_7977212fdafaaf448395636c119c5a37",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791747009000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-11T21:30:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_703f7f9a4a65058cfdced5d327bf2555",
+      "kind": "voice",
+      "createdAt": 1791788400000,
+      "durationMs": 15300,
+      "trigger": "app",
+      "state": "done",
+      "title": "ETF-Sparplan drei Monate halbieren",
+      "titleOwner": "ai",
+      "text": "Wegen der doppelten Miete im Dezember setzen wir den ETF-Sparplan von Dezember bis Februar von 500 auf 250 € runter. Ab März wieder 500 €. Das Tagesgeld bleibt als Puffer unangetastet.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_4ea94921c2bcdbeca766236296375504",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_3af238b8c3bb6981431554c3d8d210ca",
+          "kind": "same_matter",
+          "reason": "Doppelte Miete im Dezember",
+          "origin": "ai",
+          "createdAt": 1791788409000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791788409000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-12T09:00:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_bbe5999fc4b5d1f03a5129aa2497c2a5",
+      "kind": "voice",
+      "createdAt": 1791902100000,
+      "durationMs": 19200,
+      "trigger": "control",
+      "state": "done",
+      "title": "Beta-Feedback: Kategorien zu kleinteilig",
+      "titleOwner": "ai",
+      "text": "Erstes Feedback aus der Beta: 19 von 20 Familien haben die App eingerichtet. Mehrere finden die Kategorien zu kleinteilig, vor allem „Drogerie“ und „Haushalt“ getrennt. Vorschlag: acht Standardkategorien und eigene nur auf Wunsch. Zwei Familien haben nach einer Android-Version gefragt.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_638b1d4a6e0507074f6d4d62bddb8e90",
+          "kind": "continues",
+          "reason": "Beta mit 20 Familien",
+          "origin": "ai",
+          "createdAt": 1791902109000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1791902109000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-13T16:35:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_be4ccc4fa71aa1f85b9c9cd5025af361",
+      "kind": "voice",
+      "createdAt": 1792001700000,
+      "durationMs": 15700,
+      "trigger": "app",
+      "state": "done",
+      "title": "Ferienhaus auf Rømø reserviert",
+      "titleOwner": "ai",
+      "text": "Ferienhaus auf Rømø für Ostern reserviert, 4. bis 11. April, 2.180 € für die Woche. Die Anzahlung von 30 % muss bis zum 1. November raus, Felix und Lena übernehmen die Hälfte.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_8ccdfe939c45d8ad350ec11ae4ede149",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_c5efcb3d53e2cb1493f8e4a7f318cba7",
+          "text": "Anzahlung fürs Ferienhaus überweisen",
+          "quote": "die Anzahlung muss bis zum ersten November raus",
+          "dueHint": "bis zum ersten November",
+          "dueAt": 1793530800000,
+          "done": false,
+          "doneAt": null,
+          "owner": "ai",
+          "createdAt": 1792001709000
+        }
+      ],
+      "links": [
+        {
+          "target": "s_4de93141daa550e1ac28d4eb7baa207a",
+          "kind": "continues",
+          "reason": "Ferienhaus auf Rømø",
+          "origin": "ai",
+          "createdAt": 1792001709000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792001709000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-14T20:15:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_8a6d52c6e7d43a05544d0e54f95f187a",
+      "kind": "voice",
+      "createdAt": 1792054200000,
+      "durationMs": 14400,
+      "trigger": "shortcut",
+      "state": "done",
+      "title": "Pitch-Deck braucht eine Retention-Folie",
+      "titleOwner": "ai",
+      "text": "Das Pitch-Deck braucht eine eigene Folie zur Retention. Priya hat gesagt: show the cohort curve, not just averages. Sobald die Beta vier Wochen läuft, die Kohorten aus Supabase exportieren.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_613cbc14b6a254e150fa0d5009bed956",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_83dd49c066111f92d5ba8b565f98feee",
+          "text": "Kohorten aus Supabase exportieren",
+          "quote": "sobald die Beta vier Wochen läuft die Kohorten aus Supabase exportieren",
+          "dueHint": "sobald die Beta vier Wochen läuft",
+          "dueAt": null,
+          "done": false,
+          "doneAt": null,
+          "owner": "ai",
+          "createdAt": 1792054209000
+        }
+      ],
+      "links": [
+        {
+          "target": "s_1fd4eaa1198d96a1307afab381b59971",
+          "kind": "continues",
+          "reason": "Priyas Hinweis zur Retention",
+          "origin": "ai",
+          "createdAt": 1792054209000
+        }
+      ],
+      "languages": [
+        "de",
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1792054209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-15T10:50:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_436436fe8956b2f07508b40984b8fb92",
+      "kind": "voice",
+      "createdAt": 1792148400000,
+      "durationMs": 13500,
+      "trigger": "control",
+      "state": "done",
+      "title": "Kita-Platz für Ben in Beuel",
+      "titleOwner": "ai",
+      "text": "Die Kita „Rheinkiesel“ in Beuel hat für Ben ab Januar einen Platz. Mila wechselt zum Halbjahr auf die Grundschule am Rheinufer. Die Kita braucht noch die Ummeldebescheinigung.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792148409000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-16T13:00:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_5e82a67122aca199f657e7273df2e79b",
+      "kind": "voice",
+      "createdAt": 1792315200000,
+      "durationMs": 14800,
+      "trigger": "app",
+      "state": "done",
+      "title": "Abschied von Tobi",
+      "titleOwner": "ai",
+      "text": "Tobis Abschied war schön, fast alle aus der alten WG waren da. Wir haben ausgemacht, dass wir ihn im Januar in Hamburg besuchen, vielleicht mit dem Zug und ohne Kinder.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_083f6ec46df64af08ac254f55d57f454",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_921c721c41841acf97b8d4466f61b2dd",
+          "kind": "continues",
+          "reason": "Tobis Abschied vor Hamburg",
+          "origin": "ai",
+          "createdAt": 1792315209000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792315209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-18T11:20:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_80ab1d3d0ed08319f83fda542221213f",
+      "kind": "voice",
+      "createdAt": 1792395600000,
+      "durationMs": 14400,
+      "trigger": "control",
+      "state": "done",
+      "title": "Release plan: submission on November 10",
+      "titleOwner": "ai",
+      "text": "Release plan: feature freeze on October 30, App Store submission on November 10, public launch the week after if review goes through. Android stays out of scope for v1.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1792395609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-19T09:40:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_48013833a4d19b704bda92686a75e714",
+      "kind": "voice",
+      "createdAt": 1792516200000,
+      "durationMs": 13100,
+      "trigger": "control",
+      "state": "done",
+      "title": "Mama kommt im November",
+      "titleOwner": "ai",
+      "text": "Mama kommt vom 14. bis 17. November. Das ist kurz vor dem Umzug, aber sie will helfen und auf die Kinder aufpassen. Sie schläft im Arbeitszimmer.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74078bb4106effe322cbe335a2401426",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792516209000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-20T19:10:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_5d69592a5f93c8d073fba02684a95b9e",
+      "kind": "voice",
+      "createdAt": 1792559700000,
+      "durationMs": 17000,
+      "trigger": "app",
+      "state": "done",
+      "title": "Krafttraining zweimal pro Woche",
+      "titleOwner": "ai",
+      "text": "Die Physio sagt, das Knie ist okay, mir fehlt Kraft in der Hüfte. Neuer Plan: zweimal pro Woche 20 Minuten strength training – single-leg squats, glute bridges, side planks. Laufen wieder normal, aber langsam steigern.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_cc95f53150ace35d8ceff41d8258564b",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_2f1f273784b9d9b09f2a09939b827313",
+          "kind": "continues",
+          "reason": "Knie und Physio",
+          "origin": "ai",
+          "createdAt": 1792559709000
+        }
+      ],
+      "languages": [
+        "de",
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1792559709000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-21T07:15:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_821e9c28e15acb1b5dd9b4325eeedeaa",
+      "kind": "voice",
+      "createdAt": 1792686600000,
+      "durationMs": 13500,
+      "trigger": "control",
+      "state": "done",
+      "title": "Golf für 6.900 € inseriert",
+      "titleOwner": "ai",
+      "text": "Den Golf für 6.900 € inseriert. TÜV ist bis März, der Zahnriemen ist neu. Zwei Anfragen in der ersten Stunde, eine davon nur Tausch gegen ein Motorrad.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_826b882d1656de93ab958deb3dc64370",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_8ef43f573650e76ea7bc17a94910ebff",
+          "kind": "continues",
+          "reason": "Golf vor dem Umzug verkaufen",
+          "origin": "ai",
+          "createdAt": 1792686609000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792686609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-22T18:30:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_5fbd1a97f63ffb20f9503bbbf223765b",
+      "kind": "voice",
+      "createdAt": 1792785600000,
+      "durationMs": 14800,
+      "trigger": "app",
+      "state": "done",
+      "title": "Kein Android vor Q2",
+      "titleOwner": "ai",
+      "text": "Marek will Android vorziehen, weil zwei Beta-Familien gefragt haben. Wir bleiben dabei: kein Android vor Q2 2027. Erst muss die Retention auf iOS stimmen, sonst bauen wir zwei halbe Apps.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_bbe5999fc4b5d1f03a5129aa2497c2a5",
+          "kind": "same_matter",
+          "reason": "Beta-Familien fragen nach Android",
+          "origin": "ai",
+          "createdAt": 1792785609000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792785609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-23T22:00:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_6994520d6cf8fdaea041a7c60ad2e638",
+      "kind": "voice",
+      "createdAt": 1792848600000,
+      "durationMs": 16600,
+      "trigger": "control",
+      "state": "done",
+      "title": "Felix fragt mich als Trauzeugen",
+      "titleOwner": "ai",
+      "text": "Felix hat gefragt, ob ich sein Trauzeuge werde. Die Hochzeit ist am 12. Juni 2027 in Lüneburg. Ich habe sofort Ja gesagt. Zusammen mit Lena soll ich den Junggesellenabschied planen, aber bitte nichts Peinliches.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_7037e7a0447ebe63e1ac4caf9d153c74",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1792848609000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-24T15:30:00+02:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_3c44a031aceacb299c2eec1ff2fb5987",
+      "kind": "voice",
+      "createdAt": 1792961400000,
+      "durationMs": 11800,
+      "trigger": "app",
+      "state": "done",
+      "title": "Podcast on sleep and screens",
+      "titleOwner": "ai",
+      "text": "Good podcast episode on sleep: no screens after 10, a cooler bedroom, the same wake-up time on weekends. Worth trying for a week.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": null,
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [],
+      "languages": [
+        "en"
+      ],
+      "rev": 2,
+      "updatedAt": 1792961409000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-25T21:50:00+01:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_45acda1250077f4c9ed9786aecfcf6b2",
+      "kind": "voice",
+      "createdAt": 1793085000000,
+      "durationMs": 15300,
+      "trigger": "control",
+      "state": "done",
+      "title": "Einladungslink öffnet den App Store",
+      "titleOwner": "ai",
+      "text": "Bug: Der Einladungslink für den Haushalt öffnet bei manchen Testern den App Store statt der App. Vermutlich stimmt die Apple-App-Site-Association-Datei nach dem Domainwechsel nicht mehr. Heute Mittag prüfe ich die Datei.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_74ec4c869cf42c7078032ba1c52971bd",
+      "topicOwner": "ai",
+      "tasks": [
+        {
+          "id": "k_40209675281576c854cac602dc2813ce",
+          "text": "Apple-App-Site-Association-Datei prüfen",
+          "quote": "heute Mittag prüf ich die Datei",
+          "dueHint": "heute Mittag",
+          "dueAt": 1793098800000,
+          "done": false,
+          "doneAt": null,
+          "owner": "ai",
+          "createdAt": 1793085009000
+        }
+      ],
+      "links": [],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1793085009000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-27T08:10:00+01:00"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "s_a0ee7da79e48b773f3797c9307a17683",
+      "kind": "voice",
+      "createdAt": 1793090400000,
+      "durationMs": 14400,
+      "trigger": "control",
+      "state": "done",
+      "title": "Übergabe der alten Wohnung am 28. Dezember",
+      "titleOwner": "ai",
+      "text": "Herr Kowalski schlägt für die Übergabe der Wohnung in Ehrenfeld den 28. Dezember um 10 Uhr vor. Bis dahin muss der Maler fertig sein, Flur und Kinderzimmer werden gestrichen.",
+      "textOwner": "ai",
+      "textIsRaw": false,
+      "topicId": "t_0c44c9b1bca3adea15dd08dd3d65ebe8",
+      "topicOwner": "ai",
+      "tasks": [],
+      "links": [
+        {
+          "target": "s_3af238b8c3bb6981431554c3d8d210ca",
+          "kind": "same_matter",
+          "reason": "Alte Wohnung in Ehrenfeld",
+          "origin": "ai",
+          "createdAt": 1793090409000
+        }
+      ],
+      "languages": [
+        "de"
+      ],
+      "rev": 2,
+      "updatedAt": 1793090409000,
+      "deletedAt": null,
+      "_createdAtLocal": "2026-10-27T09:40:00+01:00"
+    }
+  ]
+}

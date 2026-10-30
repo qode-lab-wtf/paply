@@ -1,0 +1,7 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp" android:minHeight="180dp"
+    android:targetCellWidth="4" android:targetCellHeight="2"
+    android:updatePeriodMillis="0" android:initialLayout="@layout/task_widget_medium"
+    android:previewImage="@drawable/task_widget_preview_medium"
+    android:previewLayout="@layout/task_widget_preview_medium"
+    android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" />

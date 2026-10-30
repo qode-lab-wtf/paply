@@ -1,0 +1,189 @@
+package com.paply.android.button
+
+import android.Manifest
+import android.app.UiAutomation
+import android.content.*
+import android.provider.Settings
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.test.platform.app.InstrumentationRegistry
+import com.paply.android.settings.SettingsRepository
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.*
+
+import org.junit.Test
+
+/** Prepared only. Explicit opt-in and externally injected speech; never synthetic product audio. */
+class ButtonDeviceTest {
+    @Test fun foreignEditorWithRealMicrophone() { exercise("insert") }
+    @Test fun fieldChangeDuringRecording() { exercise("field") }
+    @Test fun rotateDuringRecording() { exercise("rotate") }
+    @Test fun dragRemainsAboveKeyboard() { exercise("drag") }
+    @Test fun rejectingEditor() { exercise("reject") }
+    @Test fun emptyFieldPreservesClipboardApi30() { exercise("empty") }
+    @Test fun hintFieldPreservesClipboardApi30() { exercise("hint") }
+    @Test fun cursorAtEndPreservesClipboardApi30() { exercise("end") }
+    @Test fun cursorInsertionPreservesClipboardApi30() { exercise("cursor") }
+    @Test fun selectionReplacementPreservesClipboardApi30() { exercise("selection") }
+
+    private fun exercise(scenario: String) { runBlocking {
+        val args = InstrumentationRegistry.getArguments()
+        require(args.getString("paplyButtonAcceptance") == "yes") { "Explicit Bauleitung opt-in required" }
+        val expected = requireNotNull(args.getString("expected")).split('|').map(String::trim).filter(String::isNotEmpty)
+        require(expected.isNotEmpty()) { "expected token required" }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val ui = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        ui.serviceInfo = ui.serviceInfo.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+        val resolver = context.contentResolver
+        val prefs = SettingsRepository.get(context)
+        val previousPrefs = prefs.state.value
+        val previousHistory = com.paply.android.history.HistoryStore.get(context).entries.value.map { it.id }.toSet()
+        ui.adoptShellPermissionIdentity(Manifest.permission.WRITE_SECURE_SETTINGS, "android.permission.GRANT_RUNTIME_PERMISSIONS")
+        val services = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        val enabled = Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
+        try {
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, "")
+            Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
+            repeat(100) { if (PaplyButtonService.connected != null) Thread.sleep(50) }
+            assertNull("Service must be disconnected before setup", PaplyButtonService.connected)
+            ui.executeShellCommand("am force-stop com.paply.android.test").use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
+            ui.grantRuntimePermission(context.packageName, Manifest.permission.RECORD_AUDIO)
+            prefs.update { it.copy(automaticLanguages = false, manualLanguages = listOf("de"), mainLanguage = "de",
+                paplyButton = true, buttonForeground = args.getString("microphone") == "fgs") }
+            val component = ComponentName(context, PaplyButtonService::class.java).flattenToString()
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                (services.orEmpty().split(':').filter { it.isNotBlank() } + component).distinct().joinToString(":"))
+            Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+            context.startActivity(Intent().setComponent(ComponentName("com.paply.android.test", "com.paply.android.ImeFixtureActivity"))
+                .putExtra("emptyWithoutHint", scenario == "empty")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            fun find(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+                fun walk(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+                    if (node == null) return null
+                    if (predicate(node)) return node
+                    for (i in 0 until node.childCount) walk(node.getChild(i))?.let { return it }
+                    return null
+                }
+                return ui.windows.firstNotNullOfOrNull { walk(it.root) }
+            }
+            fun waitFor(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo {
+                repeat(200) { find(predicate)?.let { return it }; Thread.sleep(100) }
+                error("UI condition missing")
+            }
+            val clipboardCase = scenario in listOf("cursor", "selection", "end", "empty", "hint")
+            if (clipboardCase) require(android.os.Build.VERSION.SDK_INT == 30) { "Requires API 30" }
+            val field = waitFor { it.isEditable &&
+                it.contentDescription?.toString() == if (scenario == "reject") "Editor lehnt Einsetzen ab" else "Erstes Textfeld" }
+            assertTrue(field.isShowingHintText || field.text.isNullOrEmpty())
+            assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val button = waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
+            fun bounds(node: AccessibilityNodeInfo) = android.graphics.Rect().also(node::getBoundsInScreen)
+            fun aboveKeyboard() {
+                val b = bounds(waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }.parent)
+                val ime = ui.windows.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                    .map { android.graphics.Rect().also(it::getBoundsInScreen) }.minOf { it.top }
+                assertTrue("Button overlaps IME: $b / $ime", b.bottom <= ime - (8 * context.resources.displayMetrics.density).toInt())
+            }
+            aboveKeyboard()
+            if (scenario == "drag") {
+                val b = bounds(button.parent)
+                val x = b.centerX().toFloat(); val y = b.centerY().toFloat(); val time = android.os.SystemClock.uptimeMillis()
+                for ((action, yy) in listOf(android.view.MotionEvent.ACTION_DOWN to y, android.view.MotionEvent.ACTION_MOVE to y + 400, android.view.MotionEvent.ACTION_UP to y + 400)) {
+                    val event = android.view.MotionEvent.obtain(time, android.os.SystemClock.uptimeMillis(), action, x, yy, 0)
+                    assertTrue(ui.injectInputEvent(event, true)); event.recycle()
+                }
+                Thread.sleep(500); aboveKeyboard(); return@runBlocking
+            }
+            if (clipboardCase) {
+                assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage vorbelegen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                if (scenario in listOf("cursor", "selection", "end")) {
+                    assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                            if (scenario == "selection") "Anfang ALT Ende" else "Anfang Ende")
+                    }))
+                    val start = if (scenario == "end") 11 else 6
+                    val end = if (scenario == "selection") 10 else start
+                    // API 30 can return false when SET_TEXT already put the cursor here.
+                    field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, android.os.Bundle().apply {
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start)
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end)
+                    })
+                    assertTrue(field.refresh())
+                    assertEquals(start, field.textSelectionStart)
+                    assertEquals(end, field.textSelectionEnd)
+                }
+            }
+            assertTrue(button.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
+            // Bauleitung injects its known WAV now, after audio.start, via the authorized host.
+            Thread.sleep(12_000)
+            if (scenario == "field") {
+                assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                val notice = waitFor { it.text?.contains("Einfügen") == true }
+                Thread.sleep(3000)
+                assertTrue("Clipboard notice must stay visible", notice.refresh() && notice.isVisibleToUser)
+                waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
+                assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.let { it.isShowingHintText || it.text.isNullOrEmpty() || it.text == it.hintText })
+                assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                waitFor { !it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
+                return@runBlocking
+            }
+            if (scenario == "rotate") {
+                assertTrue(ui.setRotation(UiAutomation.ROTATION_FREEZE_90))
+                Thread.sleep(1000)
+                // Same resource-ID editor after rotation must keep recording and become visible again.
+                waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
+                val recording = bounds(waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" })
+                assertTrue(recording.top >= 0 && recording.width() > 0)
+                waitFor { it.contentDescription?.toString() == "Aufnahme verwerfen" }
+            }
+            val pill = waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
+            assertTrue(pill.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            if (scenario == "reject") {
+                // On API 33+ commitText is acknowledged IPC, not editor acceptance; history remains authoritative.
+                waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
+                val rejected = waitFor { it.hintText?.toString() == "Editor lehnt Einsetzen ab" }
+                assertEquals("", if (rejected.isShowingHintText) "" else rejected.text?.toString().orEmpty())
+                val history = com.paply.android.history.HistoryStore.get(context).entries.value
+                assertTrue("Rejected text must be retained", history.any { entry -> entry.id !in previousHistory && expected.any { entry.text.contains(it, ignoreCase = true) } })
+                if (android.os.Build.VERSION.SDK_INT < 33) {
+                    assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    waitFor { !it.isEditable && expected.any { word -> it.text?.contains(word, ignoreCase = true) == true } }
+                }
+            } else {
+                // History is the complete dictated result, independent of token alternatives
+                // used to recognize the external audio. Compare the entire field to detect duplicates.
+                var result: String? = null
+                repeat(200) {
+                    if (result == null) {
+                        result = com.paply.android.history.HistoryStore.get(context).entries.value
+                            .firstOrNull { it.id !in previousHistory && it.text.isNotBlank() }?.text
+                        if (result == null) Thread.sleep(100)
+                    }
+                }
+                val dictated = requireNotNull(result)
+                val fullText = when (scenario) {
+                    "end" -> "Anfang Ende " + dictated
+                    "cursor", "selection" -> "Anfang " + dictated + " Ende"
+                    else -> dictated
+                }
+                val inserted = waitFor { it.isEditable && it.text?.toString() == fullText }
+                Thread.sleep(500)
+                assertTrue(inserted.refresh())
+                assertEquals(fullText, inserted.text?.toString())
+                if (clipboardCase) {
+                    Thread.sleep(800)
+                    assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    waitFor { it.text?.toString() == "Vorheriger Clip" }
+                }
+            }
+        } finally {
+            ui.setRotation(UiAutomation.ROTATION_UNFREEZE)
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, services)
+            Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, enabled)
+            prefs.update { previousPrefs }
+            ui.dropShellPermissionIdentity()
+        }
+    } }
+}

@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Paply</string>
+    <string name="thought_widget_name">Paply-Gedanke</string>
+    <string name="thought_widget_hint">Tippen und sprechen</string>
+    <string name="thought_widget_description">Tippen nimmt einen Gedanken auf, nochmal tippen beendet.</string>
+    <string name="voice_input">Paply</string>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item><item name="android:colorAccent">#22B45F</item>
+        <item name="android:windowLightStatusBar">false</item><item name="android:windowBackground">#0F2C20</item>
+        <item name="android:navigationBarColor">#0F2C20</item>
+    </style>
+    <style name="CaptureTheme" parent="AppTheme">
+        <item name="android:windowIsTranslucent">true</item><item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item><item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+</resources>

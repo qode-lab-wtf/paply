@@ -144,3 +144,40 @@ Nach Allans Gerätetest.
   Aufgabenmanager.
 - **Themenbilder:** Ein Thema kann statt des Symbols ein eigenes Bild tragen (quadratisch, höchstens 512 px, JPEG
   ohne Metadaten). Die Bilder bleiben auf dem Gerät und gehen nie an die KI oder ins Netz.
+
+## 2026-10-28 — Paply Android V1: Rahmen (von Allan bestätigt)
+
+- **Ziel:** Paply Android mit gleicher Qualität, gleichem Design und gleicher UX wie Paply iOS V1, als APK-Testversion
+  für Freunde. Kotlin und Jetpack Compose, nativ, Ordner `android/`, Branch `feat/android-v1`.
+- **Arbeitsteilung:** Claude plant, entscheidet und prüft mit. Codex baut: astra die Kernteile, 6.1-sol die Routine.
+  Sonnet reviewt.
+- **Rechner:** Android-Werkzeuge und Emulator liegen nur auf dem MacBook (`~/Android`), weil der Mac mini zu wenig Platz
+  hat.
+- **Diktat-Einstieg:** Paply ist eine reine Sprach-Tastatur. Der Wechsel läuft über die System-Tastaturtaste unten
+  rechts. Auf Pixel mit Android 16/17 reicht dafür ein Tipp, Gboard und die Samsung-Tastatur bleiben unangetastet.
+  Einen **schwebenden Paply-Knopf** (Overlay plus Bedienungshilfe, wie bei Wispr Flow) gibt es bewusst nicht. Allan:
+  „keine Lösung, die nur teilweise funktioniert“, denn in manchen Apps ließe sich der Text nicht einsetzen und das
+  Einrichten wäre fummelig. Einen Knopf direkt in Gboard oder der Samsung-Tastatur erlaubt Android nicht.
+
+## 2026-10-29 — Paply Android: Konto bzw. Abgleich später (von Allan bestätigt)
+
+Ein Konto, mit dem man sich von mehreren Geräten anmeldet und Transkripte vom Handy auch am Laptop sieht, ist der nächste
+große Schritt. Er kommt aber **später**. Erst müssen die einzelnen Geräte solide laufen. Bis dahin bleiben alle Daten nur
+auf dem jeweiligen Gerät.
+
+## 2026-10-29 — Paply Android: Ein-Tipp-Diktat über einen Paply-Knopf (von Allan entschieden)
+
+Echte Tester (Samsung, Xiaomi Android 11) fanden den Tastaturwechsel zu umständlich. Allan: Es „muss nativer wie bei
+iPhone laufen … 1 Klick …, reinreden, 1 Klick stopp fertig … und dann kommt meine alte Tastatur … wenn nicht Icon World
+oder Tastatur, dann eben ein Paply-Icon“.
+
+Entscheidung:
+- Ein **Paply-Knopf neben der normalen Tastatur**, wie bei Wispr Flow, über eine Bedienungshilfe.
+- Ablauf: 1 Tipp zum Aufnehmen, 1 Tipp für fertig, der Text kommt ins Feld. Die eigene Tastatur bleibt.
+- Die Paply-Tastatur bleibt als zweiter Weg erhalten.
+- Das ersetzt die Entscheidung „kein schwebender Knopf“ vom 28.10.
+- Bekannte Grenzen:
+  - Einmalig muss man die Bedienungshilfe einschalten, bei der Testdatei vorher „Eingeschränkte Einstellungen
+    zulassen“.
+  - In Apps mit eigenen bzw. geschützten Eingabefeldern landet der Text in der Zwischenablage.
+- Zusätzlich: Hinweise und Karten blenden sich nach wenigen Sekunden von selbst aus („smooth und clean, wie bei Apple“).
