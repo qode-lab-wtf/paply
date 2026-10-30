@@ -21,15 +21,16 @@ const WERTE = {
   'diktat.whisper_modell': [
     [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],
     [`${ANDROID}/GroqModels.kt`, /const val whisper = "([^"]+)"/],
+    ['android/app/src/main/java/com/paply/android/settings/SettingsRepository.kt', /val transcriptionModel: String = "([^"]+)"/],
   ],
   'polieren.modell': [
     [`${DESKTOP}/dictation/groq-models.js`, /POLISH_MODEL = '([^']+)'/],
-    [`${IOS}/Groq/GroqModels.swift`, /static let polish = "([^"]+)"/],
+    [`${IOS}/PublicAPI.swift`, /polishModel = "([^"]+)"/],
     [`${ANDROID}/GroqModels.kt`, /const val polish = "([^"]+)"/],
   ],
   'polieren.ausweichmodell': [
     [`${DESKTOP}/dictation/groq-models.js`, /POLISH_FALLBACK_MODEL = '([^']+)'/],
-    [`${IOS}/Groq/GroqModels.swift`, /static let polishFallback = "([^"]+)"/],
+    [`${IOS}/PublicAPI.swift`, /fallbackPolishModel = "([^"]+)"/],
     [`${ANDROID}/GroqModels.kt`, /const val polishFallback = "([^"]+)"/],
   ],
   'stille.no_speech_prob': [
@@ -62,12 +63,13 @@ const WERTE = {
 
 // Ausnahme aus REGELN.md → woran man im Code erkennt, dass sie noch besteht.
 const AUSNAHMEN = {
-  A1: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('language', language)"),
+  A1: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('language', language)")
+    || lies(`${DESKTOP}/notes/groq.js`).includes("form.append('language', 'de')"),
   A2: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('model', 'whisper-large-v3-turbo')"),
   A3: () => !lies(`${DESKTOP}/audio/silence-filter.js`).includes('Merci'),
   A4: () => /!userLanguages\.map\(CodeSwitchPrimer\.baseCode\)\.contains\(detected\)/.test(lies(`${IOS}/Text/LanguageGuard.swift`))
-    && /code !in userLanguages/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
-  A5: () => /const PROMPT = /.test(lies(`${DESKTOP}/notes/plan.js`)),
+    || /code !in userLanguages/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
+  A5: () => !/tasks|due_hint/.test(lies(`${DESKTOP}/notes/plan.js`)),
   A6: () => lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: false'),
   A7: () => /RETENTION_MS = 7 \* 24/.test(lies(`${DESKTOP}/meeting/audio-retention.js`)),
 };
@@ -122,6 +124,22 @@ function pruefePolierPrompt(fehler) {
   }
 }
 
+function pruefeGedankenPrompt(fehler) {
+  // Android prüft seinen Text in AILedgerPromptTests gegen dieselbe Datei.
+  const ios = [...lies(`${IOS}/Thoughts/AI/ThoughtPrompt.swift`).matchAll(/static let \w+ = """\n([\s\S]*?)\n\s*"""/g)]
+    .map(m => m[1].replace(/^ {4}/gm, '')).join('\n\n');
+  if (ios !== lies('android/thoughts/src/test/resources/thought-system-v6.txt').trimEnd()) {
+    fehler.push('Gedanken-Prompt von iOS und Android weicht ab');
+  }
+}
+
+function pruefeGedankenGrenze(fehler) {
+  // Die Voreinstellung von AudioCapture gilt nur, solange ThoughtService keine eigene Grenze übergibt.
+  if (/AudioCapture\([^\n]*maxMs/.test(lies('android/app/src/main/java/com/paply/android/ThoughtService.kt'))) {
+    fehler.push('gedanken.grenze_sekunden: ThoughtService übergibt eine eigene Grenze');
+  }
+}
+
 function pruefeStilleListe(fehler) {
   const saetze = (text, anfang) => {
     const start = text.indexOf(anfang);
@@ -143,6 +161,8 @@ const fehler = [];
 pruefeWerte(regeln, fehler);
 const ausnahmen = pruefeAusnahmen(regeln, fehler);
 pruefePolierPrompt(fehler);
+pruefeGedankenPrompt(fehler);
+pruefeGedankenGrenze(fehler);
 pruefeStilleListe(fehler);
 pruefeProjektregeln(fehler);
 
@@ -151,4 +171,4 @@ if (fehler.length) {
   for (const zeile of fehler) console.error(`- ${zeile}`);
   process.exit(1);
 }
-console.log(`Regeln eingehalten: ${Object.keys(WERTE).length} Werte, 3 Polier-Prompts, Stille-Liste. Offene Ausnahmen: ${ausnahmen}.`);
+console.log(`Regeln eingehalten: ${Object.keys(WERTE).length} Werte, 3 Polier-Prompts, Gedanken-Prompt, Stille-Liste. Offene Ausnahmen: ${ausnahmen}.`);

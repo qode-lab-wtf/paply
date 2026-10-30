@@ -7,7 +7,7 @@
 | Funktion | Mac | Windows | iPhone | Android |
 | --- | --- | --- | --- | --- |
 | Diktat | Alltagstauglich, Allans tägliche App | Gebaut, Praxistest beim Freund offen | Bei Testern, Gerätetests offen | Bei Testern, jüngste App |
-| Gedanken | Schwach: 4 von 19 Gedanken sauber eingeordnet | Wie Mac, ungetestet | Am weitesten (KI-Regeln v6) | Gleiche KI-Regeln, einfachere Verknüpfung |
+| Gedanken | Schwach: 4 von 19 Gedanken sauber eingeordnet (MacBook, 26./27.10.) | Wie Mac, ungetestet | Am weitesten (KI-Regeln v6) | Gleiche KI-Regeln, einfachere Verknüpfung |
 | Gespräche | Beta, aus (Gemini) | Beta, aus | Beta, aus, erster Gerätetest läuft | Fehlt |
 
 ## Mac und Windows
@@ -18,14 +18,14 @@
 
 ## iPhone
 
-- **Version:** 0.1.0, TestFlight bis Build 8, Build 9 als Debug auf Allans iPhone. 723 PaplyKit-Tests.
+- **Version:** 0.1.0, TestFlight bis Build 7, Build 9 als Debug auf Allans iPhone. Letzter belegter Lauf: 723 PaplyKit-Tests.
 - **Offen:** Gerätetests (Hauptsprache, Anrufe, Vibration, `idlePause`), Akku in Bereitschaft, „Gespräche“ mit echten
-  Aufnahmen. Englische Meetings: 12–19 % falsch zugeordnete Wörter.
+  Aufnahmen. Pilotmessung englische Meetings: 12–19 % der Wörter falsch oder unbekannt zugeordnet, noch keine Freigabe.
 - **Veröffentlichen:** [ios/docs/TESTFLIGHT.md](../ios/docs/TESTFLIGHT.md). **Verlauf:** [stand/ios.md](stand/ios.md).
 
 ## Android
 
-- **Version:** 0.2.1, als APK für Tester. Emulator-Abnahme API 30/34/36, 920 automatische Tests.
+- **Version:** 0.2.1, als APK für Tester. Emulator-Abnahme API 30/34/36. Letzter belegter Lauf: 852 Tests (0.1.4).
 - **Offen:** Echte Geräte (Pixel, Samsung), Anrufe, Bluetooth. „Gespräche“ gibt es noch nicht.
 - **Veröffentlichen:** [android/docs/RELEASE.md](../android/docs/RELEASE.md). **Verlauf:** [stand/android.md](stand/android.md).
 

@@ -46,17 +46,17 @@
     nein) – falls nicht, Mikro im Leerlauf anhalten (Experiment `idlePause`, auf dem Gerät noch ungetestet).
 - **Build 6 (28.10., nachmittags):** Absturz nach Anrufen behoben (AVAudioEngine warf beim Wiederaufnehmen eine
   Objective-C-Ausnahme wegen eines veralteten Formats): frische Engine, Tap ohne festes Format, Ausnahmen über das
-  neue Ziel `PaplyObjC` abgefangen. Auf drei Test-iPhones per Kabel/WLAN installiert (Debug).
+  neue Ziel `PaplyObjC` abgefangen. Auf Allans iPhone und die iPhones zweier Tester per Kabel/WLAN installiert (Debug).
 - **„Alle sehen Daten von anderen“ (28.10.) – kein Datenleck:** Es gibt keinen Server und keine geteilte Datenbank,
-  alles liegt nur auf dem jeweiligen iPhone. 
-  
+  alles liegt nur auf dem jeweiligen iPhone. Der Gedanke eines Testers (per Knopf gestartet) lief 10 Min. unbemerkt
+  mit und hat das Gespräch im Raum aufgenommen. Der Tester löscht ihn selbst.
 - **Build 7 (28.10., abends):** Verlässt man die App, während ein Gedanke läuft, erscheint oben sofort ein Banner
   (ohne Dynamic Island, z. B. iPhone 12 Pro) bzw. klappt die Dynamic Island auf – mit Sekundenzähler, „Fertig“
   und „Verwerfen“, dazu eine Vibration; alle 2 Min. wieder, „noch 1 Min.“ ebenso. Grenze bleibt 10 Min. (Allan).
   Hochgeladen und auf alle drei iPhones gespielt.
 - **Build 8 (28.10., lokal):** Eigene Themen mit + vorab anlegen (auch leer als Chip); einzelne oder mehrere
   Themen wahlweise samt Gedanken nach „Zuletzt gelöscht“ verschieben. Noch nicht auf dem Gerät getestet oder hochgeladen.
-- **TestFlight extern:** Gruppe „Testing“ mit öffentlichem Link <TestFlight-Link>
+- **TestFlight extern:** Gruppe „Testing“ mit öffentlichem Link (in App Store Connect)
   (bis 10 Tester). Build 5 liegt bei Apple zur ersten Prüfung (eingereicht 28.10. mittags); Apple schickt eine
   E-Mail, wenn sie durch ist. **Danach (Allan):** neuesten Build (7) der Gruppe „Testing“ hinzufügen, Link
   verschicken und den Prüf-Schlüssel für Apple bei Groq löschen. Neue Tester bekommen danach jeden Build ohne

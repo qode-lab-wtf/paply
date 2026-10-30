@@ -4,7 +4,8 @@ Hier steht, wie sich Paply verhält: auf Mac, Windows, iPhone und Android.
 
 **So ändert man eine Regel:** Hier ändern, dann `node shared/regeln-pruefen.mjs` laufen lassen. Der Wächter zeigt,
 welche App noch nachziehen muss. Fertig ist eine Änderung erst, wenn alle Apps sie erfüllen oder sie unten als
-Ausnahme steht. Die Texte für die KI liegen in `shared/`, die Abläufe bleiben in jeder App in ihrer eigenen Sprache.
+Ausnahme steht. Der KI-Text fürs Polieren liegt in `shared/`. Der KI-Text für Gedanken steht noch getrennt in iOS und
+Android, der Wächter vergleicht beide. Die Abläufe bleiben in jeder App in ihrer eigenen Programmiersprache.
 
 ## 1. Sprache
 
@@ -15,11 +16,13 @@ Vorgabe von Allan (30.10.2026):
 - Hauptsprache mit wenigen fremden Wörtern: Alles bleibt wie gesprochen.
 - Paply übersetzt nie.
 
-Kurze Stücke gehen direkt in der Hauptsprache raus, weil die automatische Erkennung dort oft danebenliegt.
+Kurze Stücke gehen mit der Sprache des vorherigen Stücks derselben Aufnahme raus, sonst in der Hauptsprache. Die
+automatische Erkennung liegt bei kurzen Stücken oft daneben.
 
 ## 2. Polieren
 
-- Der Rohtext von Whisper ist schon gut. Polieren macht nur wenig: Rechtschreibung, Satzzeichen, eindeutige Hörfehler.
+- Der Rohtext von Whisper ist schon gut. Polieren macht nur wenig: Rechtschreibung, Satzzeichen, Füllwörter, klar
+  gesprochene Selbstkorrekturen und eindeutige Hörfehler.
 - Englische und eingedeutschte Wörter wie „gepolisht“ bleiben unverändert.
 - Einen Begriff nur tauschen, wenn der Zusammenhang eindeutig ist.
 - Lehnt das Sicherheitsnetz die Politur ab, bleibt der Rohtext.
@@ -62,16 +65,16 @@ Diese Tabelle liest der Wächter direkt. Steht ein Wert in einer App anders, sch
 
 | Schlüssel | Wert | Bedeutung |
 | --- | --- | --- |
-| `sprache.kurz_sekunden` | `5` | Bis hierhin gesprochen: direkt in der Hauptsprache senden |
-| `diktat.whisper_modell` | `whisper-large-v3` | Standardmodell für Diktat |
+| `sprache.kurz_sekunden` | `5` | Bis hierhin gesprochen: Sprache mitsenden statt erkennen lassen (iPhone, Android) |
+| `diktat.whisper_modell` | `whisper-large-v3` | Standardmodell für Diktat (iPhone, Android) |
 | `polieren.modell` | `qwen/qwen3.8-27b` | Modell fürs Polieren |
 | `polieren.ausweichmodell` | `openai/gpt-oss-120b` | Bei Limit oder fehlendem Modell |
 | `stille.no_speech_prob` | `0.6` | Segment gilt ab hier als Stille, zusammen mit dem nächsten Wert |
 | `stille.avg_logprob` | `-1.0` | Unter diesem Wert ist Whisper unsicher |
-| `gedanken.modell` | `openai/gpt-oss-120b` | Einordnen von Gedanken |
-| `gedanken.ausweichmodell` | `openai/gpt-oss-20b` | Falls das Hauptmodell ausfällt |
-| `gedanken.regel_version` | `6` | Stand der KI-Regeln für Gedanken |
-| `gedanken.grenze_sekunden` | `600` | Länge einer Gedanken-Aufnahme |
+| `gedanken.modell` | `openai/gpt-oss-120b` | Einordnen von Gedanken (iPhone, Android) |
+| `gedanken.ausweichmodell` | `openai/gpt-oss-20b` | Falls das Hauptmodell ausfällt (iPhone, Android) |
+| `gedanken.regel_version` | `6` | Stand der KI-Regeln für Gedanken (iPhone, Android) |
+| `gedanken.grenze_sekunden` | `600` | Längste Gedanken-Aufnahme (iPhone, Android) |
 
 ## Ausnahmen
 
@@ -80,10 +83,10 @@ stimmt. **Offen** heißt: Allan entscheidet.
 
 | Nr. | App | Abweichung | Folge | Status |
 | --- | --- | --- | --- | --- |
-| A1 | Mac, Windows | Sprache ist fest eingestellt (Standard Deutsch), Whisper bekommt kein Sprachwechsel-Beispiel | Englisch gesprochen wird in Deutsch gepresst, Regel 1 gilt nicht | Offen, betrifft Cmd+X |
-| A2 | Mac, Windows | Whisper `turbo` statt `large-v3` | Messung vom 21.10.: `large-v3` nicht besser. Mobil ohne solche Messung | Offen, erst messen |
+| A1 | Mac, Windows | Diktat: Sprache fest eingestellt (Deutsch oder Englisch, Standard Deutsch), ohne Sprachwechsel-Beispiel für Whisper. Notes: immer Deutsch | Englisch gesprochen kann übersetzt oder verfälscht werden, Regel 1 gilt nicht | Offen, betrifft Cmd+X |
+| A2 | Mac, Windows | Diktat und Notes nutzen Whisper `turbo` statt `large-v3` | Mac-Messung mit echten Aufnahmen (21.10.): `large-v3` nicht besser. iPhone-Messung mit künstlicher Sprache: `large-v3` hält Sprachwechsel besser | Offen, mit echten Aufnahmen messen |
 | A3 | Mac, Windows | Stille-Liste hat 11 statt 62 Sätze, nur Deutsch und Englisch | „Merci.“ oder „Gracias.“ können bei Stille durchrutschen | Offen, betrifft Cmd+X |
 | A4 | iPhone, Android | Durchgehend fremde Sprache, die keine Nutzersprache ist, wird neu in der Hauptsprache geschrieben | Regel 1 gilt nur für eingestellte Sprachen. Schützt vor falscher Erkennung wie „ru“ | Offen |
-| A5 | Mac, Windows | Notes nutzt eigene deutsche KI-Regeln, ohne Aufgaben und Verknüpfungen zu früheren Gedanken | Regel 5 gilt nicht. Auf Allans MacBook scheiterte die Einordnung bei 10 von 19 Gedanken | Offen |
+| A5 | Mac, Windows | Notes nutzt eigene deutsche KI-Regeln ohne Aufgaben und Fälligkeiten, andere Modell-Reihenfolge, Aufnahme bis 30 Minuten | Regel 5 gilt nicht. Auf Allans MacBook (26./27.10.): von 19 Gedanken 4 sauber eingeordnet, 10 nicht eindeutig, 4 wegen Limit nur gesichert, 1 leer | Offen |
 | A6 | Mac, Windows | Polieren ist für neue Nutzer standardmäßig aus | Neue Nutzer bekommen nur den Rohtext | Offen, betrifft Cmd+X |
-| A7 | Mac, Windows | Meeting behält den Ton 7 Tage | Allans Entscheidung vom 21.09., Regel 6 gilt nur fürs iPhone | Offen |
+| A7 | Mac, Windows | Meeting und Notes behalten den Ton 7 Tage | Meeting: Allans Entscheidung vom 21.09. Regel 6 gilt nur fürs iPhone | Offen |
