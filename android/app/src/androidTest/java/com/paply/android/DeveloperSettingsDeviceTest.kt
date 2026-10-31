@@ -24,7 +24,19 @@ class DeveloperSettingsDeviceTest {
     }
 
     private fun click(text: String) {
-        var node = requireNotNull(find(text)) { "Missing $text" }
+        var found = find(text)
+        repeat(8) {
+            if (found == null) {
+                fun scroll(node: AccessibilityNodeInfo): Boolean {
+                    if (node.isScrollable && node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true
+                    for (i in 0 until node.childCount) node.getChild(i)?.let { if (scroll(it)) return true }
+                    return false
+                }
+                instrumentation.uiAutomation.rootInActiveWindow?.let(::scroll)
+                found = find(text)
+            }
+        }
+        var node = requireNotNull(found) { "Missing $text" }
         while (!node.isClickable) node = requireNotNull(node.parent) { "Not clickable: $text" }
         assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
