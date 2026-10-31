@@ -27,12 +27,15 @@ class DeveloperSettingsDeviceTest {
         var found = find(text)
         repeat(8) {
             if (found == null) {
-                fun scroll(node: AccessibilityNodeInfo): Boolean {
-                    if (node.isScrollable && node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true
-                    for (i in 0 until node.childCount) node.getChild(i)?.let { if (scroll(it)) return true }
-                    return false
+                val scrollables = mutableListOf<AccessibilityNodeInfo>()
+                fun collect(node: AccessibilityNodeInfo) {
+                    if (node.isScrollable) scrollables += node
+                    for (i in 0 until node.childCount) node.getChild(i)?.let(::collect)
                 }
-                instrumentation.uiAutomation.rootInActiveWindow?.let(::scroll)
+                instrumentation.uiAutomation.rootInActiveWindow?.let(::collect)
+                scrollables.maxByOrNull { node ->
+                    android.graphics.Rect().also(node::getBoundsInScreen).let { it.width() * it.height() }
+                }?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                 found = find(text)
             }
         }
