@@ -17,7 +17,12 @@
 
 ## Begriffs-Gegenprobe (unveröffentlicht)
 
-Alle drei Codebasen prüfen eigene Begriffe bei Diktat und Gedanken nach der Sprachwahl und vor den Filtern. Klangvergleich und Annahme folgen den 19 gemeinsamen Fällen. Lange Stücke behalten die erkannte Sprache, sofern die erwartete nicht mindestens 0,15 besser ist. Gespräche erhalten keine Begriffs-Gegenprobe. Regel-Version bleibt 6.
+Alle drei Codebasen prüfen eigene Begriffe bei Diktat und Gedanken nach der Sprachwahl. Stille- und Echo-Filter laufen vor der Begriffs-Gegenprobe und auf dem endgültigen Ergebnis. Nur Klangtreffer mit mindestens drei Schlüsselzeichen und begrenztem Schreibweisen-Abstand lösen aus; kein Unsicherheitsmodus. Klangfenster und Restwort-Prüfung folgen den 28 gemeinsamen Fällen. Der Prompt nennt höchstens drei Kandidaten jeweils zweimal, ohne Begrüßung. Fenster-Schlüssel werden je Text für die Kandidaten geteilt. Lange Stücke behalten die erkannte Sprache, sofern die erwartete nicht mindestens 0,15 besser ist. Gespräche erhalten keine Begriffs-Gegenprobe. Regel-Version bleibt 6.
+
+Review-Prüfung (31.10.2026): 936 Desktop-Tests, Vite und TypeScript; 748 Swift-Tests in 83 Suiten; iOS-App-Build auf dem MacBook bestanden. Android auf dem MacBook: 1.081 Tests (441 Core, 450 Gedanken, 190 App), Lint, Animal Sniffer der beiden Produktionsmodule und Debug-APK bestanden. Regelwächter: 13 Werte, keine neuen Ausnahmen.
+Die 28 gemeinsamen Begriffsfälle und der Titel-Fall mit nur gemeinsamem Füllwort bestehen; iPhone und Android hatten den Inhaltswort-Schutz bereits.
+200 Begriffe / 1.000 Wörter: 0,643 s lokal, 0,776 s auf dem MacBook (Debug, Testgrenze 5 s).
+Echter isolierter Desktop-Lauf mit Anna: „Lawi Min“ → „Law Min“, „Herr Lehmann“ erhalten, 3 s digitale Stille ohne Text.
 
 ## Nachzureichen
 
@@ -25,7 +30,6 @@ Alle drei Codebasen prüfen eigene Begriffe bei Diktat und Gedanken nach der Spr
 
 Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtbar, was den anderen fehlt.
 
-- **iPhone, Android:** Zusätzlichen Desktop-Titelschutz prüfen/nachziehen: Nicht belegte Inhaltswörter im Titel fallen auf die ersten Wörter des Originals zurück (im echten Lauf übersetzte die KI nur den französischen Titel).
 - **Android:** Ton-Regel 8 für Gedanken und Gespräche mit sofortiger Löschung nach gespeichertem Text und maximal 30 Tagen bei Fehlern prüfen/nachziehen (Desktop umgesetzt).
 - **iPhone, Android:** Desktop-Review-Korrekturen nachziehen/prüfen: Zeitgrenze der Gegenprobe, Sprachcode-Aliase und Schutz vor Primer-Echos sowie leeren Transkripten.
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
