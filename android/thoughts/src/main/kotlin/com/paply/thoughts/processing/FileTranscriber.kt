@@ -112,16 +112,18 @@ class FileTranscriber(
                                 pipeline.append(pcm.read(offset, next)); offset = next
                             }
                             val outcome = pipeline.finish()
-                            sentSeconds += outcome.timings.sentAudioSeconds
                             if (outcome.error == null && outcome.raw.isNotBlank())
                                 outcome.lastPieceLanguage?.let { previousLanguage = it }
                             diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
                             when (val result = result(outcome, settings.transcriptionModel)) {
-                                is TranscriptionResult.Failure -> return@use result.copy(sentAudioSeconds = sentSeconds)
+                                is TranscriptionResult.Failure -> return@use result.copy(sentAudioSeconds = sentSeconds + pipeline.sentAudioSeconds)
                                 is TranscriptionResult.Success -> { texts += result.text; languages += result.languages }
                                 TranscriptionResult.NoSpeech, is TranscriptionResult.Empty -> Unit
                             }
-                        } finally { pipeline.releaseAudio(); pipeline.close() }
+                        } finally {
+                            sentSeconds += pipeline.sentAudioSeconds
+                            pipeline.releaseAudio(); pipeline.close()
+                        }
                         start = end
                     }
                 }

@@ -109,6 +109,9 @@ constructor(
                 CodeSwitchPrimer.text(CodeSwitchPrimer.userLanguages(settings, deviceLanguages))
             else null
 
+    val sentAudioSeconds: Double
+        get() = sentSamples.get() / AudioEncoder.sampleRate
+
     val speechDetected
         get() = synchronized(lock) { vad.speechDetected }
 
@@ -214,7 +217,7 @@ constructor(
         measured: VoiceActivityDetector,
         previous: ChunkResult?,
     ): ChunkResult = try {
-        // Compact only confidently silent runs; preserve live scheduling and one request per piece.
+        // Compact only confidently silent runs; preserve live scheduling and the language check per piece.
         val ranges = LongSilence.ranges(measured, startSample, startSample + audio.size)
         if (ranges.isEmpty()) ChunkResult()
         else if (ranges.size == 1 && ranges[0].first == startSample && ranges[0].last + 1 == startSample + audio.size)
