@@ -187,7 +187,7 @@ class PipelineTests {
                         u[1].field("language") == null &&
                         u[2].field("language") == "en",
                 )
-                expect(o.languageSources == listOf("auto", "auto", "short"))
+                expect(o.languageSources == listOf("auto", "auto", "auto"))
             }
     }
 

@@ -291,6 +291,8 @@ fun DeveloperScreen(prefs: AppPreferences, edit: ((AppPreferences) -> AppPrefere
     var models by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Section("Diktat") {
+            SettingsToggle("Polieren", prefs.polish, { on -> edit { it.copy(polish = on) } })
+            Hairline()
             SettingsItem("Transkription", value = if (prefs.transcriptionModel.endsWith("turbo")) "large-v3-turbo (schneller)" else "large-v3 (genauer)", onClick = { models = true })
             Hairline()
             SettingsToggle("Stücke-Upload", prefs.chunkUpload, { on -> edit { it.copy(chunkUpload = on) } })
@@ -299,6 +301,7 @@ fun DeveloperScreen(prefs: AppPreferences, edit: ((AppPreferences) -> AppPrefere
             SettingsToggle("Immer mit Mikrofondienst", prefs.buttonForeground, { on -> edit { it.copy(buttonForeground = on) } },
                 description = "Aus: direkt, bei Sperre mit Mikrofondienst. Ein: immer mit Mikrofondienst.")
         }
+        SettingsItem("Entwicklerbereich ausblenden", onClick = { edit { it.copy(developerMode = false) }; navigate("settings") })
         Section("Werkzeuge") { SettingsItem("Diagnose", icon = PaplyIcons.AudioLines, onClick = { navigate("diagnostics") }) }
     }
     if (models) AlertDialog(onDismissRequest = { models = false }, title = { Text("Transkription") }, text = {

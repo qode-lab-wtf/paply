@@ -216,6 +216,9 @@ enum class PolishFailureCode(val rawValue: String) {
 }
 
 enum class LanguageSource(val rawValue: String) {
+    checkedExpected("checked-expected"),
+    checkedDetected("checked-detected"),
+    checkFailed("check-failed"),
     auto("auto"),
     short("short"),
     redo("redo"),

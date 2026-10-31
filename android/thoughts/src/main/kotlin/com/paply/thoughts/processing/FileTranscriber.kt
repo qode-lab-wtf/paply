@@ -79,6 +79,7 @@ class FileTranscriber(
                 val ranges = LongSilence.ranges(vad, 0, pcm.size)
                 val texts = mutableListOf<String>()
                 val languages = linkedSetOf<String>()
+                var previousLanguage: String? = null
                 for (range in ranges) {
                     start = range.first
                     while (start <= range.last) {
@@ -96,6 +97,7 @@ class FileTranscriber(
                             GroqClient(apiKey, baseUrl = baseURL, transport = transport, diagnostic = {
                                 if (it == "whisper.request") diagnostic("thought.groq count=1")
                             }), catalog, PipelineOptions(polish = false, removeLongSilence = true),
+                            previousPieceLanguage = previousLanguage,
                         )
                         try {
                             var offset = start
@@ -105,6 +107,7 @@ class FileTranscriber(
                                 pipeline.append(pcm.read(offset, next)); offset = next
                             }
                             val outcome = pipeline.finish()
+                            outcome.languages.lastOrNull()?.let { previousLanguage = it }
                             diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
                             when (val result = result(outcome, settings.transcriptionModel)) {
                                 is TranscriptionResult.Failure -> return@use result
