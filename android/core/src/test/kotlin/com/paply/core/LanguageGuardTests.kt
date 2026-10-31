@@ -57,7 +57,7 @@ class LanguageGuardTests {
         expect(LanguageGuard.checkTimeoutMs(40000.0) == 60000L)
         MockServer { _, i ->
             Groq.transcription("On se voit ce soir.", "French").apply {
-                if (i > 0) setBodyDelay(30, java.util.concurrent.TimeUnit.SECONDS)
+                if (i > 0) setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE)
             }
         }.use { server ->
             val p = pipeline(server)
