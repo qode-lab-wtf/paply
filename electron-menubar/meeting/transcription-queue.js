@@ -126,8 +126,8 @@ class TranscriptionQueue extends EventEmitter {
 
     return res.json();
     };
-    const json = await guardedTranscription(request, { expected: this.previousLanguages[channel] || this.language, users: this.users, duration: (wavBuffer.length - 44) / 32000 });
-    this.previousLanguages[channel] = json.language || this.previousLanguages[channel];
+    const json = await guardedTranscription(request, { expected: this.previousLanguages[channel] || this.language, users: this.users, spoken: require('../notes/queue').levels(wavBuffer.subarray(44)).speechMs / 1000, duration: (wavBuffer.length - 44) / 32000 });
+    if (parseVerbose(json, tOffset).length) this.previousLanguages[channel] = json.language || this.previousLanguages[channel];
     return parseVerbose(removeEchoes(json, { example, previousText }), tOffset);
   }
 }

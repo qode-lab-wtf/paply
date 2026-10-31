@@ -7,8 +7,7 @@ const string = { type: 'string' }, nullable = { type: ['string', 'null'] }, arra
 const SCHEMA = obj({ title: string, clean_text: string, topic: obj({ choice: enumeration(['existing','new','none']), id: nullable, new_name: nullable, symbol: enumeration(C.ICONS) }), tasks: array(obj({ text: string, quote: string, due_hint: nullable })), related: array(obj({ ref: string, kind: enumeration(['continues','same_matter','changes']), reason: string, confidence: enumeration(['high','medium','low']) })) });
 const words = s => s.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
 const digits = require('./numbers').digitsContained;
-const fallbackTitle = text => [...text.trim().split(/\s+/).slice(0, 6).join(' ')].slice(0, 60).join('');
-const effectiveNegations = s => negationCount(s.replace(/nicht vergessen|vergiss nicht|don't forget|do not forget|n'oublie(?:z)? pas/gi, ''));
+const { fallbackTitle, matches, locateQuote, plainHyphens, sameNamed, tidyTask, effectiveNegations } = require('./thought-text');
 const taskStopwords = new Set('der die das den dem des ein eine einen einem einer und oder für mit von vom zu zum zur im in ins an am ans auf bei beim wegen noch the a an and or for with to of in on at le la les un une de du des et pour el los las y para con il lo gli e per o os as um uma het een en voor met'.split(' '));
 function dueInQuote(hint, quote) {
   const due = words(hint), source = words(quote);
@@ -24,23 +23,24 @@ function dueInQuote(hint, quote) {
 function validate(value, ctx) {
   const raw = ctx.sentences.map(s => s.text).join(' ');
   if (!value || typeof value.title !== 'string' || typeof value.clean_text !== 'string' || !value.topic || !Array.isArray(value.tasks) || !Array.isArray(value.related) || (!value.title.trim() && !value.clean_text.trim())) throw Object.assign(new Error('Einordnung nicht lesbar'), { kind: 'plan' });
+  value = JSON.parse(plainHyphens(JSON.stringify(value)));
   const clean = value.clean_text.trim();
   const text = polishRejection(raw, clean, { profile: 'thought', vocabulary: ctx.custom_terms || '' }) ? raw : clean;
   let title = value.title.split('\n')[0].trim().replace(/^["'„“«]+|["'„“».,!?;:… –—-]+$/g, '');
-  if (!title || [...title].length > 60 || !digits(title, raw) || !words(title).some(w => words(raw).includes(w)) || contentWords(title).some(w => !words(raw).includes(w))) title = fallbackTitle(text);
+  if (!title || [...title].length > 60 || !digits(title, raw) || !words(title).some(w => matches(w, words(raw))) || contentWords(title).some(w => !matches(w, words(raw)))) title = fallbackTitle(text);
   let topic = null;
   if (value.topic.choice === 'existing' && ctx.topics.some(t => t.id === value.topic.id)) topic = { id: value.topic.id };
   if (value.topic.choice === 'new' && typeof value.topic.new_name === 'string') {
-    const name = value.topic.new_name.trim(), same = ctx.topics.filter(t => t.title.toLowerCase() === name.toLowerCase());
+    const name = value.topic.new_name.trim(), same = sameNamed(name, ctx.topics);
     if (same.length === 1) topic = { id: same[0].id };
     else if (!same.length && !ctx.topics_full && name && [...name].length <= 24 && name.split(/\s+/).length <= 3 && !/\d/.test(name) && !/^(Ideen|Gedanken|Notizen|Sonstiges|Allgemein|Aufgaben|Wichtig|Privat|Arbeit|Ideas|Notes|Misc|Todo)$/i.test(name)) topic = { name, icon: C.ICONS.includes(value.topic.symbol) ? value.topic.symbol : 'sparkles' };
   }
   const tasks = [], seen = new Set();
   for (const t of value.tasks.slice(0, 5)) {
     if (!t || typeof t.text !== 'string' || typeof t.quote !== 'string') continue;
-    const quote = t.quote.trim(), text = t.text.trim().replace(/\n/g, ' ');
-    if ([...quote].length < 2 || [...quote].length > 80 || !raw.includes(quote) || [...text].length < 2 || [...text].length > 80) continue;
-    if (words(text).filter(w => w.length >= 2 && !taskStopwords.has(w) && !words(quote).includes(w)).length > 1 || !digits(text, quote) || effectiveNegations(text) !== effectiveNegations(quote)) continue;
+    const quote = locateQuote(t.quote.trim(), raw), text = tidyTask(t.text, t.due_hint);
+    if (!quote || [...t.quote.trim()].length > 200 || [...quote].length < 2 || [...quote].length > 200 || [...text].length < 2 || [...text].length > 80) continue;
+    if (words(text).filter(w => w.length >= 2 && !taskStopwords.has(w) && !matches(w, words(quote))).length > 1 || !digits(text, quote) || effectiveNegations(text) !== effectiveNegations(quote)) continue;
     const due_hint = typeof t.due_hint === 'string' && t.due_hint.trim() && dueInQuote(t.due_hint, quote) ? t.due_hint.trim() : null;
     const key = words(text).join(' ') + '|' + (due_hint || '').toLowerCase();
     if (!seen.has(key)) { seen.add(key); tasks.push({ text, quote, due_hint }); }
@@ -48,7 +48,7 @@ function validate(value, ctx) {
   const related = [], refs = new Set();
   for (const r of value.related.slice(0, 3)) {
     const candidate = ctx.existing.find(n => n.id === r?.ref);
-    if (!candidate || candidate.score < .75 || !['high','medium'].includes(r.confidence) || !['continues','same_matter','changes'].includes(r.kind) || typeof r.reason !== 'string' || !r.reason.trim() || [...r.reason].length > 60 || !digits(r.reason, raw + candidate.text + candidate.label) || refs.has(r.ref)) continue;
+    if (!candidate || (r.confidence === 'medium' && candidate.score < .2) || !['high','medium'].includes(r.confidence) || !['continues','same_matter','changes'].includes(r.kind) || typeof r.reason !== 'string' || !r.reason.trim() || [...r.reason].length > 60 || !digits(r.reason, raw + candidate.text + candidate.label) || refs.has(r.ref)) continue;
     refs.add(r.ref); related.push(r);
   }
   return { title, text, topic, tasks, related };
@@ -58,7 +58,7 @@ function applyThought(board, result, { rawId, rawRev }) {
   if (!n || n.rev !== rawRev || n.owner === 'user') return false;
   let topicId = result.topic?.id;
   if (result.topic?.name) {
-    const same = Object.values(board.topics).find(t => t.title.toLowerCase() === result.topic.name.toLowerCase());
+    const same = sameNamed(result.topic.name, Object.values(board.topics))[0];
     topicId = same?.id || C.uid('t');
     if (!same) board.topics[topicId] = { id: topicId, title: result.topic.name, icon: result.topic.icon, owner: 'ai', createdAt: Date.now() };
   }
@@ -68,7 +68,7 @@ function applyThought(board, result, { rawId, rawRev }) {
   const protectedQuotes = Object.values(board.tasks).filter(t => t.sourceId === n.sourceId && (t.owner === 'user' || t.done)).map(t => t.quote);
   for (const [id, t] of Object.entries(board.tasks)) if (t.nodeId === n.id && t.owner !== 'user' && !t.done) delete board.tasks[id];
   const sourceTasks = Object.values(board.tasks).filter(t => t.sourceId === n.sourceId);
-  for (const task of result.tasks.slice(0, Math.max(0, 5 - sourceTasks.length))) {
+  for (const task of result.tasks.slice(0, Math.min(5, Math.max(0, 10 - sourceTasks.length)))) {
     if (protectedQuotes.includes(task.quote) || sourceTasks.some(t => t.text === task.text && t.due_hint === task.due_hint)) continue;
     const id = C.uid('task'); board.tasks[id] = { ...task, id, sourceId: n.sourceId, nodeId: n.id, owner: 'ai', done: false };
   }

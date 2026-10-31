@@ -206,6 +206,18 @@ public actor ConversationStore: ConversationRecordingStore {
         for item in try all() {
             if let deleted = item.deletedAt, now.timeIntervalSince(deleted) >= 30 * 86400 { try await purge(item.id); continue }
             if item.state == .done { try await compactAudio(item.id) }
+            else if item.state != .recording, item.audio != nil,
+                    now.timeIntervalSince(item.createdAt.addingTimeInterval(Double(item.durationMs) / 1000)) >= 30 * 86400 {
+                for file in try FileManager.default.contentsOfDirectory(at: directory(item.id), includingPropertiesForKeys: nil)
+                where file.lastPathComponent.hasPrefix("audio.") || file.lastPathComponent.hasPrefix("import-original.") {
+                    try FileManager.default.removeItem(at: file)
+                }
+                try update(item.id) {
+                    $0.audio = nil
+                    $0.state = .needsAttention
+                    $0.status = .init(message: "Audio nach 30 Tagen entfernt · bitte erneut aufnehmen")
+                }
+            }
         }
     }
 }

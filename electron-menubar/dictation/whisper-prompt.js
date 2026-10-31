@@ -68,15 +68,12 @@ function buildPrompt(vocabulary = '', previousText = '', example = '') {
     parts.push(example.trim());
     used = estimateTokens(example);
   }
-  let vocab = vocabularyPrompt(vocabulary);
-  if (estimateTokens(vocab) > 90) {
-    const kept = [];
-    for (const item of vocab.split(', ')) {
-      if (estimateTokens([...kept, item].join(', ')) > 90) break;
-      kept.push(item);
-    }
-    vocab = kept.join(', ');
+  const kept = [];
+  for (const item of vocabulary.split(/[,;\r\n]+/).map(s => s.trim()).filter(Boolean)) {
+    if (estimateTokens([...kept, item].join(', ')) > 90) break;
+    kept.push(item);
   }
+  const vocab = kept.join(', ');
   if (vocab) {
     const item = vocab.endsWith('.') ? vocab : vocab + '.';
     parts.push(item);

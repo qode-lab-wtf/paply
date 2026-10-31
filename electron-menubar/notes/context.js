@@ -18,8 +18,10 @@ function context(board, sentences, entryId = null) {
   const score = n => ((n.text + ' ' + n.label).toLocaleLowerCase('de').match(/[\p{L}\d]{3,}/gu) || []).reduce((v, w) => v + (words.has(w) ? 1 : 0), 0);
   const localScore = n => { const other = new Set(((n.text + ' ' + n.label).toLowerCase().match(/[\p{L}\d]{3,}/gu) || [])); return [...words].filter(w => other.has(w)).length / Math.max(1, new Set([...words, ...other]).size); };
   const candidates = Object.values(board.nodes).filter(n => !['point', 'hub'].includes(n.kind) && !n.pending && (!entryId || n.sourceId !== entryId)).sort((a, b) => score(b) - score(a) || b.createdAt - a.createdAt).slice(0, 8);
+  const spoken = ' ' + sentences.map(s => s.text).join(' ').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ') + ' ';
+  const mentioned = t => t.mentioned || spoken.includes(' ' + t.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ') + ' ');
   const topics = Object.values(board.topics).sort((a, b) => (candidates.some(n => n.topicId === b.id) ? 1 : 0) - (candidates.some(n => n.topicId === a.id) ? 1 : 0)).slice(0, 32);
-  return { topics: topics.map(t => ({ id: t.id, title: t.title, n: new Set(Object.values(board.nodes).filter(n => n.topicId === t.id).map(n => n.sourceId || n.id)).size })), existing: candidates.map(n => ({ id: n.id, topic: n.topicId, label: n.label, text: n.text.slice(0, 320), score: localScore(n), when: new Date(n.createdAt).toLocaleString() })), sentences };
+  return { topics: topics.map(t => ({ id: t.id, title: t.title, ...(t.about || t.note ? { about: t.about || t.note } : {}), ...(mentioned(t) ? { mentioned: true } : {}), n: new Set(Object.values(board.nodes).filter(n => n.topicId === t.id).map(n => n.sourceId || n.id)).size })), existing: candidates.map(n => ({ id: n.id, topic: n.topicId, label: n.label, text: n.text.slice(0, 160), score: localScore(n), createdAt: n.createdAt, when: new Date(n.createdAt).toLocaleString() })), sentences };
 }
 
 module.exports = { splitSentences, chunks, context };

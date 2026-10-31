@@ -17,15 +17,19 @@
 
 ## Nachzureichen
 
+- **Android:** Die hier ergänzten Desktop-Regressionen für Aufgaben-Zitate, Themen-Dubletten, Abschnittslimits und begrenzte Budget-Neuversuche gegen den mobilen Stand prüfen. iPhone verwendet bereits die Vorlagen; seine 30-Tage-Tonbereinigung ist jetzt ergänzt.
+
 Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtbar, was den anderen fehlt.
 
 - **iPhone, Android:** Zusätzlichen Desktop-Titelschutz prüfen/nachziehen: Nicht belegte Inhaltswörter im Titel fallen auf die ersten Wörter des Originals zurück (im echten Lauf übersetzte die KI nur den französischen Titel).
-- **iPhone, Android:** Ton-Regel 8 für Gedanken und Gespräche mit sofortiger Löschung nach gespeichertem Text und maximal 30 Tagen bei Fehlern prüfen/nachziehen (Desktop umgesetzt).
+- **Android:** Ton-Regel 8 für Gedanken und Gespräche mit sofortiger Löschung nach gespeichertem Text und maximal 30 Tagen bei Fehlern prüfen/nachziehen (Desktop umgesetzt).
 - **iPhone, Android:** Desktop-Review-Korrekturen nachziehen/prüfen: Zeitgrenze der Gegenprobe, Sprachcode-Aliase und Schutz vor Primer-Echos sowie leeren Transkripten.
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 
 ## Mac und Windows
+
+- **Gedanken-Endreview (31.10.2026, unveröffentlicht):** Link-Sicherheit und lokale Schwelle getrennt; Aufgaben mit bis zu 200 Zeichen langen, unscharf belegten Zitaten, mobile Textbereinigung und 5/10-Abschnittslimit. Budget-Neuversuch bleibt über Wartezeiten erhalten, Rückfall ist endlich und sichtbar; erfolglose Wiederholung schützt vorhandene KI-Ergebnisse. Themen-Dubletten, Titelbeugung/CJK, Eingabe-Aliase, eigene/erledigte Aufgaben und fehlender Ton korrigiert. Whisper-Begriffe, Meeting-Sprachkontinuität und Aufnahmehinweis nachgezogen. 878 Desktop-Tests, Vite, TypeScript und Regelwächter bestanden. Echter isolierter Lauf: 4 gesprochene Gedanken, 4 eingeordnet, 4 Aufgaben, 1 Verknüpfung, französischer Text und Titel erhalten; 9 HTTP-Anfragen (5 Whisper, 4 Einordnung), 10.447 Chat-Tokens. iPhone: 30-Tage-Tonbereinigung ergänzt, 743 Swift-Tests bestanden. Kein Release oder Windows-/GUI-Gerätetest.
 
 - **Version:** v1.15.3, veröffentlicht, auf Allans MacBook installiert. 744 automatische Tests.
 - **Quellstand (noch nicht veröffentlicht):** Sprach-Gegenprobe für Diktat, Notes und Groq-Meeting-Fallback; 62 Stille-Phrasen; Whisper large-v3 und Polieren standardmäßig an. Entwicklerbereich über fünf Versionsklicks. Bestehende Polier-Werte werden einmalig auf an migriert; danach bleibt die Entwicklerwahl erhalten.

@@ -41,7 +41,7 @@ function createCommands(repo, onChange = () => {}) {
         } else if (op.type === 'delete') {
           const n = b.nodes[C.id(op.id)]; if (!n) continue;
           for (const sid of n.sentenceIds) b.claims[sid] = { tomb: true };
-          b.tombstones[n.id] = Date.now(); delete b.nodes[n.id];
+          b.tombstones[n.id] = Date.now(); delete b.nodes[n.id]; for (const [tid, task] of Object.entries(b.tasks || {})) if (task.nodeId === n.id && task.owner !== 'user') delete b.tasks[tid];
           for (const [eid, e] of Object.entries(b.edges)) if (e.source === n.id || e.target === n.id) { b.tombstones[eid] = Date.now(); delete b.edges[eid]; }
         } else if (op.type === 'duplicate') {
           const n = b.nodes[C.id(op.id)]; C.assert(n); const copy = C.clone(n);

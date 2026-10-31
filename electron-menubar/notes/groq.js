@@ -46,14 +46,17 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
     },
     async plan(ctx, _large, signal) {
       const settings = getTranscriptionSettings();
+      const locale = settings.systemLanguages?.[0] || Intl.DateTimeFormat().resolvedOptions().locale;
+      const aliases = new Map((ctx.topics || []).map((t,i) => [t.id, `t${i+1}`]));
+      const when = n => { if (!n.createdAt) return n.when; const d=new Date(n.createdAt), now=new Date(); const days=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/86400000); return (Math.abs(days)<=1 ? new Intl.RelativeTimeFormat(locale,{numeric:'auto'}).format(days,'day') : d.toLocaleDateString(locale)) + ' ' + d.toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'}); };
       const input = { ui_language: settings.systemLanguages?.[0] || Intl.DateTimeFormat().resolvedOptions().locale,
-        spoken_languages: userLanguages(settings.language, settings.systemLanguages), now: ctx.now || new Date().toLocaleString(),
-        custom_terms: ctx.custom_terms || '', topics_full: ctx.topics_full || false,
-        topics: (ctx.topics || []).map(t => ({ id: t.id, name: t.title, n: t.n || 0, hint: '' })),
-        candidates: (ctx.existing || []).map(n => ({ ref: n.id, title: n.label, topic: n.topic, when: n.when, excerpt: n.text })),
+        spoken_languages: userLanguages(settings.language, settings.systemLanguages), now: new Date().toLocaleString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        custom_terms: require('../dictation/polish-prompt').customTermsPrompt(ctx.custom_terms || ''), topics_full: ctx.topics_full || false,
+        topics: (ctx.topics || []).map(t => ({ id: aliases.get(t.id), name: t.title, n: t.n || 0, hint: '', ...(t.about ? { about: t.about.replace(/\s+/g, ' ').trim() } : {}), ...(t.mentioned ? { mentioned: true } : {}) })),
+        candidates: (ctx.existing || []).map(n => ({ ref: n.id, title: n.label, topic: aliases.get(n.topic) || null, when: when(n), excerpt: n.text.slice(0,160) })),
         transcript: (ctx.sentences || []).map(s => s.text).join(' ') };
       const messages = [{ role: 'system', content: PROMPT }, { role: 'user', content: JSON.stringify(input) }];
-      const max = 3200;
+      const max = Math.min(6000, Math.max(1500, Math.ceil(Math.ceil(Buffer.byteLength(input.transcript) / 3) * 1.3) + 900));
       const estimate = () => Math.ceil(Buffer.byteLength(JSON.stringify({ messages, schema: SCHEMA })) / 3) + max + 256;
       let amount = estimate();
       while (amount > 7600 && (input.candidates.length || input.topics.length)) {
@@ -62,20 +65,23 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
       }
       if (amount > 7600) throw Object.assign(new Error('Original erhalten'), { kind: 'too_large' });
       // Only IDs actually sent to the model may be used in its answer.
-      ctx = { ...ctx, topics: (ctx.topics || []).filter(t => input.topics.some(x => x.id === t.id)), existing: (ctx.existing || []).filter(n => input.candidates.some(x => x.ref === n.id)) };
-      let model = PRIMARY_MODEL, effort = 'low', shortRetry = false, effortRetry = false;
+      ctx = { ...ctx, topics: (ctx.topics || []).filter(t => input.topics.some(x => x.id === aliases.get(t.id))), existing: (ctx.existing || []).filter(n => input.candidates.some(x => x.ref === n.id)) };
+      let model = PRIMARY_MODEL, effort = ctx.planRetry ? 'medium' : 'low', shortRetry = false, effortRetry = !!ctx.planRetry;
       for (;;) {
         try {
           const data = await request('chat/completions', { model, messages, temperature: .1, reasoning_effort: effort, max_completion_tokens: max, response_format: { type: 'json_schema', json_schema: { name: 'paply_thought', strict: true, schema: SCHEMA } } }, { model, amount, signal });
           let value;
           try {
             if (data.choices?.[0]?.finish_reason !== 'stop') throw Error();
-            value = JSON.parse(data.choices[0].message.content); validate(value, ctx);
+            value = JSON.parse(data.choices[0].message.content);
+            if (value.topic?.choice === 'existing') value.topic.id = [...aliases].find(([,alias]) => alias === value.topic.id)?.[0] || null;
+            validate(value, ctx);
           } catch { throw Object.assign(new Error('Einordnung nicht lesbar'), { kind: 'plan' }); }
           if (value.topic.choice === 'existing' && !ctx.topics.some(t => t.id === value.topic.id)) value.topic = { ...value.topic, choice: 'none', id: null };
           value.related = value.related.filter(r => ctx.existing.some(n => n.id === r?.ref));
           return value;
         } catch (e) {
+          if (e.kind === 'budget' && effortRetry) e.planRetry = true;
           if (e.kind === 'rate' && e.retryMs <= 20000 && !shortRetry) {
             shortRetry = true;
             await require('node:timers/promises').setTimeout(e.retryMs, undefined, { signal }); continue;
