@@ -107,7 +107,7 @@ class FileTranscriber(
                                 pipeline.append(pcm.read(offset, next)); offset = next
                             }
                             val outcome = pipeline.finish()
-                            outcome.languages.lastOrNull()?.let { previousLanguage = it }
+                            outcome.lastPieceLanguage?.let { previousLanguage = it }
                             diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
                             when (val result = result(outcome, settings.transcriptionModel)) {
                                 is TranscriptionResult.Failure -> return@use result

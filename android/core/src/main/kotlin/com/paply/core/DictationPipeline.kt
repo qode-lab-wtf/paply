@@ -460,6 +460,7 @@ constructor(
                                 uploadedBytes = bytes.get() - bytesBefore,
                                 chunkCount = uploads.get() - uploadsBefore,
                             ),
+                        lastPieceLanguage = plan.orEmpty().lastOrNull()?.result?.language,
                         languageSources =
                             plan.orEmpty().mapNotNull { it.result?.languageSource?.rawValue },
                     )
