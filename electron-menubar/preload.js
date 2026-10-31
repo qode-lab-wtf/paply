@@ -8,6 +8,7 @@ function listen(channel, cb) {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Settings
+  showDiagnosticLog: () => ipcRenderer.invoke('diagnostics:show'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   openNotes: () => ipcRenderer.invoke('notes:open'),
   getNotesSettings: () => ipcRenderer.invoke('notes:settings:get'),
@@ -50,12 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Stats
   getStats: () => ipcRenderer.invoke('stats:get'),
-  getOwnerStats: () => ipcRenderer.invoke('stats:owner'),
   onStatsUpdated: (cb) => ipcRenderer.on('stats:updated', (_e, stats) => cb(stats)),
 
-  // Owner Mode
-  checkOwnerMode: () => ipcRenderer.invoke('owner:check'),
-  toggleOwnerMode: (password) => ipcRenderer.invoke('owner:toggle', password),
 
   // Profiles / Agents
   getProfiles: () => ipcRenderer.invoke('profiles:get'),

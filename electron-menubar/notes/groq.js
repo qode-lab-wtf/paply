@@ -1,7 +1,9 @@
 'use strict';
+const { WHISPER_MODEL, userLanguages, guardedTranscription } = require('../dictation/language-guard');
+const { primer, buildPrompt, removeEchoes } = require('../dictation/whisper-prompt');
 const { PROMPT, PLAN_SCHEMA } = require('./plan');
 function retryAfter(value, now = Date.now()) { if (!value) return 30000; const sec = Number(value); return Math.max(1000, Math.min(86400000, Number.isFinite(sec) ? sec * 1000 : Date.parse(value) - now || 30000)); }
-function createGroq({ getKey, ledger, fetchImpl = globalThis.fetch, endpoint = 'https://api.groq.com/openai/v1' }) {
+function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fetchImpl = globalThis.fetch, endpoint = 'https://api.groq.com/openai/v1' }) {
   async function request(route, body, { model, amount, unit = 'tokens', signal, timeout = 90000, multipart = false }) {
     const key = getKey(); if (!key) { const e = new Error('Groq-Schlüssel in den Einstellungen ergänzen'); e.kind = 'key'; throw e; }
     const reservation = ledger.reserve(model, amount, unit);
@@ -24,10 +26,19 @@ function createGroq({ getKey, ledger, fetchImpl = globalThis.fetch, endpoint = '
     finally { clearTimeout(timer); signal?.removeEventListener('abort', cancel); }
   }
   return {
-    async transcribe(wav, seconds, signal, vocabulary = '') {
-      const form = new FormData(); form.append('file', new Blob([wav], { type: 'audio/wav' }), 'thought.wav'); form.append('model', 'whisper-large-v3-turbo'); form.append('language', 'de'); form.append('response_format', 'verbose_json'); form.append('temperature', '0');
-      if (vocabulary) form.append('prompt', vocabulary.slice(0, 800));
-      return request('audio/transcriptions', form, { model: 'whisper-large-v3-turbo', amount: Math.max(10, seconds), unit: 'audio', multipart: true, signal, timeout: 120000 });
+    async transcribe(wav, seconds, signal, vocabulary = '', context = {}) {
+      const settings = getTranscriptionSettings();
+      const users = userLanguages(settings.language, settings.systemLanguages);
+      const example = primer(users), model = settings.whisperModel || WHISPER_MODEL;
+      const response = await guardedTranscription(async language => {
+        const form = new FormData(); form.append('file', new Blob([wav], { type: 'audio/wav' }), 'thought.wav'); form.append('model', model);
+        if (language) form.append('language', language);
+        form.append('response_format', 'verbose_json'); form.append('temperature', '0');
+        const prompt = buildPrompt(vocabulary, context.previousText, example);
+        if (prompt) form.append('prompt', prompt);
+        return request('audio/transcriptions', form, { model, amount: Math.max(10, seconds), unit: 'audio', multipart: true, signal, timeout: 120000 });
+      }, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
+      return removeEchoes(response, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
     },
     async plan(ctx, large, signal) {
       const model = large ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b';

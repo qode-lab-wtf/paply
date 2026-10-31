@@ -19,7 +19,6 @@ const CANONICAL_KEYS = [
   'meetingHotkey',
   'shortcut',
   'autopaste',
-  'enablePolish',
   'customVocabulary',
   'beepEnabled',
   'autoStart',
@@ -40,4 +39,16 @@ describe('Settings-UIs sind synchron', () => {
       expect(settingsApp.includes(key)).toBe(true);
     });
   }
+});
+
+it('Polieren und Modell sind ausschließlich im gemeinsamen Entwicklerbereich bedienbar', () => {
+ const developer = fs.readFileSync(path.join(ROOT, 'src/components/DeveloperSettings.tsx'), 'utf8');
+ for (const file of [DASHBOARD, SETTINGS_APP]) {
+  const source = fs.readFileSync(file, 'utf8');
+  expect(source).toContain('<DeveloperSettings />');
+  expect(source).not.toMatch(/onCheckedChange=.*enablePolish/);
+ }
+ expect(developer).toContain('count.current >= 5');
+ expect(developer).toContain('developerMode: false');
+ for (const key of ['enablePolish', 'whisperModel', 'showDiagnosticLog']) expect(developer).toContain(key);
 });

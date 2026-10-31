@@ -16,12 +16,15 @@ const GEDANKEN = 'android/thoughts/src/main/kotlin/com/paply/thoughts';
 // Wert aus REGELN.md → wo er in den Apps steht.
 const WERTE = {
   'sprache.kurz_sekunden': [
+    [`${DESKTOP}/dictation/language-guard.js`, /SHORT_SPEECH_SECONDS = ([\d.]+)/],
     [`${IOS}/Text/LanguageGuard.swift`, /shortSpeechSeconds = ([\d.]+)/],
     [`${ANDROID}/LanguageGuard.kt`, /shortSpeechSeconds = ([\d.]+)/],
   ],
   'sprache.abstand': [
+    [`${DESKTOP}/dictation/language-guard.js`, /CHECK_GAP = ([\d.]+)/],
   ],
   'diktat.whisper_modell': [
+    [`${DESKTOP}/dictation/language-guard.js`, /WHISPER_MODEL = '([^']+)'/],
     [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],
     [`${ANDROID}/GroqModels.kt`, /const val whisper = "([^"]+)"/],
     ['android/app/src/main/java/com/paply/android/settings/SettingsRepository.kt', /val transcriptionModel: String = "([^"]+)"/],
@@ -73,7 +76,11 @@ const AUSNAHMEN = {
   A4: () => /func redoLanguage/.test(lies(`${IOS}/Text/LanguageGuard.swift`))
     || /fun redoLanguage/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
   A5: () => !/tasks|due_hint/.test(lies(`${DESKTOP}/notes/plan.js`)),
-  A6: () => lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: false'),
+  A6: () => !lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: true')
+    || !lies(`${DESKTOP}/src/components/DeveloperSettings.tsx`).includes('count.current >= 5')
+    || !lies(`${DESKTOP}/src/components/DeveloperSettings.tsx`).includes('whisperModel')
+    || !lies(`${DESKTOP}/src/components/DeveloperSettings.tsx`).includes('showDiagnosticLog')
+    || /onCheckedChange=.*enablePolish/.test(lies(`${DESKTOP}/src/apps/dashboard/Dashboard.tsx`) + lies(`${DESKTOP}/src/apps/settings/SettingsApp.tsx`)),
   A7: () => gibtEs(`${DESKTOP}/meeting/audio-retention.js`),
   A8: () => !gibtEs('android/thoughts/src/main/kotlin/com/paply/conversations') && !gibtEs('android/conversations'),
   A9: () => gibtEs(`${DESKTOP}/meeting/gemini-audio.js`),
@@ -158,6 +165,8 @@ function pruefeStilleListe(fehler) {
   };
   const ios = saetze(lies(`${IOS}/Audio/SilenceFilter.swift`), 'silencePhrases');
   const android = saetze(lies(`${ANDROID}/SilenceFilter.kt`), 'silencePhrases');
+  const desktop = JSON.parse(lies(`${DESKTOP}/audio/silence-filter.js`).match(/SILENCE_PHRASES = new Set\((\[[\s\S]*?\])\.map/)[1]).sort();
+  if (desktop.join('|') !== ios.join('|')) fehler.push('Desktop-Stille-Liste weicht von iOS ab');
   if (ios.length === 0 || ios.join('|') !== android.join('|')) fehler.push('Stille-Liste von iOS und Android weicht ab');
 }
 

@@ -22,7 +22,7 @@ async function transcribeWithGroq(opts) {
   const lastText = { mic: '', system: '' };
   const mic = []; const sys = [];
   let errors = 0;
-  const q = new TranscriptionQueue({ apiKey, language, fetchImpl, getPrompt: (ch) => lastText[ch] || '' });
+  const q = new TranscriptionQueue({ apiKey, language, fetchImpl, systemLanguages: opts.systemLanguages || (() => { try { return require('electron').app.getPreferredSystemLanguages(); } catch { return []; } })(), getPrompt: (ch) => lastText[ch] || '' });
   q.on('segments', ({ channel, segments }) => {
     (channel === 'mic' ? mic : sys).push(...segments);
     const added = segments.map((s) => s.text).join(' ');

@@ -67,13 +67,14 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
       if (signal.aborted) throw new Error('Abgebrochen');
       if (isBusy()) { const e = new Error('Diktat hat Vorrang'); e.kind = 'busy'; throw e; }
       const meta = levels(pieces[i]);
-      let text = '';
+      let text = '', language = done.at(-1)?.language;
       if (!shouldSkipTranscription(meta)) {
-        const response = await groq.transcribe(encodeWav(pieces[i]), pieces[i].length / 32000, signal, vocabulary());
+        const response = await groq.transcribe(encodeWav(pieces[i]), pieces[i].length / 32000, signal, vocabulary(), { previousLanguage: language, previousText: done.at(-1)?.text, voiceActivity: meta });
+        language = response.language || language;
         if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
         text = filterTranscription(response, meta).text;
       }
-      done.push({ text, durationMs: meta.durationMs }); repo.writeLocal(`sources/${entry.id}/stt.json`, done);
+      done.push({ text, language, durationMs: meta.durationMs }); repo.writeLocal(`sources/${entry.id}/stt.json`, done);
     }
     const original = done.map(d => d.text).filter(Boolean).join(' ');
     if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;

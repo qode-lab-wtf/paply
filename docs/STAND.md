@@ -7,13 +7,13 @@
 | Funktion | Mac | Windows | iPhone | Android |
 | --- | --- | --- | --- | --- |
 | Diktat | Alltagstauglich, Allans tägliche App | Gebaut, Praxistest beim Freund offen | Bei Testern, Gerätetests offen | Bei Testern, jüngste App |
-| Polieren | Standard aus | Standard aus | An | An |
-| Sprachregel | Fest eingestellt | Fest eingestellt | Teilweise | Teilweise |
+| Polieren | Standard an, Entwicklerbereich | Standard an, Entwicklerbereich | An | An |
+| Sprachregel | Automatisch mit Gegenprobe | Automatisch mit Gegenprobe | Teilweise | Teilweise |
 | Gedanken | Schwach: 4 von 19 Gedanken sauber eingeordnet (MacBook, 26./27.10.) | Wie Mac, ungetestet | Am weitesten (KI-Regeln v6) | Gleiche KI-Regeln, einfachere Verknüpfung |
 | Aufgaben aus Gedanken | Fehlt | Fehlt | Ja | Ja |
 | Erinnerungen, Widgets | Fehlt | Fehlt | Ja | Ja |
 | Gespräche | Beta, aus (Gemini) | Beta, aus | Beta, aus, erster Gerätetest läuft | Fehlt |
-| Entwicklerbereich | Fehlt | Fehlt | Ja | Ja, ohne Polieren-Schalter |
+| Entwicklerbereich | Ja | Ja | Ja | Ja, ohne Polieren-Schalter |
 
 ## Nachzureichen
 
@@ -25,6 +25,8 @@ Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtb
 ## Mac und Windows
 
 - **Version:** v1.15.3, veröffentlicht, auf Allans MacBook installiert. 744 automatische Tests.
+- **Quellstand (noch nicht veröffentlicht):** Sprach-Gegenprobe für Diktat, Notes und Groq-Meeting-Fallback; 62 Stille-Phrasen; Whisper large-v3 und Polieren standardmäßig an. Entwicklerbereich über fünf Versionsklicks. Bestehende Polier-Werte bleiben erhalten.
+- **Prüfung dieses Quellstands:** 774 Tests in 47 Dateien, Vite-Build, TypeScript und Regelwächter bestanden. Isoliertes echtes Diktat mit Anna/Thomas je zweimal: Deutsch und Französisch bleiben wörtlich erhalten, auch nach Polieren. Instrumentierter Lauf: 1 bzw. 2 Whisper-Anfragen. Bei identischem französischem Text in beiden Antworten speichert die vorgeschriebene Gleichtext-Regel die erwartete Sprache `de`. Entwicklerbereich in Electron einschließlich Persistenz und Ausblenden geprüft. Kein Windows-Gerätetest.
 - **Offen:** Rückmeldung des Windows-Freunds, Electron-Upgrade.
 - **Veröffentlichen:** [RELEASE.md](RELEASE.md). **Verlauf:** [stand/desktop.md](stand/desktop.md).
 

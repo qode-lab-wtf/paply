@@ -1,3 +1,5 @@
+import { WHISPER_MODEL, userLanguages, guardedTranscription } from '../../dictation/language-guard.js';
+import { primer, buildPrompt, removeEchoes } from '../../dictation/whisper-prompt.js';
 import { vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations, isVocabularyEcho } from '../../dictation/polish-prompt.js';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,10 +22,11 @@ export function makeMain(platform = 'darwin', settings = {}) {
   const timers = [];
   const ipc = {};
   const context = vm.createContext({
+    WHISPER_MODEL, userLanguages, guardedTranscription, primer, buildPrompt, removeEchoes,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date, fs, path,
     notesBridge: { dictationState: vi.fn(), meetingStarted: vi.fn() },
     process: { env: {}, platform },
-    app: { getPath: () => directory }, screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) }, isMac: platform === 'darwin', isWin: platform === 'win32',
+    app: { getPreferredSystemLanguages: () => ['de-DE'], getPath: () => directory }, screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) }, isMac: platform === 'darwin', isWin: platform === 'win32',
     dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, replaceShortcut, polishTokenBudget, completePolish, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
     vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations, isVocabularyEcho,

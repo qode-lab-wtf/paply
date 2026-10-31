@@ -1,0 +1,155 @@
+// Sprachentscheidung vor jeder Textfilterung; ohne Electron testbar.
+const SHORT_SPEECH_SECONDS = 5;
+const CHECK_GAP = 0.15;
+const WHISPER_MODEL = 'whisper-large-v3';
+const names = {
+  english: 'en',
+  german: 'de',
+  french: 'fr',
+  spanish: 'es',
+  italian: 'it',
+  portuguese: 'pt',
+  dutch: 'nl',
+  turkish: 'tr',
+  polish: 'pl',
+  russian: 'ru',
+  ukrainian: 'uk',
+  chinese: 'zh',
+  japanese: 'ja',
+  korean: 'ko',
+  arabic: 'ar',
+  hindi: 'hi',
+  swedish: 'sv',
+  danish: 'da',
+  norwegian: 'no',
+  nynorsk: 'nn',
+  finnish: 'fi',
+  czech: 'cs',
+  greek: 'el',
+  hungarian: 'hu',
+  romanian: 'ro',
+  hebrew: 'he',
+  vietnamese: 'vi',
+  thai: 'th',
+  indonesian: 'id',
+  malay: 'ms',
+  persian: 'fa',
+  catalan: 'ca',
+  croatian: 'hr',
+  serbian: 'sr',
+  slovak: 'sk',
+  slovenian: 'sl',
+  bulgarian: 'bg',
+  lithuanian: 'lt',
+  latvian: 'lv',
+  estonian: 'et',
+  tagalog: 'tl',
+  urdu: 'ur',
+  bengali: 'bn',
+  tamil: 'ta',
+  afrikaans: 'af',
+  welsh: 'cy',
+  icelandic: 'is',
+  bosnian: 'bs',
+  macedonian: 'mk',
+  galician: 'gl',
+  basque: 'eu',
+  swahili: 'sw',
+  albanian: 'sq',
+  cantonese: 'yue',
+};
+function languageCode(value) {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return names[raw] || raw.split(/[-_]/)[0] || null;
+}
+function userLanguages(main, system = []) {
+  const list = [
+    ...new Set([main, ...system].map(languageCode).filter(Boolean)),
+  ];
+  if (list.length === 1 && list[0] !== 'en') list.push('en');
+  return list;
+}
+function needsCheck({ spoken, expected, detected, users = [] }) {
+  expected = languageCode(expected);
+  detected = languageCode(detected);
+  return !!(
+    expected &&
+    detected &&
+    expected !== detected &&
+    (spoken <= SHORT_SPEECH_SECONDS ||
+      !users.map(languageCode).includes(detected))
+  );
+}
+function decide({ sameText, lpDetected, lpExpected, failed = false }) {
+  if (failed) return 'detected';
+  if (sameText) return 'expected';
+  if (!Number.isFinite(lpDetected) || !Number.isFinite(lpExpected))
+    return 'detected';
+  return lpDetected - lpExpected >= CHECK_GAP ? 'detected' : 'expected';
+}
+function confidence(response) {
+  const segments = response?.segments;
+  if (
+    !segments?.length ||
+    segments.some((s) => !Number.isFinite(s.avg_logprob))
+  )
+    return null;
+  let total = 0,
+    weight = 0;
+  for (const s of segments) {
+    const w = Number.isFinite(s.end - s.start)
+      ? Math.max(0.01, s.end - s.start)
+      : 0.01;
+    total += w * s.avg_logprob;
+    weight += w;
+  }
+  return total / weight;
+}
+const normalize = (text) =>
+  String(text || '')
+    .toLowerCase()
+    .replace(/\s+/gu, ' ')
+    .replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
+async function guardedTranscription(
+  request,
+  { expected, users = [], spoken, duration } = {},
+) {
+  const first = await request();
+  const detected = languageCode(first.language);
+  const original = { ...first, language: detected };
+  if (
+    !needsCheck({
+      expected,
+      detected,
+      users,
+      spoken: Number.isFinite(spoken)
+        ? spoken
+        : (duration ?? first.duration ?? Infinity),
+    })
+  )
+    return original;
+  let check;
+  try {
+    check = await request(languageCode(expected));
+  } catch {
+    return original;
+  }
+  return decide({
+    sameText: normalize(first.text) === normalize(check.text),
+    lpDetected: confidence(first),
+    lpExpected: confidence(check),
+  }) === 'expected'
+    ? { ...check, language: languageCode(expected) }
+    : original;
+}
+module.exports = {
+  SHORT_SPEECH_SECONDS,
+  CHECK_GAP,
+  WHISPER_MODEL,
+  languageCode,
+  userLanguages,
+  needsCheck,
+  decide,
+  confidence,
+  guardedTranscription,
+};
