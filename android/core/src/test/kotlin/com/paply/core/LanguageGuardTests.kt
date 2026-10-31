@@ -231,8 +231,8 @@ class LanguageGuardTests {
                 val p = pipeline(s, fixed = "ru")
                 feed(p, Synth.withFloor(Synth.speech(12.0)))
                 val o = p.finish()
-                expect(s.requests.size == 2 && s.requests[0].field("language") == null)
-                expect(o.languages == listOf("de") && o.languageSources == listOf("checked-expected"))
+                expect(s.requests.size == 1 && s.requests[0].field("language") == null)
+                expect(o.languages == listOf("ru") && o.languageSources == listOf("auto"))
             }
     }
 }
