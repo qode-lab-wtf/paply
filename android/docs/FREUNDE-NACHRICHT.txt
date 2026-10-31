@@ -4,5 +4,5 @@ Die APK kommt als Anhang. Beim Öffnen fragt Android, ob du diese Quelle erlaubs
 Öffne Paply und tippe auf der Karte „Einrichten“ jeweils den grünen Knopf, bis alles abgehakt ist.
 Du brauchst einen kostenlosen Groq-Schlüssel – die App führt dich hin. Den Schlüssel bitte nirgends posten.
 Für den Paply-Knopf bei Samsung: Einstellungen → Eingabehilfe → Installierte Apps → Paply → einschalten. Kommt „Eingeschränkte Einstellung“: Einstellungen → Apps → Paply → ⋮ oben rechts → „Eingeschränkte Einstellungen zulassen“, dann nochmal einschalten. Bei anderen Handys steht Paply meist unter „Heruntergeladene Apps“ oder „Installierte Apps“.
-Wer schon eine ältere Paply-Version hat, installiert einfach drüber – nichts geht verloren.
+Wer schon eine ältere Paply-Version hat, installiert einfach drüber – deine Daten bleiben. Fehlt danach der Paply-Griff, schalte Paply wie oben wieder ein.
 Es ist eine Testversion – sag mir gern, was klappt und was hakt. Danke! Allan
