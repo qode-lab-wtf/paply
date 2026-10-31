@@ -125,6 +125,16 @@ class TokenLedger(
         return Reservation(r.id)
     }
 
+    /** Already sent live audio must be recorded even when it exceeded a budget. */
+    @Synchronized
+    fun recordAudio(model: String, seconds: Double) {
+        if (seconds <= 0) return
+        clean()
+        records.add(Record(UUID.randomUUID().toString(), nowMs(), model,
+            kotlin.math.ceil(seconds).toInt(), Unit.audio, false))
+        save()
+    }
+
     @Synchronized
     fun settle(reservation: Reservation, actual: Int?) {
         val i = records.indexOfFirst { it.id == reservation.id }

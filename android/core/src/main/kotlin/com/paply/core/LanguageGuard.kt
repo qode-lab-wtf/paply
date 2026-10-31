@@ -1,12 +1,24 @@
 package com.paply.core
 
 internal object LanguageGuard {
+    fun whisperCode(value: String): String = when (val code = CodeSwitchPrimer.baseCode(value)) {
+        "nb" -> "no"
+        "fil" -> "tl"
+        "iw" -> "he"
+        "in" -> "id"
+        "ji" -> "yi"
+        "jw" -> "jv"
+        else -> code
+    }
+
+    fun checkTimeoutMs(firstMs: Double): Long = (2 * firstMs + 5000).coerceIn(5000.0, 60000.0).toLong()
+
     const val shortSpeechSeconds = 5.0
 
     fun primary(chosen: String?, userLanguages: List<String>, device: String?): String? {
-        val codes = userLanguages.map(CodeSwitchPrimer::baseCode).filter(String::isNotEmpty)
+        val codes = userLanguages.map(::whisperCode).filter(String::isNotEmpty)
         for (candidate in listOfNotNull(chosen, device)) {
-            val code = CodeSwitchPrimer.baseCode(candidate)
+            val code = whisperCode(candidate)
             if (code in codes) return code
         }
         return codes.firstOrNull()
@@ -15,13 +27,13 @@ internal object LanguageGuard {
     const val checkGap = 0.15
 
     fun expected(previous: String?, primary: String?): String? =
-        listOfNotNull(previous, primary).map(CodeSwitchPrimer::baseCode).firstOrNull { it.isNotEmpty() }
+        listOfNotNull(previous, primary).map(::whisperCode).firstOrNull { it.isNotEmpty() }
 
     fun needsCheck(expected: String?, detected: String?, users: List<String>, spoken: Double): Boolean {
-        val e = expected?.let(CodeSwitchPrimer::baseCode).orEmpty()
-        val d = detected?.let(CodeSwitchPrimer::baseCode).orEmpty()
+        val e = expected?.let(::whisperCode).orEmpty()
+        val d = detected?.let(::whisperCode).orEmpty()
         return e.isNotEmpty() && d.isNotEmpty() && e != d &&
-            (spoken <= shortSpeechSeconds || d !in users.map(CodeSwitchPrimer::baseCode))
+            (spoken <= shortSpeechSeconds || d !in users.map(::whisperCode))
     }
 
     /** Raw response only: filtering must not bias language confidence. */

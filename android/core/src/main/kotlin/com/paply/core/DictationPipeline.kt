@@ -101,6 +101,7 @@ constructor(
     private var lastFailed = false
     private val bytes = AtomicInteger()
     private val uploads = AtomicInteger()
+    private val sentSamples = java.util.concurrent.atomic.AtomicLong()
     private var state = DictationState.recording
     private val primer
         get() =
@@ -181,14 +182,12 @@ constructor(
         val audio = samples.copy(start, end)
         val measured = vad.snapshot()
         val warmCatalog = chunks.isEmpty() && options.polish
-        val previous = chunks.lastOrNull()?.task
+        val predecessors = chunks.map { it.task }
         val task =
             scope.async(start = CoroutineStart.LAZY) {
                 if (warmCatalog) catalog.cachedModels(client)
                 val before =
-                    if (previous != null)
-                        awaitChunk(previous)
-                    else null
+                    predecessors.map { awaitChunk(it) }.lastOrNull { it.succeeded && it.text.isNotBlank() }
                 currentCoroutineContext().ensureActive()
                 if (synchronized(lock) { chunkingStopped }) return@async ChunkResult(sent = false)
                 transcribe(audio, start, measured, before).also { result ->
@@ -266,6 +265,7 @@ constructor(
             uploads.incrementAndGet()
             return client.transcribe(encoded, settings.transcriptionModel, language, prompt, seconds) {
                 bytes.addAndGet(it)
+                sentSamples.addAndGet(audio.size.toLong())
             }
         }
         suspend fun send(language: String?): Transcription = try { upload(language) }
@@ -288,15 +288,17 @@ constructor(
         val range = maxOf(0, firstFrame) until minOf(lastFrame, measured.frameCount)
         val spoken = if (range.isEmpty()) seconds else measured.activity(range).speechMs / 1000
         val expected = LanguageGuard.expected(previousLanguage ?: previousPieceLanguage, primary)
+        val firstStarted = clock.monotonicNanos()
         val first = try { send(null) } catch (f: GroqFailure) {
             return ChunkResult(failure = f)
         }
-        val detected = GroqModels.languageCode(first.language)
+        val firstMs = (clock.monotonicNanos() - firstStarted) / 1e6
+        val detected = GroqModels.languageCode(first.language)?.let(LanguageGuard::whisperCode)
         var result = first
         var chosenLanguage = detected
         var source = LanguageSource.auto
         if (LanguageGuard.needsCheck(expected, detected, users, spoken)) {
-            val checked = try { send(expected) } catch (error: Throwable) {
+            val checked = try { withTimeoutOrNull(LanguageGuard.checkTimeoutMs(firstMs)) { send(expected) } } catch (error: Throwable) {
                 currentCoroutineContext().ensureActive()
                 error.asGroqFailure()
                 null
@@ -438,9 +440,11 @@ constructor(
         fun ms() = (clock.monotonicNanos() - started) / 1e6
         val bytesBefore: Int
         val uploadsBefore: Int
+        val samplesBefore: Long
         val audio: ShortArray
         val measured: VoiceActivityDetector
         synchronized(lock) {
+            samplesBefore = if (plan == null) 0 else sentSamples.get()
             bytesBefore = if (plan == null) 0 else bytes.get()
             uploadsBefore = if (plan == null) 0 else uploads.get()
             audio = samples.copy(0, samples.size)
@@ -458,8 +462,9 @@ constructor(
                                 totalMs = ms(),
                                 uploadedBytes = bytes.get() - bytesBefore,
                                 chunkCount = uploads.get() - uploadsBefore,
+                                sentAudioSeconds = (sentSamples.get() - samplesBefore) / AudioEncoder.sampleRate,
                             ),
-                        lastPieceLanguage = plan.orEmpty().lastOrNull()?.result?.language,
+                        lastPieceLanguage = plan.orEmpty().mapNotNull { it.result }.lastOrNull { it.succeeded && it.text.isNotBlank() }?.language,
                         languageSources =
                             plan.orEmpty().mapNotNull { it.result?.languageSource?.rawValue },
                     )
@@ -491,7 +496,7 @@ constructor(
         var failure: GroqFailure? = null
         for (index in pieces.indices) if (pieces[index].result?.succeeded != true) {
             val piece = pieces[index]
-            val previous = pieces.take(index).lastOrNull { it.result?.succeeded == true }?.result
+            val previous = pieces.take(index).lastOrNull { it.result?.let { r -> r.succeeded && r.text.isNotBlank() } == true }?.result
             val result =
                 transcribe(
                     audio.copyOfRange(piece.start, piece.end),

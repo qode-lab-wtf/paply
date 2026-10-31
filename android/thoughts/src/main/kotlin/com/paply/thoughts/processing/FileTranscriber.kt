@@ -23,16 +23,20 @@ enum class TranscriptionFailure {
 }
 
 sealed interface TranscriptionResult {
+    val sentAudioSeconds: Double get() = 0.0
     data class Success(
         val text: String,
         val languages: List<String>,
         val audioSeconds: Double,
         val model: String,
+        override val sentAudioSeconds: Double = audioSeconds,
     ) : TranscriptionResult
 
     data object NoSpeech : TranscriptionResult
 
-    data class Failure(val failure: TranscriptionFailure) : TranscriptionResult
+    data class Empty(override val sentAudioSeconds: Double) : TranscriptionResult
+
+    data class Failure(val failure: TranscriptionFailure, override val sentAudioSeconds: Double = 0.0) : TranscriptionResult
 }
 
 fun interface ThoughtTranscribing {
@@ -65,6 +69,7 @@ class FileTranscriber(
                 ?: return TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio))
             else WavePcm(audioURL)
         } catch (_: Exception) { return TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio) }
+        var sentSeconds = 0.0
         return input.use { pcm ->
             try {
                 if (pcm.size == 0) return@use TranscriptionResult.NoSpeech
@@ -107,33 +112,38 @@ class FileTranscriber(
                                 pipeline.append(pcm.read(offset, next)); offset = next
                             }
                             val outcome = pipeline.finish()
-                            outcome.lastPieceLanguage?.let { previousLanguage = it }
+                            sentSeconds += outcome.timings.sentAudioSeconds
+                            if (outcome.error == null && outcome.raw.isNotBlank())
+                                outcome.lastPieceLanguage?.let { previousLanguage = it }
                             diagnostic("thought.transcribe.end chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes}")
                             when (val result = result(outcome, settings.transcriptionModel)) {
-                                is TranscriptionResult.Failure -> return@use result
+                                is TranscriptionResult.Failure -> return@use result.copy(sentAudioSeconds = sentSeconds)
                                 is TranscriptionResult.Success -> { texts += result.text; languages += result.languages }
-                                TranscriptionResult.NoSpeech -> Unit
+                                TranscriptionResult.NoSpeech, is TranscriptionResult.Empty -> Unit
                             }
                         } finally { pipeline.releaseAudio(); pipeline.close() }
                         start = end
                     }
                 }
-                if (texts.isEmpty()) TranscriptionResult.NoSpeech
-                else TranscriptionResult.Success(texts.joinToString(" "), languages.toList(), pcm.size / 16000.0, settings.transcriptionModel)
+                if (texts.isEmpty()) emptyResult(sentSeconds)
+                else TranscriptionResult.Success(texts.joinToString(" "), languages.toList(), pcm.size / 16000.0, settings.transcriptionModel, sentSeconds)
             } catch (_: CancellationException) {
-                TranscriptionResult.Failure(TranscriptionFailure.cancelled)
+                TranscriptionResult.Failure(TranscriptionFailure.cancelled, sentSeconds)
             } catch (_: java.io.IOException) {
-                TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio)
+                TranscriptionResult.Failure(TranscriptionFailure.unreadableAudio, sentSeconds)
             }
         }
     }
 
     companion object {
+        private fun emptyResult(sent: Double): TranscriptionResult =
+            if (sent == 0.0) TranscriptionResult.NoSpeech else TranscriptionResult.Empty(sent)
+
         internal const val MAX_PIECE_SAMPLES = 60 * 16000
         fun result(outcome: DictationOutcome, model: String): TranscriptionResult {
-            if (outcome.noSpeech) return TranscriptionResult.NoSpeech
+            if (outcome.noSpeech) return emptyResult(outcome.timings.sentAudioSeconds)
             outcome.errorMessage?.let {
-                return TranscriptionResult.Failure(classify(it))
+                return TranscriptionResult.Failure(classify(it), outcome.timings.sentAudioSeconds)
             }
             val raw = TextForm.trim(outcome.raw)
             if (raw.isEmpty()) return TranscriptionResult.Failure(TranscriptionFailure.cancelled)
@@ -142,6 +152,7 @@ class FileTranscriber(
                 outcome.languages,
                 outcome.timings.audioSeconds,
                 model,
+                outcome.timings.sentAudioSeconds,
             )
         }
 

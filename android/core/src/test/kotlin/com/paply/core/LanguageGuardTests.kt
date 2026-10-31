@@ -4,6 +4,74 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class LanguageGuardTests {
+    @Test fun aliasesAreSentAsWhisperCodes() = runBlocking {
+        for ((device, whisper) in listOf("nb" to "no", "fil-PH" to "tl", "iw" to "he", "in" to "id", "ji" to "yi", "jw" to "jv")) {
+            MockServer { _, _ -> Groq.transcription("A spoken sentence.", "English") }.use { server ->
+                val p = pipeline(server, languages = listOf(device), primary = device)
+                feed(p, Synth.withFloor(Synth.speech(2.0)))
+                p.finish()
+                expect(server.requests.map { it.field("language") } == listOf(null, whisper))
+                p.close()
+            }
+        }
+    }
+
+    @Test fun emptyMiddlePieceKeepsLastTextLanguage() = runBlocking {
+        MockServer { request, i ->
+            when (i) {
+                0 -> Groq.transcription("This is clearly English.", "English")
+                1 -> Groq.transcription("", "German")
+                else -> Groq.transcription("And another sentence.", if (request.field("language") == "en") "English" else "German")
+            }
+        }.use { server ->
+            val p = pipeline(server, chunked = true)
+            feed(p, Synth.withFloor(Synth.speech(11.0) + Synth.silence(0.9) + Synth.speech(11.0) + Synth.silence(0.9) + Synth.speech(2.0)))
+            val result = p.finish()
+            expect(server.requests.last().field("language") == "en")
+            expect(result.lastPieceLanguage == "en")
+            p.close()
+        }
+    }
+
+    @Test fun emptyLastPieceDoesNotExportItsLanguage() = runBlocking {
+        MockServer { _, i -> if (i == 0) Groq.transcription("This is clearly English.", "English") else Groq.transcription("", "German") }.use { server ->
+            val p = pipeline(server, chunked = true)
+            feed(p, Synth.withFloor(Synth.speech(11.0) + Synth.silence(0.9) + Synth.speech(11.0)))
+            expect(p.finish().lastPieceLanguage == "en")
+            p.close()
+        }
+    }
+
+    @Test fun firstFailureReturnsWithoutCountercheck() = runBlocking {
+        MockServer { _, _ -> Groq.error(401) }.use { server ->
+            val p = pipeline(server)
+            feed(p, Synth.withFloor(Synth.speech(2.0)))
+            expect(p.finish().error != null)
+            expect(server.requests.size == 1)
+            p.close()
+        }
+    }
+
+    @Test fun countercheckHasBoundedTimeAndCountsBothUploads() = runBlocking {
+        expect(LanguageGuard.checkTimeoutMs(1200.0) == 7400L)
+        expect(LanguageGuard.checkTimeoutMs(40000.0) == 60000L)
+        MockServer { _, i ->
+            Groq.transcription("On se voit ce soir.", "French").apply {
+                if (i > 0) setBodyDelay(30, java.util.concurrent.TimeUnit.SECONDS)
+            }
+        }.use { server ->
+            val p = pipeline(server)
+            feed(p, Synth.withFloor(Synth.speech(2.0)))
+            val started = System.nanoTime()
+            val result = kotlinx.coroutines.withTimeout(12000) { p.finish() }
+            expect((System.nanoTime() - started) / 1e9 < 12)
+            expect(result.raw == "On se voit ce soir.")
+            expect(result.languageSources == listOf("check-failed"))
+            org.junit.Assert.assertEquals(4.0, result.timings.sentAudioSeconds, 0.001)
+            p.close()
+        }
+    }
+
     private fun pipeline(
         s: MockServer,
         chunked: Boolean = false,
