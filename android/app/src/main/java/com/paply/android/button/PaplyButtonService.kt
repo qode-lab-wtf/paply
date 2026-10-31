@@ -51,6 +51,7 @@ class PaplyButtonService : AccessibilityService() {
     private val position by lazy { getSharedPreferences("paply-button", MODE_PRIVATE) }
     private var hintText: String? = null
     private var hintJob: Job? = null
+    private var onRight = true
     private var offset = 0
     private var maxOffset = 0
     private var fieldBounds: Rect? = null
@@ -104,7 +105,8 @@ class PaplyButtonService : AccessibilityService() {
     override fun onServiceConnected() {
         connected = this
         wm = getSystemService(WindowManager::class.java)
-        offset = position.getInt("field-offset-v1", 0)
+        offset = position.getInt(ButtonPosition.OFFSET_KEY, 0)
+        onRight = position.getBoolean(ButtonPosition.SIDE_KEY, true)
         serviceInfo = serviceInfo.apply {
             flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
             if (Build.VERSION.SDK_INT >= 33) flags = flags or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
@@ -162,7 +164,7 @@ class PaplyButtonService : AccessibilityService() {
         if (eligible) fieldGapUntil = now + 350
         if (next?.isPassword == true || !SettingsRepository.get(this).state.value.paplyButton) fieldGapUntil = 0
         if (!eligible) fieldStability.reset(hold = bar != null)
-        else if (next != field) fieldStability.reset(hold = bar != null)
+        else if (next != field) { fieldStability.reset(hold = bar != null); logo?.wake() }
         val previousBounds = fieldBounds
         fieldBounds = next?.takeIf { it.isFocused && it.isEditable }?.let { Rect().also(it::getBoundsInScreen) }
         if (next != field || previousBounds != fieldBounds) { obstaclesDirty = true; lastRender = null }
@@ -380,7 +382,10 @@ class PaplyButtonService : AccessibilityService() {
         val safe = screenInsets()
         val safeTop = safe.top; val safeLeft = safe.left; val safeRight = safe.right
         val model = ButtonPresentation.render(phase, hintText)
-        val size = dp(model.sizeDp)
+        logo?.setPhase(phase)
+        val resting = phase == ButtonPolicy.Phase.IDLE && logo?.expanding != true
+        val size = dp(if (resting) model.sizeDp else 72)
+        val logoWidth = dp(if (resting) 44 else 80)
         val inset = (dp(72) - size) / 2
         val bounds = fieldBounds?.takeUnless { it.isEmpty }
         val candidate = ButtonPosition.anchor(keyboardTop.coerceAtMost(screen.y), bounds?.top,
@@ -412,17 +417,22 @@ class PaplyButtonService : AccessibilityService() {
                 runCatching { wm.removeView(view) }
             }; return
         }
-        val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, dp(8))
-        val key = RenderKey(model, horizontal.rightMargin + inset, anchoredY ?: safeTop, horizontal.width, amber,
+        val horizontal = ButtonPosition.horizontal(screen.x, safeLeft, safeRight, 0)
+        val key = RenderKey(model, (if (onRight) horizontal.rightMargin else safeLeft) + inset, anchoredY ?: safeTop, horizontal.width, amber,
             eligible, keyboardStable, holding, imeBounds, safeTop)
         if (bar != null && key == lastRender) return
-        val needsMeasure = bar == null || lastRender?.model != model || lastRender?.width != horizontal.width
+        val needsMeasure = bar == null || lastRender?.model != model || lastRender?.width != horizontal.width || layout.height != size
         if (bar == null) {
             val view = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 isFocusable = false; defaultFocusHighlightEnabled = false
             }
             logo = PaplyButtonView(this).apply {
+                onRight = this@PaplyButtonService.onRight
+                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                    view.systemGestureExclusionRects = listOf(Rect(0, 0, view.width, view.height))
+                }
+                settled = { lastRender = null; render() }
                 level = { session?.recording?.level ?: 0f }
                 setOnClickListener { if (phase == ButtonPolicy.Phase.IDLE) start() else if (phase == ButtonPolicy.Phase.RECORDING) finish() }
             }
@@ -433,7 +443,7 @@ class PaplyButtonService : AccessibilityService() {
             cancel?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); shape = GradientDrawable.OVAL }
             view.addView(label, LinearLayout.LayoutParams(-2,dp(48)))
             view.addView(cancel, LinearLayout.LayoutParams(dp(48),dp(48)))
-            view.addView(logo, LinearLayout.LayoutParams(size,size))
+            view.addView(logo, LinearLayout.LayoutParams(logoWidth,size))
             layout = WindowManager.LayoutParams(-2, size, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -441,15 +451,16 @@ class PaplyButtonService : AccessibilityService() {
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                     if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0) }
             bar = view
-            var down = 0f; var initial = 0; var dragged = false
+            var down = 0f; var downX = 0f; var initial = 0; var dragged = false
             logo?.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> { down = event.rawY; initial = offset; dragged = false; true }
+                    MotionEvent.ACTION_DOWN -> { down = event.rawY; downX = event.rawX; initial = offset; dragged = false; logo?.touching(true); true }
                     MotionEvent.ACTION_MOVE -> {
-                        if (kotlin.math.abs(event.rawY - down) > dp(6)) dragged = true
-                        if (dragged) { offset = (initial - (event.rawY - down).toInt()).coerceIn(0, maxOffset); render() }; true
+                        if (phase == ButtonPolicy.Phase.IDLE && (kotlin.math.abs(event.rawY - down) > dp(6) || kotlin.math.abs(event.rawX - downX) > dp(6))) dragged = true
+                        if (dragged) { offset = ButtonPosition.dragOffset(initial, (event.rawY - down).toInt(), maxOffset); onRight = ButtonPosition.rightSide(event.rawX, screen.x); reservedPosition = null; lastRender = null; logo?.touching(true); render() }; true
                     }
-                    MotionEvent.ACTION_UP -> { if (dragged) position.edit().putInt("field-offset-v1", offset).apply() else v.performClick(); true }
+                    MotionEvent.ACTION_CANCEL -> { logo?.touching(false); true }
+                    MotionEvent.ACTION_UP -> { logo?.touching(false); if (dragged) position.edit().putInt(ButtonPosition.OFFSET_KEY, offset).putBoolean(ButtonPosition.SIDE_KEY, onRight).apply() else v.performClick(); true }
                     else -> true
                 }
             }
@@ -458,17 +469,19 @@ class PaplyButtonService : AccessibilityService() {
         }
         logo?.setPhase(phase)
         logo?.amber = amber
-        logo?.let { if (it.layoutParams.width != size) {
-            it.layoutParams = LinearLayout.LayoutParams(size, size)
+        logo?.let { if (it.layoutParams.width != logoWidth || it.layoutParams.height != size) {
+            it.layoutParams = LinearLayout.LayoutParams(logoWidth, size)
         } }
         label?.visibility = if (model.hint == null) View.GONE else View.VISIBLE
         cancel?.visibility = if (model.cancel) View.VISIBLE else View.GONE
         if (label?.text?.toString().orEmpty() != hintText.orEmpty()) label?.text = hintText
-        val controlsWidth = size + (if (cancel?.visibility == View.VISIBLE) dp(48) else 0)
-        val labelWidth = (horizontal.width - inset - controlsWidth).coerceAtLeast(0)
+        logo?.onRight = onRight
+        val controlsWidth = logoWidth + (if (cancel?.visibility == View.VISIBLE) dp(48) else 0)
+        val labelWidth = (horizontal.width - controlsWidth).coerceAtLeast(0)
         if (label?.maxWidth != labelWidth) label?.maxWidth = labelWidth
-        bar?.layoutDirection = View.LAYOUT_DIRECTION_LTR
-        if (needsMeasure) bar?.measure(View.MeasureSpec.makeMeasureSpec((horizontal.width - inset).coerceAtLeast(0), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY))
+        bar?.layoutDirection = if (ButtonPresentation.cancelBeforeLogo(onRight)) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
+        label?.layoutDirection = View.LAYOUT_DIRECTION_LTR
+        if (needsMeasure) bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width.coerceAtLeast(0), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY))
         // Fix the actual window width too: a WRAP_CONTENT relayout can otherwise
         // grow beyond the measured left-anchored position on the next frame.
         val previousHeight = layout.height; val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
@@ -476,23 +489,17 @@ class PaplyButtonService : AccessibilityService() {
         layout.height = size
         val placementObstacles = obstacles + imeBounds
         val reserved = if (holding) reservedPosition else if (eligible && keyboardStable && anchoredY != null)
-            ButtonPosition.choose(safeLeft + dp(8), screen.x - safeRight - dp(8), safeTop,
-                keyboardTop.coerceAtMost(screen.y), dp(120), dp(72), dp(8),
-                bounds?.box(), placementObstacles, offset, fieldStability.top)
+            ButtonPosition.choose(safeLeft, screen.x - safeRight, safeTop,
+                keyboardTop.coerceAtMost(screen.y), maxOf(layout.width, dp(44)), dp(72), dp(8),
+                bounds?.box(), placementObstacles, offset, anchor, onRight)
         else null
-        reservedPosition = reserved
-        val anchored = reserved?.let {
-            val window = ButtonPosition.window(it, layout.width, size, dp(72))
-            if (hintText == null || (window.left >= safeLeft + dp(8) &&
-                    ButtonPosition.clearPath(window, window, bounds?.box(), placementObstacles))) window
-            else ButtonPosition.choose(safeLeft + dp(8), screen.x - safeRight - dp(8), safeTop,
-                keyboardTop.coerceAtMost(screen.y), layout.width, size, dp(8),
-                bounds?.box(), placementObstacles, offset, fieldStability.top)
-        }
-        // Full-screen IME bounds may cover every candidate. Keep controls at safeTop,
-        // never fall back to the IME's bottom-right Done/Send area.
+        // Preserve the vertical center when changing phase; only geometry of the controls changes.
+        val stable = if ((phase != ButtonPolicy.Phase.IDLE || logo?.expanding == true || (lastRender != null && lastRender?.model?.phase != phase)) && reservedPosition != null && reserved != null) reservedPosition else reserved
+        reservedPosition = stable
+        val x = ButtonPosition.edge(safeLeft, screen.x - safeRight, layout.width, onRight)
+        val anchored = stable?.let { ButtonPosition.Box(x, it.top + inset, x + layout.width, it.top + inset + size) }
         val target = ButtonPosition.resolve(phase, hintText != null, anchored,
-            screen.x - safeRight - dp(8) - inset, safeTop, layout.width, size, dp(8))
+            x + layout.width, safeTop, layout.width, size, dp(8))
         if (target == null) { bar?.visibility = View.INVISIBLE; lastRender = null; return }
         bar?.visibility = View.VISIBLE
         layout.x = screen.x - target.right
@@ -503,8 +510,8 @@ class PaplyButtonService : AccessibilityService() {
             val targetX = layout.x; val targetY = layout.y
             val from = ButtonPosition.Box(screen.x - previousX - layout.width, previousY,
                 screen.x - previousX, previousY + size)
-            if (previousWidth > 0 && previousHeight == size && ValueAnimator.areAnimatorsEnabled() &&
-                ButtonPosition.clearPath(from, target, bounds?.box(), placementObstacles)) {
+            if (previousWidth == layout.width && previousHeight == size && ValueAnimator.areAnimatorsEnabled() &&
+                (from.left != target.left || ButtonPosition.clearPath(from, target, bounds?.box(), placementObstacles))) {
                 positionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
                     duration = 180
                     interpolator = android.view.animation.DecelerateInterpolator()

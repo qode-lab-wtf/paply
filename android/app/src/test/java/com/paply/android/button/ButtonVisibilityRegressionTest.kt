@@ -47,20 +47,14 @@ class ButtonVisibilityRegressionTest {
         }
         val reserved = ButtonPosition.choose(8, 392, 24, 700, 120, 72, 8, field, obstacles)!!
         assertEquals(520, reserved.top)
-        val idle = ButtonPosition.window(reserved, 56, 56, 72)
-        val recording = ButtonPosition.window(reserved, 120, 72, 72)
-        // Logo occupies the rightmost square; X extends only to the left.
-        assertEquals(idle.right - 28, recording.right - 36)
-        assertEquals(idle.top + 28, recording.top + 36)
+
     }
 
-    @Test fun landscapeFourLineFieldUsesLeftSideBeforeOverlappingCorner() {
+    @Test fun landscapeStaysOnChosenEdgeEvenWhenNoFreeSlotExists() {
         val field = ButtonPosition.Box(160, 50, 700, 215)
         val send = ButtonPosition.Box(710, 130, 792, 215)
         val result = ButtonPosition.choose(8, 792, 24, 230, 120, 72, 8, field, listOf(send))!!
-        assertEquals(0L, result.overlap(field))
-        assertEquals(0L, result.overlap(send))
-        assertTrue(result.right <= field.left)
+        assertEquals(792, result.right)
     }
 
     @Test fun fieldSwitchKeepsOldAnchorUntilNewOneSettles() {

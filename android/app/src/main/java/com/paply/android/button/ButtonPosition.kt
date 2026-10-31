@@ -5,12 +5,11 @@ internal object ButtonPosition {
     fun obstacle(width: Int, height: Int, editable: Boolean, clickable: Boolean, limit: Int) =
         editable || (clickable && width <= limit && height <= limit)
 
-    /** Reserve recording + cancel even in idle. The logo center never depends on phase. */
-    fun window(reserved: Box, width: Int, size: Int, ringSize: Int): Box {
-        val inset = (ringSize - size) / 2
-        return Box(reserved.right - inset - width, reserved.top + inset,
-            reserved.right - inset, reserved.top + inset + size)
-    }
+    const val SIDE_KEY = "edge-right-v2"
+    const val OFFSET_KEY = "edge-offset-v2"
+    fun dragOffset(initial: Int, delta: Int, max: Int) = (initial - delta).coerceIn(0, max)
+    fun rightSide(x: Float, screenWidth: Int) = x >= screenWidth / 2f
+    fun edge(left: Int, right: Int, width: Int, onRight: Boolean) = if (onRight) right - width else left
 
     /** Active work and messages cannot disappear when the IME has no usable anchor. */
     fun resolve(phase: ButtonPolicy.Phase, hint: Boolean, anchored: Box?,
@@ -49,23 +48,17 @@ internal object ButtonPosition {
 
     /** Ordered candidates; field avoidance takes precedence even when no completely free slot exists. */
     fun choose(left: Int, right: Int, safeTop: Int, keyboardTop: Int, width: Int, height: Int,
-               gap: Int, field: Box?, obstacles: List<Box>, offset: Int = 0, fieldAnchorTop: Int? = field?.top): Box? {
+               gap: Int, field: Box?, obstacles: List<Box>, offset: Int = 0, fieldAnchorTop: Int? = field?.top, onRight: Boolean = true): Box? {
         val bottommost = keyboardTop - gap - height
         if (bottommost < safeTop || width > right - left) return null
         val candidates = mutableListOf<Box>()
         fun add(y: Int) {
             if (y < safeTop) return
             val top = (y - offset.coerceAtLeast(0)).coerceIn(safeTop, bottommost)
-            for (x in listOf(right - width, left)) candidates += Box(x, top, x + width, top + height)
+            val x = edge(left, right, width, onRight)
+            candidates += Box(x, top, x + width, top + height)
         }
         fieldAnchorTop?.let { add(it - gap - height) }
-        // A tall landscape editor may leave room only beside its upper corner.
-        field?.let {
-            val y = (it.top - offset.coerceAtLeast(0)).coerceIn(safeTop, bottommost)
-            for (x in listOf(it.left - gap - width, it.right + gap)) {
-                if (x >= left && x + width <= right) candidates += Box(x, y, x + width, y + height)
-            }
-        }
         add(bottommost)
         var y = bottommost - height - gap
         while (y >= safeTop) { add(y); y -= height + gap }
@@ -73,7 +66,7 @@ internal object ButtonPosition {
         // Also fit narrow free strips between controls, beyond the regular edge steps.
         (obstacles + listOfNotNull(field)).forEach { add(it.top - gap - height) }
         if (offset > 0) {
-            choose(left, right, safeTop, keyboardTop, width, height, gap, field, obstacles, 0, fieldAnchorTop)?.let { candidates += it }
+            choose(left, right, safeTop, keyboardTop, width, height, gap, field, obstacles, 0, fieldAnchorTop, onRight)?.let { candidates += it }
         }
         return candidates.distinct().minWithOrNull(compareBy<Box>(
             { field?.overlap(it) ?: 0L }, { candidate -> obstacles.sumOf { it.overlap(candidate) } }))

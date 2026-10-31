@@ -38,7 +38,7 @@ fun ButtonSetupCard(prefs: AppPreferences) {
             Text("Paply erkennt aktive Schreibfelder, Passwortfelder und die Lage der Tastatur. Inhalte anderer Apps werden nicht gelesen, gespeichert oder protokolliert. Nur dein Tipp startet die Aufnahme.",
                 style = MaterialTheme.typography.bodyMedium, color = C.secondary)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SettingsToggle("Knopf über der Tastatur anzeigen", prefs.paplyButton, { on ->
+                SettingsToggle("Paply-Knopf anzeigen", prefs.paplyButton, { on ->
                     scope.launch {
                         try { SettingsRepository.get(context).update { it.copy(paplyButton = on) }; error = false }
                         catch (e: kotlinx.coroutines.CancellationException) { throw e }
@@ -50,7 +50,7 @@ fun ButtonSetupCard(prefs: AppPreferences) {
             }
             if (enabled && prefs.paplyButton) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Fertig. Tipp in ein Textfeld – der Paply-Knopf erscheint über dem Eingabefeld.")
+                    Text("Fertig. Tipp in ein Textfeld – der Paply-Griff erscheint am Bildschirmrand.")
                     Text("Unten rechts erscheint ein Bedienungshilfe-Symbol? In den Einstellungen bei Paply-Knopf die „Verknüpfung“ ausschalten.",
                         style = MaterialTheme.typography.bodySmall, color = C.secondary)
                 }

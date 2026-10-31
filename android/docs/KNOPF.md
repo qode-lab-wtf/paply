@@ -273,3 +273,45 @@ Prüfung ausschließlich über `scripts/mb.sh`, `PAPLY_WORK=work-knopf021`:
 Gerätetests nur kompiliert, UI-Nachabnahme weiterhin separat. Version 0.2.1 (7).
 Abschluss: alle sechs Aufgaben grün (`BUILD SUCCESSFUL`, 9 s; vollständiger
 Produktions-Neubau zuvor 38 s), einschließlich sieben neuer Regressionstests.
+
+## 0.2.2 – Griff am Bildschirmrand
+
+- Ruhe: Forest-Halbkapsel, sichtbar 24 × 44 dp mit innen 22 dp Rundung und
+  16-dp-Marke. Touchfläche 44 × 56 dp, standardmäßig rechts, bündig an der
+  sicheren Bildschirmkante. Seitliche Navigation und Ausschnitte bleiben frei.
+- Feld-/Tastaturanker und Feldstabilisierung bleiben erhalten. Die Suche weicht
+  ausschließlich vertikal aus; automatische Links-rechts- und Feldecken-Kandidaten
+  sowie die pauschale Ruhe-Reservierung für das X sind entfernt. Bei vollständiger
+  Belegung gilt weiterhin: Feldüberdeckung vor übriger Überdeckung minimieren.
+- Ziehen verschiebt den Griff vertikal. Überquert der Finger die Bildschirmmitte,
+  wechselt die Randseite mit 180-ms-Ease-out. Seite und begrenzter Pixel-Versatz
+  liegen unter `edge-right-v2` und `edge-offset-v2`; alte Offsets werden ignoriert.
+  Der Logo-View setzt `systemGestureExclusionRects` für seine Touchfläche.
+- Nach 3 s ohne Berührung blendet nur der Griff in 300 ms auf 60 % ab.
+  Berührung und Feldwechsel wecken ihn sofort; während gehaltener Berührung und
+  aktiver Phasen bleibt er hell. Keine dauernde Ruheanimation. Bei deaktivierten
+  Systemanimationen werden die Zielzustände direkt gesetzt.
+- Griff und aktiver 56-dp-Kreis gehen in 220 ms ineinander über. Das Fenster
+  wächst vor der Animation und schrumpft erst nach der Rückanimation; die
+  vertikale Mitte bleibt beim Phasenwechsel erhalten. Der 72-dp-Ringbereich hat
+  8 dp Abstand zur sicheren Kante. Das 48-dp-X sitzt immer zur Bildschirmmitte.
+  Hinweise erweitern das Fenster nach innen; der obere Fallback gilt beidseitig.
+  Pegelringe, Verarbeitungsring, 650-ms-Haken, Warnungen und Zustellung bleiben.
+- Einrichtung und Freundestexte nennen den Bildschirmrand. Version 0.2.2 (8).
+
+Prüfung nur über `scripts/mb.sh`, `PAPLY_WORK=work-rand022`:
+`:core:test :thoughts:test :app:testDebugUnitTest :app:lintDebug :app:lintRelease
+:core:animalsnifferMain :thoughts:animalsnifferMain :app:assembleDebug
+:app:assembleDebugAndroidTest`.
+Unit-Regressionen prüfen beide Kanten, seitliche Insets, vertikales Ausweichen,
+Ziehbegrenzung, Kantenwechsel, Abdimmen, neue Schlüssel und gespiegelte X-Anordnung.
+Gerätetests wurden angepasst und nur kompiliert. Keine Emulator-UI gestartet.
+Noch am Gerät abzunehmen: Samsung-Zurück-Geste und Ziehen über die Mitte,
+TalkBack, Abdimmen sowie tatsächlich sprung-/blinkfreier Fenstergrößenwechsel,
+Hinweise und Rotation an beiden Kanten. Keine neue Mikrofon-/Zustellabnahme.
+
+Abschluss: `BUILD SUCCESSFUL` (29 s). Core: 402 Tests, davon 401 bestanden und
+1 mangels aufgezeichneter `.local/audio`-Fixture übersprungen
+(`CapturedPauseEvidenceTest`). Thoughts: 433 bestanden. App: 193 bestanden.
+Keine Fehler; Debug-/Release-Lint, beide Animal-Sniffer-Prüfungen und beide
+Debug-APK-Bauten erfolgreich.

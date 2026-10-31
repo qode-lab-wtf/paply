@@ -2,6 +2,14 @@ package com.paply.android.button
 
 /** Pure decisions shared by service rendering and regression tests. */
 internal object ButtonPresentation {
+    const val DIM_DELAY = 3000L
+    const val DIM_DURATION = 300L
+    const val DIM_ALPHA = .6f
+    fun logoCenter(width: Float, active: Float, onRight: Boolean): Float =
+        if (onRight) width - (12f + 32f * active) else 12f + 32f * active
+    fun cancelBeforeLogo(onRight: Boolean) = onRight
+    fun idleAlpha(phase: ButtonPolicy.Phase, touched: Boolean, elapsed: Long) =
+        if (phase == ButtonPolicy.Phase.IDLE && !touched && elapsed >= DIM_DELAY) DIM_ALPHA else 1f
     fun deliveryMessage(accepted: Boolean, retained: Boolean, copied: Boolean,
                         clipboardFallback: Boolean, review: Boolean): String? {
         val clipboard = copied || clipboardFallback

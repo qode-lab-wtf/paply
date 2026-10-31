@@ -18,7 +18,11 @@ class ButtonVisualDeviceTest {
                 val parent = FrameLayout(activity)
                 activity.setContentView(parent)
                 val view = PaplyButtonView(activity)
-                parent.addView(view, FrameLayout.LayoutParams(144, 144))
+                val density = activity.resources.displayMetrics.density
+                parent.addView(view, FrameLayout.LayoutParams((44 * density).toInt(), (56 * density).toInt()))
+                view.onRight = false
+                view.wake()
+                assertEquals(1f, view.alpha)
                 assertTrue(view.isAttachedToWindow)
                 assertFalse(view.isFocusable)
                 assertFalse(view.defaultFocusHighlightEnabled)
@@ -38,6 +42,7 @@ class ButtonVisualDeviceTest {
                     view.setPhase(ButtonPolicy.Phase.IDLE)
                     assertFalse(view.animationRunning)
                 }
+                view.onRight = true
                 view.setPhase(ButtonPolicy.Phase.RECORDING)
                 parent.removeView(view)
                 assertFalse(view.animationRunning)

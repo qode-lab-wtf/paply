@@ -77,6 +77,10 @@ class ButtonDeviceTest {
             assertTrue(field.isShowingHintText || field.text.isNullOrEmpty())
             assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             val button = waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
+            val density = context.resources.displayMetrics.density
+            val idleBounds = android.graphics.Rect().also(button::getBoundsInScreen)
+            assertEquals((44 * density).toInt(), idleBounds.width())
+            assertEquals((56 * density).toInt(), idleBounds.height())
             fun bounds(node: AccessibilityNodeInfo) = android.graphics.Rect().also(node::getBoundsInScreen)
             fun aboveKeyboard() {
                 val b = bounds(waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }.parent)
