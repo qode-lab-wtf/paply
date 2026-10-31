@@ -2,8 +2,12 @@ import Foundation
 
 enum TermGuard {
     static let gap = 0.05
+    private static let expressions: [String: NSRegularExpression] = {
+        let patterns = ["[^\\p{L}\\p{N} ]", "\\s+", "\\p{M}", "sch", "ch", "ph", "ck", "qu", "th", "dt", "x", "[vfw]", "[cqg]", "[zs]", "b", "d", "[^a-z]", "[aeiouyhj]", "(.)\\1+"]
+        return Dictionary(uniqueKeysWithValues: patterns.map { ($0, try! NSRegularExpression(pattern: $0)) })
+    }()
     static func replace(_ text: String, _ pattern: String, _ replacement: String) -> String {
-        text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+        expressions[pattern]!.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: replacement)
     }
     static func norm(_ text: String) -> String {
         replace(replace(text.lowercased(), "[^\\p{L}\\p{N} ]", " "), "\\s+", " ").trimmingCharacters(in: .whitespaces)
