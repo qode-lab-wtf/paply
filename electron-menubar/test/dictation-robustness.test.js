@@ -292,7 +292,7 @@ it('zeigt Mac-Fallback erneut, wenn osascript erst nach dem Ausblenden scheitert
   const { context: c, timers, win } = main('darwin');
   const paste = deferred(); c.autopasteText.mockReturnValueOnce(paste.promise);
   const work = c.processAudioData(Buffer.from('audio'), false, speech);
-  await tick();
+  await vi.waitFor(() => expect(timers.some(timer => timer.ms === 300)).toBe(true));
   timers.find(timer => timer.ms === 300).fn(); timers.find(timer => timer.ms === 200).fn();
   expect(win.hide).toHaveBeenCalledOnce();
   paste.resolve(false); await work;

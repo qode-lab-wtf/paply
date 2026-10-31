@@ -15,7 +15,7 @@ function candidates(vocabulary, response) {
  if (uncertain) { for (const term of terms) { if (estimateTokens([...selected,term].join(', ')) > 90) break; selected.push(term); } }
  return { terms:selected, prompt: !selected.length ? '' : uncertain ? selected.join(', ') : selected.map(t=>t+', '+t+'.').join(' ')+' Hallo '+selected[0]+'.' };
 }
-async function termCheck(first, vocabulary, request, firstMs, signal, diagnose = ()=>{}) {
+async function termCheck(first, vocabulary, request, firstMs, signal, diagnose = (requested,accepted)=>console.log('[Begriffe]', requested, accepted)) {
  const c = candidates(vocabulary, first);
  if (!c.terms.length) { diagnose(0,0); return first; }
  let timer, accepted = false;

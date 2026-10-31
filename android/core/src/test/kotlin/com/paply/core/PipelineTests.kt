@@ -52,7 +52,7 @@ class PipelineTests {
     }
 
     @Test
-    fun singleUploadWithPolish() = runBlocking {
+    fun uncertainUploadWithPolish() = runBlocking {
         MockServer { r, _ ->
             when {
                 r.path!!.endsWith("/models") -> Groq.models(GroqModels.polish)
@@ -81,7 +81,7 @@ class PipelineTests {
                 expect(
                     o.languages == listOf("de") &&
                         o.polishModel == GroqModels.polish &&
-                        o.timings.chunkCount == 1 &&
+                        o.timings.chunkCount == 2 &&
                         o.timings.uploadedBytes > 1000,
                 )
                 val t = o.timings

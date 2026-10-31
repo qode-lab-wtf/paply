@@ -82,7 +82,7 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
         let server = MockServer { request, _ in
             request.field("language") == "de"
                 ? Groq.transcription("Guten Morgen, wie geht's dir heute?", language: "German")
-                : Groq.transcription("Gutn morgn, kak dela segodnya?", language: "Russian")
+                : Groq.transcription("Gutn morgn, kak dela segodnya?", language: "Russian", logprob: -0.8)
         }
         let p = pipeline(server)
         await feed(p, Synth.withFloor(Synth.speech(12)))
@@ -102,7 +102,7 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
     @Test func failedRedoKeepsTheFirstResult() async {
         let server = MockServer { request, _ in
             request.field("language") == "de" ? Groq.error(422)
-                : Groq.transcription("Gutn morgn, kak dela segodnya?", language: "Russian")
+                : Groq.transcription("Gutn morgn, kak dela segodnya?", language: "Russian", logprob: -0.8)
         }
         let p = pipeline(server)
         await feed(p, Synth.withFloor(Synth.speech(2)))

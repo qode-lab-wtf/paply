@@ -320,6 +320,7 @@ public actor DictationPipeline {
         if case .success(let selected) = result {
             chosenLanguage = chosenLanguage ?? GroqModels.languageCode(selected.language)
             let candidates = TermGuard.candidates(settings.vocabulary, selected)
+            var accepted = 0
             if !candidates.terms.isEmpty {
                 let language = chosenLanguage
                 let check = await LanguageGuard.boundedCheck(firstSeconds: firstSeconds) { await send(language, termPrompt: candidates.prompt) }
@@ -327,8 +328,10 @@ public actor DictationPipeline {
                 if case .success(let second) = check,
                    candidates.terms.contains(where: { TermGuard.accept($0, first: selected.text ?? "", second: second.text ?? "", lpFirst: LanguageGuard.confidence(selected.segments), lpSecond: LanguageGuard.confidence(second.segments)) }) {
                     result = .success(second)
+                    accepted = 1
                 }
             }
+            log.info("terms \(candidates.terms.isEmpty ? 0 : 1) \(accepted)")
         }
         switch result {
         case .failure(let failure):

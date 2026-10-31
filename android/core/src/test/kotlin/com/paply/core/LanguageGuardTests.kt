@@ -211,7 +211,7 @@ class LanguageGuardTests {
         MockServer { r, _ ->
             if (r.field("language") == "de")
                 Groq.transcription("Guten Morgen, wie geht's dir heute?", language = "German")
-            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian")
+            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian", logprob = -0.8)
         }
             .use { s ->
                 val p = pipeline(s)
@@ -235,7 +235,7 @@ class LanguageGuardTests {
     fun failedShortCountercheckKeepsTheFirstResult() = runBlocking {
         MockServer { r, _ ->
             if (r.field("language") == "de") Groq.error(422)
-            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian")
+            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian", logprob = -0.8)
         }
             .use { s ->
                 val p = pipeline(s)

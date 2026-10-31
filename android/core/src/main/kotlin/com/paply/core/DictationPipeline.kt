@@ -315,11 +315,13 @@ constructor(
             }
         }
         val candidates = TermGuard.candidates(settings.vocabulary, result)
+        var termAccepted = 0
         if (candidates.terms.isNotEmpty()) {
             val checked = try { withTimeoutOrNull(LanguageGuard.checkTimeoutMs(firstMs)) { send(chosenLanguage, candidates.prompt) } }
             catch (error: Throwable) { currentCoroutineContext().ensureActive(); null }
-            if (checked != null && candidates.terms.any { TermGuard.accept(it, result.text.orEmpty(), checked.text.orEmpty(), LanguageGuard.confidence(result), LanguageGuard.confidence(checked)) }) result = checked
+            if (checked != null && candidates.terms.any { TermGuard.accept(it, result.text.orEmpty(), checked.text.orEmpty(), LanguageGuard.confidence(result), LanguageGuard.confidence(checked)) }) { result = checked; termAccepted = 1 }
         }
+        client.termDiagnostic(if (candidates.terms.isEmpty()) 0 else 1, termAccepted)
         currentCoroutineContext().ensureActive()
         val filtered =
             SilenceFilter.filter(

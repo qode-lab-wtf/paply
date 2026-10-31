@@ -52,7 +52,7 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         #expect(server.requests.isEmpty)
     }
 
-    @Test func singleUploadWithPolish() async throws {
+    @Test func uncertainUploadWithPolish() async throws {
         let server = MockServer { request, _ in
             if request.path.hasSuffix("/models") { return Groq.models(GroqModels.polish) }
             if request.path.hasSuffix("/chat/completions") { return Groq.chat("Morgen besprechen wir die offenen Aufgaben.") }
@@ -67,7 +67,7 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         #expect(outcome.text == outcome.polished)
         #expect(outcome.languages == ["de"])
         #expect(outcome.polishModel == GroqModels.polish)
-        #expect(outcome.timings.chunkCount == 1)
+        #expect(outcome.timings.chunkCount == 2)
         #expect(outcome.timings.uploadedBytes > 1000)
         let t = outcome.timings
         #expect(t.transcriptionDoneMs != nil && t.polishDoneMs != nil && t.totalMs != nil)
