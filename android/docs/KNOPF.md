@@ -305,6 +305,8 @@ Produktions-Neubau zuvor 38 s), einschließlich sieben neuer Regressionstests.
   Das X blendet nach 30 ms in 150 ms ein und ist dabei sofort antippbar;
   ohne Systemanimationen erscheint es direkt im fertigen Layout. Beim Rückweg
   verschwindet es weiterhin sofort, das Fenster schrumpft nach dem Morph.
+  Das Zurückhalten gilt höchstens 120 ms nach einer Fenstergrößen-Änderung, damit
+  ein unerwartetes Fenster auf fremden Geräten den Knopf nie einfriert.
 - Einrichtung und Freundestexte nennen den Bildschirmrand. Version 0.2.2 (8).
 
 Prüfung nur über `scripts/mb.sh`, `PAPLY_WORK=work-rand022`:

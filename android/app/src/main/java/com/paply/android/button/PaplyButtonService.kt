@@ -65,6 +65,7 @@ class PaplyButtonService : AccessibilityService() {
     private var lastRender: RenderKey? = null
     private var positionAnimator: ValueAnimator? = null
     private var expectedWindowLeft = 0
+    private var layoutDeadline = 0L
     private var obstacles = emptyList<ButtonPosition.Box>()
     private var obstaclesDirty = true
     private var obstaclesReadAt = 0L
@@ -457,27 +458,28 @@ class PaplyButtonService : AccessibilityService() {
             view.viewTreeObserver.addOnPreDrawListener {
                 // updateViewLayout is asynchronous. Keep the last surface until the
                 // window AND the children agree; never submit a clipped intermediate frame.
+                // The deadline keeps an unexpected window frame from freezing the overlay.
                 val button = logo
-                val ready = view.width == layout.width && view.height == layout.height &&
+                val placed = button?.awaitingExpansion != true || run {
+                    view.getLocationOnScreen(location)
+                    location[0] == expectedWindowLeft && location[1] == layout.y
+                }
+                val ready = placed && view.width == layout.width && view.height == layout.height &&
                     button != null && button.width == button.layoutParams.width &&
                     button.height == button.layoutParams.height &&
                     (if (onRight) button.right == view.width else button.left == 0)
-                if (!ready) false else {
-                    view.getLocationOnScreen(location)
-                    if (button.awaitingExpansion &&
-                        (location[0] != expectedWindowLeft || location[1] != layout.y)) false
-                    else {
-                        button.expandAfterLayout()
-                        cancel?.let { cross ->
-                            if (cross.visibility == View.VISIBLE && cancelRevealPending) {
-                                cancelRevealPending = false
-                                if (ValueAnimator.areAnimatorsEnabled()) {
-                                    cross.animate().alpha(1f).setStartDelay(30).setDuration(150).start()
-                                } else cross.alpha = 1f
-                            }
+                if (!ready && SystemClock.uptimeMillis() < layoutDeadline) false else {
+                    layoutDeadline = 0L
+                    button?.expandAfterLayout()
+                    cancel?.let { cross ->
+                        if (cross.visibility == View.VISIBLE && cancelRevealPending) {
+                            cancelRevealPending = false
+                            if (ValueAnimator.areAnimatorsEnabled()) {
+                                cross.animate().alpha(1f).setStartDelay(30).setDuration(150).start()
+                            } else cross.alpha = 1f
                         }
-                        true
                     }
+                    true
                 }
             }
             var down = 0f; var downX = 0f; var initial = 0; var dragged = false
@@ -542,6 +544,7 @@ class PaplyButtonService : AccessibilityService() {
         layout.x = screen.x - target.right
         layout.y = target.top
         lastRender = key
+        if (layout.height != previousHeight || layout.width != previousWidth) layoutDeadline = SystemClock.uptimeMillis() + ButtonPresentation.LAYOUT_WAIT
         if (layout.height != previousHeight || layout.width != previousWidth || layout.x != previousX || layout.y != previousY) {
             positionAnimator?.cancel()
             val targetX = layout.x; val targetY = layout.y
