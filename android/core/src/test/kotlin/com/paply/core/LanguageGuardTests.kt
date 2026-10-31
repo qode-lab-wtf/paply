@@ -164,14 +164,14 @@ class LanguageGuardTests {
     }
 
     @Test
-    fun failedRedoKeepsTheFirstResult() = runBlocking {
+    fun failedShortCountercheckKeepsTheFirstResult() = runBlocking {
         MockServer { r, _ ->
             if (r.field("language") == "de") Groq.error(422)
             else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian")
         }
             .use { s ->
                 val p = pipeline(s)
-                feed(p, Synth.withFloor(Synth.speech(12.0)))
+                feed(p, Synth.withFloor(Synth.speech(3.0)))
                 val o = p.finish()
                 expect(s.requests.size == 2 && o.errorMessage == null)
                 expect(
