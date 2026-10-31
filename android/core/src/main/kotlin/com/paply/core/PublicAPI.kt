@@ -89,6 +89,7 @@ data class DictationTimings(
     val chunkCount: Int = 0,
     val uploadedBytes: Int = 0,
     val audioSeconds: Double = 0.0,
+    val sentAudioSeconds: Double = 0.0,
 )
 
 data class DictationOutcome(
@@ -122,6 +123,7 @@ data class DictationOutcome(
                         t.number("chunkCount")?.toInt() ?: 0,
                         t.number("uploadedBytes")?.toInt() ?: 0,
                         t.number("audioSeconds") ?: 0.0,
+                        t.number("sentAudioSeconds") ?: 0.0,
                     )
             return DictationOutcome(
                 o.string("text") ?: "",
@@ -165,6 +167,7 @@ data class DictationOutcome(
                 put("chunkCount", timings.chunkCount)
                 put("uploadedBytes", timings.uploadedBytes)
                 put("audioSeconds", timings.audioSeconds)
+                put("sentAudioSeconds", timings.sentAudioSeconds)
             },
         )
     }

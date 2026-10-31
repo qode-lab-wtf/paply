@@ -245,10 +245,10 @@ fun LanguagesScreen(prefs: AppPreferences, edit: ((AppPreferences) -> AppPrefere
                 })
             }
         }
-        Section(footer = "Kurze Sätze schreibt Paply direkt in der Hauptsprache, statt die Sprache zu raten.") {
+        Section(footer = "Paply übersetzt nie. Die Hauptsprache gilt nur, wenn die Erkennung unsicher ist.") {
             SettingsItem("Hauptsprache", value = SettingsRepository.languageName(prefs.dictationPrefs().mainLanguage), onClick = { primary = true })
         }
-        Text("Bei längeren Sätzen erkennt Paply die Sprache selbst. Die Liste hilft, wenn du mitten im Satz wechselst – zum Beispiel ein englischer Satz in einer deutschen Nachricht. Erkennt Paply eine Sprache, die nicht in der Liste steht, schreibt es in der Hauptsprache.",
+        Text("Paply erkennt die gesprochene Sprache selbst. Eigene Sprachen helfen bei der Gegenprobe; auch andere Sprachen bleiben wie gesprochen.",
             color = C.secondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
     }
     if (primary) AlertDialog(onDismissRequest = { primary = false }, title = { Text("Hauptsprache") },

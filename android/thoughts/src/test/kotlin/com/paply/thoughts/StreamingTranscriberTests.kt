@@ -80,6 +80,29 @@ class StreamingTranscriberTests {
         } finally { Files.deleteIfExists(file) }
     }
 
+    @Test fun emptyMiddleFilePieceDoesNotReplaceExpectedLanguage() = runBlocking {
+        val file = Files.createTempFile("empty-middle", ".wav")
+        try {
+            WAVWriter(file).also { w -> repeat(125) { w.append(voice()) }; w.close() }
+            MockWebServer().use { server ->
+                server.enqueue(MockResponse().setBody("""{"text":"An English sentence.","language":"en"}"""))
+                server.enqueue(MockResponse().setBody("""{"text":"","language":"de"}"""))
+                server.enqueue(MockResponse().setBody("""{"text":"Une phrase française.","language":"fr","segments":[{"start":0,"end":3,"avg_logprob":-0.9}]}"""))
+                server.enqueue(MockResponse().setBody("""{"text":"Another English sentence.","language":"en","segments":[{"start":0,"end":3,"avg_logprob":-0.1}]}"""))
+                ModelCatalog().use { catalog ->
+                    val result = FileTranscriber(baseURL = server.url("/"), catalog = catalog)
+                        .transcribe(file, "fake", PaplySettings(primaryLanguage = "de", spokenLanguages = listOf("de", "en"))) as TranscriptionResult.Success
+                    assertEquals("An English sentence. Another English sentence.", result.text)
+                    assertEquals(4, server.requestCount)
+                    repeat(3) { server.takeRequest() }
+                    val body = server.takeRequest().body.readUtf8()
+                    assertEquals("en", body.substringAfter("name=\"language\"").substringAfter("\r\n\r\n").substringBefore("\r\n"))
+                    assertTrue(result.sentAudioSeconds > result.audioSeconds)
+                }
+            }
+        } finally { Files.deleteIfExists(file) }
+    }
+
     @Test fun truncatedAndUnalignedDataNeverReachesNetwork() = runBlocking {
         val file = Files.createTempFile("broken", ".wav")
         try {
