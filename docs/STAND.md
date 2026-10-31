@@ -15,6 +15,10 @@
 | Gespräche | Beta, aus (Gemini) | Beta, aus | Beta, aus, erster Gerätetest läuft | Fehlt |
 | Entwicklerbereich | Ja | Ja | Ja | Ja, ohne Polieren-Schalter |
 
+## Begriffs-Gegenprobe (unveröffentlicht)
+
+Alle drei Codebasen prüfen eigene Begriffe bei Diktat und Gedanken nach der Sprachwahl und vor den Filtern. Klangvergleich und Annahme folgen den 19 gemeinsamen Fällen. Lange Stücke behalten die erkannte Sprache, sofern die erwartete nicht mindestens 0,15 besser ist. Gespräche erhalten keine Begriffs-Gegenprobe. Regel-Version bleibt 6.
+
 ## Nachzureichen
 
 - **Android:** Die hier ergänzten Desktop-Regressionen für Aufgaben-Zitate, Themen-Dubletten, Abschnittslimits und begrenzte Budget-Neuversuche gegen den mobilen Stand prüfen. iPhone verwendet bereits die Vorlagen; seine 30-Tage-Tonbereinigung ist jetzt ergänzt.

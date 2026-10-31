@@ -18,3 +18,7 @@ for(const mode of ['accept','reject','empty','fail']) it('Begriffsablauf '+mode,
  expect(calls).toBe(mode==='empty'?1:2);
  expect(result.text).toBe(mode==='accept'?'Hallo Law Min, wie geht es dir?':first.text);
 });
+it('accepted term survives polish safety net',()=>{
+ const { polishRejection } = require('../dictation/polish');
+ expect(polishRejection('hallo Law Min wie geht es dir','Hallo Law Min, wie geht es dir?',{vocabulary:'Law Min'})).toBeNull();
+});

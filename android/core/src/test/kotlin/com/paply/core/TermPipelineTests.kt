@@ -16,6 +16,11 @@ class TermPipelineTests {
                 feed(p, Synth.withFloor(Synth.speech(3.0)))
                 val result = p.finish()
                 expect(server.requests.size == if(mode == "empty") 1 else 2)
+                org.junit.Assert.assertEquals(if(mode == "empty") 3.0 else 6.0, result.timings.sentAudioSeconds, 0.01)
+                if(mode != "empty") {
+                    expect(server.requests[1].field("language") == "de")
+                    expect(server.requests[1].field("prompt") == "Law Min, Law Min. Hallo Law Min.")
+                }
                 expect(result.raw == if(mode == "accept") "Hallo Law Min, wie geht es dir?" else "Hallo Lavi Min, wie geht es dir?")
                 p.close()
             }
