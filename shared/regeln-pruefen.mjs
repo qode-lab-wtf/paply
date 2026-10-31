@@ -52,14 +52,17 @@ const WERTE = {
     [`${ANDROID}/SilenceFilter.kt`, /const val lowLogprob = ([\d.-]+)/],
   ],
   'gedanken.modell': [
+    [`${DESKTOP}/notes/groq.js`, /PRIMARY_MODEL = '([^']+)'/],
     [`${IOS}/Thoughts/AI/ThoughtStructurer.swift`, /primaryModel = "([^"]+)"/],
     [`${GEDANKEN}/ai/ThoughtStructurer.kt`, /primaryModel = "([^"]+)"/],
   ],
   'gedanken.ausweichmodell': [
+    [`${DESKTOP}/notes/groq.js`, /FALLBACK_MODEL = '([^']+)'/],
     [`${IOS}/Thoughts/AI/ThoughtStructurer.swift`, /fallbackModel = "([^"]+)"/],
     [`${GEDANKEN}/ai/ThoughtStructurer.kt`, /fallbackModel = "([^"]+)"/],
   ],
   'gedanken.regel_version': [
+    [`${DESKTOP}/notes/prompt.js`, /VERSION = (\d+)/],
     [`${IOS}/Thoughts/AI/ThoughtPrompt.swift`, /static let version = (\d+)/],
     [`${GEDANKEN}/ai/ThoughtPrompt.kt`, /const val version = (\d+)/],
   ],
@@ -77,7 +80,7 @@ const AUSNAHMEN = {
   A3: () => !lies(`${DESKTOP}/audio/silence-filter.js`).includes('Merci'),
   A4: () => /func redoLanguage/.test(lies(`${IOS}/Text/LanguageGuard.swift`))
     || /fun redoLanguage/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
-  A5: () => !/tasks|due_hint/.test(lies(`${DESKTOP}/notes/plan.js`)),
+  A5: () => !gibtEs(`${DESKTOP}/notes/thought.js`) || !lies(`${DESKTOP}/notes/queue.js`).includes("require('./thought')") || !lies(`${DESKTOP}/src/apps/notes/NotesApp.tsx`).includes('Aufgaben'),
   A6: () => !lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: true')
     || !lies(`${DESKTOP}/src/components/DeveloperSettings.tsx`).includes('count.current >= 5')
     || !lies(`${DESKTOP}/src/components/DeveloperSettings.tsx`).includes('whisperModel')
@@ -146,7 +149,12 @@ function pruefeGedankenPrompt(fehler) {
   // Android prüft seinen Text in AILedgerPromptTests gegen dieselbe Datei.
   const ios = [...lies(`${IOS}/Thoughts/AI/ThoughtPrompt.swift`).matchAll(/static let \w+ = """\n([\s\S]*?)\n\s*"""/g)]
     .map(m => m[1].replace(/^ {4}/gm, '')).join('\n\n');
-  if (ios !== lies('android/thoughts/src/test/resources/thought-system-v6.txt').trimEnd()) {
+  const quelle = lies('shared/gedanken/system-prompt-v6.txt');
+  const desktop = lies(`${DESKTOP}/notes/prompt.js`).match(/PROMPT = ("(?:[^"\\]|\\.)*");/);
+  if (!desktop || JSON.parse(desktop[1]) !== quelle) fehler.push('Desktop-Gedanken-Prompt weicht ab');
+  const android = [...lies(`${GEDANKEN}/ai/ThoughtPrompt.kt`).matchAll(/const val (?:intro|\w+Rules) =\s*("(?:[^"\\]|\\.)*")/g)].map(m => JSON.parse(m[1])).join('\n\n');
+  if (android.trimEnd() !== quelle.trimEnd()) fehler.push('Android-Gedanken-Prompt weicht ab');
+  if (lies('android/thoughts/src/test/resources/thought-system-v6.txt') !== quelle || ios !== quelle.trimEnd()) {
     fehler.push('Gedanken-Prompt von iOS und Android weicht ab');
   }
 }

@@ -158,7 +158,6 @@ stimmt. **In Arbeit** wird gerade behoben, **Bewusst** bleibt so, **Nachzureiche
 
 | Nr. | App | Abweichung | Folge | Status |
 | --- | --- | --- | --- | --- |
-| A5 | Mac, Windows | Gedanken nutzen eigene deutsche KI-Regeln ohne Aufgaben und Fälligkeiten | Regel 5 gilt nicht. Auf Allans MacBook (26./27.10.): von 19 Gedanken 4 sauber eingeordnet, 10 nicht eindeutig, 4 wegen Limit nur gesichert, 1 leer | In Arbeit |
 | A8 | Android | „Gespräche“ fehlt | Android hat zwei von drei Funktionen | Nachzureichen, sobald das iPhone den Gerätetest bestanden hat |
 | A9 | Mac, Windows | Gespräche laufen über Gemini, heißen „Sprecher N“ und „Gegenstelle“, ohne Besitzer-Erkennung und Aufgaben-Reiter | Regel 6 gilt hier nur für den Bericht | Nachzureichen |
 | A10 | Android | Gedanken verknüpfen nur über Wörter, das iPhone zusätzlich über Apples Sprachmodell | Etwas weniger Treffer. Android hat kein eingebautes Gegenstück | Bewusst |
