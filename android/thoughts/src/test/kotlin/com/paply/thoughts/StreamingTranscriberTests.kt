@@ -59,7 +59,7 @@ class StreamingTranscriberTests {
             MockWebServer().use { server ->
                 server.dispatcher = object : Dispatcher() {
                     override fun dispatch(request: RecordedRequest): MockResponse {
-                        val body = request.body.readUtf8()
+                        val body = request.body.clone().readUtf8()
                         val checked = body.contains("name=\"language\"")
                         return MockResponse().setBody(if (checked)
                             """{"text":"Falsche Übersetzung.","language":"de","segments":[{"start":0,"end":3,"avg_logprob":-0.7}]}"""
