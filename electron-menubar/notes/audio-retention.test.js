@@ -36,10 +36,10 @@ describe('Notes Ton', () => {
     const id = make('captured'); queue({ getKey, isOnline: () => false }); await q.tick();
     expect(audio(id)).toBe(true); expect(repo.transcript(id)).toBeNull();
   });
-  it('räumt fertige Altdaten mit Text und leerem Text auf, ohne Text zu ändern', () => {
+  it('räumt nur Altdaten mit Text auf, ohne Text zu ändern', () => {
     const ids = [make('complete', 0, 'Original'), make('empty', 0, '')];
     queue().cleanAudio();
-    expect(ids.map(audio)).toEqual([false, false]); expect(repo.transcript(ids[0]).text).toBe('Original');
+    expect(ids.map(audio)).toEqual([false, true]); expect(repo.transcript(ids[0]).text).toBe('Original');
   });
   it.each(['waiting_key', 'waiting_network', 'needs_attention', 'captured'])('behält %s ohne Text bis 30 Tage und räumt auch nie fertige Einträge auf', state => {
     vi.useFakeTimers();
@@ -59,4 +59,16 @@ describe('Notes Ton', () => {
     const assets = createAssets({ repo });
     expect((await assets.serve({ url: 'paply-notes://audio/s_0' })).status).toBe(403);
   });
+});
+
+it('behält unerklärtes leeres Whisper-Ergebnis für echten Neuversuch', async () => {
+ const id = make('captured');
+ const pcm=Buffer.alloc(64000); for(let i=32000;i<64000;i+=2) pcm.writeInt16LE(8000,i);
+ fs.writeFileSync(path.join(repo.sourcePath(id),'rec.pcm'),pcm);
+ const transcribe=vi.fn().mockResolvedValueOnce({text:'',model:'whisper-large-v3'}).mockResolvedValueOnce({text:'Ein Gedanke.',model:'whisper-large-v3'});
+ queue({getKey:()=> 'k',groq:{transcribe}}); await q.tick();
+ expect(audio(id)).toBe(true); expect(repo.transcript(id)).toBeNull();
+ const entry=repo.entry(id); entry.retryAt=0; repo.saveEntry(entry); await q.tick();
+ expect(transcribe).toHaveBeenCalledTimes(2); expect(audio(id)).toBe(false);
+ expect(repo.transcript(id).model).toBe('whisper-large-v3');
 });

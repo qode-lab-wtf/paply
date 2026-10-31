@@ -231,12 +231,23 @@ describe('Main: Diagnose-Protokoll', () => {
   });
 });
 
-it('neue Nutzer polieren standardmäßig; gespeichertes Aus bleibt und Entwicklerwerte sind dauerhaft', () => {
+it('neue Nutzer polieren standardmäßig; altes Aus wird migriert, markiertes Aus bleibt und Entwicklerwerte sind dauerhaft', () => {
  const fresh = harness(); fresh.ready();
  expect(fresh.handlers.get('settings:get')().enablePolish).toBe(true);
  expect(fresh.handlers.get('settings:get')().whisperModel).toBe('whisper-large-v3');
  const saved = harness({persisted:{enablePolish:false,developerMode:true,whisperModel:'whisper-large-v3-turbo'}}); saved.ready();
  const settings=saved.handlers.get('settings:get')();
- expect(settings.enablePolish).toBe(false); expect(settings.developerMode).toBe(true);
+ expect(settings.enablePolish).toBe(true);
+ const migrated = harness({persisted:{settingsVersion:1,enablePolish:false}}); migrated.ready();
+ expect(migrated.handlers.get('settings:get')().enablePolish).toBe(false); expect(settings.developerMode).toBe(true);
  expect(settings.whisperModel).toBe('whisper-large-v3-turbo');
+});
+
+it('alte Profile und eigene Agenten bleiben ladbar und ändern die Hauptsprache nicht', () => {
+ const h=harness({persisted:{language:'fr',profiles:{legacy:{name:'Alt',language:'de',polishFlavor:'plain',autopaste:false}},customAgents:[{id:'custom',name:'Eigen',language:'en'}]}}); h.ready();
+ expect(h.handlers.get('profiles:get')().profiles.legacy.name).toBe('Alt');
+ for(const id of ['legacy','custom']) {
+ expect(h.handlers.get('profiles:setActive')(null,id)).toBe(true);
+ expect(h.handlers.get('settings:get')().language).toBe('fr');
+ }
 });

@@ -457,7 +457,12 @@ function createMeetingController(deps) {
       return;
     }
 
-    const segments = result.segments || [];
+    const segments = (result.segments || []).filter(s => typeof s.text === 'string' && s.text.trim());
+    if (!segments.length) {
+      meetingStore.finalizeIndex(id, { status: 'failed', analysisError: 'Keine Sprache erkannt · Neu auswerten', progress: null });
+      _emitUpdated(id, 'failed');
+      return;
+    }
     meetingStore.saveTranscript(id, { segments, language, detectedLanguage: result.language || null, speakers: result.speakers || [] });
     const speakerNames = [...new Set(segments.map((s) => s.speaker))];
     const preview = (segments[0] && segments[0].text ? segments[0].text : '').slice(0, 120);

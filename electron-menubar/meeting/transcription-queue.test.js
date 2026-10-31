@@ -27,14 +27,14 @@ describe('transcription-queue', () => {
     });
     q.enqueue({ channel: 'mic', wavBuffer: Buffer.alloc(44), tOffset: 0 });
     await q.idle();
-    expect(captured.get('prompt')).toBe(buildPrompt('', 'voriger gesprochener Text', primer(['de','en'])));
+    expect(captured.get('prompt')).toBe(buildPrompt('', 'voriger gesprochener Text', ''));
   });
-  it('ohne Vorstück wird nur der Primer gesendet', async () => {
+  it('ohne Vorstück und Sprechmessung wird kein Primer gesendet', async () => {
     let captured = null;
     const fakeFetch = async (_url, opts) => { captured = opts.body; return { ok: true, json: async () => ({ segments: [] }) }; };
     const q = new TranscriptionQueue({ apiKey: 'k', language: 'de', fetchImpl: fakeFetch });
     q.enqueue({ channel: 'system', wavBuffer: Buffer.alloc(44), tOffset: 0 });
     await q.idle();
-    expect(captured.get('prompt')).toBe(primer(['de','en']));
+    expect(captured.get('prompt')).toBeNull();
   });
 });

@@ -41,7 +41,7 @@ if (!hasSingleInstanceLock) { app.quit(); }
 else {
 app.on('second-instance', () => { app.whenReady().then(() => { const win = createMainWindow(); win.show(); win.focus(); }); });
 
-const { WHISPER_MODEL, userLanguages, guardedTranscription } = require('./dictation/language-guard');
+const { WHISPER_MODEL, languageCode, userLanguages, guardedTranscription } = require('./dictation/language-guard');
 const { primer, buildPrompt, removeEchoes } = require('./dictation/whisper-prompt');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -146,7 +146,7 @@ function getStore() {
         customVocabulary: '',
         shortcut: getDefaultShortcut(),
         autoStart: false,
-        language: app.getPreferredSystemLanguages()[0]?.split(/[-_]/)[0] || 'de',
+        language: languageCode(app.getPreferredSystemLanguages()[0]) || 'de',
         autopaste: true,
         beepEnabled: true,
         copyToClipboard: false,
@@ -155,9 +155,9 @@ function getStore() {
         // Profile/Rollen (Standard-Agenten)
         activeProfile: 'coding',
         profiles: {
-          coding: { name: 'Coding', language: 'de', polishFlavor: 'code', autopaste: true },
-          meeting: { name: 'Meeting', language: 'de', polishFlavor: 'meeting', autopaste: false },
-          dictation: { name: 'Diktat', language: 'de', polishFlavor: 'plain', autopaste: true },
+          coding: { name: 'Coding', polishFlavor: 'code', autopaste: true },
+          meeting: { name: 'Meeting', polishFlavor: 'meeting', autopaste: false },
+          dictation: { name: 'Diktat', polishFlavor: 'plain', autopaste: true },
         },
         // Custom Agents (vom Nutzer erstellt)
         customAgents: [],
@@ -202,6 +202,10 @@ function getStore() {
       configFileMode: 0o600,
     });
     try { if (!isWin) fs.chmodSync(store.path, 0o600); } catch { /* Datei kommt beim ersten Speichern */ }
+    if (!store.get('settingsVersion')) {
+      store.set('enablePolish', true);
+      store.set('settingsVersion', 1);
+    }
     migrateMeetingModel(store);
   }
   return store;
@@ -528,10 +532,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
       const json = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
       const filtered = filterTranscription(json, voiceActivity, options);
       // Whisper gibt bei sehr kurzem/leisem Ton gern den prompt (eigene Begriffe) wörtlich zurück.
-      if (vocabulary && filtered.text && isVocabularyEcho(filtered.text, vocabulary)) {
-        filtered.text = '';
-        filtered.reason ||= 'vocabulary-echo';
-      }
+      if (json.echoRemoved && !filtered.text) filtered.reason = 'prompt-echo';
       options.onFiltered?.(filtered);
       if (filtered.droppedSegments || filtered.reason) {
         console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',
@@ -1669,7 +1670,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     const transcription = skipTranscription ? { text: '', segments: [] } : await transcribeAudio(audioBuffer, language, 3, voiceActivity, {
       bypassLocalFilters: isRetry,
       returnDetails: true,
-      onFiltered: result => { locallyFiltered ||= result.reason === 'known-silence-phrase'; },
+      onFiltered: result => { locallyFiltered ||= ['known-silence-phrase', 'prompt-echo'].includes(result.reason); },
     });
     const { text: transcript, segments } = transcription;
     language = transcription.language || language;
@@ -2081,7 +2082,6 @@ function switchAgent(agentId) {
   // Update settings based on agent
   if (agentInfo) {
     s.set('autopaste', agentInfo.autopaste ?? true);
-    s.set('language', agentInfo.language || 'de');
   }
 
   console.log(`Switched to agent: ${agentName}`);
@@ -2231,7 +2231,7 @@ function setupIpcHandlers() {
     if (typeof settings.developerMode === 'boolean') s.set('developerMode', settings.developerMode);
     if ([WHISPER_MODEL, 'whisper-large-v3-turbo'].includes(settings.whisperModel)) s.set('whisperModel', settings.whisperModel);
     if (settings.enablePolish !== undefined) s.set('enablePolish', settings.enablePolish);
-    if (settings.language !== undefined) s.set('language', settings.language);
+    if (settings.language !== undefined) s.set('language', languageCode(settings.language));
     if (settings.autopaste !== undefined) s.set('autopaste', settings.autopaste);
     if (settings.beepEnabled !== undefined) s.set('beepEnabled', settings.beepEnabled);
     if (settings.copyToClipboard !== undefined) s.set('copyToClipboard', settings.copyToClipboard);
@@ -2332,7 +2332,6 @@ function setupIpcHandlers() {
     if (profiles[profileId]) {
       s.set('activeProfile', profileId);
       const profile = profiles[profileId];
-      if (profile.language) s.set('language', profile.language);
       if (profile.autopaste !== undefined) s.set('autopaste', profile.autopaste);
       updateTrayMenu();
       return true;
@@ -2342,7 +2341,6 @@ function setupIpcHandlers() {
     const customAgent = customAgents.find(a => a.id === profileId);
     if (customAgent) {
       s.set('activeProfile', profileId);
-      if (customAgent.language) s.set('language', customAgent.language);
       if (customAgent.autopaste !== undefined) s.set('autopaste', customAgent.autopaste);
       updateTrayMenu();
       return true;

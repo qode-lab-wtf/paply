@@ -39,7 +39,8 @@ function cleanExpiredAudio(meetingStore, { now = Date.now() } = {}) {
     if (!entry || entry.audioDeleted) continue;
     if (entry.status === 'recording') continue;
     const expires = expiresAtMs(entry);
-    const complete = entry.status === 'ready' || (!entry.status && meetingStore.loadTranscript(entry.id)?.segments?.length > 0);
+    const segments = meetingStore.loadTranscript(entry.id)?.segments;
+    const complete = (entry.status === 'ready' || !entry.status) && Array.isArray(segments) && segments.some(s => typeof s.text === 'string' && s.text.trim());
     if (!complete && expires > now) {
       if (Number.isFinite(expires)) meetingStore.finalizeIndex(entry.id, { audioExpiresAt: new Date(expires).toISOString() });
       continue;

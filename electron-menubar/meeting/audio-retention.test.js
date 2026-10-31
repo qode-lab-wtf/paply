@@ -49,3 +49,10 @@ describe('Ton-Regel 8', () => {
     expect(expiresAtMs({ startTime: new Date(0).toISOString(), stoppedAt: new Date(2000).toISOString() })).toBe(2000 + RETENTION_MS);
   });
 });
+
+it.each([[[]], [[{text:'  '}]]])('behält ready-Altdaten ohne Text bis zur Frist', segments => {
+ const {ms,now,make}=fixture(); const id=make('ready',1000);
+ ms.saveTranscript(id,{segments}); expect(cleanExpiredAudio(ms,{now})).toEqual([]);
+ expect(ms.get(id).audio.mic).not.toBeNull();
+ expect(cleanExpiredAudio(ms,{now:now+RETENTION_MS})).toEqual([id]);
+});

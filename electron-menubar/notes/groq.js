@@ -38,7 +38,7 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
         if (prompt) form.append('prompt', prompt);
         return request('audio/transcriptions', form, { model, amount: Math.max(10, seconds), unit: 'audio', multipart: true, signal, timeout: 120000 });
       }, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
-      return removeEchoes(response, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
+      return removeEchoes({ ...response, model }, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
     },
     async plan(ctx, large, signal) {
       const model = large ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b';

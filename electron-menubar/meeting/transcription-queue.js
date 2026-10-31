@@ -1,6 +1,6 @@
 'use strict';
 const { guardedTranscription, userLanguages } = require('../dictation/language-guard');
-const { primer, buildPrompt, removeEchoes } = require('../dictation/whisper-prompt');
+const { buildPrompt, removeEchoes } = require('../dictation/whisper-prompt');
 // TranscriptionQueue — serielle Groq-Whisper-Verarbeitung mit Retry. CommonJS.
 
 const EventEmitter = require('node:events');
@@ -100,7 +100,7 @@ class TranscriptionQueue extends EventEmitter {
    */
   async _callGroq({ channel, wavBuffer, tOffset }) {
     const previousText = this.getPrompt?.(channel) || '';
-    const example = primer(this.users);
+    const example = ''; // Ohne zuverlässige Sprechzeit keinen synthetischen Primer senden.
     const request = async language => {
     const formData = new FormData();
     formData.append('file', new Blob([wavBuffer], { type: 'audio/wav' }), 'chunk.wav');

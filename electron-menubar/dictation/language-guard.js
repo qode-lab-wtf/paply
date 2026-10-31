@@ -57,10 +57,23 @@ const names = {
   swahili: 'sw',
   albanian: 'sq',
   cantonese: 'yue',
+  telugu: 'te', malayalam: 'ml', latin: 'la', maori: 'mi',
+  javanese: 'jv', myanmar: 'my', armenian: 'hy', nepali: 'ne',
+  sanskrit: 'sa', marathi: 'mr', belarusian: 'be', kazakh: 'kk',
+  azerbaijani: 'az', luxembourgish: 'lb', kannada: 'kn', tajik: 'tg',
+  hawaiian: 'haw', lingala: 'ln', hausa: 'ha', bashkir: 'ba',
+  sundanese: 'su', burmese: 'my', mongolian: 'mn', tatar: 'tt',
+  assamese: 'as', punjabi: 'pa', sindhi: 'sd', gujarati: 'gu',
+  amharic: 'am', yiddish: 'yi', lao: 'lo', uzbek: 'uz', faroese: 'fo',
+  haitian: 'ht', 'haitian creole': 'ht', pashto: 'ps', turkmen: 'tk',
+  shona: 'sn', yoruba: 'yo', somali: 'so', tibetan: 'bo',
+  khmer: 'km', maltese: 'mt', georgian: 'ka', breton: 'br',
+  sinhala: 'si', irish: 'ga', malagasy: 'mg', occitan: 'oc',
 };
 function languageCode(value) {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return names[raw] || raw.split(/[-_]/)[0] || null;
+  const code = names[raw] || raw.split(/[-_]/)[0];
+  return ({ nb: 'no', fil: 'tl', iw: 'he', in: 'id', ji: 'yi', jw: 'jv' })[code] || code || null;
 }
 function userLanguages(main, system = []) {
   const list = [
@@ -114,7 +127,9 @@ async function guardedTranscription(
   request,
   { expected, users = [], spoken, duration } = {},
 ) {
+  const started = Date.now();
   const first = await request();
+  const checkTimeout = Math.min(60000, 2 * (Date.now() - started) + 5000);
   const detected = languageCode(first.language);
   const original = { ...first, language: detected };
   if (
@@ -128,12 +143,15 @@ async function guardedTranscription(
     })
   )
     return original;
-  let check;
+  let check, timer;
   try {
-    check = await request(languageCode(expected));
+    check = await Promise.race([
+      request(languageCode(expected)),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Gegenprobe abgelaufen')), checkTimeout); }),
+    ]);
   } catch {
     return original;
-  }
+  } finally { clearTimeout(timer); }
   return decide({
     sameText: normalize(first.text) === normalize(check.text),
     lpDetected: confidence(first),

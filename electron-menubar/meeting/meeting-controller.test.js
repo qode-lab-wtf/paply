@@ -311,3 +311,13 @@ describe('MeetingController v2 (Fakes statt Netz)', () => {
     expect(transcriptToText([{ tStart: 65, speaker: 'Sprecher 1', text: 'Hi' }])).toBe('[01:05] Sprecher 1: Hi');
   });
 });
+
+it.each(['gemini','groq'])('leeres %s-Ergebnis ist wiederholbarer Fehler mit Ton', async provider => {
+ const {ctl,meetingStore,baseDir}=makeCtl({storeInit:{geminiApiKey:provider==='groq'?'':'g'},deps:{analyzeAudio:async()=>({segments:[]}),fallbackAnalyze:async()=>({segments:[]})}});
+ try {
+ const {id}=ctl.start(); ctl.onMicPcm(signal()); await ctl.stop(); await ctl.whenIdle();
+ expect(meetingStore.get(id).index.status).toBe('failed');
+ expect(meetingStore.get(id).index.analysisError).toContain('Neu auswerten');
+ expect(meetingStore.get(id).audio.mic).not.toBeNull();
+ } finally {fs.rmSync(baseDir,{recursive:true,force:true});}
+});

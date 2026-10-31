@@ -1305,27 +1305,6 @@ function AgentsView({
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">Hauptsprache</Label>
-                <Select
-                  value={(currentConfigAgent as Profile).language || 'de'}
-                  onChange={(e) => onUpdateProfile(selectedConfigAgent, { language: e.target.value })}
-                >
-                  <option value="de">Deutsch</option>
-                  <option value="en">English</option>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">Output-Sprache</Label>
-                <Select defaultValue="same">
-                  <option value="same">Gleich wie Input</option>
-                  <option value="en">→ Englisch</option>
-                  <option value="de">→ Deutsch</option>
-                </Select>
-              </div>
-            </div>
-
             <div className="flex items-center justify-between">
               <Label>Autopaste</Label>
               <Switch
