@@ -29,8 +29,15 @@ class DeveloperSettingsDeviceTest {
         }
         return instrumentation.uiAutomation.rootInActiveWindow?.let(::visit)
     }
+    private fun awaitText(text: String): AccessibilityNodeInfo {
+        repeat(30) {
+            find(text)?.let { return it }
+            android.os.SystemClock.sleep(100)
+        }
+        error("Missing $text")
+    }
     private fun click(text: String) {
-        var node = requireNotNull(find(text)) { "Missing $text" }
+        var node = awaitText(text)
         while (!node.isClickable) node = requireNotNull(node.parent)
         assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
@@ -55,12 +62,12 @@ class DeveloperSettingsDeviceTest {
                     }
                 }
             }
-            assertNotNull(find("Polieren"))
+            awaitText("Polieren")
             click("Polieren")
             find("Polieren")
             assertFalse(repository.snapshot().polish)
             click("Entwicklerbereich ausblenden")
-            assertNotNull(find("settings"))
+            awaitText("settings")
             assertFalse(repository.state.value.developerMode)
             assertNull(find("Polieren"))
         } finally {
