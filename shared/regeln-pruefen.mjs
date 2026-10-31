@@ -92,6 +92,7 @@ const AUSNAHMEN = {
   A10: () => lies(`${GEDANKEN}/local/EmbeddingIndex.kt`).includes('override val available = false'),
   A11: () => lies(`${DESKTOP}/dictation/custom-agent-prompt.js`).includes('Übersetze den finalen Text'),
   A12: () => lies(`${DESKTOP}/notes/capture.js`).includes('30 * 60000'),
+  A14: () => gibtEs('ios/App/Conversations/ConversationLearning.swift'),
   A13: () => lies(`${IOS}/Conversations/ConversationSummarizer.swift`).includes('knapp auf Deutsch'),
 };
 

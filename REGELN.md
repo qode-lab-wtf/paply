@@ -9,7 +9,8 @@ Ausnahme steht. Gemeinsame KI-Texte und Prüffälle liegen in `shared/`. Die Abl
 eigenen Programmiersprache.
 
 **Begriffe:** Die **Hauptsprache** wählt der Nutzer. Ohne Wahl gilt die Gerätesprache. Agenten und Profile ändern sie
-nicht. **Eigene Sprachen** sind die Sprachen des Nutzers, automatisch aus Gerät und Tastaturen oder selbst gewählt.
+nicht. **Eigene Sprachen** sind die Sprachen des Nutzers. Auf iPhone und Android kommen sie automatisch aus Gerät und
+Tastaturen oder sind selbst gewählt, auf Mac und Windows sind es Hauptsprache, Systemsprachen und Englisch.
 
 ## 1. Sprache
 
@@ -20,7 +21,8 @@ Vorgabe von Allan (30.10.2026, geschärft am 31.10.2026):
   auch wenn sie nicht zu den eigenen Sprachen gehört.
 - Hauptsprache mit wenigen fremden Wörtern: Alles bleibt wie gesprochen.
 
-So läuft es in allen Apps, bei Diktat, Gedanken und Gesprächen:
+So läuft es bei Diktat und Gedanken in allen Apps, bei Gesprächen auf dem iPhone und im Groq-Ausweichweg auf Mac und
+Windows:
 
 1. Jedes Stück geht ohne Sprachvorgabe an Whisper. Whisper erkennt die Sprache selbst.
 2. Erwartet wird die Sprache des letzten Stücks derselben Aufnahme, das Text ergeben hat, sonst die Hauptsprache. Stimmt
@@ -29,8 +31,9 @@ So läuft es in allen Apps, bei Diktat, Gedanken und Gesprächen:
    erkannte Sprache keine eigene Sprache ist: Dasselbe Stück läuft ein zweites Mal, diesmal mit der erwarteten Sprache.
    Die Gegenprobe wartet höchstens zweimal die Dauer der ersten Anfrage plus 5 Sekunden, maximal 60 Sekunden.
    Bei Zeitablauf bleibt das erste Ergebnis.
-4. Die erkannte Sprache gewinnt, wenn ihre Konfidenz um mindestens `sprache.abstand` besser ist. Sonst gilt die erwartete
-   Sprache. Scheitert die Gegenprobe oder fehlt ein Konfidenzwert, bleibt das erste Ergebnis.
+4. Ist der Text beider Läufe gleich, gilt die erwartete Sprache. Sonst gewinnt die erkannte Sprache, wenn ihre Konfidenz
+   um mindestens `sprache.abstand` besser ist, ansonsten die erwartete. Scheitert die Gegenprobe, dauert sie zu lange oder
+   fehlt ein Konfidenzwert, bleibt das erste Ergebnis.
 
 Konfidenz ist der Mittelwert von `avg_logprob` über alle Segmente, gewichtet mit der Segmentdauer. Prüffälle:
 `shared/sprache/faelle.json`.
@@ -43,7 +46,8 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 
 ## 2. Polieren
 
-- Polieren ist immer an. Abschalten geht nur im Entwicklerbereich.
+- Jedes Diktat wird poliert. Abschalten geht nur im Entwicklerbereich. Gedanken haben eine eigene KI (Regel 5),
+  Gespräche werden nicht poliert.
 - Der Rohtext von Whisper ist schon gut. Polieren macht nur wenig: Rechtschreibung, Satzzeichen, Füllwörter, klar
   gesprochene Selbstkorrekturen und eindeutige Hörfehler.
 - Englische und eingedeutschte Wörter wie „gepolisht“ bleiben unverändert.
@@ -54,24 +58,29 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 
 ## 3. Stille
 
+Das gilt für Diktat und Gedanken in allen Apps. Gespräche haben eigene, einfachere Prüfungen.
+
 - Wurde nichts gesagt, schreibt Paply nichts und fragt Groq möglichst gar nicht erst.
 - Typische Whisper-Erfindungen wie „Vielen Dank.“ werden bei Stille verworfen. Echt gesprochen bleiben sie stehen.
 - Steht nur ein Untertitel-Rest wie „Amara.org“ da, fällt er immer weg.
-- Alle Apps nutzen dieselbe Stille-Liste.
+- Alle Apps nutzen dieselbe Stille-Liste. Der Wächter vergleicht sie.
 
 ## 4. Eigene Begriffe
 
 - Ein Begriff ersetzt nur ein ähnlich klingendes, sicher falsch gehörtes Wort.
 - Paply fügt nie einen Begriff ein, der nicht gesprochen wurde.
-- Whisper und Polieren sehen die ersten 200 Zeichen der Liste.
+- Polieren und Gedanken sehen die ersten 200 Zeichen der Liste. Whisper sieht beim Diktat so viele ganze Begriffe, wie in
+  etwa 90 Tokens passen.
 
 ## 5. Gedanken
 
 - Aus einem gesprochenen Gedanken werden Titel, sauberer Text, Thema, Aufgaben und Verknüpfungen.
 - Die KI erfindet nichts und übersetzt nichts. Nur ein neuer Themenname folgt der Gerätesprache.
-- Aufgaben nur bei ausdrücklicher Absicht, höchstens 5. Verknüpfungen höchstens 3.
+- Aufgaben nur bei ausdrücklicher Absicht, höchstens 5, bei langen Gedanken mit mehreren Teilen bis zu 10. Verknüpfungen
+  höchstens 3.
 - Die KI ordnet nur diesen einen Gedanken ein, nie die ganze Ablage neu. Themen zusammenführen schlägt sie höchstens vor.
-- Was der Nutzer selbst geändert hat, überschreibt die KI nie.
+- Was der Nutzer selbst geändert hat, überschreibt die KI nie. Weicht die gesprochene Sprache von der Gerätesprache ab,
+  gilt ein Titel nur, wenn er aus dem Gesagten stammt.
 - Scheitert das Einordnen, bleibt der Originaltext. Es geht kein Gedanke verloren.
 - Die Regel-Version wird nur am Gedanken vermerkt. Eine neue Version ordnet alte Gedanken nicht neu ein.
 
@@ -79,41 +88,44 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 
 - Personen heißen Person 1, 2, 3, bis der Besitzer sicher erkannt oder per Tipp bestätigt ist. Erst dann landen seine
   Aufgaben im Reiter. Aufgaben anderer kommen nur per „Übernehmen“ dazu.
-- Der Bericht folgt Regel 1: durchgehend andere Sprache in dieser Sprache, sonst in der Hauptsprache. Zitate bleiben
-  wörtlich.
+- Der Bericht folgt Regel 1: Liegt eine andere Sprache bei mindestens 80 % der Sprechzeit, steht er in dieser Sprache,
+  sonst in der Hauptsprache. Zitate bleiben wörtlich.
 - Alle Beteiligten müssen der Aufnahme zustimmen. Die App weist darauf hin.
 
 ## 7. Grenzen und Hinweise
 
 - Grenzen nicht kürzen. Lieber ein einfacher sichtbarer Hinweis, zum Beispiel Banner oder Vibration.
 - Erreicht eine Aufnahme ihre Grenze, wird alles Bisherige gesichert und normal verarbeitet.
-- Eine Minute vor der Grenze kommt ein Hinweis. Läuft ein Gedanke unbemerkt, erinnert Paply daran.
+- Kurz vor der Grenze kommt ein Hinweis: beim Gedanken eine Minute vorher, beim Gespräch fünf Minuten. Läuft ein Gedanke
+  unbemerkt im Hintergrund von iPhone oder Android, erinnert Paply daran. Auf Mac und Windows zeigt die Pille die Zeit.
 
 | Aufnahme | Mac, Windows | iPhone | Android |
 | --- | --- | --- | --- |
-| Diktat | Keine Grenze, Groq nimmt bis 25 MB | Keine Grenze | 10 Minuten |
+| Diktat | Keine eigene Grenze, Groq nimmt 25 MB, das sind rund 27 Minuten | Keine Grenze | 10 Minuten |
 | Gedanke | 30 Minuten | 10 Minuten | 10 Minuten |
 | Gespräch | Keine Grenze | 4 Stunden Ton, 8 Stunden insgesamt | Noch nicht vorhanden |
 
 ## 8. Ton und Verlauf
 
 - Ton bleibt nur, bis der Text sicher gespeichert ist. Das gilt für alle Apps und alle Funktionen.
-- Scheitert die Verarbeitung, bleibt der Ton für den Neuversuch, höchstens 30 Tage ab dem Stopp.
-- Auch dauerhaft hängende Auswertungen laufen nach 30 Tagen ab; laufende Aufnahmen bleiben unberührt.
-- Ein leeres Meeting-Transkript gilt als Fehler mit Neuversuch. Bei Gedanken darf Ton ohne Text nur weg, wenn die eigene Pegelmessung Stille nachweist.
+- Scheitert die Verarbeitung, bleibt der Ton für den Neuversuch, höchstens 30 Tage ab dem Stopp. Das gilt auch für
+  hängende Auswertungen, laufende Aufnahmen bleiben unberührt.
+- Bleibt ein Gespräch auf Mac oder Windows trotz Ton ohne Text, gilt das als Fehler, der Ton bleibt ebenfalls.
+- Ein leeres Ergebnis von Whisper gilt bei Gedanken auf iPhone und Android als „nichts gesagt“, Ton und Eintrag entfallen.
+  Auf Mac und Windows muss das die Pegelmessung bestätigen, sonst bleibt der Ton.
 - Nachhören gibt es nicht.
 
 | Was | Mac, Windows | iPhone | Android |
 | --- | --- | --- | --- |
 | Verlauf Diktat | 90 Tage | 300 Einträge | 300 Einträge |
-| Ton nach Fehler beim Diktat | 24 Stunden | 10 Minuten | 30 Tage |
-| Gelöschte Gedanken | Sofort | 30 Tage im Papierkorb | 30 Tage im Papierkorb |
+| Ton nach Fehler beim Diktat | 24 Stunden, auch bei lokal verworfener Stille | 10 Minuten im Speicher, nur Tastatur | 30 Tage |
+| Gelöschte Gedanken | Rückgängig, solange die App läuft, der Originaltext bleibt auf dem Gerät | 30 Tage im Papierkorb | 30 Tage im Papierkorb |
 
 ## 9. Zustellung
 
 - Text landet nie im falschen Feld. Geht das Einsetzen nicht sicher, wartet er in Verlauf oder Zwischenablage.
-- In Passwortfeldern nimmt Paply nicht auf (Android-Tastatur und -Knopf; iPhone-Tastaturen sind dort von iOS gesperrt).
-- Ein Diktat, das nichts enthält, erzeugt keinen Eintrag und keine Kosten.
+- In Passwortfeldern nimmt Paply auf iPhone und Android nicht auf. Mac und Windows können Passwortfelder nicht erkennen.
+- Ein Diktat, das nichts enthält, erzeugt keinen Eintrag.
 
 ## 10. Vorrang
 
@@ -124,14 +136,16 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 
 - Jede App hat ihn. Er öffnet sich mit 5× Tippen auf die Version und lässt sich wieder ausblenden.
 - Er enthält mindestens: Polieren an/aus, Whisper-Modell (`whisper-large-v3` oder `whisper-large-v3-turbo`) und Diagnose.
-- Normale Nutzer brauchen ihn nie. Was dort steht, ändert nur Testläufe, nicht die Regeln hier.
+- Normale Nutzer brauchen ihn nie. Seine Einstellungen bleiben gespeichert, auch nach dem Ausblenden.
+- Polieren an/aus wirkt aufs Diktat, das Whisper-Modell auf Diktat und Gedanken. Gespräche nutzen immer `whisper-large-v3`.
 
 ## 12. Kosten, Schlüssel und Daten
 
 - Keine laufenden Kosten, keine Abos. Paply läuft mit den kostenlosen Kontingenten der Nutzer.
 - Schlüssel kommen in die App-Einstellungen, nie ins Repository.
-- Ton und Text gehen an Groq. Gemini kommt nur bei Gesprächen auf Mac und Windows dazu. Sonst verlässt nichts das Gerät.
-- Diagnose enthält nie Diktat-Text. Tester-Namen, Geräte-IDs und Einladungslinks gehören nicht ins Repository.
+- Ton und Text gehen an Groq. Gemini kommt nur bei Gesprächen auf Mac und Windows dazu. Sonst verlassen Ton und Text das
+  Gerät nicht. Eingeschalteter Bildschirmkontext schickt auf Mac und Windows Bilder an Groq.
+- Diagnose enthält im Betrieb nie Diktat-Text. Tester-Namen, Geräte-IDs und Einladungslinks gehören nicht ins Repository.
 
 ## Werte
 
@@ -159,7 +173,8 @@ stimmt. **In Arbeit** wird gerade behoben, **Bewusst** bleibt so, **Nachzureiche
 | Nr. | App | Abweichung | Folge | Status |
 | --- | --- | --- | --- | --- |
 | A8 | Android | „Gespräche“ fehlt | Android hat zwei von drei Funktionen | Nachzureichen, sobald das iPhone den Gerätetest bestanden hat |
-| A9 | Mac, Windows | Gespräche laufen über Gemini, heißen „Sprecher N“ und „Gegenstelle“, ohne Besitzer-Erkennung und Aufgaben-Reiter | Regel 6 gilt hier nur für den Bericht | Nachzureichen |
+| A9 | Mac, Windows | Gespräche laufen über Gemini, bei Ausfall über Groq ohne Sprecher. Sie heißen „Sprecher N“ und „Gegenstelle“, ohne Besitzer-Erkennung und Aufgaben-Reiter | Regeln 1, 3 und 6 gelten mit Gemini nur für den Bericht | Nachzureichen |
 | A10 | Android | Gedanken verknüpfen nur über Wörter, das iPhone zusätzlich über Apples Sprachmodell | Etwas weniger Treffer. Android hat kein eingebautes Gegenstück | Bewusst |
 | A11 | Mac, Windows | Eigene Agenten haben einen eigenen KI-Text, können übersetzen und umgehen das Sicherheitsnetz | Regeln 1 und 2 gelten dort nicht | Bewusst, der Nutzer stellt das selbst ein |
 | A12 | Mac, Windows | Gedanken dürfen 30 statt 10 Minuten lang sein | Regel 7 | Bewusst, Grenzen werden nicht gekürzt |
+| A14 | iPhone | Mit eingeschalteter Beta „Gespräche“ bewahrt das Stimmen-Lernen bis zu 10 Kopien von Gedanken-Ton bis zu 7 Tage auf | Regel 8 gilt dort nicht | Bewusst, nur in der Beta |
