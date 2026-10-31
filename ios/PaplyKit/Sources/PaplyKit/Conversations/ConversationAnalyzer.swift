@@ -56,7 +56,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                 return .partial(partial, waiting: .waitingKey, retryAt: nil, message: "Groq-Schlüssel fehlt")
             }
             progress(.init(stage: .transcript))
-            let whisper = try await transcriber.transcribe(audio: input.audio, workDirectory: input.workDirectory, apiKey: apiKey, mainLanguage: input.mainLanguage, vocabulary: input.vocabulary, gaps: input.gaps)
+            let whisper = try await transcriber.transcribe(audio: input.audio, workDirectory: input.workDirectory, apiKey: apiKey, mainLanguage: input.mainLanguage, vocabulary: input.vocabulary, userLanguages: input.userLanguages, gaps: input.gaps)
             guard !whisper.words.isEmpty else { return .empty }
             let diarization: Diarization
             do {
@@ -70,7 +70,7 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                 let aligned = SpeakerAlignment.align(words: whisper.words, diarization: fallback, gaps: input.gaps)
                 partial.stagesDone = [.transcript]
                 partial.speakers = aligned.speakers
-                partial.transcript = .init(utterances: aligned.utterances.map { var item = $0; item.uncertain = true; return item }, languages: [whisper.language ?? input.mainLanguage],
+                partial.transcript = .init(utterances: aligned.utterances.map { var item = $0; item.uncertain = true; return item }, languages: whisper.languageSpeechSeconds.map { $0.keys.sorted() } ?? [whisper.language ?? input.mainLanguage],
                     model: "whisper-large-v3", createdAt: input.recordedAt)
                 partial.audioSeconds = whisper.duration ?? end
                 return .partial(partial, waiting: .waitingNetwork, retryAt: Date().addingTimeInterval(60),
@@ -84,7 +84,8 @@ public struct ConversationAnalyzer: ConversationAnalyzing {
                 if input.previous?.stagesDone.contains(.speakers) == true, let old = input.previous?.speakers.first(where: { $0.id == speakers[i].id && $0.nameSource == .user }) { speakers[i] = old }
             }
             speakers = SpeakerIdentifier.identify(speakers, prints: aligned.prints, people: input.people)
-            let transcript = ConversationTranscript(utterances: aligned.utterances, languages: [whisper.language ?? input.mainLanguage], model: "whisper-large-v3", createdAt: input.recordedAt)
+            var transcript = ConversationTranscript(utterances: aligned.utterances, languages: whisper.languageSpeechSeconds.map { $0.keys.sorted() } ?? [whisper.language ?? input.mainLanguage], model: "whisper-large-v3", createdAt: input.recordedAt)
+            transcript.languageSpeechSeconds = whisper.languageSpeechSeconds
             partial.stagesDone = [.speakers, .transcript]; partial.speakers = speakers; partial.speakerPrints = aligned.prints; partial.transcript = transcript; partial.audioSeconds = whisper.duration ?? 0
             progress(.init(stage: .summary))
             var result = try await summarizer.summarize(input, transcript: transcript, speakers: speakers, apiKey: apiKey)

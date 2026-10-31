@@ -676,6 +676,7 @@ struct DeveloperView: View {
     var body: some View {
         Form {
             Section("Diktat") {
+                Toggle("Polieren", isOn: $settings.testOptions.polish)
                 Picker("Transkription", selection: $settings.paply.transcriptionModel) {
                     ForEach(AppSettings.transcriptionModels, id: \.id) { model in
                         Text(model.label).tag(model.id)
@@ -794,7 +795,6 @@ struct TestVariantsView: View {
                     Text("WAV").tag(true)
                 }
                 Toggle("Sprachwechsel-Beispiel", isOn: $settings.testOptions.codeSwitchPrimer)
-                Toggle("Polieren", isOn: $settings.testOptions.polish)
                 Toggle("Strenge Polier-Prüfung", isOn: $settings.testOptions.strictPolishCheck)
                     .disabled(!settings.testOptions.polish)
             } footer: {

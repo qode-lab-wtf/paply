@@ -22,6 +22,7 @@ const WERTE = {
   ],
   'sprache.abstand': [
     [`${DESKTOP}/dictation/language-guard.js`, /CHECK_GAP = ([\d.]+)/],
+    [`${IOS}/Text/LanguageGuard.swift`, /checkGap = ([\d.]+)/],
   ],
   'diktat.whisper_modell': [
     [`${DESKTOP}/dictation/language-guard.js`, /WHISPER_MODEL = '([^']+)'/],

@@ -19,6 +19,7 @@ public protocol ThoughtTranscribing: Sendable {
 
 /// Dateiweg: WAV lesen → DictationPipeline (KONZEPT §5.3 Punkt 4): `chunkedUpload = false`,
 /// `polish = false`, `append(alles)` → `finish()`. Teile ≤ 10 Min. übernimmt PaplyKit.
+/// Die Pipeline reicht die gewählte Sprache jedes Teils an den nächsten weiter.
 public struct FileTranscriber: ThoughtTranscribing {
     private let transport: GroqTransport
     private let baseURL: URL

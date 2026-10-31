@@ -39,35 +39,6 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
         #expect(LanguageGuard.primary(chosen: "en", userLanguages: [], device: "de") == nil)
     }
 
-    @Test func shortPiecesSendTheLanguage() {
-        let users = ["de", "en"]
-        func first(_ previous: String?, _ seconds: Double, fixed: String? = nil, primary: String? = "de") -> LanguageGuard.Request {
-            LanguageGuard.firstRequest(fixed: fixed, primary: primary, previous: previous,
-                                       userLanguages: users, spokenSeconds: seconds)
-        }
-        #expect(first(nil, 1.2) == .init(language: "de", source: .short))
-        #expect(first(nil, LanguageGuard.shortSpeechSeconds) == .init(language: "de", source: .short))
-        // Rest eines englischen Diktats bleibt englisch.
-        #expect(first("en", 2) == .init(language: "en", source: .short))
-        // Vorstück in fremder Sprache zählt nicht.
-        #expect(first("ru", 2) == .init(language: "de", source: .short))
-        #expect(first(nil, 5.1) == .init(language: nil, source: .auto))
-        #expect(first("en", 8) == .init(language: nil, source: .auto))
-        #expect(first(nil, 3, primary: nil) == .init(language: nil, source: .auto))
-        // Feste Sprache: wie bisher, unabhängig von der Länge.
-        #expect(first("en", 3, fixed: "fr") == .init(language: "fr", source: .fixed))
-        #expect(first(nil, 30, fixed: "fr") == .init(language: "fr", source: .fixed))
-    }
-
-    @Test func onlyForeignLanguagesAreRedone() {
-        let users = ["de-DE", "en"]
-        #expect(LanguageGuard.redoLanguage(detected: "ru", primary: "de", userLanguages: users) == "de")
-        #expect(LanguageGuard.redoLanguage(detected: "en", primary: "de", userLanguages: users) == nil)
-        #expect(LanguageGuard.redoLanguage(detected: "de", primary: "de", userLanguages: users) == nil)
-        #expect(LanguageGuard.redoLanguage(detected: nil, primary: "de", userLanguages: users) == nil)
-        #expect(LanguageGuard.redoLanguage(detected: "ru", primary: nil, userLanguages: []) == nil)
-    }
-
     @Test func settingsWithoutPrimaryLanguageStillDecode() throws {
         let old = #"{"transcriptionModel":"whisper-large-v3","polishModel":"p","fallbackPolishModel":"f","vocabulary":"Paply","chunkedUpload":true,"spokenLanguages":["de","en"]}"#
         let decoded = try JSONDecoder().decode(PaplySettings.self, from: Data(old.utf8))
@@ -83,32 +54,17 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
 
     // MARK: Pipeline
 
-    @Test func shortPieceIsSentOnceWithThePrimaryLanguage() async throws {
+    @Test func shortMatchingPieceIsSentOnceWithoutLanguage() async throws {
         let server = MockServer { _, _ in Groq.transcription("Hi, wie geht's?") }
         let p = pipeline(server)
         await feed(p, Synth.withFloor(Synth.speech(3)))
         let outcome = await p.finish()
         let uploads = server.requests("/audio/transcriptions")
         #expect(uploads.count == 1)
-        #expect(uploads.first?.field("language") == "de")
+        #expect(uploads.first?.field("language") == nil)
         #expect(outcome.raw == "Hi, wie geht's?" && outcome.languages == ["de"])
-        #expect(outcome.languageSources == ["short"])
+        #expect(outcome.languageSources == ["auto"])
         #expect(outcome.timings.chunkCount == 1)
-    }
-
-    @Test func chosenPrimaryLanguageIsUsedWhileListed() async {
-        let server = MockServer { _, _ in Groq.transcription("Hi, how are you?", language: "English") }
-        let p = pipeline(server, primary: "en")
-        await feed(p, Synth.withFloor(Synth.speech(3)))
-        _ = await p.finish()
-        #expect(server.requests("/audio/transcriptions").first?.field("language") == "en")
-        // Nicht mehr in der Liste: wieder die Standardregel (erste iPhone-Sprache bzw. erste Nutzersprache).
-        let other = MockServer { _, _ in Groq.transcription("Hallo.") }
-        let q = pipeline(other, primary: "fr")
-        await feed(q, Synth.withFloor(Synth.speech(3)))
-        _ = await q.finish()
-        let fallback = LanguageGuard.primary(chosen: nil, userLanguages: ["de", "en"], device: Locale.preferredLanguages.first)
-        #expect(other.requests("/audio/transcriptions").first?.field("language") == fallback)
     }
 
     @Test func shortSpeechWithLongPauseCountsAsShort() async {
@@ -118,8 +74,8 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
         await feed(p, Synth.withFloor(Synth.silence(0.5) + Synth.speech(1.5) + Synth.silence(6.3)))
         let outcome = await p.finish()
         #expect(outcome.timings.audioSeconds > 8)
-        #expect(server.requests("/audio/transcriptions").map { $0.field("language") } == ["de"])
-        #expect(outcome.languageSources == ["short"])
+        #expect(server.requests("/audio/transcriptions").map { $0.field("language") } == [nil])
+        #expect(outcome.languageSources == ["auto"])
     }
 
     @Test func longForeignPieceIsRedoneInThePrimaryLanguage() async throws {
@@ -138,7 +94,7 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
         // Gleicher Prompt, gleiches Audio.
         #expect(uploads[1].field("prompt") == uploads[0].field("prompt"))
         #expect(outcome.raw == "Guten Morgen, wie geht's dir heute?")
-        #expect(outcome.languages == ["de"] && outcome.languageSources == ["redo"])
+        #expect(outcome.languages == ["de"] && outcome.languageSources == ["check-expected"])
         #expect(outcome.timings.chunkCount == 2)
         #expect(outcome.timings.uploadedBytes > 2 * 1000)
     }
@@ -149,12 +105,12 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
                 : Groq.transcription("Gutn morgn, kak dela segodnya?", language: "Russian")
         }
         let p = pipeline(server)
-        await feed(p, Synth.withFloor(Synth.speech(12)))
+        await feed(p, Synth.withFloor(Synth.speech(2)))
         let outcome = await p.finish()
         #expect(server.requests("/audio/transcriptions").count == 2)
         #expect(outcome.errorMessage == nil)
         #expect(outcome.raw == "Gutn morgn, kak dela segodnya?")
-        #expect(outcome.languages == ["ru"] && outcome.languageSources == ["redo-failed"])
+        #expect(outcome.languages == ["ru"] && outcome.languageSources == ["check-failed"])
     }
 
     @Test func longPieceInAnotherUserLanguageStays() async {
@@ -176,20 +132,38 @@ private func feed(_ pipeline: DictationPipeline, _ samples: [Float]) async {
         await feed(p, Synth.withFloor(Synth.speech(11) + Synth.silence(0.9) + Synth.speech(3)))
         let outcome = await p.finish()
         let uploads = server.requests("/audio/transcriptions")
-        #expect(uploads.count == 2)
+        #expect(uploads.count == 3)
         #expect(uploads[0].field("language") == nil)
-        #expect(uploads[1].field("language") == "en")
+        #expect(uploads[1].field("language") == nil)
+        #expect(uploads[2].field("language") == "en")
         #expect(outcome.raw == "This part is clearly English. And the rest.")
-        #expect(outcome.languages == ["en"] && outcome.languageSources == ["auto", "short"])
+        #expect(outcome.languages == ["en"] && outcome.languageSources == ["auto", "check-expected"])
     }
 
-    @Test func fixedLanguageBypassesTheGuard() async {
-        let server = MockServer { _, _ in Groq.transcription("Privet, kak dela segodnya?", language: "Russian") }
-        let p = pipeline(server, fixed: "ru")
-        await feed(p, Synth.withFloor(Synth.speech(12)))
+    @Test func shortFrenchRemainsFrench() async {
+        let server = MockServer { request, _ in
+            request.field("language") == "de"
+                ? Groq.transcription("Wir sehen uns heute Abend.", logprob: -0.39)
+                : Groq.transcription("On se voit ce soir.", language: "French", logprob: -0.08)
+        }
+        let p = pipeline(server)
+        await feed(p, Synth.withFloor(Synth.speech(1.6)))
         let outcome = await p.finish()
-        let uploads = server.requests("/audio/transcriptions")
-        #expect(uploads.count == 1 && uploads.first?.field("language") == "ru")
-        #expect(outcome.languages == ["ru"] && outcome.languageSources == ["fixed"])
+        #expect(server.requests("/audio/transcriptions").map { $0.field("language") } == [nil, "de"])
+        #expect(outcome.raw == "On se voit ce soir.")
+        #expect(outcome.languages == ["fr"])
+    }
+
+    @Test func confidenceIsDurationWeightedAndMissingFailsClosed() {
+        #expect(LanguageGuard.confidence([.init(text: "a", start: 0, end: 1, avgLogprob: -0.125), .init(text: "b", start: 1, end: 4, avgLogprob: -0.625)]) == -0.5)
+        #expect(LanguageGuard.confidence([.init(text: "a")]) == nil)
+        #expect(LanguageGuard.expected(previous: "ar", primary: "de") == "ar")
+        #expect(LanguageGuard.choose(detectedText: "  BONJOUR !", expectedText: "bonjour", detectedConfidence: nil, expectedConfidence: nil) == .expected)
+    }
+
+    @Test func reportLanguageUsesSpeechShare() {
+        #expect(ConversationSummarizer.reportLanguage(["fr": 80, "de": 20], primary: "de") == "fr")
+        #expect(ConversationSummarizer.reportLanguage(["fr": 79, "de": 21], primary: "de") == "de")
+        #expect(ConversationSummarizer.reportLanguage(nil, primary: "en") == "en")
     }
 }

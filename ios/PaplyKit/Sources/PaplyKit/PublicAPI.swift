@@ -179,6 +179,9 @@ public enum PolishFailureCode: String, Sendable, Codable, CaseIterable {
 
 /// Woher die Sprache eines Teils kam (Werte von `DictationOutcome.languageSources`).
 public enum LanguageSource: String, Sendable, Codable, CaseIterable {
+    case checkExpected = "check-expected"
+    case checkDetected = "check-detected"
+    case checkFailed = "check-failed"
     /// Whisper hat selbst erkannt.
     case auto
     /// Kurzes Stück: Sprache direkt mitgeschickt (Vorstück oder Hauptsprache).

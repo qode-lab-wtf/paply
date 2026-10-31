@@ -2,7 +2,8 @@ import Foundation
 import AVFoundation
 
 public struct ConversationWhisperResult: Codable, Sendable, Equatable {
-    public struct Segment: Codable, Sendable, Equatable { public var start: Double; public var end: Double; public var text: String }
+    public struct Segment: Codable, Sendable, Equatable { public var start: Double; public var end: Double; public var text: String; public var avg_logprob: Double? = nil }
+    public var languageSpeechSeconds: [String: Double]? = nil
     public var words: [ConversationWord]
     public var segments: [Segment]
     public var language: String?
@@ -16,6 +17,7 @@ public struct ConversationWhisperResult: Codable, Sendable, Equatable {
         segments = try values.decodeIfPresent([Segment].self, forKey: .segments) ?? []
         language = try values.decodeIfPresent(String.self, forKey: .language)
         duration = try values.decodeIfPresent(Double.self, forKey: .duration)
+        languageSpeechSeconds = try values.decodeIfPresent([String: Double].self, forKey: .languageSpeechSeconds)
     }
 }
 
@@ -49,7 +51,15 @@ public actor ConversationTranscriber {
     public init(ledger: TokenLedger) { self.ledger = ledger; transport = .shared; baseURL = GroqClient.defaultBaseURL }
     init(ledger: TokenLedger, client: GroqClient) { self.ledger = ledger; transport = client.transport; baseURL = client.baseURL }
     private var busy = false
-    struct Piece: Codable { var start: Int; var end: Int; var result: ConversationWhisperResult; var nextStart: Int? = nil }
+    struct Piece: Codable { var start: Int; var end: Int; var result: ConversationWhisperResult; var nextStart: Int? = nil; var spokenSeconds: Double? = nil }
+
+    static func rawText(_ result: ConversationWhisperResult) -> String {
+        result.segments.isEmpty ? result.words.map(\.word).joined(separator: " ") : result.segments.map(\.text).joined(separator: " ")
+    }
+
+    static func confidence(_ result: ConversationWhisperResult) -> Double? {
+        LanguageGuard.confidence(result.segments.map { WhisperSegment(text: $0.text, start: $0.start, end: $0.end, avgLogprob: $0.avg_logprob) })
+    }
 
     static func quietCut(_ samples: [Int16]) -> Int {
         let first = max(1, samples.count - 30 * 16000)
@@ -97,7 +107,7 @@ public actor ConversationTranscriber {
     }
 
     /// `final == false`: nur bis zur letzten abgeschlossenen Sprechpause. Wiederholung liest fertige Stücke von Platte.
-    public func transcribe(audio: URL, workDirectory: URL, apiKey: String, mainLanguage: String, vocabulary: [String], gaps: [ConversationGap] = [], final: Bool = true) async throws -> ConversationWhisperResult {
+    public func transcribe(audio: URL, workDirectory: URL, apiKey: String, mainLanguage: String, vocabulary: [String], userLanguages: [String] = [], gaps: [ConversationGap] = [], final: Bool = true) async throws -> ConversationWhisperResult {
         let started = Date()
         defer { ConversationDiagnostics.record("conversation.whisper.duration", ["ms": Int(Date().timeIntervalSince(started) * 1000)]) }
         guard !busy else { throw ThoughtStoreError.unavailable }
@@ -107,6 +117,8 @@ public actor ConversationTranscriber {
         guard file.processingFormat.sampleRate == 16000, file.processingFormat.channelCount == 1 else { throw WAVWriter.WAVError.notWAV }
         let total = Int(file.length)
         var offset = 0, index = 0, words: [ConversationWord] = [], segments: [ConversationWhisperResult.Segment] = [], languages: [String] = []
+        var previousLanguage: String?
+        var languageSeconds: [String: Double] = [:]
         while offset < total {
             try Task.checkCancellation()
             let cache = workDirectory.appendingPathComponent("whisper-\(index).json")
@@ -134,12 +146,30 @@ public actor ConversationTranscriber {
                 let gap = gaps.map { Int($0.at * 16000) }.filter { $0 > offset && $0 < end }.min()
                 let cut = gap ?? end
                 let encoded = AudioEncoder.encode(samples.prefix(cut - offset)[...])
+                var pieceVAD = VoiceActivityDetector()
+                pieceVAD.process(samples.prefix(cut - offset).map { Float($0) / 32768 })
+                let spoken = pieceVAD.frameCount == 0 ? Double(cut - offset) / 16000 : pieceVAD.activity(in: 0..<pieceVAD.frameCount).speechMs / 1000
+                let expected = LanguageGuard.expected(previous: previousLanguage, primary: mainLanguage)
                 let result: ConversationWhisperResult = try await ConversationRetry.run {
                 let reservation = try await ledger.reserve(model: "whisper-large-v3", amount: max(10, (cut - offset + 15999) / 16000), unit: .audio)
                 let client = GroqClient(apiKey: apiKey, transport: transport, baseURL: baseURL)
-                let response = await client.transcribeConversation(audio: encoded, language: cut - offset < 30 * 16000 ? mainLanguage : nil, vocabulary: vocabulary)
+                let response = await client.transcribeConversation(audio: encoded, language: nil, vocabulary: vocabulary)
                 switch response {
                 case .success(var result):
+                    result.language = GroqModels.languageCode(result.language)
+                    if LanguageGuard.needsCheck(expected: expected, detected: result.language, userLanguages: userLanguages, spokenSeconds: spoken) {
+                        let checkReservation = try? await ledger.reserve(model: "whisper-large-v3", amount: max(10, (cut - offset + 15999) / 16000), unit: .audio)
+                        if let checkReservation {
+                            let check = await client.transcribeConversation(audio: encoded, language: expected, vocabulary: vocabulary)
+                            await ledger.settle(checkReservation, actual: max(10, (cut - offset + 15999) / 16000))
+                            if case .success(let second) = check,
+                               LanguageGuard.choose(detectedText: Self.rawText(result),
+                                                    expectedText: Self.rawText(second),
+                                                    detectedConfidence: Self.confidence(result), expectedConfidence: Self.confidence(second)) == .expected {
+                                result = second; result.language = expected
+                            }
+                        }
+                    }
                     let duration = Double(cut - offset) / 16000
                     guard result.words.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end >= $0.start }) else { throw GroqFailure.invalidResponse }
                     result.words = result.words.map { .init(word: $0.word, start: min(duration, $0.start), end: min(duration, $0.end)) }
@@ -152,7 +182,7 @@ public actor ConversationTranscriber {
                 }
                 }
                 let overlap = lastCut == 0 && gap == nil && cut < total
-                piece = Piece(start: offset, end: cut, result: result, nextStart: overlap ? cut - 32000 : nil)
+                piece = Piece(start: offset, end: cut, result: result, nextStart: overlap ? cut - 32000 : nil, spokenSeconds: spoken)
                 try FileSafety.writeAtomically(try ThoughtJSON.encoder().encode(piece), to: cache)
             }
             let shift = Double(offset) / 16000
@@ -161,9 +191,16 @@ public actor ConversationTranscriber {
             }
             words = Self.join(words, incoming)
             for var segment in piece.result.segments { segment.start += shift; segment.end += shift; segments.append(segment) }
-            if let language = piece.result.language, !languages.contains(language) { languages.append(language) }
+            previousLanguage = GroqModels.languageCode(piece.result.language)
+            if let language = previousLanguage {
+                if !languages.contains(language) { languages.append(language) }
+                let speech = piece.spokenSeconds ?? piece.result.segments.reduce(0) { $0 + max(0, $1.end - $1.start) }
+                languageSeconds[language, default: 0] += speech
+            }
             offset = piece.nextStart ?? piece.end; index += 1
         }
-        return ConversationWhisperResult(words: words, segments: segments, language: languages.first, duration: Double(offset) / 16000)
+        var result = ConversationWhisperResult(words: words, segments: segments, language: languages.first, duration: Double(offset) / 16000)
+        result.languageSpeechSeconds = languageSeconds
+        return result
     }
 }

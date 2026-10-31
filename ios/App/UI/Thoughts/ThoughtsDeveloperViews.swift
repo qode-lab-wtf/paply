@@ -2,29 +2,22 @@ import PaplyKit
 import SwiftUI
 
 // Entwicklerbereich → Gedanken (KONZEPT §3.9). Für Nutzer gibt es hier nichts einzustellen.
-// Modell und Tagesbudget liegen unter festen Schlüsseln in UserDefaults (ThoughtsEnvironment liest
+// Das Tagesbudget liegt unter festen Schlüsseln in UserDefaults (ThoughtsEnvironment liest
 // sie); Verbrauch und Themenpflege kommen aus dem ThoughtsModel.
 
 enum ThoughtsDevKeys {
-    /// "openai/gpt-oss-120b" (Standard) oder "openai/gpt-oss-20b"
-    static let model = "paply.thoughts.model"
     /// Tokens je gleitende 24 h (Standard 80 000)
     static let dailyTokens = "paply.thoughts.dailyTokens"
 }
 
 struct ThoughtsDeveloperSection: View {
     @Environment(ThoughtsModel.self) private var model
-    @AppStorage(ThoughtsDevKeys.model) private var aiModel = "openai/gpt-oss-120b"
     @AppStorage(ThoughtsDevKeys.dailyTokens) private var dailyTokens = 80_000
 
     var body: some View {
         let queue = model.thoughts.filter { $0.state != .done }.count
         let provisional = model.topics.filter { !model.isActive($0) }.count
         Section {
-            Picker("Modell", selection: $aiModel) {
-                Text("gpt-oss-120b").tag("openai/gpt-oss-120b")
-                Text("gpt-oss-20b").tag("openai/gpt-oss-20b")
-            }
             Stepper(value: $dailyTokens, in: 20_000...150_000, step: 10_000) {
                 LabeledContent("Tagesbudget", value: "\(dailyTokens.formatted(.number.locale(Locale(identifier: "de_DE")))) Tokens")
             }
