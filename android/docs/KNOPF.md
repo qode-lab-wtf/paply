@@ -297,6 +297,14 @@ Produktions-Neubau zuvor 38 s), einschließlich sieben neuer Regressionstests.
   8 dp Abstand zur sicheren Kante. Das 48-dp-X sitzt immer zur Bildschirmmitte.
   Hinweise erweitern das Fenster nach innen; der obere Fallback gilt beidseitig.
   Pegelringe, Verarbeitungsring, 650-ms-Haken, Warnungen und Zustellung bleiben.
+- Startübergang: Erst wenn Fenster und Logo-Kind ihre Zielgröße und Randposition
+  im Pre-Draw erreicht haben, beginnt der 220-ms-Ease-out-Morph. Bis dahin bleibt
+  das letzte Griffbild stehen; Zwischenlayouts werden nicht gezeichnet. Gilt
+  rechts und links. Die Aufnahme startet weiterhin sofort. Die Ringe wachsen mit,
+  damit auch sie während des Morphs nicht am Rand abgeschnitten werden.
+  Das X blendet nach 30 ms in 150 ms ein und ist dabei sofort antippbar;
+  ohne Systemanimationen erscheint es direkt im fertigen Layout. Beim Rückweg
+  verschwindet es weiterhin sofort, das Fenster schrumpft nach dem Morph.
 - Einrichtung und Freundestexte nennen den Bildschirmrand. Version 0.2.2 (8).
 
 Prüfung nur über `scripts/mb.sh`, `PAPLY_WORK=work-rand022`:
@@ -315,3 +323,11 @@ Abschluss: `BUILD SUCCESSFUL` (29 s). Core: 402 Tests, davon 401 bestanden und
 (`CapturedPauseEvidenceTest`). Thoughts: 433 bestanden. App: 193 bestanden.
 Keine Fehler; Debug-/Release-Lint, beide Animal-Sniffer-Prüfungen und beide
 Debug-APK-Bauten erfolgreich.
+
+Nachprüfung des Startübergangs: dieselben neun Pflichtaufgaben über `mb.sh`
+mit `PAPLY_WORK=work-rand022` erfolgreich (33 s). Core: 401 bestanden,
+1 übersprungen; Thoughts: 433 bestanden; App: 193 bestanden. Debug-/Release-Lint
+ohne Fehler, Animal Sniffer und beide Debug-APK-Bauten grün. Die Änderung nutzt
+Androids Layout-/Pre-Draw-Lebenszyklus, keine neue reine Fachlogik.
+Keine Emulator-UI gestartet; lückenlose Framefolge, beide Kanten, Rückweg und
+abgeschaltete Systemanimationen müssen separat am Gerät abgenommen werden.

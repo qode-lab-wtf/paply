@@ -46,6 +46,7 @@ class PaplyButtonService : AccessibilityService() {
     private var label: TextView? = null
     private var logo: PaplyButtonView? = null
     private var cancel: TextView? = null
+    private var cancelRevealPending = false
     private lateinit var wm: WindowManager
     private lateinit var layout: WindowManager.LayoutParams
     private val position by lazy { getSharedPreferences("paply-button", MODE_PRIVATE) }
@@ -63,6 +64,7 @@ class PaplyButtonService : AccessibilityService() {
                                  val ime: List<ButtonPosition.Box>, val safeTop: Int)
     private var lastRender: RenderKey? = null
     private var positionAnimator: ValueAnimator? = null
+    private var expectedWindowLeft = 0
     private var obstacles = emptyList<ButtonPosition.Box>()
     private var obstaclesDirty = true
     private var obstaclesReadAt = 0L
@@ -382,7 +384,7 @@ class PaplyButtonService : AccessibilityService() {
         val safe = screenInsets()
         val safeTop = safe.top; val safeLeft = safe.left; val safeRight = safe.right
         val model = ButtonPresentation.render(phase, hintText)
-        logo?.setPhase(phase)
+        logo?.setPhase(phase, deferExpansion = true)
         val resting = phase == ButtonPolicy.Phase.IDLE && logo?.expanding != true
         val size = dp(if (resting) model.sizeDp else 72)
         val logoWidth = dp(if (resting) 44 else 80)
@@ -437,7 +439,7 @@ class PaplyButtonService : AccessibilityService() {
                 setOnClickListener { if (phase == ButtonPolicy.Phase.IDLE) start() else if (phase == ButtonPolicy.Phase.RECORDING) finish() }
             }
             label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER_VERTICAL; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(8),0,dp(8),0) }
-            cancel = TextView(this).apply { text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
+            cancel = TextView(this).apply { visibility = View.GONE; alpha = 0f; text = "✕"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); contentDescription = "Aufnahme verwerfen"; setOnClickListener { discard() } }
             listOfNotNull(label, cancel).forEach { it.isFocusable = false; it.defaultFocusHighlightEnabled = false }
             label?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); cornerRadius = dp(16).toFloat() }
             cancel?.background = GradientDrawable().apply { setColor(Color.rgb(15, 44, 32)); shape = GradientDrawable.OVAL }
@@ -451,6 +453,33 @@ class PaplyButtonService : AccessibilityService() {
                     layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                     if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0) }
             bar = view
+            val location = IntArray(2)
+            view.viewTreeObserver.addOnPreDrawListener {
+                // updateViewLayout is asynchronous. Keep the last surface until the
+                // window AND the children agree; never submit a clipped intermediate frame.
+                val button = logo
+                val ready = view.width == layout.width && view.height == layout.height &&
+                    button != null && button.width == button.layoutParams.width &&
+                    button.height == button.layoutParams.height &&
+                    (if (onRight) button.right == view.width else button.left == 0)
+                if (!ready) false else {
+                    view.getLocationOnScreen(location)
+                    if (button.awaitingExpansion &&
+                        (location[0] != expectedWindowLeft || location[1] != layout.y)) false
+                    else {
+                        button.expandAfterLayout()
+                        cancel?.let { cross ->
+                            if (cross.visibility == View.VISIBLE && cancelRevealPending) {
+                                cancelRevealPending = false
+                                if (ValueAnimator.areAnimatorsEnabled()) {
+                                    cross.animate().alpha(1f).setStartDelay(30).setDuration(150).start()
+                                } else cross.alpha = 1f
+                            }
+                        }
+                        true
+                    }
+                }
+            }
             var down = 0f; var downX = 0f; var initial = 0; var dragged = false
             logo?.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
@@ -467,13 +496,20 @@ class PaplyButtonService : AccessibilityService() {
             try { wm.addView(view, layout) } catch (_: Exception) { bar = null; overlayFailed = true; discard("Paply-Knopf kann nicht angezeigt werden. Bedienungshilfe erneut einschalten."); return }
             if (ValueAnimator.areAnimatorsEnabled()) { view.alpha = 0f; view.animate().alpha(1f).setDuration(140).start() }
         }
-        logo?.setPhase(phase)
+        logo?.setPhase(phase, deferExpansion = true)
         logo?.amber = amber
         logo?.let { if (it.layoutParams.width != logoWidth || it.layoutParams.height != size) {
             it.layoutParams = LinearLayout.LayoutParams(logoWidth, size)
         } }
         label?.visibility = if (model.hint == null) View.GONE else View.VISIBLE
-        cancel?.visibility = if (model.cancel) View.VISIBLE else View.GONE
+        cancel?.let {
+            if (!model.cancel || it.visibility != View.VISIBLE) {
+                it.animate().cancel()
+                it.alpha = 0f
+                cancelRevealPending = model.cancel
+            }
+            it.visibility = if (model.cancel) View.VISIBLE else View.GONE
+        }
         if (label?.text?.toString().orEmpty() != hintText.orEmpty()) label?.text = hintText
         logo?.onRight = onRight
         val controlsWidth = logoWidth + (if (cancel?.visibility == View.VISIBLE) dp(48) else 0)
@@ -502,6 +538,7 @@ class PaplyButtonService : AccessibilityService() {
             x + layout.width, safeTop, layout.width, size, dp(8))
         if (target == null) { bar?.visibility = View.INVISIBLE; lastRender = null; return }
         bar?.visibility = View.VISIBLE
+        expectedWindowLeft = target.left
         layout.x = screen.x - target.right
         layout.y = target.top
         lastRender = key

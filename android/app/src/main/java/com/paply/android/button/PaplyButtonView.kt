@@ -20,6 +20,7 @@ internal class PaplyButtonView(context: Context) : View(context) {
         set(value) { field = value; invalidate() }
     var settled: () -> Unit = {}
     internal var expanding = false; private set
+    internal var awaitingExpansion = false; private set
     private var morph = 0f
     private var morphAnimator: ValueAnimator? = null
     private val shape = Path()
@@ -61,29 +62,17 @@ internal class PaplyButtonView(context: Context) : View(context) {
         contentDescription = "Paply-Diktat starten"
     }
 
-    fun setPhase(value: ButtonPolicy.Phase) {
+    fun setPhase(value: ButtonPolicy.Phase, deferExpansion: Boolean = false) {
         if (phase == value) return
         val wasIdle = phase == ButtonPolicy.Phase.IDLE
         phase = value
-        wake()
         if (wasIdle != (value == ButtonPolicy.Phase.IDLE)) {
             morphAnimator?.removeAllListeners(); morphAnimator?.cancel()
-            val target = if (value == ButtonPolicy.Phase.IDLE) 0f else 1f
+            awaitingExpansion = value != ButtonPolicy.Phase.IDLE && deferExpansion
             expanding = true
-            if (ValueAnimator.areAnimatorsEnabled()) {
-                morphAnimator = ValueAnimator.ofFloat(morph, target).apply {
-                    duration = 220
-                    interpolator = android.view.animation.DecelerateInterpolator()
-                    addUpdateListener { morph = it.animatedValue as Float; invalidate() }
-                    addListener(object : android.animation.AnimatorListenerAdapter() {
-                        override fun onAnimationEnd(animation: android.animation.Animator) {
-                            expanding = false; settled()
-                        }
-                    })
-                    start()
-                }
-            } else { morph = target; expanding = false }
+            if (!awaitingExpansion) animateMorph()
         }
+        if (!awaitingExpansion) wake()
         // Every recording has fresh visual state, independent of transient hints.
         amplitude = 0f
         time = 0f
@@ -98,6 +87,31 @@ internal class PaplyButtonView(context: Context) : View(context) {
         stopAnimation()
         if (isAttachedToWindow) startAnimation()
         invalidate()
+    }
+
+    // Called at pre-draw, after both the overlay and its children have their new bounds.
+    fun expandAfterLayout() {
+        if (!awaitingExpansion) return
+        awaitingExpansion = false
+        wake()
+        animateMorph()
+    }
+
+    private fun animateMorph() {
+        val target = if (phase == ButtonPolicy.Phase.IDLE) 0f else 1f
+        if (ValueAnimator.areAnimatorsEnabled()) {
+            morphAnimator = ValueAnimator.ofFloat(morph, target).apply {
+                duration = 220
+                interpolator = android.view.animation.DecelerateInterpolator()
+                addUpdateListener { morph = it.animatedValue as Float; invalidate() }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        expanding = false; settled()
+                    }
+                })
+                start()
+            }
+        } else { morph = target; expanding = false; invalidate() }
     }
 
     private fun startAnimation() {
@@ -142,14 +156,14 @@ internal class PaplyButtonView(context: Context) : View(context) {
         val center = ButtonPresentation.logoCenter(width / density, morph, onRight)
         canvas.translate(center * density, height / 2f)
         canvas.scale(density, density)
-        if (phase == ButtonPolicy.Phase.RECORDING) {
+        if (phase == ButtonPolicy.Phase.RECORDING && morph > 0f) {
             val breath = (sin(time * 2.6f) + 1f) * .5f
             ink.color = if (amber) Color.rgb(218, 170, 75) else Color.rgb(58, 216, 121)
             ink.style = Paint.Style.STROKE
             ink.strokeWidth = 1.5f
             for (i in 0..2) {
-                ink.alpha = (28 + amplitude * 70 - i * 6).toInt()
-                canvas.drawCircle(0f, 0f, 29f + i * 2f + amplitude * 1.2f + breath * .6f, ink)
+                ink.alpha = ((28 + amplitude * 70 - i * 6) * morph).toInt()
+                canvas.drawCircle(0f, 0f, (29f + i * 2f + amplitude * 1.2f + breath * .6f) * morph, ink)
             }
         }
         ink.style = Paint.Style.FILL
@@ -177,12 +191,14 @@ internal class PaplyButtonView(context: Context) : View(context) {
             mark.setBounds(-markSize, -markSize, markSize, markSize)
             mark.draw(canvas)
         }
-        if (phase == ButtonPolicy.Phase.STARTING || phase == ButtonPolicy.Phase.WORKING) {
+        if ((phase == ButtonPolicy.Phase.STARTING || phase == ButtonPolicy.Phase.WORKING) && morph > 0f) {
             ink.color = Color.rgb(58, 216, 121)
             ink.style = Paint.Style.STROKE
             ink.strokeWidth = 2f
             ink.strokeCap = Paint.Cap.ROUND
-            arc.set(-29f, -29f, 29f, 29f)
+            ink.alpha = (255 * morph).toInt()
+            val radius = 29f * morph
+            arc.set(-radius, -radius, radius, radius)
             canvas.drawArc(arc, time * 150f - 90f, 100f, false, ink)
         }
         canvas.restore()
