@@ -8,8 +8,8 @@ welche App noch nachziehen muss. Fertig ist eine Änderung erst, wenn alle Apps 
 Ausnahme steht. Gemeinsame KI-Texte und Prüffälle liegen in `shared/`. Die Abläufe bleiben in jeder App in ihrer
 eigenen Programmiersprache.
 
-**Begriffe:** Die **Hauptsprache** wählt der Nutzer. Ohne Wahl gilt die Gerätesprache. **Eigene Sprachen** sind die
-Sprachen des Nutzers, automatisch aus Gerät und Tastaturen oder selbst gewählt.
+**Begriffe:** Die **Hauptsprache** wählt der Nutzer. Ohne Wahl gilt die Gerätesprache. Agenten und Profile ändern sie
+nicht. **Eigene Sprachen** sind die Sprachen des Nutzers, automatisch aus Gerät und Tastaturen oder selbst gewählt.
 
 ## 1. Sprache
 
@@ -23,8 +23,8 @@ Vorgabe von Allan (30.10.2026, geschärft am 31.10.2026):
 So läuft es in allen Apps, bei Diktat, Gedanken und Gesprächen:
 
 1. Jedes Stück geht ohne Sprachvorgabe an Whisper. Whisper erkennt die Sprache selbst.
-2. Erwartet wird die Sprache des vorherigen Stücks derselben Aufnahme, sonst die Hauptsprache. Stimmt die Erkennung
-   damit überein, ist das Stück fertig.
+2. Erwartet wird die Sprache des letzten Stücks derselben Aufnahme, das Text ergeben hat, sonst die Hauptsprache. Stimmt
+   die Erkennung damit überein, ist das Stück fertig.
 3. Stimmt sie nicht überein, folgt eine Gegenprobe, wenn höchstens `sprache.kurz_sekunden` gesprochen wurde oder die
    erkannte Sprache keine eigene Sprache ist: Dasselbe Stück läuft ein zweites Mal, diesmal mit der erwarteten Sprache.
 4. Die erkannte Sprache gewinnt, wenn ihre Konfidenz um mindestens `sprache.abstand` besser ist. Sonst gilt die erwartete
@@ -54,7 +54,7 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 
 - Wurde nichts gesagt, schreibt Paply nichts und fragt Groq möglichst gar nicht erst.
 - Typische Whisper-Erfindungen wie „Vielen Dank.“ werden bei Stille verworfen. Echt gesprochen bleiben sie stehen.
-- Untertitel-Reste wie „Amara.org“ fallen immer weg.
+- Steht nur ein Untertitel-Rest wie „Amara.org“ da, fällt er immer weg.
 - Alle Apps nutzen dieselbe Stille-Liste.
 
 ## 4. Eigene Begriffe
