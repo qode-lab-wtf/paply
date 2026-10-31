@@ -66,12 +66,12 @@ const WERTE = {
 
 // Ausnahme aus REGELN.md → woran man im Code erkennt, dass sie noch besteht.
 const AUSNAHMEN = {
-  A1: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('language', language)")
+  A1: () => !gibtEs(`${DESKTOP}/dictation/language-guard.js`)
     || lies(`${DESKTOP}/notes/groq.js`).includes("form.append('language', 'de')"),
   A2: () => lies(`${DESKTOP}/electron-main.js`).includes("formData.append('model', 'whisper-large-v3-turbo')"),
   A3: () => !lies(`${DESKTOP}/audio/silence-filter.js`).includes('Merci'),
-  A4: () => /!userLanguages\.map\(CodeSwitchPrimer\.baseCode\)\.contains\(detected\)/.test(lies(`${IOS}/Text/LanguageGuard.swift`))
-    || /code !in userLanguages/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
+  A4: () => /func redoLanguage/.test(lies(`${IOS}/Text/LanguageGuard.swift`))
+    || /fun redoLanguage/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
   A5: () => !/tasks|due_hint/.test(lies(`${DESKTOP}/notes/plan.js`)),
   A6: () => lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: false'),
   A7: () => gibtEs(`${DESKTOP}/meeting/audio-retention.js`),
