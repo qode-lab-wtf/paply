@@ -20,14 +20,16 @@
 Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtbar, was den anderen fehlt.
 
 - **iPhone, Android:** Ton-Regel 8 für Gedanken und Gespräche mit sofortiger Löschung nach gespeichertem Text und maximal 30 Tagen bei Fehlern prüfen/nachziehen (Desktop umgesetzt).
+- **iPhone, Android:** Desktop-Review-Korrekturen nachziehen/prüfen: Zeitgrenze der Gegenprobe, Sprachcode-Aliase und Schutz vor Primer-Echos sowie leeren Transkripten.
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 
 ## Mac und Windows
 
 - **Version:** v1.15.3, veröffentlicht, auf Allans MacBook installiert. 744 automatische Tests.
-- **Quellstand (noch nicht veröffentlicht):** Sprach-Gegenprobe für Diktat, Notes und Groq-Meeting-Fallback; 62 Stille-Phrasen; Whisper large-v3 und Polieren standardmäßig an. Entwicklerbereich über fünf Versionsklicks. Bestehende Polier-Werte bleiben erhalten.
+- **Quellstand (noch nicht veröffentlicht):** Sprach-Gegenprobe für Diktat, Notes und Groq-Meeting-Fallback; 62 Stille-Phrasen; Whisper large-v3 und Polieren standardmäßig an. Entwicklerbereich über fünf Versionsklicks. Bestehende Polier-Werte werden einmalig auf an migriert; danach bleibt die Entwicklerwahl erhalten.
 - **Prüfung dieses Quellstands:** 774 Tests in 47 Dateien, Vite-Build, TypeScript und Regelwächter bestanden. Isoliertes echtes Diktat mit Anna/Thomas je zweimal: Deutsch und Französisch bleiben wörtlich erhalten, auch nach Polieren. Instrumentierter Lauf: 1 bzw. 2 Whisper-Anfragen. Bei identischem französischem Text in beiden Antworten speichert die vorgeschriebene Gleichtext-Regel die erwartete Sprache `de`. Entwicklerbereich in Electron einschließlich Persistenz und Ausblenden geprüft. Kein Windows-Gerätetest.
+- **Desktop-Review (31.10.2026, unveröffentlicht):** Leere Meeting-/Notes-Ergebnisse schützen den Ton; Primer-Echos schützen das Diktat-Backup. Profile ändern die Hauptsprache nicht. Gegenprobe zeitlich begrenzt, Sprachcodes normalisiert, Notes-Modell korrekt gespeichert. 821 Tests in 48 Dateien, Vite-Build, TypeScript und Regelwächter bestanden. Regression gegen Ausgangscode: 30 erwartete Fehler in 103 gezielten Tests.
 - **Offen:** Rückmeldung des Windows-Freunds, Electron-Upgrade.
 - **Veröffentlichen:** [RELEASE.md](RELEASE.md). **Verlauf:** [stand/desktop.md](stand/desktop.md).
 

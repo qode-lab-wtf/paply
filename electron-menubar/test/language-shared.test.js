@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import {
+  languageCode,
   needsCheck,
   decide,
   confidence,
@@ -134,7 +135,7 @@ it('Notes verwendet Entwickler-Modell, Vorstücksprache und zwei echte Multipart
  expect(calls).toHaveLength(2); expect(calls[0].has('language')).toBe(false);
  expect(calls[1].get('language')).toBe('fr');
  expect(calls[0].get('model')).toBe('whisper-large-v3-turbo');
- expect(calls[0].get('prompt')).toContain('Bonjour.'); expect(out.language).toBe('fr');
+ expect(calls[0].get('prompt')).toContain('Bonjour.'); expect(out.language).toBe('fr'); expect(out.model).toBe('whisper-large-v3-turbo');
 });
 
 it('Meeting-Fallback führt Gegenprobe aus und merkt Sprache je Kanal', async () => {
@@ -150,4 +151,39 @@ it('Meeting-Fallback führt Gegenprobe aus und merkt Sprache je Kanal', async ()
  q.enqueue({channel:'system',wavBuffer:Buffer.alloc(64044),tOffset:0});
  await q.idle(); expect(calls).toHaveLength(5);
  expect(calls.map(c=>c.get('language'))).toEqual([null,'de',null,null,'de']);
+});
+
+it('Primer samt Begriffen und Fragmente fallen ohne Messung und nach Husten weg', () => {
+ const example=primer(['de','en']);
+ for(const speechMs of [undefined,0,1200]) for(const text of [buildPrompt('Kubernetes', '', example), 'Kurzes Update Das Meeting ist verschoben']) {
+ const out=removeEchoes({text,segments:[{text}]},{example,vocabulary:'Kubernetes',speechMs});
+ expect(out.text).toBe(''); expect(out.echoRemoved).toBe(true);
+ }
+});
+it('gesprochenes Einzelwort aus Begriffsliste bleibt', async () => {
+ const m=makeMain('darwin',{customVocabulary:'Kubernetes',enablePolish:false,autopaste:false});
+ m.context.fetch.mockResolvedValue({ok:true,text:async()=>JSON.stringify({text:'Kubernetes.',segments:[{text:'Kubernetes.'}]})});
+ try {await m.context.processAudioData(Buffer.from('audio'),false,speech); expect(m.context.addToHistory).toHaveBeenCalledWith(expect.objectContaining({transcript:'Kubernetes.'}));} finally {m.dispose();}
+});
+it('Primer-Entfernung behält Diktat-Backup', async () => {
+ const m=makeMain(); const text=primer(['de','en']);
+ m.context.fetch.mockResolvedValue({ok:true,text:async()=>JSON.stringify({text,segments:[{text}]})});
+ try {await m.context.saveAudioBackup(Buffer.from('audio'),speech); await m.context.processAudioData(Buffer.from('audio'),false,speech); expect(m.context.getAudioBackup()).not.toBeNull();} finally {m.dispose();}
+});
+it.each([[20,5040],[40000,60000]])('Gegenprobe begrenzt nach %s ms erste Anfrage auf %s ms', async(firstMs,limit)=>{
+ vi.useFakeTimers();
+ try {
+ const request=vi.fn().mockImplementationOnce(()=>new Promise(resolve=>setTimeout(()=>resolve({text:'first',language:'fr'}),firstMs))).mockImplementationOnce(()=>new Promise(()=>{}));
+ let result; const pending=guardedTranscription(request,{expected:'de',spoken:1}).then(r=>{result=r;});
+ await vi.advanceTimersByTimeAsync(firstMs+limit-1); expect(result).toBeUndefined();
+ await vi.advanceTimersByTimeAsync(1); await pending; expect(result.text).toBe('first');
+ } finally {vi.useRealTimers();}
+});
+it.each([['nb-NO','no'],['fil-PH','tl'],['iw','he'],['in','id'],['ji','yi'],['jw','jv'],['telugu','te'],['malayalam','ml'],['latin','la'],['maori','mi']])('normalisiert %s', (input,code)=>{expect(languageCode(input)).toBe(code);expect(needsCheck({expected:input,detected:code,spoken:1})).toBe(false);});
+it('Agenten und Profile schreiben keine Hauptsprache; UI bietet zusätzliche Gerätesprache',()=>{
+ const main=fs.readFileSync(new URL('../electron-main.js',import.meta.url),'utf8');
+ expect(main).not.toMatch(/s\.set\('language', (?:agentInfo|profile|customAgent)\./);
+ const ui=fs.readFileSync(new URL('../src/apps/dashboard/Dashboard.tsx',import.meta.url),'utf8');
+ expect(ui).not.toContain('(currentConfigAgent as Profile).language'); expect(ui).toContain('Output-Sprache');
+ const select=fs.readFileSync(new URL('../src/components/LanguageSelect.tsx',import.meta.url),'utf8'); expect(select).toContain('<option value={value}>');
 });

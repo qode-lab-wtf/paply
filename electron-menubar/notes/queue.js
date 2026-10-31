@@ -6,6 +6,8 @@ const { encodeWav } = require('../audio/wav-encoder');
 const { filterTranscription, shouldSkipTranscription } = require('../audio/silence-filter');
 const { splitSentences, chunks, context, validatePlan, applyPlan } = require('./plan');
 
+function hasTranscript(transcript) { return !!(transcript?.text?.trim() || transcript?.silenceProven === true); }
+
 function levels(pcm) {
   const windows = [];
   for (let offset = 0; offset + 1 < pcm.length; offset += 1600) {
@@ -61,20 +63,27 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
   }
   async function transcribe(entry, signal) {
     const pcm = fs.readFileSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'));
-    const pieces = audioChunks(pcm), done = repo.readLocal(`sources/${entry.id}/stt.json`, []);
+    const pieces = audioChunks(pcm), done = [];
+    for (const part of repo.readLocal(`sources/${entry.id}/stt.json`, [])) {
+      if (!hasTranscript(part)) break;
+      done.push(part);
+    }
     save({ ...entry, state: 'transcribing' });
     for (let i = done.length; i < pieces.length; i++) {
       if (signal.aborted) throw new Error('Abgebrochen');
       if (isBusy()) { const e = new Error('Diktat hat Vorrang'); e.kind = 'busy'; throw e; }
       const meta = levels(pieces[i]);
-      let text = '', language = done.at(-1)?.language;
-      if (!shouldSkipTranscription(meta)) {
+      let text = '', language = done.at(-1)?.language, model = null;
+      const silenceProven = shouldSkipTranscription(meta);
+      if (!silenceProven) {
         const response = await groq.transcribe(encodeWav(pieces[i]), pieces[i].length / 32000, signal, vocabulary(), { previousLanguage: language, previousText: done.at(-1)?.text, voiceActivity: meta });
         language = response.language || language;
+        model = response.model;
         if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
         text = filterTranscription(response, meta).text;
       }
-      done.push({ text, language, durationMs: meta.durationMs }); repo.writeLocal(`sources/${entry.id}/stt.json`, done);
+      if (!text.trim() && !silenceProven) throw new Error('Keine Sprache erkannt · Erneut versuchen');
+      done.push({ text, language, model, silenceProven, durationMs: meta.durationMs }); repo.writeLocal(`sources/${entry.id}/stt.json`, done);
     }
     const original = done.map(d => d.text).filter(Boolean).join(' ');
     if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
@@ -84,8 +93,8 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     if (hasScreen) { const hash = assets.put(fs.readFileSync(temporary)); entry.attachments = [...new Set([...(entry.attachments || []), hash])]; }
     if (match && !hasScreen) entry.message = 'Kein Startbild vorhanden · Bildschirmkontext in den Notes-Einstellungen aktivieren';
     try { fs.rmSync(temporary, { force: true }); } catch { /* later housekeeping */ }
-    const transcript = repo.saveTranscript(entry.id, { text: original, command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: 'whisper-large-v3-turbo', createdAt: Date.now() });
-    deleteAudio(entry);
+    const transcript = repo.saveTranscript(entry.id, { text: original, command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: done.find(d => d.model)?.model || null, silenceProven: done.every(d => d.silenceProven === true), createdAt: Date.now() });
+    if (transcript.text.trim() || transcript.silenceProven) deleteAudio(entry);
     prepare(entry, transcript);
   }
   async function structure(entry, signal) {
@@ -136,7 +145,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
       const entry = repo.entries().filter(e => ['captured', 'transcribed', 'waiting_key', 'waiting_network', 'waiting_limit', 'waiting_budget'].includes(e.state) && (!e.retryAt || e.retryAt <= Date.now())).sort((a, b) => (a.resumeStep === 'plan' || a.state === 'transcribed' ? 1 : 0) - (b.resumeStep === 'plan' || b.state === 'transcribed' ? 1 : 0) || a.createdAt - b.createdAt)[0];
       if (!entry) { await vision(); return; }
       currentId = entry.id; controller = new AbortController();
-      entry.resumeStep = repo.transcript(entry.id) ? 'plan' : 'stt';
+      entry.resumeStep = entry.state === 'transcribed' || hasTranscript(repo.transcript(entry.id)) ? 'plan' : 'stt';
       if (!getKey() || authKey === getKey()) { entry.state = 'waiting_key'; entry.message = authKey ? 'Groq-Schlüssel prüfen' : 'Groq-Schlüssel in den Einstellungen ergänzen'; entry.retryAt = Date.now() + 60000; save(entry); return; }
       authKey = null;
       if (!isOnline()) { entry.state = 'waiting_network'; entry.message = 'Lokal gesichert · wartet auf Verbindung'; entry.retryAt = Date.now() + 30000; save(entry); return; }
@@ -176,7 +185,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
   function cleanAudio(now = Date.now()) {
     for (const entry of repo.entries()) {
       if (entry.state === 'recording' || entry.id === currentId) continue;
-      if (repo.transcript(entry.id) || now - (entry.stoppedAt ?? (entry.createdAt + (entry.durationMs || 0))) >= 30 * 86400000) deleteAudio(entry);
+      if (repo.transcript(entry.id)?.text?.trim() || repo.transcript(entry.id)?.silenceProven === true || now - (entry.stoppedAt ?? (entry.createdAt + (entry.durationMs || 0))) >= 30 * 86400000) deleteAudio(entry);
     }
   }
   function recover() {
@@ -195,7 +204,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
         for (let i = 0; i < (e.parts || 0); i++) repo.writeLocal(`sources/${id}/plan-${i}.json`, null);
         e.partsDone = 0; e.fallback = false; e.largeFallback = false; e.keptUser = false;
       }
-      e.state = repo.transcript(id) ? 'transcribed' : 'captured'; e.retryAt = 0; e.attempts = 0; e.message = ''; authKey = null; save(e); tick().catch(() => {});
+      e.state = hasTranscript(repo.transcript(id)) ? 'transcribed' : 'captured'; e.retryAt = 0; e.attempts = 0; e.message = ''; authKey = null; save(e); tick().catch(() => {});
     },
     discard(id) { const e = repo.entry(id); assert(e && e.state !== 'recording'); if (currentId === id) controller?.abort(); e.state = 'discarded'; e.discardedAt = Date.now(); save(e); commands.commit(b => { for (const [nid, n] of Object.entries(b.nodes)) if (n.sourceId === id) { n.sentenceIds.forEach(s => { b.claims[s] = { tomb: true }; }); b.tombstones[nid] = Date.now(); delete b.nodes[nid]; } for (const [eid, edge] of Object.entries(b.edges)) if (!b.nodes[edge.source] || !b.nodes[edge.target]) delete b.edges[eid]; }); },
     reconcileUndo() {

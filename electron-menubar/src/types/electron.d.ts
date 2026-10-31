@@ -9,7 +9,7 @@ export interface Settings {
   polishUnavailable?: boolean;
   shortcut: string;
   autoStart: boolean;
-  language: 'de' | 'en' | 'fr' | 'es' | 'it' | 'pt' | 'nl' | 'tr' | 'pl';
+  language: string;
   developerMode: boolean;
   whisperModel: 'whisper-large-v3' | 'whisper-large-v3-turbo';
   autopaste: boolean;
@@ -63,7 +63,6 @@ export interface Stats {
 
 export interface Profile {
   name: string;
-  language: string;
   polishFlavor: string;
   autopaste: boolean;
   hotkey?: string;

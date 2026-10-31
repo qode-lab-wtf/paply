@@ -101,7 +101,8 @@ function buildPrompt(vocabulary = '', previousText = '', example = '') {
   } else if (tail.length) parts.push(tail.join(' '));
   return parts.join(' ');
 }
-// Ohne segmentgenaue VAD nur mit der gesamten Sprechzeit verwerfen: konservativ.
+// Begriffe nur bei sehr kurzer Sprechzeit verwerfen. Längere Primer-Echos
+// sind auch ohne Messung verdächtig; nachweislich viel Sprache schützt sie.
 function removeEchoes(
   response,
   { example = '', previousText = '', vocabulary = '', speechMs } = {},
@@ -118,7 +119,10 @@ function removeEchoes(
   const echo = (text) => {
     const w = words(text);
     return (
-      (vocabulary && isVocabularyEcho(text, vocabulary)) ||
+      (vocabulary && Number.isFinite(speechMs) && speechMs < 300 && isVocabularyEcho(text, vocabulary)) ||
+      (!(Number.isFinite(speechMs) && speechMs >= Math.max(3000, w.length * 100)) &&
+        words(example).some((_, i, e) => contains(w, e.slice(i, i + 5), 5)) &&
+        words(buildPrompt(vocabulary, previousText, example)).some((_, i, p) => contains(w, p.slice(i, i + 5), 5))) ||
       (Number.isFinite(speechMs) &&
         speechMs < 100 * w.length &&
         (contains(words(example), w, 3) || contains(words(previousText), w, 2)))
@@ -129,10 +133,11 @@ function removeEchoes(
     if (kept.length !== response.segments.length)
       return {
         ...response,
+        echoRemoved: true,
         text: kept.map((s) => s.text.trim()).join(' '),
         segments: kept,
       };
-  } else if (echo(response.text || '')) return { ...response, text: '' };
+  } else if (echo(response.text || '')) return { ...response, text: '', echoRemoved: true };
   return response;
 }
 module.exports = { primer, estimateTokens, buildPrompt, removeEchoes };

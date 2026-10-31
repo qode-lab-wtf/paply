@@ -27,6 +27,8 @@ So läuft es in allen Apps, bei Diktat, Gedanken und Gesprächen:
    die Erkennung damit überein, ist das Stück fertig.
 3. Stimmt sie nicht überein, folgt eine Gegenprobe, wenn höchstens `sprache.kurz_sekunden` gesprochen wurde oder die
    erkannte Sprache keine eigene Sprache ist: Dasselbe Stück läuft ein zweites Mal, diesmal mit der erwarteten Sprache.
+   Die Gegenprobe wartet höchstens zweimal die Dauer der ersten Anfrage plus 5 Sekunden, maximal 60 Sekunden.
+   Bei Zeitablauf bleibt das erste Ergebnis.
 4. Die erkannte Sprache gewinnt, wenn ihre Konfidenz um mindestens `sprache.abstand` besser ist. Sonst gilt die erwartete
    Sprache. Scheitert die Gegenprobe oder fehlt ein Konfidenzwert, bleibt das erste Ergebnis.
 
@@ -98,6 +100,7 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 - Ton bleibt nur, bis der Text sicher gespeichert ist. Das gilt für alle Apps und alle Funktionen.
 - Scheitert die Verarbeitung, bleibt der Ton für den Neuversuch, höchstens 30 Tage ab dem Stopp.
 - Auch dauerhaft hängende Auswertungen laufen nach 30 Tagen ab; laufende Aufnahmen bleiben unberührt.
+- Ein leeres Meeting-Transkript gilt als Fehler mit Neuversuch. Bei Gedanken darf Ton ohne Text nur weg, wenn die eigene Pegelmessung Stille nachweist.
 - Nachhören gibt es nicht.
 
 | Was | Mac, Windows | iPhone | Android |
