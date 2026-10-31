@@ -18,11 +18,11 @@ enum ConversationsEnvironment {
     private static var processorEnvironment: ConversationProcessor.Environment {
         .init(
             apiKey: { await MainActor.run { AppSettings.shared.apiKey ?? "" } },
-            mainLanguage: { await MainActor.run { AppSettings.shared.effectivePrimaryLanguage ?? "de" } },
+            mainLanguage: { await MainActor.run { LanguageGuard.primary(AppSettings.shared.effectivePaply) ?? "" } },
             vocabulary: {
                 let own = await MainActor.run { AppSettings.shared.effectivePaply.vocabulary }
                 return [own]
-            }, userLanguages: { await MainActor.run { AppSettings.shared.effectivePaply.spokenLanguages } })
+            }, userLanguages: { await MainActor.run { CodeSwitchPrimer.userLanguages(AppSettings.shared.effectivePaply) } })
     }
     // Anschlussstelle für die Bereitschaft des echten Motors.
     static var voiceLearningAllowed: Bool { AppSettings.shared.betaConversations }

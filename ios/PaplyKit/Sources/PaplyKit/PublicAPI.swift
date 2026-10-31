@@ -14,8 +14,8 @@ public struct PaplySettings: Sendable, Codable, Equatable {
     /// Leer = Gerätesprachen. Dient dem Sprachwechsel-Beispiel im Whisper-Prompt und der
     /// Sprachwache (`LanguageGuard`: kurze Stücke, fremd erkannte Sprachen).
     public var spokenLanguages: [String]
-    /// Ergänzung: Hauptsprache (ISO 639-1). Kurze Stücke werden ohne Erkennung direkt in ihr
-    /// geschrieben, fremd erkannte Sprachen mit ihr neu transkribiert (`LanguageGuard`).
+    /// Hauptsprache: Erwartung bei unsicherer Erkennung. Paply übersetzt nie;
+    /// jedes Stück wird zuerst ohne Sprachvorgabe erkannt (`LanguageGuard`).
     /// nil/leer oder nicht unter den Nutzersprachen = die erste Nutzersprache.
     public var primaryLanguage: String?
 
@@ -58,6 +58,8 @@ public struct DictationTimings: Sendable, Codable {
     public var chunkCount: Int
     public var uploadedBytes: Int
     public var audioSeconds: Double
+    /// Tatsächlich angefragte Audiolänge einschließlich Gegenproben. Optional für alte gespeicherte Ergebnisse.
+    public var requestedAudioSeconds: Double? = nil
 
     public init(
         transcriptionDoneMs: Double? = nil,
@@ -184,13 +186,13 @@ public enum LanguageSource: String, Sendable, Codable, CaseIterable {
     case checkFailed = "check-failed"
     /// Whisper hat selbst erkannt.
     case auto
-    /// Kurzes Stück: Sprache direkt mitgeschickt (Vorstück oder Hauptsprache).
+    /// Historischer Diagnosewert vor Regel 1; nur zum Lesen älterer Ergebnisse.
     case short
-    /// Fremde Sprache erkannt, mit der Hauptsprache neu transkribiert.
+    /// Historischer Diagnosewert vor Regel 1; heute `checkExpected`/`checkDetected`.
     case redo
-    /// Fremde Sprache erkannt, Neutranskription scheiterte: erstes Ergebnis behalten.
+    /// Historischer Diagnosewert; heute `checkFailed`.
     case redoFailed = "redo-failed"
-    /// Feste Sprache aus den Einstellungen.
+    /// Historischer Diagnosewert vor Regel 1; erste Anfragen erkennen immer selbst.
     case fixed
 }
 

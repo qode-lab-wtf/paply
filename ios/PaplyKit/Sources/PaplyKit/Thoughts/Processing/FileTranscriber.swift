@@ -7,7 +7,7 @@ public enum TranscriptionFailure: String, Sendable, Codable, Equatable, CaseIter
 }
 
 public enum TranscriptionResult: Sendable, Equatable {
-    case success(text: String, languages: [String], audioSeconds: Double, model: String)
+    case success(text: String, languages: [String], audioSeconds: Double, model: String, requestedAudioSeconds: Double? = nil)
     case noSpeech
     case failure(TranscriptionFailure)
 }
@@ -63,7 +63,7 @@ public struct FileTranscriber: ThoughtTranscribing {
         if let message = outcome.errorMessage { return .failure(classify(message)) }
         let raw = outcome.raw.trimmed
         guard !raw.isEmpty else { return .failure(.cancelled) } // abgebrochen: kein Text, keine Meldung
-        return .success(text: raw, languages: outcome.languages, audioSeconds: outcome.timings.audioSeconds, model: model)
+        return .success(text: raw, languages: outcome.languages, audioSeconds: outcome.timings.audioSeconds, model: model, requestedAudioSeconds: outcome.timings.requestedAudioSeconds)
     }
 
     /// Die Pipeline meldet Fehler nur als deutschen Text; die Texte stammen aus `GroqFailure.germanMessage`.
