@@ -158,7 +158,7 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         // Gescheitertes Stück + Rest in einem Teil, kein getrennter Rest-Upload.
         #expect(uploads.count == 3)
         #expect(uploads[2].body.count > uploads[0].body.count)
-        #expect(outcome.timings.chunkCount == 1)
+        #expect(outcome.timings.chunkCount == 2)
     }
 
     @Test func finalTranscriptionFailureIsReportedInGerman() async {

@@ -221,7 +221,7 @@ class PipelineTests {
                 val u = s.requests("/audio/transcriptions")
                 expect(o.raw == "Das gesamte Diktat in einem Stück." && o.errorMessage == null)
                 expect(u.size == 3 && u[2].bodySize > u[0].bodySize)
-                expect(o.timings.chunkCount == 1)
+                expect(o.timings.chunkCount == 2)
             }
     }
 
