@@ -126,7 +126,7 @@ class LanguageGuardTests {
 
     @Test
     fun equalTextWinsBeforeMissingConfidence() {
-        expect(LanguageGuard.chooseExpected(Transcription(text = " Hallo Welt! "),
+        expect(LanguageGuard.chooseExpected(Transcription(text = " . Hallo Welt! "),
             Transcription(text = "hallo  welt.")))
         expect(!LanguageGuard.chooseExpected(Transcription(text = "Hallo"), null))
     }

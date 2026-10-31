@@ -53,7 +53,7 @@ internal object LanguageGuard {
 
     private fun normalized(text: String): String =
         text.trim().lowercase(java.util.Locale.ROOT).replace(Regex("\\s+"), " ")
-            .replace(Regex("^[\\p{P}]+|[\\p{P}]+$"), "")
+            .replace(Regex("^[\\s\\p{P}]+|[\\s\\p{P}]+$"), "")
 
     fun chooseExpected(detected: Transcription, checked: Transcription?, spoken: Double = 0.0): Boolean {
         if (checked == null) return false
