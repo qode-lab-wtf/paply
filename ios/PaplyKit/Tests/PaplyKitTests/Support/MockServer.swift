@@ -118,7 +118,7 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         switch reply {
         case .raw(_, _, _, let d), .failure(_, let d): delay = d
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
+        let deliver: @Sendable () -> Void = { [self] in
             guard !stopped.withLock({ $0 }) else { return }
             switch reply {
             case .failure(let code, _):
@@ -128,6 +128,10 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
                 respond(status: status, data: data, headers: headers)
             }
         }
+        // Ohne Verzögerung keine zusätzliche globale Queue: unter CPU-Last kann diese
+        // die Schlüsselprüfung sonst bis zum URLSession-Timeout aushungern.
+        if delay == 0 { deliver() }
+        else { DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: deliver) }
     }
 
     private func respond(status: Int, data: Data, headers: [String: String]) {

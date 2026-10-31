@@ -31,7 +31,7 @@ extension GroqClient {
             if PartSplitter.estimateTokens(next) > 200 { break }; prompt = next
         }
         var fields = [("model", "whisper-large-v3"), ("response_format", "verbose_json"), ("temperature", "0"), ("timestamp_granularities[]", "word"), ("timestamp_granularities[]", "segment"), ("prompt", prompt)]
-        if let language { fields.append(("language", language)) }
+        if let language { fields.append(("language", LanguageGuard.code(language))) }
         let boundary = UUID().uuidString
         var request = request("audio/transcriptions", method: "POST")
         request.timeoutInterval = 120
@@ -153,23 +153,43 @@ public actor ConversationTranscriber {
                 let result: ConversationWhisperResult = try await ConversationRetry.run {
                 let reservation = try await ledger.reserve(model: "whisper-large-v3", amount: max(10, (cut - offset + 15999) / 16000), unit: .audio)
                 let client = GroqClient(apiKey: apiKey, transport: transport, baseURL: baseURL)
+                let firstStarted = Date()
                 let response = await client.transcribeConversation(audio: encoded, language: nil, vocabulary: vocabulary)
                 switch response {
                 case .success(var result):
                     result.language = GroqModels.languageCode(result.language)
                     if LanguageGuard.needsCheck(expected: expected, detected: result.language, userLanguages: userLanguages, spokenSeconds: spoken) {
-                        let checkReservation = try? await ledger.reserve(model: "whisper-large-v3", amount: max(10, (cut - offset + 15999) / 16000), unit: .audio)
-                        if let checkReservation {
-                            let check = await client.transcribeConversation(audio: encoded, language: expected, vocabulary: vocabulary)
-                            await ledger.settle(checkReservation, actual: max(10, (cut - offset + 15999) / 16000))
-                            if case .success(let second) = check,
-                               LanguageGuard.choose(detectedText: Self.rawText(result),
-                                                    expectedText: Self.rawText(second),
-                                                    detectedConfidence: Self.confidence(result), expectedConfidence: Self.confidence(second)) == .expected {
-                                result = second; result.language = expected
-                            }
+                        let firstSeconds = Date().timeIntervalSince(firstStarted)
+                        await ledger.settle(reservation, actual: max(10, (cut - offset + 15999) / 16000))
+                        let amount = max(10, (cut - offset + 15999) / 16000)
+                        let ledger = ledger
+                        let check = await LanguageGuard.boundedCheck(firstSeconds: firstSeconds) {
+                            do {
+                                return try await ConversationRetry.run {
+                                    let ticket = try await ledger.reserve(model: "whisper-large-v3", amount: amount, unit: .audio)
+                                    let response = await client.transcribeConversation(audio: encoded, language: expected, vocabulary: vocabulary)
+                                    switch response {
+                                    case .success(let second):
+                                        await ledger.settle(ticket, actual: amount)
+                                        return Result<ConversationWhisperResult, GroqFailure>.success(second)
+                                    case .failure(let failure):
+                                        await ledger.settle(ticket, actual: 0)
+                                        throw failure
+                                    }
+                                }
+                            } catch let failure as GroqFailure { return .failure(failure) }
+                            catch is CancellationError { return .failure(.cancelled) }
+                            catch { return .failure(.invalidResponse) }
+                        }
+                        if Task.isCancelled { throw CancellationError() }
+                        if case .failure(.cancelled) = check { throw CancellationError() }
+                        if case .success(let second) = check,
+                           LanguageGuard.choose(detectedText: Self.rawText(result), expectedText: Self.rawText(second),
+                                                detectedConfidence: Self.confidence(result), expectedConfidence: Self.confidence(second)) == .expected {
+                            result = second; result.language = expected
                         }
                     }
+
                     let duration = Double(cut - offset) / 16000
                     guard result.words.allSatisfy({ $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end >= $0.start }) else { throw GroqFailure.invalidResponse }
                     result.words = result.words.map { .init(word: $0.word, start: min(duration, $0.start), end: min(duration, $0.end)) }
@@ -177,7 +197,7 @@ public actor ConversationTranscriber {
                     await ledger.settle(reservation, actual: max(10, Int(ceil(Double(cut - offset) / 16000))))
                     return result
                 case .failure(let failure):
-                    if case .http(let status, _, _) = failure, [401,403,404,429].contains(status) { await ledger.settle(reservation, actual: 0) }
+                    await ledger.settle(reservation, actual: 0)
                     throw failure
                 }
                 }
@@ -191,8 +211,8 @@ public actor ConversationTranscriber {
             }
             words = Self.join(words, incoming)
             for var segment in piece.result.segments { segment.start += shift; segment.end += shift; segments.append(segment) }
-            previousLanguage = GroqModels.languageCode(piece.result.language)
-            if let language = previousLanguage {
+            if !piece.result.words.isEmpty, let language = GroqModels.languageCode(piece.result.language) {
+                previousLanguage = language
                 if !languages.contains(language) { languages.append(language) }
                 let speech = piece.spokenSeconds ?? piece.result.segments.reduce(0) { $0 + max(0, $1.end - $1.start) }
                 languageSeconds[language, default: 0] += speech

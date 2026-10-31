@@ -304,7 +304,7 @@ package struct GroqClient: Sendable {
                             audioSeconds: Double? = nil,
                             bytesSent: (@Sendable (Int) -> Void)? = nil) async -> Result<Transcription, GroqFailure> {
         var fields: [(String, String)] = [("model", model), ("response_format", "verbose_json"), ("temperature", "0")]
-        if let language, !language.trimmed.isEmpty { fields.append(("language", language.trimmed)) }
+        if let language, !language.trimmed.isEmpty { fields.append(("language", LanguageGuard.code(language.trimmed))) }
         if let prompt, !prompt.isEmpty { fields.append(("prompt", prompt)) }
         let boundary = "paply-\(UUID().uuidString)"
         var request = request("audio/transcriptions", method: "POST")

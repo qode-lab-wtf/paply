@@ -899,7 +899,7 @@ struct ProcessingTests {
         settings.chunkedUpload = true // wird für den Dateiweg abgeschaltet
         let transcriber = FileTranscriber(transport: server.transport, baseURL: server.baseURL, catalog: ModelCatalog())
         let result = await transcriber.transcribe(audioURL: url, apiKey: "test-placeholder", settings: settings)
-        #expect(result == .success(text: "die tomaten im garten gießen", languages: ["de"], audioSeconds: 5, model: "whisper-large-v3"))
+        #expect(result == .success(text: "die tomaten im garten gießen", languages: ["de"], audioSeconds: 5, model: "whisper-large-v3", requestedAudioSeconds: 5))
         #expect(server.requests("/audio/transcriptions").count == 1)
         #expect(server.requests("/chat/completions").isEmpty) // nie polieren
     }

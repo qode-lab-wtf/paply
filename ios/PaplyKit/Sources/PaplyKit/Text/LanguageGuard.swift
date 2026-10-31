@@ -1,7 +1,19 @@
 import Foundation
 
 /// Reine Sprachentscheidung; jede erste Anfrage erkennt ohne Sprachvorgabe.
-enum LanguageGuard {
+public enum LanguageGuard {
+    public static func code(_ identifier: String) -> String {
+        let base = CodeSwitchPrimer.baseCode(identifier)
+        return ["nb": "no", "fil": "tl", "iw": "he", "in": "id", "ji": "yi", "jw": "jv"][base] ?? base
+    }
+
+    static func checkTimeout(firstSeconds: Double) -> Double { min(60, 2 * firstSeconds + 5) }
+
+    static func boundedCheck<T: Sendable>(firstSeconds: Double, timeout: Duration? = nil, operation: @escaping @Sendable () async -> T) async -> T? {
+        let task = Task { await operation() }
+        defer { task.cancel() }
+        return await awaitResult(task, timeout: timeout ?? .seconds(checkTimeout(firstSeconds: firstSeconds)))
+    }
     static let shortSpeechSeconds = 5.0
     static let checkGap = 0.15
 
@@ -9,27 +21,27 @@ enum LanguageGuard {
     /// ist; sonst die erste iPhone-Sprache, wenn sie darunter ist (nicht die erste Tastatur);
     /// sonst die erste Nutzersprache.
     static func primary(chosen: String?, userLanguages: [String], device: String?) -> String? {
-        let codes = userLanguages.map(CodeSwitchPrimer.baseCode).filter { !$0.isEmpty }
+        let codes = userLanguages.map(code).filter { !$0.isEmpty }
         for candidate in [chosen, device] {
-            if let code = candidate.map(CodeSwitchPrimer.baseCode), codes.contains(code) { return code }
+            if let code = candidate.map(code), codes.contains(code) { return code }
         }
         return codes.first
     }
 
-    static func primary(_ settings: PaplySettings) -> String? {
+    public static func primary(_ settings: PaplySettings) -> String? {
         primary(chosen: settings.primaryLanguage, userLanguages: CodeSwitchPrimer.userLanguages(settings),
                 device: Locale.preferredLanguages.first)
     }
 
     static func expected(previous: String?, primary: String?) -> String? {
-        [previous, primary].compactMap { $0.map(CodeSwitchPrimer.baseCode) }.first { !$0.isEmpty }
+        [previous, primary].compactMap { $0.map(code) }.first { !$0.isEmpty }
     }
 
     static func needsCheck(expected: String?, detected: String?, userLanguages: [String], spokenSeconds: Double) -> Bool {
-        guard let expected = expected.map(CodeSwitchPrimer.baseCode), !expected.isEmpty,
-              let detected = detected.map(CodeSwitchPrimer.baseCode), !detected.isEmpty,
+        guard let expected = expected.map(code), !expected.isEmpty,
+              let detected = detected.map(code), !detected.isEmpty,
               expected != detected else { return false }
-        return spokenSeconds <= shortSpeechSeconds || !userLanguages.map(CodeSwitchPrimer.baseCode).contains(detected)
+        return spokenSeconds <= shortSpeechSeconds || !userLanguages.map(code).contains(detected)
     }
 
     enum Choice { case detected, expected }

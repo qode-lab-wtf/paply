@@ -206,7 +206,14 @@ public actor DictationPipeline {
             Task.detached(priority: .utility) { _ = await catalog.models(client) }
         }
         let index = chunks.count
-        let previous = chunks.last?.task
+        let priorTasks = chunks.map(\.task)
+        let previous: Task<ChunkResult, Never>? = priorTasks.count <= 1 ? priorTasks.last : Task.detached(priority: .userInitiated) {
+            for task in priorTasks.reversed() {
+                guard let result = await awaitResult(task) else { return ChunkResult(failure: .cancelled) }
+                if result.succeeded && !result.text.isEmpty { return result }
+            }
+            return ChunkResult()
+        }
         let context = makeContext()
         let vad = vad
         let task = Task.detached(priority: .userInitiated) { [weak self] () -> ChunkResult in
@@ -238,16 +245,19 @@ public actor DictationPipeline {
         let format: PipelineOptions.UploadFormat
         let primer: String?
         let bytes: Counter
+        let requestedSamples: Counter
         let uploads: Counter
     }
 
+    private let requestedSamples = Counter()
+
     private func makeContext() -> Context {
         Context(client: client, settings: settings, format: options.uploadFormat, primer: primer,
-                bytes: bytes, uploads: uploads)
+                bytes: bytes, requestedSamples: requestedSamples, uploads: uploads)
     }
 
     /// `previous`: Ergebnis des Vorstücks (Ende als Prompt-Kontext, Sprache für kurze Stücke).
-    private static func transcribe(_ audio: ArraySlice<Int16>, startSample: Int, vad: VoiceActivityDetector,
+    static func transcribe(_ audio: ArraySlice<Int16>, startSample: Int, vad: VoiceActivityDetector,
                                    previous: ChunkResult?, context: Context, previousTask: Task<ChunkResult, Never>? = nil) async -> ChunkResult {
         let settings = context.settings
         let previousText = previous?.text
@@ -255,11 +265,11 @@ public actor DictationPipeline {
         let encoded = AudioEncoder.encode(audio, preferFLAC: context.format == .flac)
         let seconds = Double(audio.count) / AudioEncoder.sampleRate
         let bytes = context.bytes
-        func send(_ language: String?) async -> Result<Transcription, GroqFailure> {
+        @Sendable func send(_ language: String?) async -> Result<Transcription, GroqFailure> {
             context.uploads.add(1)
             return await context.client.transcribe(audio: encoded, model: settings.transcriptionModel,
                                                    language: language, prompt: prompt, audioSeconds: seconds,
-                                                   bytesSent: { bytes.add($0) })
+                                                   bytesSent: { bytes.add($0); context.requestedSamples.add(audio.count) })
         }
         // Erst erkennen, bei Bedarf mit der erwarteten Sprache gegenprüfen.
         let users = CodeSwitchPrimer.userLanguages(settings)
@@ -272,18 +282,28 @@ public actor DictationPipeline {
         let spoken = measured.isEmpty ? seconds : vad.activity(in: measured).speechMs / 1000
         var source = LanguageSource.auto
         var chosenLanguage: String?
+        let firstStarted = ContinuousClock.now
         var result = await send(nil)
+        let firstDuration = firstStarted.duration(to: .now)
+        let firstSeconds = Double(firstDuration.components.seconds) + Double(firstDuration.components.attoseconds) / 1e18
+        guard case .success(let first) = result else {
+            if case .failure(let failure) = result { return ChunkResult(failure: failure) }
+            return ChunkResult(failure: .invalidResponse)
+        }
+        let canCheck = spoken <= LanguageGuard.shortSpeechSeconds || !users.map(LanguageGuard.code).contains(LanguageGuard.code(GroqModels.languageCode(first.language) ?? ""))
+        let checkDeadline = ContinuousClock.now.advanced(by: .seconds(LanguageGuard.checkTimeout(firstSeconds: firstSeconds)))
         // Erst für die Gegenprobe muss die tatsächlich gewählte Vorstücksprache feststehen.
         let resolvedPrevious: ChunkResult?
-        if let previousTask { resolvedPrevious = await awaitResult(previousTask) }
+        if canCheck, let previousTask { resolvedPrevious = await awaitResult(previousTask, timeout: ContinuousClock.now.duration(to: checkDeadline)) }
         else { resolvedPrevious = previous }
         if Task.isCancelled { return ChunkResult(failure: .cancelled) }
-        let previousLanguage = resolvedPrevious.flatMap { $0.succeeded ? $0.language : nil }
+        let previousLanguage = resolvedPrevious.flatMap { $0.succeeded && !$0.text.isEmpty ? $0.language : nil }
         let expected = LanguageGuard.expected(previous: previousLanguage, primary: primary)
-        if case .success(let first) = result, !Task.isCancelled,
+        if case .success(let first) = result, !Task.isCancelled, ContinuousClock.now < checkDeadline,
            LanguageGuard.needsCheck(expected: expected, detected: GroqModels.languageCode(first.language),
                                     userLanguages: users, spokenSeconds: spoken) {
-            switch await send(expected) {
+            let check = await LanguageGuard.boundedCheck(firstSeconds: firstSeconds, timeout: ContinuousClock.now.duration(to: checkDeadline)) { await send(expected) }
+            switch check ?? .failure(.cancelled) {
             case .success(let second):
                 if LanguageGuard.choose(detectedText: first.text ?? "", expectedText: second.text,
                                         detectedConfidence: LanguageGuard.confidence(first.segments),
@@ -337,12 +357,14 @@ public actor DictationPipeline {
         // Bytes/Anfragen dieses Laufs; der erste Lauf zählt die Stücke der Aufnahme mit.
         let bytesBefore = plan == nil ? 0 : bytes.value
         let uploadsBefore = plan == nil ? 0 : uploads.value
+        let requestedBefore = plan == nil ? 0 : requestedSamples.value
         var timings = DictationTimings(audioSeconds: Double(samples.count) / AudioEncoder.sampleRate)
         func done(_ outcome: DictationOutcome, failed: Bool = false) -> DictationOutcome {
             var outcome = outcome
             timings.totalMs = ms()
             timings.uploadedBytes = bytes.value - bytesBefore
             timings.chunkCount = uploads.value - uploadsBefore
+            timings.requestedAudioSeconds = Double(requestedSamples.value - requestedBefore) / AudioEncoder.sampleRate
             outcome.timings = timings
             outcome.languageSources = (plan ?? []).compactMap { $0.result?.languageSource?.rawValue }
             if !cancelled {
@@ -378,7 +400,7 @@ public actor DictationPipeline {
         var failure: GroqFailure?
         for index in (plan ?? []).indices where plan?[index].result?.succeeded != true {
             guard let piece = plan?[index] else { break }
-            let previous = plan?[..<index].last(where: { $0.result?.succeeded == true })?.result
+            let previous = plan?[..<index].last(where: { $0.result?.succeeded == true && $0.result?.text.isEmpty == false })?.result
             let result = await Self.transcribe(samples[piece.start..<piece.end], startSample: piece.start, vad: vad,
                                                previous: previous, context: context)
             if cancelled || Task.isCancelled { return DictationOutcome() }

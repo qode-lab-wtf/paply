@@ -31,7 +31,7 @@ enum GroqModels {
     /// Whisper liefert in `verbose_json` den Sprachnamen („German“); vereinheitlicht auf ISO 639-1.
     static func languageCode(_ value: String?) -> String? {
         guard let raw = value?.trimmed.lowercased(), !raw.isEmpty else { return nil }
-        if raw.count <= 3, raw.allSatisfy(\.isLetter) { return raw }
+        if raw.count <= 3, raw.allSatisfy(\.isLetter) { return LanguageGuard.code(raw) }
         return whisperLanguages[raw] ?? raw
     }
 

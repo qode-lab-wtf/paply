@@ -275,8 +275,8 @@ public actor ThoughtProcessor {
             case .noSpeech:
                 await markEmpty(id)
                 return nil
-            case let .success(text, languages, seconds, model):
-                await recordLiveAudio(seconds: seconds, model: model)
+            case let .success(text, languages, seconds, model, requested):
+                await recordLiveAudio(seconds: requested ?? seconds, model: model)
                 return await persistSource(id, text: text, languages: languages, seconds: seconds, model: model)
             case .failure:
                 break // Dateiweg
@@ -321,8 +321,8 @@ public actor ThoughtProcessor {
         let result = await transcriber.transcribe(audioURL: audioURL, apiKey: key, settings: settings)
         traceTranscription(id, result, started: started)
         switch result {
-        case let .success(text, languages, audioSeconds, model):
-            await ledger.settle(reservation, actual: Int(audioSeconds.rounded(.up)))
+        case let .success(text, languages, audioSeconds, model, requested):
+            await ledger.settle(reservation, actual: Int((requested ?? audioSeconds).rounded(.up)))
             return await persistSource(id, text: text, languages: languages, seconds: audioSeconds, model: model)
         case .noSpeech:
             await ledger.settle(reservation, actual: 0)
@@ -792,11 +792,12 @@ public actor ThoughtProcessor {
         var fields: ThoughtTrace.Fields = ["id": .s(ThoughtTrace.short(id)), "live": .b(started == nil)]
         if let started { fields["ms"] = ThoughtTrace.milliseconds(since: started) }
         switch result {
-        case let .success(text, languages, audioSeconds, model):
+        case let .success(text, languages, audioSeconds, model, requested):
             fields["result"] = .s("ok")
             fields["textLen"] = .i(text.count)
             fields["langs"] = .s(languages.joined(separator: ","))
             fields["audioS"] = .ms(audioSeconds)
+            fields["requestedAudioS"] = .ms(requested ?? audioSeconds)
             fields["model"] = .s(model)
         case .noSpeech:
             fields["result"] = .s("noSpeech")
