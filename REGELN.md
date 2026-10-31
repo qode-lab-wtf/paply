@@ -166,4 +166,3 @@ stimmt. **In Arbeit** wird gerade behoben, **Bewusst** bleibt so, **Nachzureiche
 | A10 | Android | Gedanken verknüpfen nur über Wörter, das iPhone zusätzlich über Apples Sprachmodell | Etwas weniger Treffer. Android hat kein eingebautes Gegenstück | Bewusst |
 | A11 | Mac, Windows | Eigene Agenten haben einen eigenen KI-Text, können übersetzen und umgehen das Sicherheitsnetz | Regeln 1 und 2 gelten dort nicht | Bewusst, der Nutzer stellt das selbst ein |
 | A12 | Mac, Windows | Gedanken dürfen 30 statt 10 Minuten lang sein | Regel 7 | Bewusst, Grenzen werden nicht gekürzt |
-| A13 | iPhone | Gespräche nutzen die Regel 1 noch nicht, die Zusammenfassung ist fest deutsch | Hauptsprache wird nur bei Stücken unter 30 Sekunden mitgeschickt | In Arbeit |

@@ -115,16 +115,17 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         #expect(outcome.raw == "Erstes Stück endet hier. Zweites Stück folgt. Und der Rest.")
         #expect(outcome.text == outcome.raw)
         #expect(outcome.languages == ["de", "en"])
-        #expect(outcome.timings.chunkCount == 3)
+        #expect(outcome.timings.chunkCount == 4)
         let uploads = server.requests("/audio/transcriptions")
-        #expect(uploads.count == 3)
+        #expect(uploads.count == 4)
         // Kontext: das Ende des Vorstücks steht am Ende des Prompts.
         #expect(uploads[1].field("prompt")?.hasSuffix("Erstes Stück endet hier.") == true)
         #expect(uploads[2].field("prompt")?.hasSuffix("Zweites Stück folgt.") == true)
         // Sprachwache: lange Stücke erkennt Whisper selbst, der kurze Rest folgt dem (englischen) Vorstück.
         #expect(uploads[0].field("language") == nil && uploads[1].field("language") == nil)
-        #expect(uploads[2].field("language") == "en")
-        #expect(outcome.languageSources == ["auto", "auto", "short"])
+        #expect(uploads[2].field("language") == nil)
+        #expect(uploads[3].field("language") == "en")
+        #expect(outcome.languageSources == ["auto", "auto", "check-expected"])
     }
 
     @Test func silentTailIsNotUploaded() async {

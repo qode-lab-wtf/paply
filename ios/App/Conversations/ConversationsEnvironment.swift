@@ -22,7 +22,7 @@ enum ConversationsEnvironment {
             vocabulary: {
                 let own = await MainActor.run { AppSettings.shared.effectivePaply.vocabulary }
                 return [own]
-            })
+            }, userLanguages: { await MainActor.run { AppSettings.shared.effectivePaply.spokenLanguages } })
     }
     // Anschlussstelle für die Bereitschaft des echten Motors.
     static var voiceLearningAllowed: Bool { AppSettings.shared.betaConversations }

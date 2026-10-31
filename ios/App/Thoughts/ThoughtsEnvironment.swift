@@ -18,7 +18,6 @@ import UIKit
 enum ThoughtsEnvironment {
     static let backgroundTaskID = "com.paply.ios.thoughts"
     /// Entwicklerbereich (ThoughtsDevKeys in der Oberfläche)
-    nonisolated static let modelKey = "paply.thoughts.model"
     nonisolated static let dailyTokensKey = "paply.thoughts.dailyTokens"
 
     static let root: URL = {

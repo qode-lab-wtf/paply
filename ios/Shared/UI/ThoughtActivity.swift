@@ -16,7 +16,7 @@ struct ThoughtActivityAttributes: ActivityAttributes {
         /// `wifi.slash` / `hourglass` / `key`
         var waitSymbol: String?
         var note: String?
-        /// „Noch 5 Min.“ (Sicherheitsgrenze 30 Min.)
+        /// „Noch 5 Min.“ (Sicherheitsgrenze 10 Min.)
         var warnLimit: Bool
     }
 

@@ -1,19 +1,9 @@
 import Foundation
 
-/// Sprachwache je Stück (nur ohne feste Sprache in den Einstellungen).
-///
-/// Gerätefund: Whisper legt die Sprache pro Anfrage selbst fest und liegt bei kurzen
-/// Stücken oft daneben („Hi, wie geht's“ → „en“, sogar „ru“). Bei falscher Sprache
-/// übersetzt Whisper die Rede. Deshalb, ohne Raterei:
-/// - Kurzes Stück (gesprochen ≤ `shortSpeechSeconds`, laut VAD – nicht die Audiolänge:
-///   „Hi, wie geht's“ plus Pause waren 8,3 s Audio): Sprache direkt mitschicken – die des
-///   Vorstücks derselben Aufnahme (so bleibt der kurze Rest eines englischen Diktats
-///   englisch), sonst die Hauptsprache. Eine Anfrage.
-/// - Längeres Stück: Whisper erkennt selbst. Ist die erkannte Sprache keine Nutzersprache,
-///   einmal mit der Hauptsprache neu transkribieren und dieses Ergebnis nehmen.
+/// Reine Sprachentscheidung; jede erste Anfrage erkennt ohne Sprachvorgabe.
 enum LanguageGuard {
-    /// Bis zu dieser gesprochenen Dauer wird die Sprache nicht erkannt, sondern mitgeschickt.
     static let shortSpeechSeconds = 5.0
+    static let checkGap = 0.15
 
     /// Wirksame Hauptsprache (Basiscode): die gewählte, solange sie unter den Nutzersprachen
     /// ist; sonst die erste iPhone-Sprache, wenn sie darunter ist (nicht die erste Tastatur);
@@ -31,31 +21,40 @@ enum LanguageGuard {
                 device: Locale.preferredLanguages.first)
     }
 
-    /// Erste Anfrage: mitgeschickte Sprache (nil = Whisper erkennt selbst) und ihre Herkunft.
-    struct Request: Equatable {
-        var language: String?
-        var source: LanguageSource
+    static func expected(previous: String?, primary: String?) -> String? {
+        [previous, primary].compactMap { $0.map(CodeSwitchPrimer.baseCode) }.first { !$0.isEmpty }
     }
 
-    /// `spokenSeconds`: gesprochene Dauer des Stücks (VAD); ohne Messwert die Audiolänge.
-    static func firstRequest(fixed: String?, primary: String?, previous: String?, userLanguages: [String],
-                             spokenSeconds: Double) -> Request {
-        if let fixed = fixed?.trimmed, !fixed.isEmpty { return Request(language: fixed, source: .fixed) }
-        guard spokenSeconds <= shortSpeechSeconds else { return Request(language: nil, source: .auto) }
-        let codes = userLanguages.map(CodeSwitchPrimer.baseCode)
-        if let previous = previous.map(CodeSwitchPrimer.baseCode), codes.contains(previous) {
-            return Request(language: previous, source: .short)
+    static func needsCheck(expected: String?, detected: String?, userLanguages: [String], spokenSeconds: Double) -> Bool {
+        guard let expected = expected.map(CodeSwitchPrimer.baseCode), !expected.isEmpty,
+              let detected = detected.map(CodeSwitchPrimer.baseCode), !detected.isEmpty,
+              expected != detected else { return false }
+        return spokenSeconds <= shortSpeechSeconds || !userLanguages.map(CodeSwitchPrimer.baseCode).contains(detected)
+    }
+
+    enum Choice { case detected, expected }
+    static func choose(detectedText: String, expectedText: String?, detectedConfidence: Double?, expectedConfidence: Double?) -> Choice {
+        guard let expectedText else { return .detected }
+        if normalize(detectedText) == normalize(expectedText) { return .expected }
+        guard let detectedConfidence, let expectedConfidence else { return .detected }
+        return detectedConfidence - expectedConfidence >= checkGap ? .detected : .expected
+    }
+
+    static func normalize(_ text: String) -> String {
+        text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    /// Vor allen Text-/Stillefiltern auf der rohen Antwort messen.
+    static func confidence(_ segments: [WhisperSegment]?) -> Double? {
+        guard let segments, !segments.isEmpty else { return nil }
+        var sum = 0.0, weight = 0.0
+        for segment in segments {
+            guard let probability = segment.avgLogprob, probability.isFinite else { return nil }
+            let duration = max(0.01, (segment.end ?? 0) - (segment.start ?? 0))
+            guard duration.isFinite else { return nil }
+            sum += probability * duration; weight += duration
         }
-        if let primary { return Request(language: primary, source: .short) }
-        return Request(language: nil, source: .auto)
-    }
-
-    /// Nach eigener Erkennung: die Hauptsprache, wenn die erkannte Sprache keine
-    /// Nutzersprache ist (dann einmal neu transkribieren); sonst nil.
-    static func redoLanguage(detected: String?, primary: String?, userLanguages: [String]) -> String? {
-        guard let detected = detected.map(CodeSwitchPrimer.baseCode), !detected.isEmpty,
-              let primary, detected != primary,
-              !userLanguages.map(CodeSwitchPrimer.baseCode).contains(detected) else { return nil }
-        return primary
+        return sum / weight
     }
 }

@@ -20,6 +20,7 @@ const WERTE = {
     [`${ANDROID}/LanguageGuard.kt`, /shortSpeechSeconds = ([\d.]+)/],
   ],
   'sprache.abstand': [
+    [`${IOS}/Text/LanguageGuard.swift`, /checkGap = ([\d.]+)/],
   ],
   'diktat.whisper_modell': [
     [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],
