@@ -30,7 +30,7 @@ function harness({ platform = 'win32', persisted = {}, polishFactory, logPath = 
   };
   const electron = {
     protocol: { registerSchemesAsPrivileged: vi.fn() },
-    app: { whenReady: () => ({ then: cb => { ready = cb; } }), on: vi.fn(), getPath: () => '/test-only', requestSingleInstanceLock: () => true, quit: vi.fn() },
+    app: { getPreferredSystemLanguages: () => ['de-DE'], whenReady: () => ({ then: cb => { ready = cb; } }), on: vi.fn(), getPath: () => '/test-only', requestSingleInstanceLock: () => true, quit: vi.fn() },
     systemPreferences: { isTrustedAccessibilityClient: () => true },
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler), on: vi.fn() },
     globalShortcut: { register: vi.fn(() => true), unregister: vi.fn() },
@@ -229,4 +229,14 @@ describe('Main: Diagnose-Protokoll', () => {
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
+});
+
+it('neue Nutzer polieren standardmäßig; gespeichertes Aus bleibt und Entwicklerwerte sind dauerhaft', () => {
+ const fresh = harness(); fresh.ready();
+ expect(fresh.handlers.get('settings:get')().enablePolish).toBe(true);
+ expect(fresh.handlers.get('settings:get')().whisperModel).toBe('whisper-large-v3');
+ const saved = harness({persisted:{enablePolish:false,developerMode:true,whisperModel:'whisper-large-v3-turbo'}}); saved.ready();
+ const settings=saved.handlers.get('settings:get')();
+ expect(settings.enablePolish).toBe(false); expect(settings.developerMode).toBe(true);
+ expect(settings.whisperModel).toBe('whisper-large-v3-turbo');
 });

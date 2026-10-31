@@ -98,8 +98,7 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     const pastedFirst = deferred();
     c.autopasteText.mockImplementationOnce(() => pastedFirst.promise);
     firstResponse.resolve({ ok: true, text: async () => JSON.stringify({ text: 'Erstes Diktat' }) });
-    await tick();
-    expect(c.autopasteText).toHaveBeenCalledWith('Erstes Diktat', 'First target');
+    await vi.waitFor(() => expect(c.autopasteText).toHaveBeenCalledWith('Erstes Diktat', 'First target'));
     expect(c.getAudioBackup()).toEqual(Buffer.from('second'));
     win.webContents.send.mockClear();
     pastedFirst.resolve(true); await firstWork;

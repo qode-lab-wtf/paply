@@ -41,7 +41,7 @@ function createNotes(deps) {
     const url = new URL(process.env.PAPLY_NOTES_TEST_ENDPOINT);
     if (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) endpoint = url.href.replace(/\/$/, '');
   }
-  const groq = createGroq({ getKey: () => store.get('groqApiKey'), ledger, ...(endpoint ? { endpoint } : {}) });
+  const groq = createGroq({ getTranscriptionSettings: () => ({ language: store.get('language'), whisperModel: store.get('whisperModel'), systemLanguages: app.getPreferredSystemLanguages() }), getKey: () => store.get('groqApiKey'), ledger, ...(endpoint ? { endpoint } : {}) });
   function secureWindow(win) {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', e => e.preventDefault());

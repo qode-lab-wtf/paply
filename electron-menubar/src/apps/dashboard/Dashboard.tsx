@@ -1,3 +1,5 @@
+import { LanguageSelect } from '@/components/LanguageSelect';
+import { DeveloperSettings } from '@/components/DeveloperSettings';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PaplyMark } from '@/components/brand/PaplyMark';
 import {
@@ -258,9 +260,7 @@ export function Dashboard() {
           ))}
         </nav>
 
-        <div className="p-4 border-t text-xs text-muted-foreground text-center">
-          paply v{platform?.version ?? '1.12.5'}
-        </div>
+        <DeveloperSettings />
       </aside>
 
       {/* Main Content */}
@@ -482,23 +482,10 @@ function TranscriptionView({
               onCheckedChange={(checked) => onSettingChange('copyToClipboard', checked)}
             />
           </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="polish">Polish aktiviert</Label>
-            <Switch
-              id="polish"
-              checked={settings?.enablePolish ?? true}
-              onCheckedChange={(checked) => onSettingChange('enablePolish', checked)}
-            />
-          </div>
+
           <div className="pt-2 border-t">
-            <Label className="text-xs text-muted-foreground mb-2 block">Sprache</Label>
-            <Select
-              value={settings?.language || 'de'}
-              onChange={(e) => onSettingChange('language', e.target.value)}
-            >
-              <option value="de">Deutsch</option>
-              <option value="en">English</option>
-            </Select>
+            <Label className="text-xs text-muted-foreground mb-2 block">Hauptsprache</Label>
+            <LanguageSelect value={settings?.language || 'de'} onChange={language => onSettingChange('language', language)} />
           </div>
         </CardContent>
       </Card>
@@ -657,7 +644,7 @@ function StatsView({ stats, history, settings }: { stats: Stats | null; history:
   // Calculate polish stats from history
   const polishedCount = history.filter(h => h.polishUsed).length;
   const polishPercentage = history.length > 0 ? Math.round((polishedCount / history.length) * 100) : 0;
-  
+
   // Calculate filler words removed
   const totalFillers = history.reduce((sum, h) => sum + (h.delta?.fillersRemoved || 0), 0);
   const avgFillers = history.length > 0 ? Math.round(totalFillers / history.length) : 0;
@@ -849,7 +836,7 @@ function generateExamplePrompt(data: Partial<CustomAgent> & { description?: stri
   const desc = (data.description || '').toLowerCase();
   const combined = name + ' ' + desc;
   const { tone, format, length, creativity, fillerWords, isPromptGenerator, outputLang } = data;
-  
+
   // Detect agent type from name/description - EXPANDED categories
   const categories = {
     maerchen: /märchen|erzähler|story|geschicht|kinder|fantasy/.test(combined),
@@ -871,10 +858,10 @@ function generateExamplePrompt(data: Partial<CustomAgent> & { description?: stri
     creative: /kreativ|idee|brainstorm|innovation|konzept/.test(combined),
     news: /news|artikel|bericht|journal|presse|nachrichten/.test(combined),
   };
-  
+
   // Find matched category or use 'generic'
   const matchedCategory = Object.entries(categories).find(([_, matches]) => matches)?.[0] || 'generic';
-  
+
   // Raw inputs with filler words for each category
   const rawInputs: Record<string, string> = {
     maerchen: 'also ähm ein kleines mädchen findet quasi so einen sprechenden frosch im garten und so',
@@ -896,7 +883,7 @@ function generateExamplePrompt(data: Partial<CustomAgent> & { description?: stri
     news: 'ähm also gestern gab es quasi so einen vorfall im rathaus halt da wurde was beschlossen',
     generic: 'also ähm ich möchte das quasi so umformulieren dass es halt besser klingt oder so',
   };
-  
+
   // Generate outputs based on category AND settings
   const generateOutput = (): string => {
     const c = creativity || 20;
@@ -1029,32 +1016,32 @@ function generateExamplePrompt(data: Partial<CustomAgent> & { description?: stri
       default:
         // Use the description to make it contextual
         const contextHint = desc ? `im Bereich "${data.description?.slice(0, 30)}..."` : '';
-        
+
         if (isBullets) {
           return isShort
             ? `• Kernaussage: [Hauptpunkt]\n• Fazit: [Schluss]`
             : `• Kernpunkt 1: [Hauptaussage ${contextHint}]\n• Kernpunkt 2: [Relevante Details]\n• Kernpunkt 3: [Zusammenfassung]\n• Nächste Schritte: [Empfehlung]`;
         }
-        
+
         if (isFormal) {
           return isShort
             ? `Die Kernaussage ${contextHint} lautet: [Präzise Formulierung].`
             : `Zusammenfassend lässt sich ${contextHint} Folgendes feststellen:\n\nDie Hauptaussage betrifft [Thema]. Die relevanten Aspekte sind [Details]. Daraus ergibt sich [Schlussfolgerung].`;
         }
-        
+
         if (isCasual) {
           return isShort
             ? `Kurz gesagt ${contextHint}: [Kernpunkt]. Easy!`
             : `Hey! ${contextHint ? `Wenn's um ${contextHint} geht: ` : ''}Das ist eigentlich ganz simpel. Im Grunde geht's um [Hauptpunkt]. Der wichtigste Takeaway: [Fazit].`;
         }
-        
+
         // Neutral default
         if (isCreative) {
           return isShort
             ? `${contextHint ? `[${data.description?.slice(0, 20)}...]: ` : ''}[Kreativ umformulierter Inhalt mit Stil und Flair]`
             : `Der Text wurde ${contextHint} optimiert und ansprechend umformuliert:\n\n[Hier steht der verbesserte, flüssig lesbare Text mit klarer Struktur und ansprechendem Stil.]`;
         }
-        
+
         return isShort
           ? `[Präzise Kernaussage ${contextHint}]`
           : `${contextHint ? `Optimiert ${contextHint}:\n\n` : ''}[Hier steht der bereinigte, klar strukturierte Text. Füllwörter wurden entfernt, die Aussage präzisiert.]`;
@@ -1066,7 +1053,7 @@ function generateExamplePrompt(data: Partial<CustomAgent> & { description?: stri
 
   // Show filler word removal if enabled
   const fillerNote = fillerWords !== false ? `\n\n✓ Füllwörter entfernt: "also", "ähm", "quasi", "halt", "so"` : '';
-  
+
   // Show language conversion if set
   const langNote = outputLang && outputLang !== 'same' ? `\n✓ Übersetzt nach: ${outputLang === 'en' ? 'Englisch' : 'Deutsch'}` : '';
 
@@ -1185,7 +1172,7 @@ function AgentsView({
     const recording = isWizard ? wizardHotkeyRecording : isRecordingHotkey;
     if (!recording) return;
     e.preventDefault();
-    
+
     const hotkey = keyEventToAccelerator(e);
     if (hotkey) {
       if (isWizard) {
@@ -1320,7 +1307,7 @@ function AgentsView({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">Sprache</Label>
+                <Label className="text-xs text-muted-foreground mb-2 block">Hauptsprache</Label>
                 <Select
                   value={(currentConfigAgent as Profile).language || 'de'}
                   onChange={(e) => onUpdateProfile(selectedConfigAgent, { language: e.target.value })}
@@ -1840,7 +1827,7 @@ function SettingsView({
   const handleHotkeyRecord = (e: React.KeyboardEvent) => {
     if (!isRecording) return;
     e.preventDefault();
-    
+
     const shortcut = keyEventToAccelerator(e);
     if (shortcut) {
       setShortcutInput(shortcut);
@@ -1972,16 +1959,7 @@ function SettingsView({
           </div>
           <CustomVocabularySettings value={settings.customVocabulary || ''}
             onSave={value => onSettingChange('customVocabulary', value)} />
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Polish aktivieren</Label>
-              <p className="text-xs text-muted-foreground">Diktat behutsam korrigieren</p>
-            </div>
-            <Switch
-              checked={settings.enablePolish}
-              onCheckedChange={(checked) => onSettingChange('enablePolish', checked)}
-            />
-          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <Label>Beep-Sound</Label>
@@ -2026,12 +2004,11 @@ function SettingsView({
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <Label>Sprache</Label>
-              <p className="text-xs text-muted-foreground">Transkriptions-Sprache</p>
+              <Label>Hauptsprache</Label>
+              <p className="text-xs text-muted-foreground">Erwartete Sprache; andere Sprachen bleiben erhalten</p>
             </div>
             <div className="flex gap-1">
-              <Button size="sm" variant={settings.language === 'de' ? 'default' : 'outline'} onClick={() => onSettingChange('language', 'de')}>DE</Button>
-              <Button size="sm" variant={settings.language === 'en' ? 'default' : 'outline'} onClick={() => onSettingChange('language', 'en')}>EN</Button>
+              <LanguageSelect value={settings.language} onChange={language => onSettingChange('language', language)} />
             </div>
           </div>
         </CardContent>

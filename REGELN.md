@@ -154,12 +154,8 @@ stimmt. **In Arbeit** wird gerade behoben, **Bewusst** bleibt so, **Nachzureiche
 
 | Nr. | App | Abweichung | Folge | Status |
 | --- | --- | --- | --- | --- |
-| A1 | Mac, Windows | Diktat und Gedanken schicken eine feste Sprache mit | Fremde Sprache kann übersetzt werden, Regel 1 gilt nicht | In Arbeit |
-| A2 | Mac, Windows | Diktat und Gedanken nutzen Whisper `turbo` statt `large-v3` | Schwächer bei Sprachwechseln | In Arbeit |
-| A3 | Mac, Windows | Stille-Liste hat 11 statt 62 Sätze, nur Deutsch und Englisch | „Merci.“ oder „Gracias.“ können bei Stille durchrutschen | In Arbeit |
 | A4 | iPhone, Android | Kurze Stücke gehen mit fester Sprache raus, fremde Sprachen werden neu in der Hauptsprache geschrieben | Hier entsteht die Übersetzung, die Allan aufgefallen ist | In Arbeit |
 | A5 | Mac, Windows | Gedanken nutzen eigene deutsche KI-Regeln ohne Aufgaben und Fälligkeiten | Regel 5 gilt nicht. Auf Allans MacBook (26./27.10.): von 19 Gedanken 4 sauber eingeordnet, 10 nicht eindeutig, 4 wegen Limit nur gesichert, 1 leer | In Arbeit |
-| A6 | Mac, Windows | Polieren ist für neue Nutzer aus, der Schalter steht in den Einstellungen, es gibt keinen Entwicklerbereich | Regeln 2 und 11 gelten nicht | In Arbeit |
 | A7 | Mac, Windows | Gespräche und Gedanken behalten den Ton 7 Tage, Gespräche haben Nachhören | Regel 8 gilt nicht | In Arbeit |
 | A8 | Android | „Gespräche“ fehlt | Android hat zwei von drei Funktionen | Nachzureichen, sobald das iPhone den Gerätetest bestanden hat |
 | A9 | Mac, Windows | Gespräche laufen über Gemini, heißen „Sprecher N“ und „Gegenstelle“, ohne Besitzer-Erkennung und Aufgaben-Reiter | Regel 6 gilt hier nur für den Bericht | Nachzureichen |

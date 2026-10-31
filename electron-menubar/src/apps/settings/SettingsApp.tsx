@@ -1,3 +1,5 @@
+import { LanguageSelect } from '@/components/LanguageSelect';
+import { DeveloperSettings } from '@/components/DeveloperSettings';
 import { useEffect, useState } from 'react';
 import { Key, Keyboard, Volume2, Eye, EyeOff, Globe, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -111,6 +113,7 @@ export function SettingsApp() {
         <h1 className="text-lg font-semibold">Einstellungen</h1>
       </div>
 
+      <DeveloperSettings />
       <div className="mb-5 space-y-4">
         <Button variant="link" className="px-0" onClick={() => window.electronAPI.openOnboarding()}>Ersteinrichtung erneut zeigen</Button>
         <NotesSettings />
@@ -412,12 +415,7 @@ export function SettingsApp() {
                     {formatShortcut('CommandOrControl+Alt+Shift+R', !!platform?.isMac)}
                   </kbd>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Screen-Parser</span>
-                  <kbd className="px-2 py-1 rounded bg-muted text-xs font-mono">
-                    {platform?.isMac ? '⌘⇧S' : 'Ctrl+Shift+S'}
-                  </kbd>
-                </div>
+
               </div>
             </CardContent>
           </Card>
@@ -454,18 +452,7 @@ export function SettingsApp() {
                 />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Polish aktivieren</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Text mit Groq Llama optimieren
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.enablePolish}
-                  onCheckedChange={(checked) => handleSave('enablePolish', checked)}
-                />
-              </div>
+
 
               {settings.meetingEnabled && <div>
                 <Label>System-Audio (Anrufe)</Label>
@@ -537,24 +524,11 @@ export function SettingsApp() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Sprache</CardTitle>
+              <CardTitle className="text-base">Hauptsprache</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
-                <Button
-                  variant={settings.language === 'de' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => handleSave('language', 'de')}
-                >
-                  🇩🇪 Deutsch
-                </Button>
-                <Button
-                  variant={settings.language === 'en' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => handleSave('language', 'en')}
-                >
-                  🇬🇧 English
-                </Button>
+                <LanguageSelect value={settings.language} onChange={language => handleSave('language', language)} />
               </div>
             </CardContent>
           </Card>

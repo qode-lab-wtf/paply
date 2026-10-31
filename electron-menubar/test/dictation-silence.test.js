@@ -1,3 +1,5 @@
+import { WHISPER_MODEL, userLanguages, guardedTranscription } from '../dictation/language-guard.js';
+import { primer, buildPrompt, removeEchoes } from '../dictation/whisper-prompt.js';
 import { vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations } from '../dictation/polish-prompt.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
@@ -24,11 +26,12 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
   const values = { language: 'de', groqApiKey: 'test-placeholder', enablePolish: true, autopaste: true, ...settings };
   const window = { webContents: { send: vi.fn() }, hide: vi.fn(), showInactive: vi.fn() };
   const context = vm.createContext({
+    WHISPER_MODEL, userLanguages, guardedTranscription, primer, buildPrompt, removeEchoes,
     process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
     savePreviousApp: async () => null, positionRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date,
-    fs, path, app: { getPath: () => directory },
+    fs, path, app: { getPreferredSystemLanguages: () => ['de-DE'], getPath: () => directory },
     vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations,
     filterTranscription, shouldSkipTranscription, validateVoiceActivity, isSilentSegment, isBackupAtOrBefore, compareBackups,
     GROQ_API_URL: 'https://example.invalid/transcribe',
@@ -70,8 +73,8 @@ describe('Stille im echten Main-Diktat- und Retry-Weg', () => {
     expect(context.fetch).toHaveBeenCalledTimes(1);
     const body = context.fetch.mock.calls[0][1].body;
     expect(body.get('response_format')).toBe('verbose_json');
-    expect(body.get('model')).toBe('whisper-large-v3-turbo');
-    expect(body.get('language')).toBe('de');
+    expect(body.get('model')).toBe('whisper-large-v3');
+    expect(body.get('language')).toBe(null);
     expect(context.polishText).toHaveBeenCalledWith('Vielen Dank.', 'de', 'code', null, []);
     expect(context.addToHistory).toHaveBeenCalledWith(expect.objectContaining({ transcript: 'Vielen Dank.', polished: 'Vielen Dank.', language: 'de' }));
     expect(context.autopasteText).toHaveBeenCalledWith('Vielen Dank.', null);

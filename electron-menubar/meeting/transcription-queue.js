@@ -1,5 +1,7 @@
-// TranscriptionQueue — serielle Groq-Whisper-Verarbeitung mit Retry. CommonJS.
 'use strict';
+const { guardedTranscription, userLanguages } = require('../dictation/language-guard');
+const { primer, buildPrompt, removeEchoes } = require('../dictation/whisper-prompt');
+// TranscriptionQueue — serielle Groq-Whisper-Verarbeitung mit Retry. CommonJS.
 
 const EventEmitter = require('node:events');
 
@@ -34,10 +36,12 @@ class TranscriptionQueue extends EventEmitter {
    * Transkript-Kontext des Kanals als Whisper-`prompt` — gibt Groq Kontext über
    * Chunk-Grenzen hinweg, damit angeschnittene Wörter/Sätze korrekt verstanden werden.
    */
-  constructor({ apiKey, language, fetchImpl, getPrompt } = {}) {
+  constructor({ apiKey, language, fetchImpl, getPrompt, systemLanguages = [] } = {}) {
     super();
     this.apiKey = apiKey;
     this.language = language || 'de';
+    this.users = userLanguages(this.language, systemLanguages);
+    this.previousLanguages = {};
     this.fetchImpl = fetchImpl || globalThis.fetch;
     this.getPrompt = typeof getPrompt === 'function' ? getPrompt : null;
     /** @type {Promise<void>} Serielle Kette */
@@ -95,16 +99,19 @@ class TranscriptionQueue extends EventEmitter {
    * @private
    */
   async _callGroq({ channel, wavBuffer, tOffset }) {
+    const previousText = this.getPrompt?.(channel) || '';
+    const example = primer(this.users);
+    const request = async language => {
     const formData = new FormData();
     formData.append('file', new Blob([wavBuffer], { type: 'audio/wav' }), 'chunk.wav');
     formData.append('model', 'whisper-large-v3');
-    formData.append('language', this.language);
+    if (language) formData.append('language', language);
     formData.append('response_format', 'verbose_json');
     formData.append('timestamp_granularities[]', 'segment');
     // Kontext-Kontinuität: bisheriger Transkript-Text des Kanals als prompt
     // (Whisper-Limit ~224 Tokens → konservativ auf 800 Zeichen begrenzt).
-    const prompt = this.getPrompt ? this.getPrompt(channel) : null;
-    if (prompt) formData.append('prompt', String(prompt).slice(-800));
+    const prompt = buildPrompt('', previousText, example);
+    if (prompt) formData.append('prompt', prompt);
 
     const res = await this.fetchImpl(GROQ_API_URL, {
       method: 'POST',
@@ -117,8 +124,11 @@ class TranscriptionQueue extends EventEmitter {
       throw new Error(`Groq Whisper HTTP ${res.status}: ${text}`);
     }
 
-    const json = await res.json();
-    return parseVerbose(json, tOffset);
+    return res.json();
+    };
+    const json = await guardedTranscription(request, { expected: this.previousLanguages[channel] || this.language, users: this.users, duration: (wavBuffer.length - 44) / 32000 });
+    this.previousLanguages[channel] = json.language || this.previousLanguages[channel];
+    return parseVerbose(removeEchoes(json, { example, previousText }), tOffset);
   }
 }
 
