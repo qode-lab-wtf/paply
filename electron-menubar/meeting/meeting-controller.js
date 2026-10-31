@@ -7,7 +7,7 @@
 // Phase 2 (nach dem Stop, asynchron, seriell): Chunks → audio_mic.wav / audio_system.wav →
 //   Gemini-Audio-Auswertung (Wortlaut + Sprecher + Zeitmarken; Fallback Groq Whisper ohne Sprecher)
 //   → Bericht v2 → Index-Status ready/failed → 'meetings:updated' ans Dashboard.
-// Audio bleibt 7 Tage (Nachhören, Neu-Auswerten), danach löscht audio-retention.js.
+// Ton bleibt nur bis zur gespeicherten Auswertung, bei Fehlern höchstens 30 Tage.
 'use strict';
 
 const fs = require('node:fs');
@@ -19,7 +19,7 @@ const { evaluateHealth } = require('./health-monitor');
 const { generateMeetingSummary } = require('./summary');
 const { transcribeWithGemini } = require('./gemini-audio');
 const { transcribeWithGroq } = require('./groq-fallback');
-const { cleanExpiredAudio, RETENTION_MS } = require('./audio-retention');
+const { cleanExpiredAudio, expiresAtMs, RETENTION_MS } = require('./audio-retention');
 
 const MAX_ANALYSIS_ATTEMPTS = 3;
 
@@ -343,6 +343,7 @@ function createMeetingController(deps) {
         meetingStore.saveTranscript(id, { segments: [], language: store.get('language') || 'de' });
         meetingStore.finalizeIndex(id, {
           status: 'processing',
+          stoppedAt: new Date(now()).toISOString(),
           durationMs,
           title: new Date(startedAtMs).toLocaleString('de-DE'),
           audioExpiresAt: new Date(now() + RETENTION_MS).toISOString(),
@@ -457,7 +458,7 @@ function createMeetingController(deps) {
     }
 
     const segments = result.segments || [];
-    meetingStore.saveTranscript(id, { segments, language, speakers: result.speakers || [] });
+    meetingStore.saveTranscript(id, { segments, language, detectedLanguage: result.language || null, speakers: result.speakers || [] });
     const speakerNames = [...new Set(segments.map((s) => s.speaker))];
     const preview = (segments[0] && segments[0].text ? segments[0].text : '').slice(0, 120);
     const firstSentence = (segments.find((s) => (s.text || '').trim().length > 8)?.text || '').trim().slice(0, 70);
@@ -466,13 +467,14 @@ function createMeetingController(deps) {
       status: 'ready', analysis, analysisError, progress: segments.length ? 'Bericht wird erstellt …' : null,
       speakerCount: speakerNames.length || 1, speakerNames, preview, title, analysisModel: result.model || null,
     });
+    try { cleanRetention(meetingStore, { now: now() }); } catch { /* next cleanup retries */ }
     _emitUpdated(id, 'ready');
 
     // Bericht (best effort; Kontingent-Fehler verständlich merken)
     const text = transcriptToText(segments);
     if (text.trim()) {
       try {
-        const summary = await summarize(text, { ...llmConfig(), language });
+        const summary = await summarize(text, { ...llmConfig(), language: store.get('language') || 'de', segments, detectedLanguage: result.language });
         meetingStore.saveSummary(id, summary);
         const sumTitle = (summary.titel || summary.kurzfassung || '').slice(0, 60);
         meetingStore.finalizeIndex(id, { hasSummary: true, title: sumTitle || title, summaryError: null, progress: null });
@@ -483,10 +485,6 @@ function createMeetingController(deps) {
       meetingStore.finalizeIndex(id, { progress: null });
     }
     _emitUpdated(id, 'ready');
-
-    // Chunk-Dateien (Absturzsicherung) sind nach erfolgreicher Auswertung redundant
-    try { fs.rmSync(path.join(meetingStore.meetingDir(id), 'chunks'), { recursive: true, force: true }); } catch { /* egal */ }
-    try { cleanRetention(meetingStore, { now: now() }); } catch { /* egal */ }
   }
 
   /** Beim App-Start: unterbrochene Aufnahmen/Auswertungen wieder aufnehmen. */
@@ -494,6 +492,7 @@ function createMeetingController(deps) {
     const resumed = [];
     for (const entry of meetingStore.list()) {
       if (!entry || (entry.status !== 'recording' && entry.status !== 'processing')) continue;
+      if (expiresAtMs(entry) <= now()) continue;
       if ((entry.analysisAttempts || 0) >= MAX_ANALYSIS_ATTEMPTS) {
         try { meetingStore.finalizeIndex(entry.id, { status: 'failed', analysisError: entry.analysisError || 'Auswertung mehrfach abgebrochen', progress: null }); } catch { /* egal */ }
         continue;
@@ -542,7 +541,7 @@ function createMeetingController(deps) {
     if (!text.trim()) return null;
     let summary;
     try {
-      summary = await summarize(text, { ...llmConfig(), language: (full.transcript.language) || store.get('language') });
+      summary = await summarize(text, { ...llmConfig(), language: store.get('language') || 'de', segments: full.transcript.segments, detectedLanguage: full.transcript.detectedLanguage });
     } catch (e) {
       if (e && e.code === 'rate_limit') return { error: 'rate_limit' };
       throw e;

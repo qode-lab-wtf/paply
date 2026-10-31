@@ -19,6 +19,7 @@
 
 Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtbar, was den anderen fehlt.
 
+- **iPhone, Android:** Ton-Regel 8 für Gedanken und Gespräche mit sofortiger Löschung nach gespeichertem Text und maximal 30 Tagen bei Fehlern prüfen/nachziehen (Desktop umgesetzt).
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 

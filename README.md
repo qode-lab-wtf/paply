@@ -3,8 +3,7 @@
 Für Mac, Windows, iPhone und Android.
 
 Mac und Windows: **Cmd+X** diktieren (Groq Whisper, optional Polieren), **Cmd+Y** Gedanken,
-**Cmd+Shift+X** Gespräch aufnehmen → Gemini-Audio-Auswertung mit Sprechern, Wortlaut, Bericht und
-Nachhören (Original-Ton 7 Tage).
+**Cmd+Shift+X** Gespräch aufnehmen → Gemini-Audio-Auswertung mit Sprechern, Wortlaut, Bericht. Ton wird nach der Auswertung gelöscht; bei Fehlern bleibt er höchstens 30 Tage für den Neuversuch.
 
 ## Download
 

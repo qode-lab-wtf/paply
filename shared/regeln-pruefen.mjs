@@ -74,7 +74,7 @@ const AUSNAHMEN = {
     || /fun redoLanguage/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
   A5: () => !/tasks|due_hint/.test(lies(`${DESKTOP}/notes/plan.js`)),
   A6: () => lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: false'),
-  A7: () => gibtEs(`${DESKTOP}/meeting/audio-retention.js`),
+  A7: () => /RETENTION_MS\s*=\s*7\s*\*/.test(lies(`${DESKTOP}/meeting/audio-retention.js`)) || /<audio\b/.test(lies(`${DESKTOP}/src/apps/dashboard/views/MeetingDetail.tsx`)) || /<audio\b/.test(lies(`${DESKTOP}/src/apps/notes/NotesApp.tsx`)) || /7\s*\*\s*86400000/.test(lies(`${DESKTOP}/notes/queue.js`)),
   A8: () => !gibtEs('android/thoughts/src/main/kotlin/com/paply/conversations') && !gibtEs('android/conversations'),
   A9: () => gibtEs(`${DESKTOP}/meeting/gemini-audio.js`),
   A10: () => lies(`${GEDANKEN}/local/EmbeddingIndex.kt`).includes('override val available = false'),

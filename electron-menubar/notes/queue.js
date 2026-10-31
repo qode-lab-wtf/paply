@@ -33,7 +33,7 @@ function audioChunks(pcm) {
   return result;
 }
 function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabulary = () => '', isBusy = () => false, isEditing = () => false, isOnline = () => true, onChange = () => {} }) {
-  let running = false, stopped = false, controller = null, timer = null, currentId = null, authKey = null;
+  let running = false, stopped = false, controller = null, timer = null, currentId = null, authKey = null, retentionTimer = null;
   function save(entry) { repo.saveEntry(entry); onChange(); }
   function prepare(entry, transcript) {
     const parts = chunks(transcript.sentences), firstId = `raw_${entry.id}`;
@@ -84,6 +84,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     if (match && !hasScreen) entry.message = 'Kein Startbild vorhanden · Bildschirmkontext in den Notes-Einstellungen aktivieren';
     try { fs.rmSync(temporary, { force: true }); } catch { /* later housekeeping */ }
     const transcript = repo.saveTranscript(entry.id, { text: original, command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: 'whisper-large-v3-turbo', createdAt: Date.now() });
+    deleteAudio(entry);
     prepare(entry, transcript);
   }
   async function structure(entry, signal) {
@@ -168,17 +169,24 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     catch (e) { if (e.kind === 'auth') authKey = getKey(); item.retryAt = Date.now() + Math.max(60000, e.retryMs || 600000); }
     repo.writeLocal(`assets/${item.id}.json`, item); onChange();
   }
+  function deleteAudio(entry) {
+    try { fs.rmSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'), { force: true }); } catch { /* retry at next cleanup */ }
+  }
+  function cleanAudio(now = Date.now()) {
+    for (const entry of repo.entries()) {
+      if (entry.state === 'recording' || entry.id === currentId) continue;
+      if (repo.transcript(entry.id) || now - (entry.stoppedAt ?? (entry.createdAt + (entry.durationMs || 0))) >= 30 * 86400000) deleteAudio(entry);
+    }
+  }
   function recover() {
     for (const entry of repo.entries()) {
       if (entry.state === 'transcribing') { entry.state = 'captured'; save(entry); }
       else if (entry.state === 'structuring') { entry.state = 'transcribed'; save(entry); }
-      // Retention only after a durable transcript exists. Failed audio is never auto-deleted.
-      if ((entry.finishedAt && entry.finishedAt < Date.now() - 7 * 86400000 && repo.transcript(entry.id)) || (entry.discardedAt && entry.state === 'discarded' && entry.discardedAt < Date.now() - 7 * 86400000)) fs.rmSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'), { force: true });
     }
   }
-  return { tick, recover,
-    start() { recover(); timer = setInterval(() => { tick().catch(() => {}); }, 1500); timer.unref(); tick().catch(() => {}); },
-    stop() { stopped = true; clearInterval(timer); controller?.abort(); },
+  return { tick, recover, cleanAudio,
+    start() { recover(); cleanAudio(); retentionTimer = setInterval(() => { try { cleanAudio(); } catch { /* retry next hour */ } }, 3600000); retentionTimer.unref(); timer = setInterval(() => { tick().catch(() => {}); }, 1500); timer.unref(); tick().catch(() => {}); },
+    stop() { stopped = true; clearInterval(timer); clearInterval(retentionTimer); controller?.abort(); },
     retry(id) {
       const e = repo.entry(id); assert(e && !['recording', 'discarded'].includes(e.state));
       if (e.fallback) {

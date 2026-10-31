@@ -1,4 +1,4 @@
-// Datenmodell für den Meeting-Recorder (v2: Gemini-Audio-Auswertung, Audio 7 Tage, Bericht v2).
+// Datenmodell für den Meeting-Recorder (v2: Gemini-Audio-Auswertung, Ton bis zur Auswertung, Bericht v2).
 // Siehe docs/superpowers/specs/2026-09-21-meeting-gemini-audio-design.md
 
 export type MeetingStatus = 'recording' | 'processing' | 'ready' | 'failed';
@@ -21,6 +21,7 @@ export interface MeetingIndexEntry {
   analysisError?: string | null; // Klartext, wenn die Auswertung scheiterte
   analysisAttempts?: number;
   progress?: string | null; // z. B. „Abschnitt 2 von 3“
+  stoppedAt?: string;
   audioExpiresAt?: string | null; // ISO; danach werden die WAV-Dateien gelöscht
   audioDeleted?: boolean;
   captureStartGapMs?: { mic: number; system: number };
@@ -85,5 +86,5 @@ export interface MeetingFull {
   index: MeetingIndexEntry;
   transcript: MeetingTranscript;
   summary: MeetingSummary | null;
-  audio: { mic: string | null; system: string | null }; // absolute Pfade (null, wenn gelöscht)
+  canReanalyze: boolean;
 }

@@ -2182,7 +2182,12 @@ function setupIpcHandlers() {
   // Stop-Handshake: Renderer hat Restpuffer gesendet und Capture beendet.
   ipcMain.handle('meeting:capture-flushed', () => { if (meetingController) meetingController.onCaptureFlushed(); return true; });
   ipcMain.handle('meetings:list', () => (meetingStore ? meetingStore.list() : []));
-  ipcMain.handle('meetings:get', (_e, id) => (meetingStore ? meetingStore.get(id) : null));
+  ipcMain.handle('meetings:get', (_e, id) => {
+    const full = meetingStore ? meetingStore.get(id) : null;
+    if (!full) return null;
+    const { audio, ...detail } = full;
+    return { ...detail, canReanalyze: !!(audio.mic || audio.system) };
+  });
   ipcMain.handle('meetings:delete', (_e, id) => (meetingStore ? meetingStore.remove(id) : false));
   ipcMain.handle('meetings:reanalyze', (_e, id) => (meetingController ? meetingController.reanalyze(id) : { error: 'unavailable' }));
   ipcMain.handle('meetings:regenerateSummary', (_e, id) => (meetingController ? meetingController.regenerateSummary(id) : null));
@@ -2625,7 +2630,7 @@ app.whenReady().then(() => {
     chunkMaxSeconds: 40,
   });
   // Unterbrochene Aufnahmen/Auswertungen (App-Neustart, Absturz) wieder aufnehmen;
-  // abgelaufenes Audio (7 Tage) löschen — jetzt und täglich.
+  // fertigen Ton und abgelaufenes Fehler-Audio (30 Tage) löschen — jetzt und täglich.
   try { meetingController.resumePending(); } catch (e) { console.error('resumePending failed:', e); }
   try { meetingController.runRetention(); } catch { /* best effort */ }
   setInterval(() => { try { meetingController.runRetention(); } catch { /* best effort */ } }, 24 * 60 * 60 * 1000);

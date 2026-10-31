@@ -58,7 +58,7 @@ function makeCtl(overrides = {}) {
     showOverlay: () => win, hideOverlay: () => { events.push({ ch: 'overlay:hide' }); }, getMainWindow: () => win,
     windowSeconds: 1, sampleRate: SR, captureStopTimeoutMs: 5, systemChunkMs: 0,
     analyzeAudio: fakeAnalyze(overrides.analyzeCalls), fallbackAnalyze: overrides.fallbackAnalyze, summarize: fakeSummary,
-    cleanRetention: overrides.cleanRetention || (() => []),
+    cleanRetention: overrides.cleanRetention || require('./audio-retention.js').cleanExpiredAudio,
     now: clock.now, sleep: async () => {},
     ...(overrides.deps || {}),
   });
@@ -82,7 +82,7 @@ describe('MeetingController v2 (Fakes statt Netz)', () => {
     const afterStop = meetingStore.get(id);
     expect(afterStop.index.status).toBe('processing');
     expect(afterStop.index.systemRemote).toBe(true); // System-Signal ohne Detektor → Gegenstelle
-    expect(afterStop.index.audioExpiresAt).toBe(new Date(1700000000000 + 7 * 86400000).toISOString());
+    expect(afterStop.index.audioExpiresAt).toBe(new Date(1700000000000 + 30 * 86400000).toISOString());
     expect(afterStop.audio.mic).not.toBeNull();
     expect(afterStop.audio.system).not.toBeNull();
     expect(events.some((e) => e.ch === 'meeting:capture-stop')).toBe(true);
@@ -103,9 +103,9 @@ describe('MeetingController v2 (Fakes statt Netz)', () => {
     // Auswertung bekam beide Spuren (System als Gegenstelle)
     expect(calls[0].systemWavPath).not.toBeNull();
     expect(calls[0].apiKey).toBe('g');
-    // Chunks nach Erfolg weg, Audio bleibt (7 Tage)
+    // Chunks und Original nach gespeichertem Text weg
     expect(fs.existsSync(path.join(meetingStore.meetingDir(id), 'chunks'))).toBe(false);
-    expect(full.audio.mic).not.toBeNull();
+    expect(full.audio.mic).toBeNull();
     const statuses = events.filter((e) => e.ch === 'meetings:updated').map((e) => e.p.status);
     expect(statuses).toContain('processing');
     expect(statuses[statuses.length - 1]).toBe('ready');
@@ -202,6 +202,8 @@ describe('MeetingController v2 (Fakes statt Netz)', () => {
     expect(full.index.analysisError).toContain('Gemini');
     expect(fallbackCalls[0].apiKey).toBe('k');
     expect(full.transcript.segments[0].text).toBe('Nur Text.');
+    expect(full.audio.mic).toBeNull();
+    expect(fs.existsSync(path.join(meetingStore.meetingDir(id), 'chunks'))).toBe(false);
   });
 
   it('ohne Gemini-Key direkt Fallback; ohne beide Keys → failed mit Klartext', async () => {
@@ -217,16 +219,14 @@ describe('MeetingController v2 (Fakes statt Netz)', () => {
     expect(c2.meetingStore.get(r.id).audio.mic).not.toBeNull(); // Audio bleibt für „Neu auswerten“
   });
 
-  it('reanalyze: erneute Auswertung aus dem gespeicherten Audio; ohne Audio Fehler', async () => {
-    const calls = [];
-    const { ctl, meetingStore } = makeCtl({ analyzeCalls: calls });
+  it('reanalyze nach Fehler möglich, nach Erfolg ist der Ton gelöscht', async () => {
+    const { ctl, meetingStore, store } = makeCtl({ storeInit: { geminiApiKey: '', groqApiKey: '' } });
     const { id } = ctl.start(); ctl.onMicPcm(signal()); await ctl.stop(); await ctl.whenIdle();
-    expect(calls.length).toBe(1);
+    expect(meetingStore.get(id).index.status).toBe('failed');
+    store.set('geminiApiKey', 'g');
     expect(ctl.reanalyze(id)).toEqual({ ok: true });
     await ctl.whenIdle();
-    expect(calls.length).toBe(2);
     expect(meetingStore.get(id).index.status).toBe('ready');
-    fs.rmSync(meetingStore.audioPath(id, 'mic'));
     expect(ctl.reanalyze(id)).toEqual({ error: 'no_audio' });
   });
 
@@ -246,8 +246,39 @@ describe('MeetingController v2 (Fakes statt Netz)', () => {
     const full = meetingStore.get(id);
     expect(full.index.status).toBe('ready');
     expect(full.index.durationMs).toBe(2000);
-    expect(full.audio.mic).not.toBeNull();
+    expect(full.audio.mic).toBeNull();
     expect(meetingStore.get(id2).index.status).toBe('failed');
+  });
+
+  it('löscht bereits vor dem Bericht und behält den Text auch bei Berichtsfehlern', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const { ctl, meetingStore } = makeCtl({ deps: { summarize: async () => { await gate; throw new Error('Bericht fehlgeschlagen'); } } });
+    const { id } = ctl.start(); ctl.onMicPcm(signal()); await ctl.stop();
+    for (let i = 0; i < 100 && meetingStore.get(id).index.status !== 'ready'; i++) await new Promise(r => setTimeout(r, 1));
+    expect(meetingStore.get(id).audio.mic).toBeNull();
+    release(); await ctl.whenIdle();
+    expect(meetingStore.get(id).transcript.segments).toHaveLength(2);
+    expect(meetingStore.get(id).index.summaryError).toBe('error');
+  });
+
+  it('behält Ton und Chunks, wenn das Transkript nicht gespeichert werden kann', async () => {
+    const { ctl, meetingStore } = makeCtl();
+    const { id } = ctl.start(); ctl.onMicPcm(signal()); await ctl.stop();
+    meetingStore.saveTranscript = () => { throw new Error('Disk full'); };
+    await ctl.whenIdle();
+    expect(meetingStore.get(id).index.status).toBe('failed');
+    expect(meetingStore.get(id).audio.mic).not.toBeNull();
+    expect(fs.existsSync(path.join(meetingStore.meetingDir(id), 'chunks'))).toBe(true);
+  });
+
+  it('nimmt abgelaufene processing-Einträge nicht wieder auf und räumt sie auf', () => {
+    const { ctl, meetingStore, clock } = makeCtl();
+    const id = meetingStore.create(new Date(clock.now() - 31 * 86400000).toISOString());
+    meetingStore.finalizeIndex(id, { status: 'processing' });
+    fs.writeFileSync(meetingStore.chunkPath(id, 'mic', 0), 'audio');
+    expect(ctl.resumePending()).toEqual([]); ctl.runRetention();
+    expect(meetingStore.get(id).index).toMatchObject({ status: 'failed', audioDeleted: true });
   });
 
   it('Retention läuft nach der Auswertung; regenerateSummary aktualisiert Titel', async () => {
