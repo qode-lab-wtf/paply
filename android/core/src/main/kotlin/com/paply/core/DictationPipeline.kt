@@ -57,7 +57,6 @@ constructor(
 
     companion object {
         const val maxPieceSeconds = 600.0
-        const val previousTextWaitMillis = 1500L
     }
 
     private val lock = Any()
