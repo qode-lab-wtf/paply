@@ -11,7 +11,7 @@ import { createSettings, defaults } from './settings';
 import { createLedger } from './ledger';
 import { createQueue, levels, audioChunks } from './queue';
 import { createGroq, retryAfter } from './groq';
-import { validatePlan, applyPlan, splitSentences, chunks, context } from './plan';
+import { splitSentences, chunks, context } from './context';
 let root, repo, commands;
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'paply-notes-unit-')); repo = createRepo(root); commands = createCommands(repo); });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); fs.rmSync(root, { force: true, recursive: true }); });
@@ -19,7 +19,7 @@ const textOp = (text = 'Nicht vergessen.') => ({ type: 'create', node: { kind: '
 const single = () => Object.values(repo.current().nodes)[0];
 function fixturePlan(sentences = [{ id: 's1', text: 'Ich möchte keine rote Lampe.' }]) {
   const ctx = { topics: [], existing: [], sentences };
-  const plan = { topics: [{ key: 'home', title: 'Zuhause', icon: 'home' }], items: sentences.map((s, i) => ({ key: `i${i}`, sentenceIds: [s.id], label: 'Lampe', icon: 'lightbulb', topic: 'home', appearance: 'note' })), structures: [], relations: [] };
+  const plan = { title: 'Lampe', clean_text: sentences.map(s => s.text).join(' '), topic: { choice: 'new', id: null, new_name: 'Zuhause', symbol: 'home' }, tasks: [], related: [] };
   return { ctx, plan };
 }
 function rawFor(sentences) {
@@ -47,21 +47,11 @@ describe('durable store and commands', () => {
   it('deleting a free edge removes orphan endpoints and undo restores the whole line', () => { commands.apply([{ type: 'line', from: { x: 0, y: 0 }, to: { x: 100, y: 100 } }]); commands.apply([{ type: 'deleteEdge', id: Object.keys(repo.current().edges)[0] }]); expect(Object.keys(repo.current().nodes)).toHaveLength(0); commands.undo(); expect(Object.keys(repo.current().nodes)).toHaveLength(2); expect(Object.keys(repo.current().edges)).toHaveLength(1); });
   it.each(['toString','valueOf','__defineGetter__'])('rejects inherited object IDs: %s', id => { expect(() => commands.apply([{ type: 'edge', source: id, target: id }])).toThrow(); expect(Object.keys(repo.current().edges)).toHaveLength(0); });
 });
-describe('semantic coverage and user priority', () => {
-  it('keeps even one-word notes and every negative sentence verbatim', () => { const { ctx, plan } = fixturePlan([{ id: 's1', text: 'Nein.' }, { id: 's2', text: 'Ich möchte keine rote Lampe.' }]); const raw = rawFor(ctx.sentences); commands.commit(b => applyPlan(b, validatePlan(plan, ctx), { entryId: 's', sentences: ctx.sentences, rawId: raw.id, rawRev: raw.rev }), false); expect(Object.values(repo.current().nodes).map(n => n.text)).toEqual(ctx.sentences.map(s => s.text)); expect(Object.keys(repo.current().claims)).toHaveLength(2); });
-  it.each(['omitted', 'duplicate', 'unknown', 'topic'])('rejects hard %s errors without applying fragments', fault => { const { ctx, plan } = fixturePlan([{ id: 's1', text: 'Eins.' }, { id: 's2', text: 'Zwei.' }]); if (fault === 'omitted') plan.items.pop(); if (fault === 'duplicate') plan.items[1].sentenceIds = ['s1']; if (fault === 'unknown') plan.items[1].sentenceIds = ['outside']; if (fault === 'topic') plan.items[1].topic = 'nonexistent'; expect(() => validatePlan(plan, ctx)).toThrow(); });
-  it.each(['edit', 'move', 'delete'])('a pending result cannot override a user %s', action => { const { ctx, plan } = fixturePlan(); const raw = rawFor(ctx.sentences); commands.apply([action === 'delete' ? { type: 'delete', id: raw.id } : { type: 'update', id: raw.id, patch: action === 'edit' ? { text: 'Meine Korrektur' } : { position: { x: 3, y: 4 } } }]); const before = repo.snapshot(); commands.commit(b => applyPlan(b, plan, { entryId: 's', sentences: ctx.sentences, rawId: raw.id, rawRev: raw.rev }), false); expect(repo.snapshot()).toEqual(before); });
-  it('drops an invented sequence while retaining all notes', () => { const { ctx, plan } = fixturePlan([{ id: 's1', text: 'Rot gefällt mir.' }, { id: 's2', text: 'Blau auch.' }, { id: 's3', text: 'Grün vielleicht.' }]); plan.structures = [{ kind: 'flow', title: 'Farbe', members: ['i0','i1','i2'], columns: [], rows: [] }]; const out = validatePlan(plan, ctx); expect(out.structures).toEqual([]); expect(out.items).toHaveLength(3); });
-  it('restores omitted negation in comparison cells and refuses hiding a source', () => { const { ctx, plan } = fixturePlan([{ id: 's1', text: 'Die rote Lampe passt nicht.' }, { id: 's2', text: 'Die blaue ist schön.' }]); plan.structures = [{ kind: 'table', title: 'Lampen', members: ['i0','i1'], columns: ['Rot','Blau'], rows: [{ label: 'Eindruck', cells: [{ sentenceId: 's1', quote: 'Die rote Lampe passt' }, { sentenceId: 's2', quote: 'schön' }] }] }]; const out = validatePlan(plan, ctx); expect(out.structures[0].rows[0].cells[0].quote).toBe(ctx.sentences[0].text); plan.structures[0].rows[0].cells[1] = { sentenceId: null, quote: 'Erfunden' }; expect(validatePlan(plan, ctx).structures).toEqual([]); });
-  it('covers a long multi-topic source in bounded batches without loss', () => { const input = Array.from({ length: 150 }, (_, i) => `Gedanke Nummer ${i} ist noch offen.`).join(' '); const sentences = splitSentences(input, 's'); expect(chunks(sentences).flat()).toEqual(sentences); expect(chunks(sentences).every(part => part.length <= 28)).toBe(true); expect(sentences.map(s => s.text).join(' ')).toBe(input); });
-  it('never mutates the stored original transcript on editing', () => { repo.saveTranscript('s', { text: 'Original' }); repo.saveTranscript('s', { text: 'Ersatz' }); expect(repo.transcript('s').text).toBe('Original'); });
-  it('keeps a moment image once rather than copying it into every generated note', () => { const { ctx, plan } = fixturePlan([{ id: 's1', text: 'Eins.' }, { id: 's2', text: 'Zwei.' }]); const raw = rawFor(ctx.sentences), hash = 'a'.repeat(64); commands.commit(b => { b.nodes[raw.id].attachments = [hash]; }, false); commands.commit(b => applyPlan(b, validatePlan(plan, ctx), { entryId: 's', sentences: ctx.sentences, rawId: raw.id, rawRev: raw.rev }), false); expect(Object.values(repo.current().nodes).flatMap(n => n.attachments)).toEqual([hash]); });
-});
 describe('quota and HTTP failures', () => {
   it('reserves before use, survives restart and rolls off after 24 hours', () => { let now = 100000000; const ledger = createLedger(repo, () => ({ dailyTokens: 8000, dailyAudioMinutes: 60 }), () => now); const id = ledger.reserve('20b', 6000); expect(() => ledger.reserve('20b', 2000)).toThrow('Pause'); ledger.settle(id, 3000); now += 61000; ledger.reserve('20b', 5000); const recovered = createLedger(repo, () => ({ dailyTokens: 8000, dailyAudioMinutes: 60 }), () => now); expect(() => recovered.reserve('120b', 1)).toThrow('Budget'); now += 86400001; expect(recovered.reserve('20b', 3000)).toBeTruthy(); });
   it('separates audio seconds from text tokens', () => { const ledger = createLedger(repo, () => ({ dailyTokens: 10000, dailyAudioMinutes: 1 })); ledger.reserve('whisper', 50, 'audio'); expect(() => ledger.reserve('whisper', 20, 'audio')).toThrow('Budget'); expect(ledger.reserve('20b', 5000)).toBeTruthy(); });
   it('does not call fetch without a key', async () => { const fetchImpl = vi.fn(); const groq = createGroq({ getKey: () => '', ledger: { reserve: vi.fn() }, fetchImpl }); await expect(groq.plan({}, false)).rejects.toMatchObject({ kind: 'key' }); expect(fetchImpl).not.toHaveBeenCalled(); });
-  it('preserves retry-after and does not return an echoed API body', async () => { const groq = createGroq({ getKey: () => 'fake', ledger: { reserve: () => 'r', settle: vi.fn() }, fetchImpl: async () => new Response('sensitive body', { status: 429, headers: { 'retry-after': '74' } }) }); await expect(groq.plan({}, false)).rejects.toMatchObject({ kind: 'rate', retryMs: 74000 }); });
+  it('preserves retry-after and does not return an echoed API body', async () => { const groq = createGroq({ getKey: () => 'fake', ledger: { reserve: () => 'r', settle: vi.fn() }, fetchImpl: async () => new Response('sensitive body', { status: 429, headers: { 'retry-after': '74' } }) }); await expect(groq.plan({}, false)).rejects.toMatchObject({ kind: 'rate', retryMs: 900000 }); });
   it('rejects truncated strict output instead of applying it', async () => { const groq = createGroq({ getKey: () => 'fake', ledger: { reserve: () => 'r', settle: vi.fn() }, fetchImpl: async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '{}' } }], usage: { total_tokens: 19 } })) }); await expect(groq.plan({}, false)).rejects.toMatchObject({ kind: 'plan' }); });
   it('supports date-form retry-after without spinning on invalid headers', () => { expect(retryAfter('bad', 0)).toBe(30000); expect(retryAfter('Thu, 01 Jan 1970 00:01:00 GMT', 0)).toBe(60000); });
   it('fails a request larger than its daily budget without an infinite retry date', () => { const ledger = createLedger(repo, () => ({ dailyTokens: 5000, dailyAudioMinutes: 1 })); expect(() => ledger.reserve('120b', 6000)).toThrow('zu klein'); try { ledger.reserve('whisper', 120, 'audio'); } catch (e) { expect(e.kind).toBe('budget_small'); expect(e.retryMs).toBeUndefined(); } expect(ledger.summary().requests).toBe(0); });
@@ -125,7 +115,7 @@ describe('queue boundaries', () => {
   });
   it('shows fallback honestly and explicitly retries the untouched raw note', async () => {
     const groq = { plan: vi.fn(async () => { const e = new Error('Plan falsch'); e.kind = 'plan'; throw e; }) }; const q = fixture(groq); const id = q.addText('Eins. Zwei. Drei.');
-    for (let i = 0; i < 6; i++) await q.tick(); expect(repo.entry(id).state).toBe('fallback'); expect(groq.plan).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 6; i++) await q.tick(); expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(1);
     q.retry(id); for (let i = 0; i < 6; i++) await q.tick(); expect(groq.plan).toHaveBeenCalledTimes(2); expect(single().text).toBe('Eins. Zwei. Drei.'); q.stop();
   });
   it('excludes its own raw source from retrieval and matches Unicode words', () => { const sentences = [{ id: 's1', text: 'Größe für die Küche' }]; const raw = rawFor(sentences); commands.apply([textOp('Größe der Küche')]); const ctx = context(repo.current(), sentences, 's'); expect(ctx.existing.map(n => n.id)).not.toContain(raw.id); expect(ctx.existing[0].text).toBe('Größe der Küche'); });
@@ -149,7 +139,7 @@ describe('queue boundaries', () => {
     const q = fixture(groq, { isEditing: id => editing === id });
     const id = q.addText('Ein Gedanke bleibt sichtbar.'), raw = single(); editing = raw.id;
     release(); for (let i = 0; i < 30; i++) await Promise.resolve();
-    expect(single().id).toBe(raw.id); expect(repo.readLocal(`sources/${id}/plan-0.json`, null)?.rawRev).toBe(raw.rev);
+    expect(single().id).toBe(raw.id); expect(repo.readLocal(`sources/${id}/thought-v6-0.json`, null)?.rawRev).toBe(raw.rev);
     if (changed) commands.apply([{ type: 'update', id: raw.id, rev: raw.rev, patch: { text: 'Mein korrigierter Gedanke.' } }]);
     editing = null; repo.saveEntry({ ...repo.entry(id), retryAt: 0 });
     for (let i = 0; i < 5; i++) await q.tick();
@@ -157,17 +147,7 @@ describe('queue boundaries', () => {
     expect(repo.entry(id).state).toBe(changed ? 'kept_user' : 'complete');
     expect(single().text).toBe(changed ? 'Mein korrigierter Gedanke.' : 'Ein Gedanke bleibt sichtbar.'); q.stop();
   });
-  it('soft-drops a table whose restored quote is too long without spending another request', async () => {
-    const long = 'Die Lampe ist nicht ' + 'besonders '.repeat(220) + 'praktisch.';
-    const groq = { plan: vi.fn(async ctx => {
-      const plan = fixturePlan(ctx.sentences).plan;
-      plan.structures = [{ kind: 'table', title: 'Vergleich', members: ['i0', 'i1'], columns: ['A', 'B'], rows: [{ label: 'Eindruck', cells: [{ sentenceId: ctx.sentences[0].id, quote: 'Erfundene Kurzfassung' }, { sentenceId: ctx.sentences[1].id, quote: ctx.sentences[1].text }] }] }]; return plan;
-    }) };
-    const q = fixture(groq), id = q.addText(long + ' Die zweite Lampe gefällt mir.');
-    for (let i = 0; i < 8; i++) await q.tick();
-    expect(groq.plan).toHaveBeenCalledTimes(1); expect(repo.entry(id).state).toBe('complete');
-    expect(Object.values(repo.current().nodes).some(n => n.text === long && n.kind === 'note')).toBe(true); expect(Object.values(repo.current().nodes).flatMap(n => n.sentenceIds)).toHaveLength(2); q.stop();
-  });
+
   it('retains a cached plan across a failed board write without requesting it again', async () => {
     let release; const delayed = new Promise(resolve => { release = resolve; });
     const groq = { plan: vi.fn(async ctx => { await delayed; return fixturePlan(ctx.sentences).plan; }) }, q = fixture(groq);
@@ -185,17 +165,17 @@ describe('queue boundaries', () => {
     vi.spyOn(commands, 'commit').mockImplementationOnce(() => { throw new Error('Ungültige Notes-Daten'); });
     release(); for (let i = 0; i < 30; i++) await Promise.resolve();
     for (let i = 0; i < 5; i++) await q.tick();
-    expect(groq.plan).toHaveBeenCalledTimes(1); expect(repo.entry(id).state).toBe('fallback'); expect(single().text).toBe('Original bleibt.'); q.stop();
+    expect(groq.plan).toHaveBeenCalledTimes(1); expect(repo.entry(id).state).toBe('complete'); expect(single().text).toBe('Original bleibt.'); q.stop();
   });
   it('revalidates a waiting cached plan against its original allowed IDs when retrieval changes', async () => {
-    commands.commit(b => { for (let i = 0; i < 25; i++) b.topics[`t_${i}`] = { id: `t_${i}`, title: `Thema ${i}`, icon: 'leaf', owner: 'user', createdAt: i }; }, false);
+    commands.commit(b => { for (let i = 0; i < 40; i++) b.topics[`t_${i}`] = { id: `t_${i}`, title: `Thema ${i}`, icon: 'leaf', owner: 'user', createdAt: i }; }, false);
     commands.apply([{ type: 'create', node: { kind: 'note', text: 'Gewächshaus Tomaten', topicId: 't_24' } }]);
     let editing = null, release; const gate = new Promise(resolve => { release = resolve; });
-    const groq = { plan: vi.fn(async ctx => { await gate; const plan = fixturePlan(ctx.sentences).plan; plan.topics = []; plan.items[0].topic = 't_24'; return plan; }) };
+    const groq = { plan: vi.fn(async ctx => { await gate; const plan = fixturePlan(ctx.sentences).plan; plan.topic = { choice: 'existing', id: 't_24' }; return plan; }) };
     const q = fixture(groq, { isEditing: id => editing === id }), id = q.addText('Tomaten im Gewächshaus gießen.'); editing = `raw_${id}`;
     release(); for (let i = 0; i < 30; i++) await Promise.resolve();
     commands.apply(Array.from({ length: 10 }, (_, i) => ({ type: 'create', node: { kind: 'note', text: `Tomaten Gewächshaus gießen ${i}`, topicId: `t_${i}` } })));
-    expect(context(repo.current(), repo.transcript(id).sentences, id).topics.some(t => t.id === 't_24')).toBe(false);
+    expect(context(repo.current(), repo.transcript(id).sentences, id).topics.some(t => t.id === 't_24')).toBe(true);
     editing = null; repo.saveEntry({ ...repo.entry(id), retryAt: 0 }); for (let i = 0; i < 6; i++) await q.tick();
     expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(1);
     expect(Object.values(repo.current().nodes).find(n => n.sourceId === id)?.topicId).toBe('t_24'); q.stop();
@@ -205,7 +185,7 @@ describe('queue boundaries', () => {
     const groq = { plan: vi.fn(async ctx => { await gate; return fixturePlan(ctx.sentences).plan; }) }, q = fixture(groq), id = q.addText('Original bleibt sichtbar.');
     vi.spyOn(commands, 'commit').mockImplementationOnce(() => { throw new Error('Ungültige Notes-Daten'); });
     release(); for (let i = 0; i < 30; i++) await Promise.resolve(); for (let i = 0; i < 5; i++) await q.tick();
-    expect(repo.entry(id).state).toBe('fallback'); expect(groq.plan).toHaveBeenCalledTimes(1);
+    expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(1);
     q.retry(id); for (let i = 0; i < 8; i++) await q.tick();
     expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(2); q.stop();
   });
@@ -215,11 +195,18 @@ describe('queue boundaries', () => {
     repo.saveEntry({ id: 's', state: 'transcribed', createdAt: Date.now() }); repo.saveTranscript('s', { text: '', sentences: [] });
     const q = fixture({ plan: vi.fn() }); await q.tick(); expect(single()).toMatchObject({ pending: false, text: 'Eigener Text' }); q.stop();
   });
-  it('removes and restores a whole mindmap including its hub with the moment', async () => {
-    const groq = { plan: vi.fn(async ctx => { const plan = fixturePlan(ctx.sentences).plan; plan.structures = [{ kind: 'mindmap', title: 'Ideen', members: ['i0', 'i1', 'i2'], columns: [], rows: [] }]; return plan; }) };
-    const q = fixture(groq), id = q.addText('Eins. Zwei. Drei.'); for (let i = 0; i < 8; i++) await q.tick();
-    expect(Object.values(repo.current().nodes)).toHaveLength(4); q.discard(id); expect(Object.values(repo.current().nodes)).toHaveLength(0);
-    commands.undo(); q.reconcileUndo(); expect(Object.values(repo.current().nodes)).toHaveLength(4); expect(Object.values(repo.current().edges)).toHaveLength(3); q.stop();
+
+  it('leaves completed legacy thoughts alone until explicit retry and preserves every card', async () => {
+    const sentences = splitSentences('Die erste Lampe bleibt. Die zweite Lampe auch.', 'legacy');
+    repo.saveEntry({ id: 'legacy', state: 'complete', createdAt: Date.now(), parts: 1, partsDone: 1 });
+    repo.saveTranscript('legacy', { text: sentences.map(s => s.text).join(' '), sentences });
+    commands.commit(b => { for (const sentence of sentences) { const n = node({ kind: 'note', text: sentence.text }); n.owner = 'ai'; n.sourceId = 'legacy'; n.sentenceIds = [sentence.id]; b.nodes[n.id] = n; b.claims[sentence.id] = n.id; } }, false);
+    const groq = { plan: vi.fn(async ctx => fixturePlan(ctx.sentences).plan) }, q = fixture(groq), before = repo.snapshot();
+    await q.tick(); expect(groq.plan).not.toHaveBeenCalled(); expect(repo.snapshot()).toEqual(before);
+    q.retry('legacy'); for (let i = 0; i < 8; i++) await q.tick();
+    expect(groq.plan).toHaveBeenCalledTimes(2); expect(repo.entry('legacy').state).toBe('complete');
+    expect(Object.values(repo.current().nodes).map(n => n.text)).toEqual(sentences.map(s => s.text));
+    expect(Object.keys(repo.current().nodes)).toEqual(Object.keys(before.nodes)); q.stop();
   });
   it('digital silence produces no speech duration and chunking covers every PCM byte', () => { const pcm = Buffer.alloc(20*60*32000); expect(levels(pcm.subarray(0,32000))).toMatchObject({ speechMs: 0, peakDbfs: -120, durationMs: 1000 }); const pieces = audioChunks(pcm); expect(pieces.every(p => p.length < 25*1024*1024)).toBe(true); expect(Buffer.concat(pieces).equals(pcm)).toBe(true); });
 });

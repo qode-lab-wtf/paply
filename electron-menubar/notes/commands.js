@@ -1,7 +1,7 @@
 'use strict';
 const C = require('./contracts');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const TABLES = ['nodes', 'edges', 'topics', 'claims', 'tombstones'];
+const TABLES = ['tasks', 'nodes', 'edges', 'topics', 'claims', 'tombstones'];
 function changes(before, after) {
   const result = [];
   for (const table of TABLES) for (const key of new Set([...Object.keys(before[table]), ...Object.keys(after[table])])) {
@@ -24,7 +24,13 @@ function createCommands(repo, onChange = () => {}) {
     return commit(b => {
       for (const op of ops) {
         C.assert(op && typeof op.type === 'string');
-        if (op.type === 'create') { const n = C.node(op.node); if (n.topicId) C.assert(b.topics[n.topicId]); b.nodes[n.id] = n; }
+        if (op.type === 'task') {
+          const t = b.tasks[C.id(op.id)]; C.assert(t);
+          if (op.text !== undefined) t.text = C.text(op.text, 200);
+          if (op.due_hint !== undefined) t.due_hint = op.due_hint === null ? null : C.text(op.due_hint, 200);
+          if (op.done !== undefined) { C.assert(typeof op.done === 'boolean'); t.done = op.done; }
+          t.owner = 'user';
+        } else if (op.type === 'create') { const n = C.node(op.node); if (n.topicId) C.assert(b.topics[n.topicId]); b.nodes[n.id] = n; }
         else if (op.type === 'update') {
           const n = b.nodes[C.id(op.id)]; C.assert(n, 'Diese Notiz wurde bereits entfernt.');
           if (op.rev !== undefined) C.assert(op.rev === n.rev, 'Die Notiz hat sich geändert. Bitte erneut bearbeiten.');

@@ -1,7 +1,10 @@
 'use strict';
 const { WHISPER_MODEL, userLanguages, guardedTranscription } = require('../dictation/language-guard');
 const { primer, buildPrompt, removeEchoes } = require('../dictation/whisper-prompt');
-const { PROMPT, PLAN_SCHEMA } = require('./plan');
+const { PROMPT } = require('./prompt');
+const { SCHEMA, validate } = require('./thought');
+const PRIMARY_MODEL = 'openai/gpt-oss-120b';
+const FALLBACK_MODEL = 'openai/gpt-oss-20b';
 function retryAfter(value, now = Date.now()) { if (!value) return 30000; const sec = Number(value); return Math.max(1000, Math.min(86400000, Number.isFinite(sec) ? sec * 1000 : Date.parse(value) - now || 30000)); }
 function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fetchImpl = globalThis.fetch, endpoint = 'https://api.groq.com/openai/v1' }) {
   async function request(route, body, { model, amount, unit = 'tokens', signal, timeout = 90000, multipart = false }) {
@@ -18,6 +21,7 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
         // Never log server bodies: they may echo input or credentials.
         const error = new Error(response.status === 401 || response.status === 403 ? 'Groq-Schlüssel prüfen' : response.status === 429 ? 'Groq-Limit · später erneut' : `Groq ist gerade nicht verfügbar (${response.status})`);
         error.kind = [401, 403].includes(response.status) ? 'auth' : response.status === 429 ? 'rate' : response.status === 404 ? 'model' : response.status >= 500 ? 'server' : 'invalid';
+        if (['model_not_found', 'model_decommissioned'].includes(providerCode)) error.kind = 'model';
         if (providerCode === 'json_validate_failed') { error.kind = 'plan'; error.message = 'Einordnungsformat war nicht eindeutig'; }
         error.retryMs = retryAfter(response.headers.get('retry-after')); throw error;
       }
@@ -40,21 +44,48 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
       }, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
       return removeEchoes({ ...response, model }, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
     },
-    async plan(ctx, large, signal) {
-      const model = large ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b';
-      const input = structuredClone(ctx);
+    async plan(ctx, _large, signal) {
+      const settings = getTranscriptionSettings();
+      const input = { ui_language: settings.systemLanguages?.[0] || Intl.DateTimeFormat().resolvedOptions().locale,
+        spoken_languages: userLanguages(settings.language, settings.systemLanguages), now: ctx.now || new Date().toLocaleString(),
+        custom_terms: ctx.custom_terms || '', topics_full: ctx.topics_full || false,
+        topics: (ctx.topics || []).map(t => ({ id: t.id, name: t.title, n: t.n || 0, hint: '' })),
+        candidates: (ctx.existing || []).map(n => ({ ref: n.id, title: n.label, topic: n.topic, when: n.when, excerpt: n.text })),
+        transcript: (ctx.sentences || []).map(s => s.text).join(' ') };
       const messages = [{ role: 'system', content: PROMPT }, { role: 'user', content: JSON.stringify(input) }];
-      const max = large ? 3200 : 2500;
-      const estimateTokens = () => Math.ceil(Buffer.byteLength(JSON.stringify({ messages, schema: PLAN_SCHEMA })) / 3) + max + 256;
-      let estimate = estimateTokens();
-      while (estimate > 7600 && (input.existing?.length || input.topics?.length > 3)) {
-        if (input.existing.length) input.existing.pop(); else input.topics.pop();
-        messages[1].content = JSON.stringify(input); estimate = estimateTokens();
+      const max = 3200;
+      const estimate = () => Math.ceil(Buffer.byteLength(JSON.stringify({ messages, schema: SCHEMA })) / 3) + max + 256;
+      let amount = estimate();
+      while (amount > 7600 && (input.candidates.length || input.topics.length)) {
+        if (input.candidates.length) input.candidates.pop(); else input.topics.pop();
+        messages[1].content = JSON.stringify(input); amount = estimate();
       }
-      if (estimate > 7600) { const e = new Error('Dieser Gedanke bleibt als vollständige Notiz erhalten'); e.kind = 'too_large'; throw e; }
-      const data = await request('chat/completions', { model, messages, temperature: .1, reasoning_effort: large ? 'medium' : 'low', max_completion_tokens: max, response_format: { type: 'json_schema', json_schema: { name: 'paply_notes', strict: true, schema: PLAN_SCHEMA } } }, { model, amount: estimate, signal });
-      if (data.choices?.[0]?.finish_reason !== 'stop') { const e = new Error('Einordnung unvollständig'); e.kind = 'plan'; throw e; }
-      try { return JSON.parse(data.choices[0].message.content); } catch { const e = new Error('Einordnung nicht lesbar'); e.kind = 'plan'; throw e; }
+      if (amount > 7600) throw Object.assign(new Error('Original erhalten'), { kind: 'too_large' });
+      // Only IDs actually sent to the model may be used in its answer.
+      ctx = { ...ctx, topics: (ctx.topics || []).filter(t => input.topics.some(x => x.id === t.id)), existing: (ctx.existing || []).filter(n => input.candidates.some(x => x.ref === n.id)) };
+      let model = PRIMARY_MODEL, effort = 'low', shortRetry = false, effortRetry = false;
+      for (;;) {
+        try {
+          const data = await request('chat/completions', { model, messages, temperature: .1, reasoning_effort: effort, max_completion_tokens: max, response_format: { type: 'json_schema', json_schema: { name: 'paply_thought', strict: true, schema: SCHEMA } } }, { model, amount, signal });
+          let value;
+          try {
+            if (data.choices?.[0]?.finish_reason !== 'stop') throw Error();
+            value = JSON.parse(data.choices[0].message.content); validate(value, ctx);
+          } catch { throw Object.assign(new Error('Einordnung nicht lesbar'), { kind: 'plan' }); }
+          if (value.topic.choice === 'existing' && !ctx.topics.some(t => t.id === value.topic.id)) value.topic = { ...value.topic, choice: 'none', id: null };
+          value.related = value.related.filter(r => ctx.existing.some(n => n.id === r?.ref));
+          return value;
+        } catch (e) {
+          if (e.kind === 'rate' && e.retryMs <= 20000 && !shortRetry) {
+            shortRetry = true;
+            await require('node:timers/promises').setTimeout(e.retryMs, undefined, { signal }); continue;
+          }
+          if (['rate', 'model'].includes(e.kind) && model === PRIMARY_MODEL) { model = FALLBACK_MODEL; continue; }
+          if (['plan', 'invalid'].includes(e.kind) && !effortRetry) { effortRetry = true; effort = 'medium'; continue; }
+          if (e.kind === 'rate') e.retryMs = Math.max(900000, e.retryMs || 0);
+          throw e;
+        }
+      }
     },
     async describe(dataUrl, signal) {
       const model = 'qwen/qwen3.8-27b';

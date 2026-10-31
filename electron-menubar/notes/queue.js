@@ -4,7 +4,8 @@ const path = require('node:path');
 const { uid, node, assert } = require('./contracts');
 const { encodeWav } = require('../audio/wav-encoder');
 const { filterTranscription, shouldSkipTranscription } = require('../audio/silence-filter');
-const { splitSentences, chunks, context, validatePlan, applyPlan } = require('./plan');
+const { splitSentences, chunks, context } = require('./context');
+const { validate: validatePlan, applyThought: applyPlan, fallbackTitle } = require('./thought');
 
 function hasTranscript(transcript) { return !!(transcript?.text?.trim() || transcript?.silenceProven === true); }
 
@@ -99,35 +100,38 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
   }
   async function structure(entry, signal) {
     const transcript = repo.transcript(entry.id); assert(transcript, 'Originaltext fehlt');
-    const parts = chunks(transcript.sentences), index = entry.partsDone || 0;
-    if (index >= parts.length) { entry.state = entry.fallback ? 'fallback' : entry.keptUser ? 'kept_user' : 'complete'; entry.finishedAt = Date.now(); save(entry); return; }
-    const rawId = `raw_${entry.id}${index ? `_${index}` : ''}`, raw = repo.current().nodes[rawId];
-    if (!raw || raw.owner === 'user' || raw.pinned) {
+    const parts = entry.retryParts ? entry.retryParts.map(p => p.sentences) : chunks(transcript.sentences), index = entry.partsDone || 0;
+    if (index >= parts.length) { entry.state = entry.keptUser ? 'kept_user' : 'complete'; entry.finishedAt = Date.now(); save(entry); return; }
+    const rawId = entry.retryParts?.[index]?.nodeId || `raw_${entry.id}${index ? `_${index}` : ''}`, raw = repo.current().nodes[rawId];
+    if (!raw || raw.owner === 'user') {
       const alreadyApplied = !raw && parts[index].every(s => typeof repo.current().claims[s.id] === 'string' && repo.current().nodes[repo.current().claims[s.id]]?.sourceId === entry.id);
       entry.partsDone = index + 1; entry.state = 'transcribed'; if (!alreadyApplied) entry.keptUser = true; save(entry); return;
     }
     const waitForEditor = () => { if (isEditing(rawId)) { const error = new Error('Bearbeitung hat Vorrang'); error.kind = 'busy'; throw error; } };
     waitForEditor();
-    const ctx = context(repo.current(), parts[index], entry.id); const rawRev = raw.rev;
-    const useLarge = !!entry.largeFallback || parts[index].length >= 3 || parts[index].map(s => s.text).join(' ').length > 550;
+    const ctx = { ...context(repo.current(), parts[index], entry.id), custom_terms: vocabulary().slice(0, 200), now: new Date(entry.createdAt).toLocaleString(), topics_full: Object.keys(repo.current().topics).length >= 32 }; const rawRev = raw.rev;
     entry.state = 'structuring'; save(entry);
-    const planPath = `sources/${entry.id}/plan-${index}.json`;
+    const planPath = `sources/${entry.id}/thought-v6-${index}.json`;
     const cached = repo.readLocal(planPath, null);
     const reuse = cached?.rawRev === rawRev && cached.context;
     const validationContext = reuse ? { ...ctx, ...cached.context, sentences: parts[index] } : ctx;
-    let plan;
+    let plan, result;
     try {
-      const result = reuse ? cached.plan : await groq.plan(ctx, useLarge, signal);
+      result = reuse ? cached.plan : await groq.plan(ctx, true, signal);
       try { plan = validatePlan(result, validationContext); } catch (e) { e.kind = 'plan'; throw e; }
     } catch (e) {
-      if (['plan', 'invalid', 'model'].includes(e.kind) && !useLarge) { entry.largeFallback = true; entry.state = 'transcribed'; entry.retryAt = Date.now() + 1500; save(entry); return; }
-      if (['plan', 'invalid', 'model', 'too_large'].includes(e.kind)) { entry.partsDone = index + 1; entry.largeFallback = false; entry.state = 'transcribed'; entry.fallback = true; entry.message = 'Original erhalten · Einordnung nicht eindeutig'; save(entry); return; }
+      if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
+      if (['plan', 'invalid', 'model', 'too_large', 'budget_small'].includes(e.kind)) {
+        const text = parts[index].map(s => s.text).join(' ');
+        commands.commit(b => applyPlan(b, { title: fallbackTitle(text), text, topic: null, tasks: [], related: [] }, { rawId, rawRev }), false);
+        entry.partsDone = index + 1; entry.state = 'transcribed'; entry.fallback = true; entry.message = 'Original erhalten'; save(entry); return;
+      }
       throw e;
     }
     if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
     // A completed request is durable before waiting for an open editor or saving
     // the projection. Retrying a local write never buys the same plan again.
-    repo.writeLocal(planPath, { plan, rawRev, context: { topics: validationContext.topics.map(t => ({ id: t.id })), existing: validationContext.existing.map(n => ({ id: n.id })) }, at: Date.now() });
+    repo.writeLocal(planPath, { plan: result, rawRev, context: { topics: validationContext.topics, existing: validationContext.existing }, at: Date.now() });
     waitForEditor();
     let applied = false;
     try { commands.commit(b => { applied = applyPlan(b, plan, { entryId: entry.id, sentences: parts[index], rawId, rawRev }); }, false); }
@@ -136,7 +140,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
       entry.fallback = true; entry.message = 'Original erhalten · Darstellung nicht verwendbar';
     }
     if (!applied && !entry.fallback) entry.keptUser = true;
-    entry.partsDone = index + 1; entry.largeFallback = false; entry.state = 'transcribed'; entry.attempts = 0; entry.retryAt = 0; save(entry);
+    entry.partsDone = index + 1; entry.largeFallback = false; entry.state = 'transcribed'; entry.attempts = 0; entry.retryAt = 0; entry.message = ''; save(entry);
   }
   async function tick() {
     if (stopped || running || isBusy()) return;
@@ -199,10 +203,17 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     stop() { stopped = true; clearInterval(timer); clearInterval(retentionTimer); controller?.abort(); },
     retry(id) {
       const e = repo.entry(id); assert(e && !['recording', 'discarded'].includes(e.state));
-      if (e.fallback) {
+      if (hasTranscript(repo.transcript(id))) {
         // Explicit retry requests a fresh plan. Automatic retries only reuse it.
-        for (let i = 0; i < (e.parts || 0); i++) repo.writeLocal(`sources/${id}/plan-${i}.json`, null);
+        for (let i = 0; i < (e.parts || 0); i++) repo.writeLocal(`sources/${id}/thought-v6-${i}.json`, null);
         e.partsDone = 0; e.fallback = false; e.largeFallback = false; e.keptUser = false;
+      }
+      const transcript = repo.transcript(id);
+      if (transcript?.sentences?.length) {
+        const existing = Object.values(repo.current().nodes).filter(n => n.sourceId === id && n.sentenceIds.length);
+        e.retryParts = existing.map(n => ({ nodeId: n.id, sentences: transcript.sentences.filter(s => n.sentenceIds.includes(s.id)) })).filter(p => p.sentences.length);
+        e.parts = e.retryParts.length;
+        if (!e.parts) { e.state = 'complete'; e.message = ''; save(e); return; }
       }
       e.state = hasTranscript(repo.transcript(id)) ? 'transcribed' : 'captured'; e.retryAt = 0; e.attempts = 0; e.message = ''; authKey = null; save(e); tick().catch(() => {});
     },

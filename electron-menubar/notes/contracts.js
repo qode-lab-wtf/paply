@@ -9,13 +9,14 @@ function assert(ok, message = 'Ungültige Notes-Daten') { if (!ok) throw new Err
 function id(value) { assert(typeof value === 'string' && ID.test(value) && !Object.hasOwn(Object.prototype, value) && value !== 'prototype'); return value; }
 function text(value, max = 20000) { assert(typeof value === 'string' && value.length <= max); return value; }
 function point(value) { assert(value && Number.isFinite(value.x) && Number.isFinite(value.y) && Math.abs(value.x) <= 1e7 && Math.abs(value.y) <= 1e7); return { x: value.x, y: value.y }; }
-function blankBoard() { return { schemaVersion: 1, rev: 0, nodes: {}, edges: {}, topics: {}, claims: {}, tombstones: {}, viewport: { x: 90, y: 100, zoom: 1 } }; }
+function blankBoard() { return { schemaVersion: 1, rev: 0, nodes: {}, tasks: {}, edges: {}, topics: {}, claims: {}, tombstones: {}, viewport: { x: 90, y: 100, zoom: 1 } }; }
 function validBoard(b) {
   try {
     assert(b && b.schemaVersion === 1 && Number.isInteger(b.rev) && b.rev >= 0);
     for (const table of ['nodes', 'edges', 'topics', 'claims', 'tombstones']) {
       assert(b[table] && typeof b[table] === 'object' && !Array.isArray(b[table])); Object.keys(b[table]).forEach(id);
     }
+    for (const [key, t] of Object.entries(b.tasks || {})) { id(key); assert(t.id === key && ['ai', 'user'].includes(t.owner) && typeof t.done === 'boolean'); text(t.text, 200); text(t.quote, 200); if (t.due_hint !== null) text(t.due_hint, 200); id(t.sourceId); id(t.nodeId); }
     point(b.viewport); assert(Number.isFinite(b.viewport.zoom) && b.viewport.zoom >= .1 && b.viewport.zoom <= 2.5);
     for (const [key, n] of Object.entries(b.nodes)) {
       assert(n && n.id === key && KINDS.includes(n.kind)); text(n.text, 650000); text(n.label, 80);

@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { assert, uid, node } = require('./contracts');
 function createCapture({ repo, commands, getSettings, isDictating, isMeetingActive, show, send, hide, screenshot, onChange = () => {} }) {
-  let active = null, timer = null, finishTimer = null, resumeTimer = null, quitting = false;
-  function state(phase, detail = '') { send({ phase, detail, entryId: active?.id || null, epoch: active?.epoch || 0, elapsedMs: active ? active.bytes / 32 : 0, hasImage: !!active?.attachments.length }); onChange(); }
+  let active = null, timer = null, warningTimer = null, finishTimer = null, resumeTimer = null, quitting = false;
+  function state(phase, detail = '') { detail ||= active?.limitWarning ? 'Noch 1 Min. · dann wird gesichert' : ''; send({ phase, detail, entryId: active?.id || null, epoch: active?.epoch || 0, elapsedMs: active ? active.bytes / 32 : 0, hasImage: !!active?.attachments.length }); onChange(); }
   function emptyPlaceholder(entryId) {
     commands.commit(b => { const n = b.nodes[`raw_${entryId}`]; if (n?.pending) { n.pending = false; n.label = 'Kein Ton aufgenommen'; } }, false);
   }
@@ -33,7 +33,8 @@ function createCapture({ repo, commands, getSettings, isDictating, isMeetingActi
       active = { ...entry, fd, epoch: 1, seq: 0, bytes: 0, paused: false, stopping: false, started: false, droppedPackets: 0 };
       const generation = active;
       commands.commit(b => { const n = node({ kind: 'note', label: 'Neuer Gedanke', text: '' }); Object.assign(n, { id: `raw_${entry.id}`, owner: 'system', sourceId: entry.id, pending: true }); b.nodes[n.id] = n; }, false);
-      timer = setTimeout(() => stop(), 30 * 60000);
+      warningTimer = setTimeout(() => { if (active === generation && !active.stopping) { active.limitWarning = true; state(active.paused ? 'paused' : 'recording'); } }, 29 * 60000);
+      timer = setTimeout(() => { if (active) active.limitReached = true; stop(); }, 30 * 60000);
       await show(); if (active !== generation) return;
       if (active.stopping) { finish(); return; }
       state(active.paused ? 'paused' : 'start');
@@ -60,23 +61,23 @@ function createCapture({ repo, commands, getSettings, isDictating, isMeetingActi
       while (offset < bytes.length) { const written = fs.writeSync(a.fd, bytes, offset, bytes.length - offset); assert(written > 0, 'Audio konnte nicht gespeichert werden'); offset += written; }
       fs.fsyncSync(a.fd); a.bytes += bytes.length; a.seq = payload.seq;
       if (!a.started) { a.started = true; if (!a.stopping) { clearTimeout(finishTimer); state('recording'); } }
-      if (a.bytes >= 30 * 60 * 32000) stop();
+      if (a.bytes >= 30 * 60 * 32000) { a.limitReached = true; stop(); }
       return { accepted: true, seq: a.seq };
     } catch { fail('Speichern fehlgeschlagen · bisheriger Ton bleibt erhalten'); return { accepted: false }; }
   }
   function finish(message = '') {
     const a = active; if (!a) return;
-    clearTimeout(timer); clearTimeout(finishTimer); clearTimeout(resumeTimer);
+    clearTimeout(timer); clearTimeout(warningTimer); clearTimeout(finishTimer); clearTimeout(resumeTimer);
     // A full disk must never leave a live microphone or a stuck capture lease.
     // entry.json remains 'recording' if its final write fails; recover() repairs it.
     try { const length = fs.fstatSync(a.fd).size; a.bytes = length - length % 2; if (length % 2) fs.ftruncateSync(a.fd, a.bytes); fs.fsyncSync(a.fd); } catch { message ||= 'Speichern unterbrochen · vorhandener Ton bleibt erhalten'; }
     try { fs.closeSync(a.fd); } catch { message ||= 'Aufnahme beendet · Speicher prüfen'; }
     active = null;
     const entry = repo.entry(a.id) || { id: a.id, kind: 'voice', createdAt: a.createdAt, partsDone: 0, attempts: 0 };
-    Object.assign(entry, { stoppedAt: Date.now(), state: a.bytes ? 'captured' : 'needs_attention', durationMs: a.bytes / 32, attachments: a.attachments, message: message || (a.bytes ? '' : 'Kein Ton aufgenommen'), droppedPackets: a.droppedPackets });
+    Object.assign(entry, { stoppedAt: Date.now(), state: a.bytes ? 'captured' : 'needs_attention', durationMs: a.bytes / 32, attachments: a.attachments, message: message || (a.limitReached ? 'Nach 30 Min. gespeichert' : a.bytes ? '' : 'Kein Ton aufgenommen'), droppedPackets: a.droppedPackets });
     try { repo.saveEntry(entry); } catch { message = 'Speicher voll oder nicht erreichbar · vorhandenen Ton beim Neustart wiederherstellen'; }
     if (!a.bytes) { try { emptyPlaceholder(a.id); } catch { /* Keep the last durable board on disk failure. */ } }
-    state(message ? 'error' : 'saved', message || (getSettings().hasGroqKey ? 'Gedanke gesichert' : 'Gesichert · Schlüssel ergänzen')); if (!quitting) hide(message ? 3000 : 1400);
+    state(message ? 'error' : 'saved', message || (a.limitReached ? 'Nach 30 Min. gespeichert' : getSettings().hasGroqKey ? 'Gedanke gesichert' : 'Gesichert · Schlüssel ergänzen')); if (!quitting) hide(message ? 3000 : 1400);
   }
   function stop() {
     if (!active || active.stopping) return;

@@ -11,7 +11,7 @@ function fixture() {
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'paply-independent-'));
  const repo=createRepo(directory),commands=createCommands(repo);let request,release;
  const gate=new Promise(r=>{release=r});
- const queue=createQueue({repo,commands,getSettings:()=>({}),getKey:()=> 'paply-notes-test-key',assets:{pending:()=>[]},groq:{async plan(ctx){request=ctx;await gate;return{topics:[],items:ctx.sentences.map((s,i)=>({key:`thought${i}`,sentenceIds:[s.id],label:'Gedanke',icon:'pencil',topic:null,appearance:'note'})),structures:[],relations:[]}}}});
+ const queue=createQueue({repo,commands,getSettings:()=>({}),getKey:()=> 'paply-notes-test-key',assets:{pending:()=>[]},groq:{async plan(ctx){request=ctx;await gate;return{title:'Gedanke',clean_text:ctx.sentences.map(s=>s.text).join(' '),topic:{choice:'none'},tasks:[],related:[]}}}});
  return {repo,commands,queue,request:()=>request,release,async finish(){release();for(let i=0;i<8;i++){await Promise.resolve();await queue.tick();}},close(){queue.stop();fs.rmSync(directory,{recursive:true,force:true})}};
 }
 describe('Independent Notes acceptance regressions',()=>{
