@@ -59,6 +59,18 @@
    "term": "Maks",
    "text": "Ich rufe Max gleich an.",
    "near": true
+  },
+  {
+   "name": "Kurzer Name trifft kein Allerweltswort",
+   "term": "Tom",
+   "text": "Ich habe dem Mann geschrieben.",
+   "near": false
+  },
+  {
+   "name": "Fachbegriff trifft kein Fuellwort",
+   "term": "Datenschutz",
+   "text": "Ich glaube dass das stimmt.",
+   "near": false
   }
  ],
  "annahme": [
@@ -141,6 +153,69 @@
    "second": "Hallo law min, wie geht es dir?",
    "lpFirst": null,
    "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Echo bei kurzem Diktat",
+   "term": "Law Min",
+   "first": "Lamin danke.",
+   "second": "Law Min, Law Min.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Echo mit Hallo",
+   "term": "Law Min",
+   "first": "Ruf Lehmann bitte an.",
+   "second": "Hallo Law Min.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Doppeltes Echo",
+   "term": "Law Min",
+   "first": "Herr Lehmann, ja.",
+   "second": "Law Min, Law Min.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Stille wird nicht zum Begriff",
+   "term": "Law Min",
+   "first": "Vielen Dank.",
+   "second": "Law Min.",
+   "lpFirst": -0.9,
+   "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Das ganze Stueck ist der Begriff",
+   "term": "Law Min",
+   "first": "Lamin.",
+   "second": "Law Min.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": true
+  },
+  {
+   "name": "Langes Stueck mit einem veraenderten Wort",
+   "term": "Law Min",
+   "first": "Ich habe heute lange mit Lavi Min ueber die neue Planung fuer den Sommer gesprochen.",
+   "second": "Ich habe heute lange mit Law Min ueber eine neue Planung fuer den Sommer gesprochen.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.28,
+   "accept": true
+  },
+  {
+   "name": "Langes Stueck mit zu vielen Aenderungen",
+   "term": "Law Min",
+   "first": "Ich habe heute lange mit Lavi Min ueber die neue Planung fuer den Sommer gesprochen.",
+   "second": "Wir haben gestern kurz mit Law Min ueber eine alte Idee fuer den Winter gesprochen.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.28,
    "accept": false
   }
  ]

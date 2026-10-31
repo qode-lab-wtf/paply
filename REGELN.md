@@ -72,12 +72,12 @@ Das gilt für Diktat und Gedanken in allen Apps. Gespräche haben eigene, einfac
 
 - Ein Begriff ersetzt nur ein ähnlich klingendes, sicher falsch gehörtes Wort.
 - Paply fügt nie einen Begriff ein, der nicht gesprochen wurde.
-- Begriffs-Gegenprobe bei Diktat und Gedanken: Klingt ein Teil des Textes nach einem eigenen Begriff oder ist Whisper bei
-  einem Segment unsicher, läuft das Stück ein zweites Mal mit dem Begriff im Vordergrund. Der Begriff zählt nur, wenn
-  Whisper ihn dabei selbst hört: Die Konfidenz darf um höchstens `begriffe.abstand` schlechter sein, und der übrige Text
-  bleibt gleich. Sonst bleibt das erste Ergebnis. Prüffälle: `shared/begriffe/faelle.json`.
-- Polieren und Gedanken sehen die ersten 200 Zeichen der Liste. Whisper sieht beim Diktat so viele ganze Begriffe, wie in
-  etwa 90 Tokens passen.
+- Begriffs-Gegenprobe bei Diktat und Gedanken: Klingt ein Teil des Textes nach einem eigenen Begriff, läuft das Stück ein
+  zweites Mal mit dem Begriff im Vordergrund. Der Begriff zählt nur, wenn Whisper ihn dabei selbst hört: Die Konfidenz darf
+  um höchstens `begriffe.abstand` schlechter sein, und nur der ähnlich klingende Teil ändert sich. Sonst bleibt das erste
+  Ergebnis. Was die Stille-Regeln verwerfen, bekommt keine Gegenprobe. Prüffälle: `shared/begriffe/faelle.json`.
+- Messung vom 31.10.2026: Mit zehn typischen Begriffen betrifft das rund 14 % von Allans 1.374 echten Diktaten, mit kurzen
+  Namen keines. Die Gegenprobe wurde bisher nur mit künstlicher Stimme geprüft.
 
 ## 5. Gedanken
 
@@ -163,6 +163,7 @@ Diese Tabelle liest der Wächter direkt. Steht ein Wert in einer App anders, sch
 | `sprache.kurz_sekunden` | `5` | Bis zu dieser Sprechzeit bekommt eine abweichende Erkennung eine Gegenprobe |
 | `sprache.abstand` | `0.15` | So viel besser muss die Konfidenz der erkannten Sprache sein, damit sie gewinnt |
 | `begriffe.abstand` | `0.05` | So viel schlechter darf die Konfidenz der Begriffs-Gegenprobe höchstens sein |
+| `begriffe.schreibweise` | `0.6` | Größter Schreibweisen-Abstand als Anteil der Begriffslänge, darüber keine Gegenprobe |
 | `diktat.whisper_modell` | `whisper-large-v3` | Standardmodell für Diktat |
 | `polieren.modell` | `qwen/qwen3.8-27b` | Modell fürs Polieren |
 | `polieren.ausweichmodell` | `openai/gpt-oss-120b` | Bei Limit oder fehlendem Modell |

@@ -30,6 +30,8 @@ const WERTE = {
     [`${IOS}/Text/TermGuard.swift`, /gap = ([\d.]+)/],
     [`${ANDROID}/TermGuard.kt`, /gap = ([\d.]+)/],
   ],
+  'begriffe.schreibweise': [
+  ],
   'diktat.whisper_modell': [
     [`${DESKTOP}/dictation/language-guard.js`, /WHISPER_MODEL = '([^']+)'/],
     [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],
