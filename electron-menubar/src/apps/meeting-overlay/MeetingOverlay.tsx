@@ -1,3 +1,4 @@
+import { RecordingNotice } from './RecordingNotice';
 import { useEffect, useRef, useState } from 'react';
 import { Mic, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -341,6 +342,8 @@ export function MeetingOverlay() {
           <span className="text-[8px] leading-none font-bold">■</span>
         </button>
       </div>
+
+      <RecordingNotice durationMs={durationMs}/>
 
       {/* Gelb/Rot: Klartext-Grund (z.B. Mikro verspätet, fehlende Berechtigung) */}
       {capturing && health !== 'green' && reason && (

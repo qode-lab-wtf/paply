@@ -1042,8 +1042,8 @@ function ensureMeetingOverlayWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width } = primaryDisplay.workAreaSize;
 
-  const widgetWidth = 240;
-  const widgetHeight = 64;
+  const widgetWidth = 300;
+  const widgetHeight = 110;
 
   const windowOptions = {
     width: widgetWidth,

@@ -37,6 +37,11 @@ describe('durable store and commands', () => {
     const recovered = createRepo(root); expect(recovered.recovered).toBe(true); expect(Object.values(recovered.current().nodes)[0].text).toBe('erhalten');
   });
   it('keeps memory and old disk state when rename fails', () => { commands.apply([textOp('first')]); const before = repo.snapshot(); vi.spyOn(fs, 'renameSync').mockImplementation(() => { throw Object.assign(new Error('disk busy'), { code: 'EPERM' }); }); expect(() => commands.apply([textOp('second')])).toThrow(); expect(repo.snapshot()).toEqual(before); expect(JSON.parse(fs.readFileSync(path.join(root, 'board.json')))).toEqual(before); });
+  it('11: deleting a thought removes AI tasks, preserves own tasks and supports undo', () => {
+    const n=rawFor([{id:'s1',text:'Milch kaufen'}]);
+    commands.commit(b=>{b.tasks.ai={id:'ai',nodeId:n.id,sourceId:'s',text:'Milch kaufen',quote:'Milch kaufen',due_hint:null,owner:'ai',done:true};b.tasks.own={...b.tasks.ai,id:'own',owner:'user'};},false);
+    commands.apply([{type:'delete',id:n.id}]);expect(repo.current().tasks.ai).toBeUndefined();expect(repo.current().tasks.own).toBeTruthy();commands.undo();expect(repo.current().tasks.ai).toBeTruthy();
+  });
   it('deletes incident edges and restores edges plus source claims on undo', () => { const { ctx } = fixturePlan(); const a = rawFor(ctx.sentences); commands.apply([textOp('other')]); const other = Object.values(repo.current().nodes).find(n => n.id !== a.id); commands.apply([{ type: 'edge', source: a.id, target: other.id }]); commands.apply([{ type: 'delete', id: a.id }]); expect(repo.current().claims.s1).toEqual({ tomb: true }); expect(Object.keys(repo.current().edges)).toHaveLength(0); commands.undo(); expect(repo.current().nodes[a.id]).toBeTruthy(); expect(repo.current().claims.s1).toBe(a.id); expect(Object.keys(repo.current().edges)).toHaveLength(1); commands.redo(); expect(repo.current().nodes[a.id]).toBeUndefined(); });
   it('undo does not remove an unrelated AI commit', () => { commands.apply([textOp('user')]); commands.commit(b => { const n = node({ kind: 'note', text: 'AI' }); b.nodes[n.id] = n; }, false); commands.undo(); expect(Object.values(repo.current().nodes).map(n => n.text)).toEqual(['AI']); });
   it('rejects stale edit revisions and prevents partial batch writes', () => { commands.apply([textOp()]); const n = single(); const before = repo.snapshot(); expect(() => commands.apply([{ type: 'update', id: n.id, rev: 0, patch: { text: 'stale' } }])).toThrow('geändert'); expect(() => commands.apply([textOp('partial'), { type: 'update', id: n.id, patch: { sourceId: 'fake' } }])).toThrow(); expect(repo.snapshot()).toEqual(before); });
@@ -118,6 +123,26 @@ describe('queue boundaries', () => {
     q.stop();
   });
   function fixture(groq, extra = {}) { return createQueue({ repo, commands, groq, ...extra, assets: { pending: () => [] }, getSettings: () => defaults(), getKey: () => 'fake', onChange: vi.fn() }); }
+  it('5: failed retry preserves an existing AI result and tasks', async () => {
+    const groq = { plan: vi.fn(async ctx => fixturePlan(ctx.sentences).plan) }, q = fixture(groq);
+    const id = q.addText('Ich muss morgen Milch kaufen.');
+    for(let i=0;i<10;i++) await q.tick();
+    const before = JSON.parse(JSON.stringify(repo.current()));
+    groq.plan.mockRejectedValue(Object.assign(new Error('bad'), {kind:'plan'}));
+    q.retry(id); for(let i=0;i<10;i++) await q.tick();
+    expect(repo.current().nodes).toEqual(before.nodes); expect(repo.current().tasks).toEqual(before.tasks); q.stop();
+  });
+  it('3: budget can wait once, persists medium retry, then finishes with raw text', async () => {
+    const groq={plan:vi.fn(async()=>{throw Object.assign(new Error('budget'),{kind:'budget',planRetry:true});})},q=fixture(groq);
+    const id=q.addText('Original bleibt.');for(let i=0;i<6;i++)await q.tick();
+    expect(repo.entry(id)).toMatchObject({state:'waiting_budget',planRetry:true});
+    repo.saveEntry({...repo.entry(id),retryAt:0});for(let i=0;i<8;i++)await q.tick();
+    expect(repo.entry(id).state).toBe('fallback');expect(groq.plan).toHaveBeenCalledTimes(2);q.stop();
+  });
+  it('12: missing audio is explained without a filesystem path', async () => {
+    repo.saveEntry({id:'s_missing',state:'captured',kind:'voice',createdAt:Date.now()});const q=fixture({});await q.tick();
+    expect(repo.entry('s_missing').message).toBe('Aufnahme nicht mehr vorhanden · bitte erneut aufnehmen');q.stop();
+  });
   it.each([{ position: { x: 40, y: 80 } }, { width: 480, height: 240 }, { text: 'Mein Zusatz' }])('fills a touched pending placeholder and keeps all later parts: %j', async patch => {
     const sentences = splitSentences(Array.from({ length: 60 }, (_, i) => `Gedanke ${i} bleibt erhalten.`).join(' '), 's'); const raw = rawFor([]);
     commands.commit(b => { b.nodes[raw.id].pending = true; }, false); commands.apply([{ type: 'update', id: raw.id, patch }]);
@@ -128,7 +153,7 @@ describe('queue boundaries', () => {
   });
   it('shows fallback honestly and explicitly retries the untouched raw note', async () => {
     const groq = { plan: vi.fn(async () => { const e = new Error('Plan falsch'); e.kind = 'plan'; throw e; }) }; const q = fixture(groq); const id = q.addText('Eins. Zwei. Drei.');
-    for (let i = 0; i < 6; i++) await q.tick(); expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 6; i++) await q.tick(); expect(repo.entry(id).state).toBe('fallback'); expect(repo.entry(id).message).toBe('Original erhalten'); expect(groq.plan).toHaveBeenCalledTimes(1);
     q.retry(id); for (let i = 0; i < 6; i++) await q.tick(); expect(groq.plan).toHaveBeenCalledTimes(2); expect(single().text).toBe('Eins. Zwei. Drei.'); q.stop();
   });
   it('excludes its own raw source from retrieval and matches Unicode words', () => { const sentences = [{ id: 's1', text: 'Größe für die Küche' }]; const raw = rawFor(sentences); commands.apply([textOp('Größe der Küche')]); const ctx = context(repo.current(), sentences, 's'); expect(ctx.existing.map(n => n.id)).not.toContain(raw.id); expect(ctx.existing[0].text).toBe('Größe der Küche'); });
@@ -178,7 +203,7 @@ describe('queue boundaries', () => {
     vi.spyOn(commands, 'commit').mockImplementationOnce(() => { throw new Error('Ungültige Notes-Daten'); });
     release(); for (let i = 0; i < 30; i++) await Promise.resolve();
     for (let i = 0; i < 5; i++) await q.tick();
-    expect(groq.plan).toHaveBeenCalledTimes(1); expect(repo.entry(id).state).toBe('complete'); expect(single().text).toBe('Original bleibt.'); q.stop();
+    expect(groq.plan).toHaveBeenCalledTimes(1); expect(repo.entry(id).state).toBe('fallback'); expect(single().text).toBe('Original bleibt.'); q.stop();
   });
   it('revalidates a waiting cached plan against its original allowed IDs when retrieval changes', async () => {
     commands.commit(b => { for (let i = 0; i < 40; i++) b.topics[`t_${i}`] = { id: `t_${i}`, title: `Thema ${i}`, icon: 'leaf', owner: 'user', createdAt: i }; }, false);
@@ -198,7 +223,7 @@ describe('queue boundaries', () => {
     const groq = { plan: vi.fn(async ctx => { await gate; return fixturePlan(ctx.sentences).plan; }) }, q = fixture(groq), id = q.addText('Original bleibt sichtbar.');
     vi.spyOn(commands, 'commit').mockImplementationOnce(() => { throw new Error('Ungültige Notes-Daten'); });
     release(); for (let i = 0; i < 30; i++) await Promise.resolve(); for (let i = 0; i < 5; i++) await q.tick();
-    expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(1);
+    expect(repo.entry(id).state).toBe('fallback'); expect(groq.plan).toHaveBeenCalledTimes(1);
     q.retry(id); for (let i = 0; i < 8; i++) await q.tick();
     expect(repo.entry(id).state).toBe('complete'); expect(groq.plan).toHaveBeenCalledTimes(2); q.stop();
   });

@@ -38,3 +38,12 @@ describe('transcription-queue', () => {
     expect(captured.get('prompt')).toBeNull();
   });
 });
+it('14: empty pieces do not change expected language',async()=>{
+ const q=new TranscriptionQueue({apiKey:'fake',fetchImpl:async()=>({ok:true,json:async()=>({language:'fr',text:'',segments:[]})})});
+ q.previousLanguages.mic='de';await q._callGroq({channel:'mic',wavBuffer:Buffer.alloc(44),tOffset:0});expect(q.previousLanguages.mic).toBe('de');
+});
+it('14: short speech in a long window still gets a language counter-check',async()=>{
+ const languages=[];const q=new TranscriptionQueue({apiKey:'fake',language:'de',systemLanguages:['de','fr'],fetchImpl:async(_,opts)=>{languages.push(opts.body.get('language'));return {ok:true,json:async()=>({language:opts.body.get('language')||'fr',text:'Bonjour Sophie',segments:[{start:0,end:1,text:'Bonjour Sophie',avg_logprob:-.2}]})};}});
+ const pcm=Buffer.alloc(320000);for(let i=0;i<32000;i+=2)pcm.writeInt16LE(i%4?12000:-12000,i);
+ await q._callGroq({channel:'mic',wavBuffer:Buffer.concat([Buffer.alloc(44),pcm]),tOffset:0});expect(languages).toEqual([null,'de']);
+});
