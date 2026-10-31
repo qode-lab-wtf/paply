@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Prüft, ob Mac/Windows, iOS und Android zu REGELN.md passen. Ändert nichts.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const WURZEL = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lies = datei => readFileSync(join(WURZEL, datei), 'utf8');
+const gibtEs = datei => existsSync(join(WURZEL, datei));
 
 const DESKTOP = 'electron-menubar';
 const IOS = 'ios/PaplyKit/Sources/PaplyKit';
@@ -17,6 +18,8 @@ const WERTE = {
   'sprache.kurz_sekunden': [
     [`${IOS}/Text/LanguageGuard.swift`, /shortSpeechSeconds = ([\d.]+)/],
     [`${ANDROID}/LanguageGuard.kt`, /shortSpeechSeconds = ([\d.]+)/],
+  ],
+  'sprache.abstand': [
   ],
   'diktat.whisper_modell': [
     [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],
@@ -71,7 +74,13 @@ const AUSNAHMEN = {
     || /code !in userLanguages/.test(lies(`${ANDROID}/LanguageGuard.kt`)),
   A5: () => !/tasks|due_hint/.test(lies(`${DESKTOP}/notes/plan.js`)),
   A6: () => lies(`${DESKTOP}/electron-main.js`).includes('enablePolish: false'),
-  A7: () => /RETENTION_MS = 7 \* 24/.test(lies(`${DESKTOP}/meeting/audio-retention.js`)),
+  A7: () => gibtEs(`${DESKTOP}/meeting/audio-retention.js`),
+  A8: () => !gibtEs('android/thoughts/src/main/kotlin/com/paply/conversations') && !gibtEs('android/conversations'),
+  A9: () => gibtEs(`${DESKTOP}/meeting/gemini-audio.js`),
+  A10: () => lies(`${GEDANKEN}/local/EmbeddingIndex.kt`).includes('override val available = false'),
+  A11: () => lies(`${DESKTOP}/dictation/custom-agent-prompt.js`).includes('Übersetze den finalen Text'),
+  A12: () => lies(`${DESKTOP}/notes/capture.js`).includes('30 * 60000'),
+  A13: () => lies(`${IOS}/Conversations/ConversationSummarizer.swift`).includes('knapp auf Deutsch'),
 };
 
 const zahl = text => Number(String(text).replace(/_/g, '').split('*').reduce((a, b) => a * Number(b), 1));
@@ -152,6 +161,15 @@ function pruefeStilleListe(fehler) {
   if (ios.length === 0 || ios.join('|') !== android.join('|')) fehler.push('Stille-Liste von iOS und Android weicht ab');
 }
 
+function pruefeSprachfaelle(fehler) {
+  const faelle = JSON.parse(lies('shared/sprache/faelle.json'));
+  const felder = ['name', 'spoken', 'expected', 'detected', 'users', 'check', 'result'];
+  for (const fall of faelle) {
+    if (felder.some(feld => !(feld in fall))) fehler.push(`Sprachfall unvollständig: ${fall.name}`);
+    if (fall.result !== 'detected' && fall.result !== 'expected') fehler.push(`Sprachfall ohne gültiges Ergebnis: ${fall.name}`);
+  }
+}
+
 function pruefeProjektregeln(fehler) {
   if (lies('CLAUDE.md') !== lies('AGENTS.md')) fehler.push('CLAUDE.md und AGENTS.md müssen gleich sein');
 }
@@ -164,6 +182,7 @@ pruefePolierPrompt(fehler);
 pruefeGedankenPrompt(fehler);
 pruefeGedankenGrenze(fehler);
 pruefeStilleListe(fehler);
+pruefeSprachfaelle(fehler);
 pruefeProjektregeln(fehler);
 
 if (fehler.length) {

@@ -4,6 +4,7 @@ Wegweiser: `docs/instinct/START.md`. Kanonischer Stand: `docs/STAND.md`. Entsche
 
 - Es gibt genau ein Paply: dieses Repository, Branch `main`. Apps: `electron-menubar/` (Mac, Windows), `ios/`, `android/`. `paply.dev` ist ein anderes Produkt.
 - Verhalten steht in `REGELN.md` und gilt für alle Apps. Änderungen dort beginnen, dann `node shared/regeln-pruefen.mjs`.
+- Neue Funktion oder Änderung: zuerst klären, ob sie für alle Apps oder nur für eine gilt. Nur eine App: Die übrigen kommen unter „Nachzureichen“ in `docs/STAND.md`, damit der Gesamtstand sichtbar bleibt.
 - Für jede Aufgabe ein kurzer Branch von `main`, nach dem Merge löschen. Keine langlebigen Plattform-Branches.
 - Diktat (Cmd+X) nicht anfassen, ohne dass Allan es ausdrücklich will.
 - Keine Keys ins Repository; Keys kommen in die App-Einstellungen.

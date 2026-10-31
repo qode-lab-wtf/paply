@@ -192,3 +192,15 @@ Allans Auftrag: zentralisieren, einfach halten, Verhalten an einer Stelle festle
   Wächter `shared/regeln-pruefen.mjs`, der jede Abweichung meldet.
 - Der Zusammenschluss ändert keine App. Abweichungen stehen als Ausnahmen in `REGELN.md`, bis Allan sie entscheidet.
 - Für jede Aufgabe ein kurzer Branch von `main`, keine langlebigen Plattform-Branches.
+
+## 2026-10-31 — Sprache: erkennen lassen, Gegenprobe statt Vorgabe (von Allan beauftragt)
+
+Allan will fremde Sprache immer ausgeschrieben, nie übersetzt. Die Übersetzung entstand, weil kurze Stücke mit fester
+Sprache rausgingen und fremde Sprachen neu in der Hauptsprache geschrieben wurden. Künftig erkennt Whisper immer selbst.
+Weicht die Erkennung bei kurzen Stücken oder außerhalb der eigenen Sprachen ab, entscheidet eine Gegenprobe über die
+Konfidenz. Messung und Regel: `REGELN.md`, Abschnitt 1.
+
+Am selben Tag entschieden: Regel 1, `large-v3` und die lange Stille-Liste gelten auch auf Mac und Windows. Polieren ist
+überall an, der Schalter wandert in einen Entwicklerbereich, den jede App bekommt. Ton bleibt nur bis zum gesicherten
+Text, Nachhören entfällt. Das ersetzt „Originalton 7 Tage“ von 2026-09-21. Die Historie vor dem Merge wurde von
+Tester-Namen, einem privaten Vorfall und dem TestFlight-Link bereinigt.

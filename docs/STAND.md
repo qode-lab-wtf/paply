@@ -1,19 +1,31 @@
 # Paply — Stand
 
-**Zeitpunkt:** 30.10.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
+**Zeitpunkt:** 31.10.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
 
 ## Überblick
 
 | Funktion | Mac | Windows | iPhone | Android |
 | --- | --- | --- | --- | --- |
 | Diktat | Alltagstauglich, Allans tägliche App | Gebaut, Praxistest beim Freund offen | Bei Testern, Gerätetests offen | Bei Testern, jüngste App |
+| Polieren | Standard aus | Standard aus | An | An |
+| Sprachregel | Fest eingestellt | Fest eingestellt | Teilweise | Teilweise |
 | Gedanken | Schwach: 4 von 19 Gedanken sauber eingeordnet (MacBook, 26./27.10.) | Wie Mac, ungetestet | Am weitesten (KI-Regeln v6) | Gleiche KI-Regeln, einfachere Verknüpfung |
+| Aufgaben aus Gedanken | Fehlt | Fehlt | Ja | Ja |
+| Erinnerungen, Widgets | Fehlt | Fehlt | Ja | Ja |
 | Gespräche | Beta, aus (Gemini) | Beta, aus | Beta, aus, erster Gerätetest läuft | Fehlt |
+| Entwicklerbereich | Fehlt | Fehlt | Ja | Ja, ohne Polieren-Schalter |
+
+## Nachzureichen
+
+Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtbar, was den anderen fehlt.
+
+- **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
+- **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 
 ## Mac und Windows
 
 - **Version:** v1.15.3, veröffentlicht, auf Allans MacBook installiert. 744 automatische Tests.
-- **Offen:** Sprachregel (A1), Gedanken neu einordnen (A5), Rückmeldung des Windows-Freunds, Electron-Upgrade.
+- **Offen:** Rückmeldung des Windows-Freunds, Electron-Upgrade.
 - **Veröffentlichen:** [RELEASE.md](RELEASE.md). **Verlauf:** [stand/desktop.md](stand/desktop.md).
 
 ## iPhone

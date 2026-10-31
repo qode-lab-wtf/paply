@@ -1,0 +1,23 @@
+[
+  {"name": "Kurz, Erkennung passt zur Hauptsprache", "spoken": 2.0, "expected": "de", "detected": "de", "users": ["de", "en"], "check": false, "result": "detected"},
+  {"name": "Lang, eigene Fremdsprache bleibt ohne Gegenprobe", "spoken": 12.0, "expected": "de", "detected": "en", "users": ["de", "en"], "check": false, "result": "detected"},
+  {"name": "Lang, fremde Sprache ausserhalb der eigenen bekommt Gegenprobe und bleibt", "spoken": 12.0, "expected": "de", "detected": "ar", "users": ["de", "en"], "check": true, "lpDetected": -0.17, "lpExpected": -0.62, "sameText": false, "result": "detected"},
+  {"name": "Lang, falsche Erkennung ru faellt auf Hauptsprache zurueck", "spoken": 9.0, "expected": "de", "detected": "ru", "users": ["de", "en"], "check": true, "lpDetected": -0.95, "lpExpected": -0.30, "sameText": false, "result": "expected"},
+  {"name": "Genau an der Grenze gilt als kurz", "spoken": 5.0, "expected": "de", "detected": "en", "users": ["de", "en"], "check": true, "lpDetected": -0.30, "lpExpected": -0.31, "sameText": false, "result": "expected"},
+  {"name": "Knapp ueber der Grenze keine Gegenprobe bei eigener Sprache", "spoken": 5.01, "expected": "de", "detected": "en", "users": ["de", "en"], "check": false, "result": "detected"},
+  {"name": "Messung: Franzoesisch kurz, Vorgabe wuerde uebersetzen", "spoken": 1.6, "expected": "de", "detected": "fr", "users": ["de", "en"], "check": true, "lpDetected": -0.08, "lpExpected": -0.39, "sameText": false, "result": "detected"},
+  {"name": "Messung: Franzoesisch, deutlicher Abstand", "spoken": 2.0, "expected": "de", "detected": "fr", "users": ["de", "en"], "check": true, "lpDetected": -0.14, "lpExpected": -0.67, "sameText": false, "result": "detected"},
+  {"name": "Messung: Russisch mit kleinstem echten Abstand", "spoken": 1.8, "expected": "de", "detected": "ru", "users": ["de", "en"], "check": true, "lpDetected": -0.16, "lpExpected": -0.33, "sameText": false, "result": "detected"},
+  {"name": "Messung: Arabisch", "spoken": 1.5, "expected": "de", "detected": "ar", "users": ["de", "en"], "check": true, "lpDetected": -0.17, "lpExpected": -0.47, "sameText": false, "result": "detected"},
+  {"name": "Messung: echtes kurzes deutsches Stueck, als Englisch erkannt, kaum Abstand", "spoken": 1.3, "expected": "de", "detected": "en", "users": ["de", "en"], "check": true, "lpDetected": -0.29, "lpExpected": -0.27, "sameText": false, "result": "expected"},
+  {"name": "Messung: echtes kurzes Stueck, Abstand zu klein", "spoken": 1.1, "expected": "de", "detected": "en", "users": ["de", "en"], "check": true, "lpDetected": -0.59, "lpExpected": -0.67, "sameText": false, "result": "expected"},
+  {"name": "Gleicher Text: erwartete Sprache behalten", "spoken": 1.2, "expected": "de", "detected": "en", "users": ["de", "en"], "check": true, "lpDetected": -0.31, "lpExpected": -0.15, "sameText": true, "result": "expected"},
+  {"name": "Abstand genau erreicht: erkannte Sprache gewinnt", "spoken": 3.0, "expected": "de", "detected": "fr", "users": ["de"], "check": true, "lpDetected": -0.25, "lpExpected": -0.40, "sameText": false, "result": "detected"},
+  {"name": "Kurzer Rest eines englischen Diktats, Erkennung kippt auf Deutsch", "spoken": 2.0, "expected": "en", "detected": "de", "users": ["de", "en"], "check": true, "lpDetected": -0.60, "lpExpected": -0.20, "sameText": false, "result": "expected"},
+  {"name": "Vorstueck ausserhalb der eigenen Sprachen wird erwartet", "spoken": 2.0, "expected": "ar", "detected": "ar", "users": ["de", "en"], "check": false, "result": "detected"},
+  {"name": "Keine Hauptsprache bekannt: keine Gegenprobe", "spoken": 2.0, "expected": null, "detected": "en", "users": [], "check": false, "result": "detected"},
+  {"name": "Keine Sprache erkannt: keine Gegenprobe", "spoken": 2.0, "expected": "de", "detected": null, "users": ["de"], "check": false, "result": "detected"},
+  {"name": "Konfidenz fehlt: erstes Ergebnis bleibt", "spoken": 2.0, "expected": "de", "detected": "fr", "users": ["de"], "check": true, "lpDetected": null, "lpExpected": -0.20, "sameText": false, "result": "detected"},
+  {"name": "Gegenprobe gescheitert: erstes Ergebnis bleibt", "spoken": 2.0, "expected": "de", "detected": "fr", "users": ["de"], "check": true, "lpDetected": -0.20, "lpExpected": null, "sameText": false, "result": "detected"},
+  {"name": "Sprachcodes werden auf den Basiscode verglichen", "spoken": 2.0, "expected": "de", "detected": "de-DE", "users": ["de-DE", "en-US"], "check": false, "result": "detected"}
+]
