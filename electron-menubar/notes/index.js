@@ -41,7 +41,7 @@ function createNotes(deps) {
     const url = new URL(process.env.PAPLY_NOTES_TEST_ENDPOINT);
     if (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) endpoint = url.href.replace(/\/$/, '');
   }
-  const groq = createGroq({ getKey: () => store.get('groqApiKey'), ledger, ...(endpoint ? { endpoint } : {}) });
+  const groq = createGroq({ getTranscriptionSettings: () => ({ language: store.get('language'), whisperModel: store.get('whisperModel'), systemLanguages: app.getPreferredSystemLanguages() }), getKey: () => store.get('groqApiKey'), ledger, ...(endpoint ? { endpoint } : {}) });
   function secureWindow(win) {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', e => e.preventDefault());
@@ -62,7 +62,7 @@ function createNotes(deps) {
     captureWindow.setPosition(Math.round(area.x + (area.width - 340) / 2), area.y + area.height - 160); captureWindow.showInactive();
   }
   capture = createCapture({ repo, commands, getSettings, isDictating, isMeetingActive, show: showCapture, send: sendCapture, screenshot: assets.screenshot, hide(ms) { clearTimeout(hideTimer); hideTimer = setTimeout(() => captureWindow?.hide(), ms); }, onChange: changed });
-  queue = createQueue({ repo, commands, groq, assets, getSettings, getKey: () => store.get('groqApiKey'), vocabulary: () => store.get('customVocabulary', ''), isBusy: () => isDictating() || isMeetingActive() || capture.status().active, isEditing: id => editingId === id, isOnline: () => deps.net.isOnline(), onChange: changed });
+  queue = createQueue({ getUILanguage: () => app.getPreferredSystemLanguages()[0] || Intl.DateTimeFormat().resolvedOptions().locale, repo, commands, groq, assets, getSettings, getKey: () => store.get('groqApiKey'), vocabulary: () => store.get('customVocabulary', ''), isBusy: () => isDictating() || isMeetingActive() || capture.status().active, isEditing: id => editingId === id, isOnline: () => deps.net.isOnline(), onChange: changed });
   async function openBoard() {
     settings.refreshKeyLabels();
     if (boardWindow && !boardWindow.isDestroyed()) { boardWindow.webContents.send('notes:changed', snapshot()); boardWindow.show(); boardWindow.focus(); return true; }
@@ -104,7 +104,7 @@ function createNotes(deps) {
     try { await new Promise(resolve => setTimeout(resolve, 200)); await assets.camera(p?.target || null, p?.position ? C.point(p.position) : undefined); return snapshot(); }
     finally { if (visible && window && !window.isDestroyed() && !closing) { window.show(); window.focus(); } }
   });
-  handle('notes:source', 'board', value => { const nid = C.id(value), sourceId = repo.current().nodes[nid]?.sourceId || nid; const entry = repo.entry(sourceId); C.assert(entry && entry.state !== 'discarded'); return { ...repo.transcript(sourceId), entry, audioUrl: fs.existsSync(path.join(repo.sourcePath(sourceId), 'rec.pcm')) ? `paply-notes://audio/${sourceId}` : null }; });
+  handle('notes:source', 'board', value => { const nid = C.id(value), sourceId = repo.current().nodes[nid]?.sourceId || nid; const entry = repo.entry(sourceId); C.assert(entry && entry.state !== 'discarded'); return { ...repo.transcript(sourceId), entry }; });
   handle('notes:retry', 'board', value => { queue.retry(C.id(value)); return snapshot(); });
   handle('notes:discard', 'board', value => { queue.discard(C.id(value)); return snapshot(); });
   handle('notes:capture:toggle', 'board', async () => { await capture.toggle(); return snapshot(); });

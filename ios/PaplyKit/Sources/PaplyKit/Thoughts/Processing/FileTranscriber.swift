@@ -7,7 +7,7 @@ public enum TranscriptionFailure: String, Sendable, Codable, Equatable, CaseIter
 }
 
 public enum TranscriptionResult: Sendable, Equatable {
-    case success(text: String, languages: [String], audioSeconds: Double, model: String)
+    case success(text: String, languages: [String], audioSeconds: Double, model: String, requestedAudioSeconds: Double? = nil)
     case noSpeech
     case failure(TranscriptionFailure)
 }
@@ -19,6 +19,7 @@ public protocol ThoughtTranscribing: Sendable {
 
 /// Dateiweg: WAV lesen → DictationPipeline (KONZEPT §5.3 Punkt 4): `chunkedUpload = false`,
 /// `polish = false`, `append(alles)` → `finish()`. Teile ≤ 10 Min. übernimmt PaplyKit.
+/// Die Pipeline reicht die gewählte Sprache jedes Teils an den nächsten weiter.
 public struct FileTranscriber: ThoughtTranscribing {
     private let transport: GroqTransport
     private let baseURL: URL
@@ -62,7 +63,7 @@ public struct FileTranscriber: ThoughtTranscribing {
         if let message = outcome.errorMessage { return .failure(classify(message)) }
         let raw = outcome.raw.trimmed
         guard !raw.isEmpty else { return .failure(.cancelled) } // abgebrochen: kein Text, keine Meldung
-        return .success(text: raw, languages: outcome.languages, audioSeconds: outcome.timings.audioSeconds, model: model)
+        return .success(text: raw, languages: outcome.languages, audioSeconds: outcome.timings.audioSeconds, model: model, requestedAudioSeconds: outcome.timings.requestedAudioSeconds)
     }
 
     /// Die Pipeline meldet Fehler nur als deutschen Text; die Texte stammen aus `GroqFailure.germanMessage`.

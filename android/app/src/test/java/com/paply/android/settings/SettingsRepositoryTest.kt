@@ -14,6 +14,15 @@ import org.junit.rules.TemporaryFolder
 class SettingsRepositoryTest {
     @get:Rule val temporary = TemporaryFolder()
 
+    @Test fun polishDefaultsOnAndPersistsInSessionSnapshot() {
+        assertTrue(SettingsRepository.decode("{}").polish)
+        for (enabled in listOf(false, true)) {
+            val saved = SettingsRepository.decode(SettingsRepository.encode(AppPreferences(polish = enabled)))
+            assertEquals(enabled, saved.polish)
+            assertEquals(enabled, saved.dictationPrefs().polish)
+        }
+    }
+
     @Test fun paplyButtonDefaultsOnForNewAndPreviouslyUnsetPreferences() {
         assertTrue(AppPreferences().paplyButton)
         assertTrue(SettingsRepository.decode("{}").paplyButton)

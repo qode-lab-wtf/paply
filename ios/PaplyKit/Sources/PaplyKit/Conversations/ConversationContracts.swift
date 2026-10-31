@@ -167,6 +167,7 @@ public struct ConversationUtterance: Codable, Sendable, Identifiable, Equatable 
 
 /// `transcript.json` – kann groß werden (1 Std. ≈ 10 000 Wörter), deshalb getrennt von `conversation.json`.
 public struct ConversationTranscript: Codable, Sendable, Equatable {
+    public var languageSpeechSeconds: [String: Double]? = nil
     public var utterances: [ConversationUtterance]
     public var languages: [String]
     public var model: String
@@ -385,6 +386,7 @@ public struct ConversationAnalysisInput: Sendable {
     public var recordedAt: Date
     public var expectedSpeakers: Int?
     public var gaps: [ConversationGap]
+    public var userLanguages: [String]
     /// Hauptsprache (Einstellung „Hauptsprache“), z. B. "de"
     public var mainLanguage: String
     /// „Eigene Begriffe“ + Namen bekannter Personen + Themennamen (Whisper-Hinweis, gekürzt)
@@ -397,13 +399,14 @@ public struct ConversationAnalysisInput: Sendable {
 
     public init(id: String, audio: URL, workDirectory: URL, recordedAt: Date, expectedSpeakers: Int?, gaps: [ConversationGap],
                 mainLanguage: String, vocabulary: [String], topics: [TopicIndexEntry], people: [VoicePerson],
-                previous: Conversation?) {
+                previous: Conversation?, userLanguages: [String] = []) {
         self.id = id
         self.audio = audio
         self.workDirectory = workDirectory
         self.recordedAt = recordedAt
         self.expectedSpeakers = expectedSpeakers
         self.gaps = gaps
+        self.userLanguages = userLanguages
         self.mainLanguage = mainLanguage
         self.vocabulary = vocabulary
         self.topics = topics

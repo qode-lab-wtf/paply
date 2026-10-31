@@ -146,7 +146,7 @@ struct ConversationCoreTests {
             #expect(request.field("model") == "whisper-large-v3")
             #expect(request.field("response_format") == "verbose_json")
             #expect(request.bodyText.contains("timestamp_granularities[]"))
-            #expect(request.field("language") == "de")
+            #expect(request.field("language") == nil)
             return .json(200, ["words": [["word":"Hallo", "start":0, "end":0.1]], "segments": [["text":"Hallo", "start":0, "end":0.1]], "language":"de", "duration":0.2])
         }
         let audio = root.appendingPathComponent("audio.wav"), writer = try WAVWriter(url: root.appendingPathComponent("audio.wav"))

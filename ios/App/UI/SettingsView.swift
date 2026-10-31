@@ -461,14 +461,14 @@ struct SpokenLanguagesView: View {
                         }
                     }
                 } footer: {
-                    Text("Kurze Sätze schreibt Paply direkt in der Hauptsprache, statt die Sprache zu raten.")
+                    Text("Paply übersetzt nie. Die Hauptsprache gilt nur, wenn die Erkennung unsicher ist.")
                 }
                 .paplyRows()
             }
             Section {
                 EmptyView()
             } footer: {
-                Text("Bei längeren Sätzen erkennt Paply die Sprache selbst. Die Liste hilft, wenn du mitten im Satz wechselst – zum Beispiel ein englischer Satz in einer deutschen Nachricht. Erkennt Paply eine Sprache, die nicht in der Liste steht, schreibt es in der Hauptsprache.")
+                Text("Paply erkennt die Sprache jedes Stücks selbst. Deine Sprachen helfen bei unsicherer Erkennung und beim Wechsel mitten im Satz.")
             }
         }
         .paplyList()
@@ -676,6 +676,7 @@ struct DeveloperView: View {
     var body: some View {
         Form {
             Section("Diktat") {
+                Toggle("Polieren", isOn: $settings.testOptions.polish)
                 Picker("Transkription", selection: $settings.paply.transcriptionModel) {
                     ForEach(AppSettings.transcriptionModels, id: \.id) { model in
                         Text(model.label).tag(model.id)
@@ -794,7 +795,6 @@ struct TestVariantsView: View {
                     Text("WAV").tag(true)
                 }
                 Toggle("Sprachwechsel-Beispiel", isOn: $settings.testOptions.codeSwitchPrimer)
-                Toggle("Polieren", isOn: $settings.testOptions.polish)
                 Toggle("Strenge Polier-Prüfung", isOn: $settings.testOptions.strictPolishCheck)
                     .disabled(!settings.testOptions.polish)
             } footer: {

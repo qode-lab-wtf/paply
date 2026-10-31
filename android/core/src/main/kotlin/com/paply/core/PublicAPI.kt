@@ -89,6 +89,7 @@ data class DictationTimings(
     val chunkCount: Int = 0,
     val uploadedBytes: Int = 0,
     val audioSeconds: Double = 0.0,
+    val sentAudioSeconds: Double = 0.0,
 )
 
 data class DictationOutcome(
@@ -104,6 +105,7 @@ data class DictationOutcome(
     val noSpeech: Boolean = false,
     val languageSources: List<String> = emptyList(),
     val error: DictationError? = null,
+    val lastPieceLanguage: String? = null,
 ) {
     companion object {
         fun fromJson(json: String): DictationOutcome {
@@ -121,6 +123,7 @@ data class DictationOutcome(
                         t.number("chunkCount")?.toInt() ?: 0,
                         t.number("uploadedBytes")?.toInt() ?: 0,
                         t.number("audioSeconds") ?: 0.0,
+                        t.number("sentAudioSeconds") ?: 0.0,
                     )
             return DictationOutcome(
                 o.string("text") ?: "",
@@ -137,6 +140,7 @@ data class DictationOutcome(
                 o.string("error")?.let { value ->
                     DictationError.entries.firstOrNull { it.name == value }
                 },
+                o.string("lastPieceLanguage"),
             )
         }
     }
@@ -153,6 +157,7 @@ data class DictationOutcome(
         polishModel?.let { put("polishModel", it) }
         put("noSpeech", noSpeech)
         error?.let { put("error", it.name) }
+        lastPieceLanguage?.let { put("lastPieceLanguage", it) }
         put(
             "timings",
             buildJsonObject {
@@ -162,6 +167,7 @@ data class DictationOutcome(
                 put("chunkCount", timings.chunkCount)
                 put("uploadedBytes", timings.uploadedBytes)
                 put("audioSeconds", timings.audioSeconds)
+                put("sentAudioSeconds", timings.sentAudioSeconds)
             },
         )
     }
@@ -216,6 +222,9 @@ enum class PolishFailureCode(val rawValue: String) {
 }
 
 enum class LanguageSource(val rawValue: String) {
+    checkedExpected("checked-expected"),
+    checkedDetected("checked-detected"),
+    checkFailed("check-failed"),
     auto("auto"),
     short("short"),
     redo("redo"),

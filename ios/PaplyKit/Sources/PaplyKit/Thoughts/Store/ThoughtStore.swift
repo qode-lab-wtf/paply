@@ -734,7 +734,19 @@ public actor ThoughtStore {
         }
         if !expired.isEmpty { purge(expired.map(\.id)) }
         for thought in Array(cache.values) where thought.audio != nil {
-            releaseAudio(thought.id)
+            if thought.state != .recording, !activeCaptures.contains(thought.id),
+               now.timeIntervalSince(thought.createdAt.addingTimeInterval(Double(thought.durationMs) / 1000)) >= 30 * 86400 {
+                do {
+                    for url in [wavURL(thought.id), m4aURL(thought.id)] where FileSafety.exists(url) { try FileManager.default.removeItem(at: url) }
+                    try update(thought.id) {
+                        $0.audio = nil
+                        if readSource(thought.id) == nil {
+                            $0.state = .needsAttention
+                            $0.status = .init(message: "Audio nach 30 Tagen entfernt · bitte erneut aufnehmen")
+                        }
+                    }
+                } catch { /* Next housekeeping retries removal. */ }
+            } else { releaseAudio(thought.id) }
         }
         removeStaleTempFiles(olderThan: 3600)
     }

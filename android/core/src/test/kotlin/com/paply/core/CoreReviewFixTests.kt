@@ -336,7 +336,7 @@ class CoreReviewFixTests {
                 deviceLanguages = listOf("fr-FR", "en-GB", "de-DE")).use { p ->
                 feed(p, spoken)
                 assertEquals(listOf("fr"), p.finish().languages)
-                assertEquals("fr", s.requests.single().field("language"))
+                assertEquals(listOf(null, "fr"), s.requests.map { it.field("language") })
             }
         }
     }

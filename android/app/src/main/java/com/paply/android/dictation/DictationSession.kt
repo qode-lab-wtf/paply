@@ -38,7 +38,7 @@ object DictationRuntime {
             spokenLanguages = prefs.languages, vocabulary = prefs.vocabulary,
             transcriptionModel = prefs.transcriptionModel, chunkedUpload = prefs.chunkUpload,
             deviceLanguages = (0 until locales.size()).map { locales[it].toLanguageTag() },
-        ), recentRawDictations = history.recentRawDictations(), encoder = AndroidAudioEncoding(),
+        ), options = PipelineOptions(polish = prefs.polish), recentRawDictations = history.recentRawDictations(), encoder = AndroidAudioEncoding(),
             detector = AndroidLanguageDetector(context), clock = AndroidPaplyClock,
             reachability = reachability(context), diagnostic = Diag::event, onState = state)
     }
@@ -129,7 +129,7 @@ object DictationRuntime {
             throw CancellationException("dictation-deleted")
         }
         if (result.text.isNotBlank()) withContext(Dispatchers.IO) { retainedAudio(context, entry.audioFile)?.delete() }
-        Diag.event("dictation.saved status=${result.status} chars=${result.text.length} audio=${result.audioFile != null} chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes} totalMs=${outcome.timings.totalMs?.toLong()} language=${outcome.language ?: "none"} source=${outcome.languageSources.joinToString(",")}")
+        Diag.event("dictation.saved status=${result.status} chars=${result.text.length} audio=${result.audioFile != null} chunks=${outcome.timings.chunkCount} bytes=${outcome.timings.uploadedBytes} totalMs=${outcome.timings.totalMs?.toLong()} languages=${outcome.languages.size} checkedExpected=${outcome.languageSources.count { it == "checked-expected" }} checkedDetected=${outcome.languageSources.count { it == "checked-detected" }} checkFailed=${outcome.languageSources.count { it == "check-failed" }}")
         return result
     }
 

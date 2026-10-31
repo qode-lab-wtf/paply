@@ -4,8 +4,10 @@ public actor ConversationProcessor: ConversationEditing {
     public struct Environment: Sendable {
         public var apiKey: @Sendable () async -> String
         public var mainLanguage: @Sendable () async -> String
+        public var userLanguages: @Sendable () async -> [String]
         public var vocabulary: @Sendable () async -> [String]
-        public init(apiKey: @escaping @Sendable () async -> String, mainLanguage: @escaping @Sendable () async -> String = { "de" }, vocabulary: @escaping @Sendable () async -> [String] = { [] }) {
+        public init(apiKey: @escaping @Sendable () async -> String, mainLanguage: @escaping @Sendable () async -> String = { "de" }, vocabulary: @escaping @Sendable () async -> [String] = { [] }, userLanguages: @escaping @Sendable () async -> [String] = { [] }) {
+            self.userLanguages = userLanguages
             self.apiKey = apiKey; self.mainLanguage = mainLanguage; self.vocabulary = vocabulary
         }
     }
@@ -82,7 +84,7 @@ public actor ConversationProcessor: ConversationEditing {
 
             let input = ConversationAnalysisInput(id: item.id, audio: audio, workDirectory: store.workDirectory(item.id), recordedAt: item.createdAt,
                 expectedSpeakers: item.expectedSpeakers, gaps: item.gaps, mainLanguage: await environment.mainLanguage(), vocabulary: await environment.vocabulary(),
-                topics: [], people: try await profiles.people(), previous: current)
+                topics: [], people: try await profiles.people(), previous: current, userLanguages: await environment.userLanguages())
             try await store.update(item.id) { $0.state = .analyzing }
             let broadcast = self.broadcast
             let store = self.store

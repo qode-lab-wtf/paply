@@ -98,8 +98,7 @@ for (const platform of ['darwin', 'win32']) describe(`Diktat auf ${platform}`, (
     const pastedFirst = deferred();
     c.autopasteText.mockImplementationOnce(() => pastedFirst.promise);
     firstResponse.resolve({ ok: true, text: async () => JSON.stringify({ text: 'Erstes Diktat' }) });
-    await tick();
-    expect(c.autopasteText).toHaveBeenCalledWith('Erstes Diktat', 'First target');
+    await vi.waitFor(() => expect(c.autopasteText).toHaveBeenCalledWith('Erstes Diktat', 'First target'));
     expect(c.getAudioBackup()).toEqual(Buffer.from('second'));
     win.webContents.send.mockClear();
     pastedFirst.resolve(true); await firstWork;
@@ -293,7 +292,7 @@ it('zeigt Mac-Fallback erneut, wenn osascript erst nach dem Ausblenden scheitert
   const { context: c, timers, win } = main('darwin');
   const paste = deferred(); c.autopasteText.mockReturnValueOnce(paste.promise);
   const work = c.processAudioData(Buffer.from('audio'), false, speech);
-  await tick();
+  await vi.waitFor(() => expect(timers.some(timer => timer.ms === 300)).toBe(true));
   timers.find(timer => timer.ms === 300).fn(); timers.find(timer => timer.ms === 200).fn();
   expect(win.hide).toHaveBeenCalledOnce();
   paste.resolve(false); await work;

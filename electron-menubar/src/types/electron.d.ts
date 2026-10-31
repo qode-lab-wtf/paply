@@ -9,7 +9,9 @@ export interface Settings {
   polishUnavailable?: boolean;
   shortcut: string;
   autoStart: boolean;
-  language: 'de' | 'en';
+  language: string;
+  developerMode: boolean;
+  whisperModel: 'whisper-large-v3' | 'whisper-large-v3-turbo';
   autopaste: boolean;
   beepEnabled: boolean;
   copyToClipboard: boolean;
@@ -61,7 +63,6 @@ export interface Stats {
 
 export interface Profile {
   name: string;
-  language: string;
   polishFlavor: string;
   autopaste: boolean;
   hotkey?: string;
@@ -128,6 +129,7 @@ export interface ElectronAPI {
   openMicrophoneSettings: () => Promise<void>;
 
   // Settings
+  showDiagnosticLog: () => Promise<void>;
   getSettings: () => Promise<Settings>;
   setSettings: (settings: Partial<Settings>) => Promise<true | { success: false; error: { code: 'HOTKEY_REGISTRATION_FAILED'; field: 'shortcut'; message: string } }>;
 
@@ -156,12 +158,8 @@ export interface ElectronAPI {
 
   // Stats
   getStats: () => Promise<Stats>;
-  getOwnerStats: () => Promise<{ tokensGroq: number; tokensGroqPolish: number; estimatedCost: number } | null>;
   onStatsUpdated: (cb: (stats: Stats) => void) => void;
 
-  // Owner Mode
-  checkOwnerMode: () => Promise<boolean>;
-  toggleOwnerMode: (password: string) => Promise<boolean>;
 
   // Profiles / Agents
   getProfiles: () => Promise<{ active: string; profiles: Record<string, Profile>; customAgents: CustomAgent[] }>;

@@ -23,7 +23,7 @@ class LongPauseTranscriberTests {
         return value.substringBefore("\r\n")
     }
 
-    @Test fun speechTwoMinutesSilenceSpeechUsesTwoShortGuardedRequests() = runBlocking {
+    @Test fun speechTwoMinutesSilenceSpeechUsesTwoAutomaticRequests() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"text":"Tomaten pflanzen.","language":"de"}"""))
             server.enqueue(MockResponse().setBody("""{"text":"Erde kaufen.","language":"de"}"""))
@@ -38,7 +38,7 @@ class LongPauseTranscriberTests {
                 repeat(2) {
                     val request = server.takeRequest(2, TimeUnit.SECONDS)!!
                     assertEquals("/audio/transcriptions", request.path)
-                    assertEquals("de", field(request, "language"))
+                    assertNull(field(request, "language"))
                     // 120 s cannot be in either lossless PCM upload (JVM fallback = WAV).
                     assertTrue(request.bodySize < 4 * 16000 * 2 + 4096)
                 }

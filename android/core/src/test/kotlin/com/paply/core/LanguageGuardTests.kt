@@ -4,6 +4,81 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class LanguageGuardTests {
+    @Test fun whitespaceDoesNotEraseWordBoundaries() {
+        val a = Transcription(text = "ab c", segments = listOf(WhisperSegment(start = 0.0, end = 1.0, avgLogprob = -0.1)))
+        val b = a.copy(text = "a bc", segments = listOf(WhisperSegment(start = 0.0, end = 1.0, avgLogprob = -0.9)))
+        expect(!LanguageGuard.chooseExpected(a,b,2.0))
+        expect(LanguageGuard.chooseExpected(a,a.copy(text = "ab  c"),2.0))
+    }
+
+    @Test fun aliasesAreSentAsWhisperCodes() = runBlocking {
+        for ((device, whisper) in listOf("nb" to "no", "fil-PH" to "tl", "iw" to "he", "in" to "id", "ji" to "yi", "jw" to "jv")) {
+            MockServer { _, _ -> Groq.transcription("A spoken sentence.", "English") }.use { server ->
+                val p = pipeline(server, languages = listOf(device), primary = device)
+                feed(p, Synth.withFloor(Synth.speech(2.0)))
+                p.finish()
+                expect(server.requests.map { it.field("language") } == listOf(null, whisper))
+                p.close()
+            }
+        }
+    }
+
+    @Test fun emptyMiddlePieceKeepsLastTextLanguage() = runBlocking {
+        MockServer { request, i ->
+            when (i) {
+                0 -> Groq.transcription("This is clearly English.", "English")
+                1 -> Groq.transcription("", "German")
+                else -> Groq.transcription("And another sentence.", if (request.field("language") == "en") "English" else "German")
+            }
+        }.use { server ->
+            val p = pipeline(server, chunked = true)
+            feed(p, Synth.withFloor(Synth.speech(11.0) + Synth.silence(0.9) + Synth.speech(11.0) + Synth.silence(0.9) + Synth.speech(2.0)))
+            val result = p.finish()
+            expect(server.requests.last().field("language") == "en")
+            expect(result.lastPieceLanguage == "en")
+            p.close()
+        }
+    }
+
+    @Test fun emptyLastPieceDoesNotExportItsLanguage() = runBlocking {
+        MockServer { _, i -> if (i == 0) Groq.transcription("This is clearly English.", "English") else Groq.transcription("", "German") }.use { server ->
+            val p = pipeline(server, chunked = true)
+            feed(p, Synth.withFloor(Synth.speech(11.0) + Synth.silence(0.9) + Synth.speech(11.0)))
+            expect(p.finish().lastPieceLanguage == "en")
+            p.close()
+        }
+    }
+
+    @Test fun firstFailureReturnsWithoutCountercheck() = runBlocking {
+        MockServer { _, _ -> Groq.error(401) }.use { server ->
+            val p = pipeline(server)
+            feed(p, Synth.withFloor(Synth.speech(2.0)))
+            expect(p.finish().error != null)
+            expect(server.requests.size == 1)
+            p.close()
+        }
+    }
+
+    @Test fun countercheckHasBoundedTimeAndCountsBothUploads() = runBlocking {
+        expect(LanguageGuard.checkTimeoutMs(1200.0) == 7400L)
+        expect(LanguageGuard.checkTimeoutMs(40000.0) == 60000L)
+        MockServer { _, i ->
+            Groq.transcription("On se voit ce soir.", "French").apply {
+                if (i > 0) setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE)
+            }
+        }.use { server ->
+            val p = pipeline(server)
+            feed(p, Synth.withFloor(Synth.speech(2.0)))
+            val started = System.nanoTime()
+            val result = kotlinx.coroutines.withTimeout(12000) { p.finish() }
+            expect((System.nanoTime() - started) / 1e9 < 12)
+            expect(result.raw == "On se voit ce soir.")
+            expect(result.languageSources == listOf("check-failed"))
+            org.junit.Assert.assertEquals(4.0, result.timings.sentAudioSeconds, 0.001)
+            p.close()
+        }
+    }
+
     private fun pipeline(
         s: MockServer,
         chunked: Boolean = false,
@@ -33,35 +108,42 @@ class LanguageGuardTests {
     }
 
     @Test
-    fun shortPiecesSendTheLanguage() {
-        fun first(
-            previous: String?,
-            seconds: Double,
-            fixed: String? = null,
-            primary: String? = "de",
-        ) = LanguageGuard.firstRequest(fixed, primary, previous, listOf("de", "en"), seconds)
-        expect(first(null, 1.2) == LanguageGuard.Request("de", LanguageSource.short))
-        expect(
-            first(null, LanguageGuard.shortSpeechSeconds) ==
-                LanguageGuard.Request("de", LanguageSource.short),
-        )
-        expect(first("en", 2.0) == LanguageGuard.Request("en", LanguageSource.short))
-        expect(first("ru", 2.0) == LanguageGuard.Request("de", LanguageSource.short))
-        expect(first(null, 5.1) == LanguageGuard.Request(null, LanguageSource.auto))
-        expect(first("en", 8.0) == LanguageGuard.Request(null, LanguageSource.auto))
-        expect(first(null, 3.0, primary = null) == LanguageGuard.Request(null, LanguageSource.auto))
-        expect(first("en", 3.0, fixed = "fr") == LanguageGuard.Request("fr", LanguageSource.fixed))
-        expect(first(null, 30.0, fixed = "fr") == LanguageGuard.Request("fr", LanguageSource.fixed))
+    fun previousLanguageIsNotRestrictedToOwnLanguages() {
+        expect(LanguageGuard.expected("ar", "de") == "ar")
+        expect(LanguageGuard.expected(null, "de") == "de")
     }
 
     @Test
-    fun onlyForeignLanguagesAreRedone() {
-        val users = listOf("de-DE", "en")
-        expect(LanguageGuard.redoLanguage("ru", "de", users) == "de")
-        for (d in listOf("en", "de", null)) expect(
-            LanguageGuard.redoLanguage(d, "de", users) == null,
-        )
-        expect(LanguageGuard.redoLanguage("ru", null, emptyList()) == null)
+    fun confidenceUsesDurationAndMinimumWeight() {
+        val response = Transcription(segments = listOf(
+            WhisperSegment(start = 0.0, end = 1.0, avgLogprob = -0.1),
+            WhisperSegment(start = 1.0, end = 4.0, avgLogprob = -0.5),
+            WhisperSegment(start = 4.0, end = 4.0, avgLogprob = -0.9),
+        ))
+        org.junit.Assert.assertEquals((-0.1 - 1.5 - 0.009) / 4.01, LanguageGuard.confidence(response)!!, 0.000001)
+        expect(LanguageGuard.confidence(Transcription()) == null)
+    }
+
+    @Test
+    fun equalTextWinsBeforeMissingConfidence() {
+        expect(LanguageGuard.chooseExpected(Transcription(text = " . Hallo Welt! "),
+            Transcription(text = "hallo  welt.")))
+        expect(!LanguageGuard.chooseExpected(Transcription(text = "Hallo"), null))
+    }
+
+    @Test
+    fun shortFrenchRemainsFrench() = runBlocking {
+        MockServer { r, _ ->
+            if (r.field("language") == "de") Groq.transcription("Wir sehen uns heute Abend.", "German", -0.39)
+            else Groq.transcription("On se voit ce soir.", "French", -0.08)
+        }.use { s ->
+            val p = pipeline(s)
+            feed(p, Synth.withFloor(Synth.speech(1.6)))
+            val o = p.finish()
+            expect(s.requests.map { it.field("language") } == listOf(null, "de"))
+            expect(o.raw == "On se voit ce soir." && o.languages == listOf("fr"))
+            expect(o.languageSources == listOf("checked-detected"))
+        }
     }
 
     @Test
@@ -81,27 +163,27 @@ class LanguageGuardTests {
     }
 
     @Test
-    fun shortPieceIsSentOnceWithThePrimaryLanguage() = runBlocking {
+    fun shortMatchingGermanIsSentOnceWithoutLanguage() = runBlocking {
         MockServer { _, _ -> Groq.transcription("Hi, wie geht's?") }
             .use { s ->
                 val p = pipeline(s)
                 feed(p, Synth.withFloor(Synth.speech(3.0)))
                 val o = p.finish()
                 val uploads = s.requests("/audio/transcriptions")
-                expect(uploads.size == 1 && uploads[0].field("language") == "de")
+                expect(uploads.size == 1 && uploads[0].field("language") == null)
                 expect(o.raw == "Hi, wie geht's?" && o.languages == listOf("de"))
-                expect(o.languageSources == listOf("short") && o.timings.chunkCount == 1)
+                expect(o.languageSources == listOf("auto") && o.timings.chunkCount == 1)
             }
     }
 
     @Test
-    fun chosenPrimaryLanguageIsUsedWhileListed() = runBlocking {
+    fun matchingPrimaryIsDetectedWithoutLanguage() = runBlocking {
         MockServer { _, _ -> Groq.transcription("Hi, how are you?", "English") }
             .use { s ->
                 val p = pipeline(s, primary = "en")
                 feed(p, Synth.withFloor(Synth.speech(3.0)))
                 p.finish()
-                expect(s.requests.first().field("language") == "en")
+                expect(s.requests.first().field("language") == null)
             }
         MockServer { _, _ -> Groq.transcription("Hallo.") }
             .use { s ->
@@ -110,7 +192,7 @@ class LanguageGuardTests {
                 p.finish()
                 expect(
                     s.requests.first().field("language") ==
-                        LanguageGuard.primary(null, listOf("de", "en"), "de-DE"),
+                        null,
                 )
             }
     }
@@ -126,8 +208,8 @@ class LanguageGuardTests {
                 )
                 val o = p.finish()
                 expect(o.timings.audioSeconds > 8)
-                expect(s.requests.map { it.field("language") } == listOf("de"))
-                expect(o.languageSources == listOf("short"))
+                expect(s.requests.map { it.field("language") } == listOf<String?>(null))
+                expect(o.languageSources == listOf("auto"))
             }
     }
 
@@ -136,7 +218,7 @@ class LanguageGuardTests {
         MockServer { r, _ ->
             if (r.field("language") == "de")
                 Groq.transcription("Guten Morgen, wie geht's dir heute?", language = "German")
-            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian")
+            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian", logprob = -0.8)
         }
             .use { s ->
                 val p = pipeline(s)
@@ -150,27 +232,27 @@ class LanguageGuardTests {
                 expect(
                     o.raw == "Guten Morgen, wie geht's dir heute?" &&
                         o.languages == listOf("de") &&
-                        o.languageSources == listOf("redo"),
+                        o.languageSources == listOf("checked-expected"),
                 )
                 expect(o.timings.chunkCount == 2 && o.timings.uploadedBytes > 2000)
             }
     }
 
     @Test
-    fun failedRedoKeepsTheFirstResult() = runBlocking {
+    fun failedShortCountercheckKeepsTheFirstResult() = runBlocking {
         MockServer { r, _ ->
             if (r.field("language") == "de") Groq.error(422)
-            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian")
+            else Groq.transcription("Gutn morgn, kak dela segodnya?", "Russian", logprob = -0.8)
         }
             .use { s ->
                 val p = pipeline(s)
-                feed(p, Synth.withFloor(Synth.speech(12.0)))
+                feed(p, Synth.withFloor(Synth.speech(3.0)))
                 val o = p.finish()
                 expect(s.requests.size == 2 && o.errorMessage == null)
                 expect(
                     o.raw == "Gutn morgn, kak dela segodnya?" &&
                         o.languages == listOf("ru") &&
-                        o.languageSources == listOf("redo-failed"),
+                        o.languageSources == listOf("check-failed"),
                 )
             }
     }
@@ -205,27 +287,27 @@ class LanguageGuardTests {
                 )
                 val o = p.finish()
                 expect(
-                    s.requests.size == 2 &&
+                    s.requests.size == 3 &&
                         s.requests[0].field("language") == null &&
-                        s.requests[1].field("language") == "en",
+                        s.requests[1].field("language") == null && s.requests[2].field("language") == "en",
                 )
                 expect(
                     o.raw == "This part is clearly English. And the rest." &&
                         o.languages == listOf("en") &&
-                        o.languageSources == listOf("auto", "short"),
+                        o.languageSources == listOf("auto", "checked-expected"),
                 )
             }
     }
 
     @Test
-    fun fixedLanguageBypassesTheGuard() = runBlocking {
+    fun legacyFixedLanguageDoesNotBypassDetection() = runBlocking {
         MockServer { _, _ -> Groq.transcription("Privet, kak dela segodnya?", "Russian") }
             .use { s ->
                 val p = pipeline(s, fixed = "ru")
                 feed(p, Synth.withFloor(Synth.speech(12.0)))
                 val o = p.finish()
-                expect(s.requests.size == 1 && s.requests[0].field("language") == "ru")
-                expect(o.languages == listOf("ru") && o.languageSources == listOf("fixed"))
+                expect(s.requests.size == 1 && s.requests[0].field("language") == null)
+                expect(o.languages == listOf("ru") && o.languageSources == listOf("auto"))
             }
     }
 }

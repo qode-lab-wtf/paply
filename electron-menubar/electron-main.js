@@ -41,6 +41,9 @@ if (!hasSingleInstanceLock) { app.quit(); }
 else {
 app.on('second-instance', () => { app.whenReady().then(() => { const win = createMainWindow(); win.show(); win.focus(); }); });
 
+const { termCheck } = require('./dictation/term-guard');
+const { WHISPER_MODEL, languageCode, userLanguages, guardedTranscription } = require('./dictation/language-guard');
+const { primer, buildPrompt, removeEchoes } = require('./dictation/whisper-prompt');
 const path = require('node:path');
 const fs = require('node:fs');
 // Diagnose-Protokoll so früh wie möglich: nach Sperre und (Test-)userData, vor allen Modulen.
@@ -138,11 +141,13 @@ function getStore() {
     store = new Store({
       defaults: {
         groqApiKey: '',
-        enablePolish: false,
+        enablePolish: true,
+        developerMode: false,
+        whisperModel: WHISPER_MODEL,
         customVocabulary: '',
         shortcut: getDefaultShortcut(),
         autoStart: false,
-        language: 'de',
+        language: languageCode(app.getPreferredSystemLanguages()[0]) || 'de',
         autopaste: true,
         beepEnabled: true,
         copyToClipboard: false,
@@ -151,9 +156,9 @@ function getStore() {
         // Profile/Rollen (Standard-Agenten)
         activeProfile: 'coding',
         profiles: {
-          coding: { name: 'Coding', language: 'de', polishFlavor: 'code', autopaste: true },
-          meeting: { name: 'Meeting', language: 'de', polishFlavor: 'meeting', autopaste: false },
-          dictation: { name: 'Diktat', language: 'de', polishFlavor: 'plain', autopaste: true },
+          coding: { name: 'Coding', polishFlavor: 'code', autopaste: true },
+          meeting: { name: 'Meeting', polishFlavor: 'meeting', autopaste: false },
+          dictation: { name: 'Diktat', polishFlavor: 'plain', autopaste: true },
         },
         // Custom Agents (vom Nutzer erstellt)
         customAgents: [],
@@ -171,13 +176,6 @@ function getStore() {
           errorsCount: 0,
           lastResetDay: null,
           lastResetWeek: null,
-        },
-        // Owner Analytics (hidden)
-        ownerMode: false,
-        ownerStats: {
-          tokensGroq: 0,
-          tokensGroqPolish: 0,
-          estimatedCost: 0,
         },
         // PTT hold threshold in ms (press longer than this = hold-to-talk mode)
         pttThreshold: 350,
@@ -205,6 +203,10 @@ function getStore() {
       configFileMode: 0o600,
     });
     try { if (!isWin) fs.chmodSync(store.path, 0o600); } catch { /* Datei kommt beim ersten Speichern */ }
+    if (!store.get('settingsVersion')) {
+      store.set('enablePolish', true);
+      store.set('settingsVersion', 1);
+    }
     migrateMeetingModel(store);
   }
   return store;
@@ -348,18 +350,6 @@ function updateStats(wordCount, durationMinutes = 0, isError = false) {
 
   s.set('stats', stats);
 
-  // Update owner stats (token estimation)
-  if (s.get('ownerMode')) {
-    const ownerStats = s.get('ownerStats') || {};
-    // Rough estimation: ~1 token per 4 characters for text, ~100 tokens per minute for audio
-    ownerStats.tokensGroq = (ownerStats.tokensGroq || 0) + Math.round(durationMinutes * 100);
-    ownerStats.tokensGroqPolish = (ownerStats.tokensGroqPolish || 0) + Math.round(wordCount * 1.5);
-    // Cost estimation: Groq Whisper ~$0.0001/min, Groq Llama ~$0.00079/1k tokens (output)
-    ownerStats.estimatedCost = (ownerStats.estimatedCost || 0) +
-      (durationMinutes * 0.0001) + (wordCount * 1.5 * 0.00079 / 1000);
-    s.set('ownerStats', ownerStats);
-  }
-
   // Notify main window of stats update
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('stats:updated', stats);
@@ -497,59 +487,61 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
 
   for (let i = 0; i <= retries; i++) {
     try {
-      const formData = new FormData();
-      const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
-      formData.append('file', audioBlob, 'audio.webm');
-      formData.append('model', 'whisper-large-v3-turbo');
-      formData.append('language', language);
-      formData.append('response_format', 'verbose_json');
+      const users = userLanguages(language, app.getPreferredSystemLanguages());
+      const example = primer(users);
       const vocabulary = vocabularyPrompt(getStore().get('customVocabulary'));
-      if (vocabulary) formData.append('prompt', vocabulary);
+      let firstMs;
+      const request = async (forcedLanguage, termPrompt) => {
+        const started = Date.now();
+        const formData = new FormData();
+        const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
+        formData.append('file', audioBlob, 'audio.webm');
+        formData.append('model', getStore().get('whisperModel') || WHISPER_MODEL);
+        if (forcedLanguage) formData.append('language', forcedLanguage);
+        formData.append('response_format', 'verbose_json');
+        const prompt = termPrompt ?? buildPrompt(vocabulary, '', example);
+        if (prompt) formData.append('prompt', prompt);
 
-      console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
+        console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
 
-      const res = await readResponse(GROQ_API_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: formData,
-      }, Math.max(1000, Math.min(transcriptionTimeoutMs(audioBuffer.length), budgetEnd - Date.now())));
+        const res = await readResponse(GROQ_API_URL, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: formData,
+        }, Math.max(1000, Math.min(transcriptionTimeoutMs(audioBuffer.length), budgetEnd - Date.now())));
 
-      if (!res.ok) {
-        const errText = res.body;
-        console.error('Groq error:', res.status);
+        if (!res.ok) {
+          const errText = res.body;
+          console.error('Groq error:', res.status);
 
-        // If it's a rate limit or server error, maybe retry
-        if (res.status >= 500 || res.status === 429) {
-          // Nennt Groq eine lange Wartezeit (z. B. Tageslimit), nicht stur wiederholen.
-          const wait = res.status === 429 ? retryAfterMs(res.retryAfter) : null;
-          if (i < retries && !(wait > 10000)) {
-            console.log(`Retrying due to status ${res.status}...`);
-            await new Promise(r => setTimeout(r, Math.max(wait ?? 0, 1000 * (i + 1))));
-            continue;
+          let errorMsg = `Transkription fehlgeschlagen (${res.status})`;
+          try {
+            const errJson = JSON.parse(errText);
+            if (errJson.error?.message) errorMsg = errJson.error.message;
+          } catch (e) {
+            if (errText.length < 100) errorMsg += `: ${errText}`;
           }
+          const error = new Error(errorMsg);
+          error.status = res.status;
+          error.retryAfter = res.retryAfter;
+          throw error;
         }
 
-        let errorMsg = `Transkription fehlgeschlagen (${res.status})`;
-        try {
-          const errJson = JSON.parse(errText);
-          if (errJson.error?.message) errorMsg = errJson.error.message;
-        } catch (e) {
-          if (errText.length < 100) errorMsg += `: ${errText}`;
-        }
-        const error = new Error(errorMsg);
-        error.status = res.status;
-        throw error;
-      }
-
-      const json = JSON.parse(res.body);
+        firstMs ??= Date.now() - started;
+        return JSON.parse(res.body);
+      };
+      let selected = await guardedTranscription(request, { expected: language, users, spoken: validateVoiceActivity(voiceActivity)?.speechMs / 1000 });
+      const preEcho = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
+      const preFiltered = filterTranscription(preEcho, voiceActivity, options);
+      selected = { ...preEcho, text: preFiltered.text, ...(!preFiltered.text ? { segments: [] } : {}) };
+      selected = await termCheck(selected, getStore().get('customVocabulary') || '', request, firstMs);
+      const json = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
       const filtered = filterTranscription(json, voiceActivity, options);
       // Whisper gibt bei sehr kurzem/leisem Ton gern den prompt (eigene Begriffe) wörtlich zurück.
-      if (vocabulary && filtered.text && isVocabularyEcho(filtered.text, vocabulary)) {
-        filtered.text = '';
-        filtered.reason ||= 'vocabulary-echo';
-      }
+      if (json.echoRemoved && !filtered.text) filtered.reason = 'prompt-echo';
+      if (!filtered.text) filtered.reason = preEcho.echoRemoved ? 'prompt-echo' : preFiltered.reason || filtered.reason;
       options.onFiltered?.(filtered);
       if (filtered.droppedSegments || filtered.reason) {
         console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',
@@ -557,7 +549,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
       }
       // Standard bleibt string; nur der Diktatpfad fordert zusätzliche Metadaten an.
       return options.returnDetails ? {
-        text: filtered.text,
+        text: filtered.text, language: selected.language,
         segments: filtered.text ? uncertainSegments({ segments: (Array.isArray(json.segments) ? json.segments : [])
           .filter(segment => segment && (options.bypassLocalFilters || !isSilentSegment(segment))) }) : [],
       } : filtered.text;
@@ -584,8 +576,10 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         error.name === 'AbortError';
 
       // Exponentielles Backoff: 1s, 2s, 4s – nur solange das Gesamtbudget reicht.
-      const delay = Math.min(1000 * Math.pow(2, i), 8000);
-      if (isNetworkError && i < retries && budgetEnd - Date.now() > delay + 5000) {
+      const wait = error.status === 429 ? retryAfterMs(error.retryAfter) : null;
+      const retryableStatus = (error.status >= 500 || error.status === 429) && !(wait > 10000);
+      const delay = Math.max(wait ?? 0, Math.min(1000 * Math.pow(2, i), 8000));
+      if ((isNetworkError || retryableStatus) && i < retries && budgetEnd - Date.now() > delay + 5000) {
         console.log(`Network error detected (${causeCode || error.name}), retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -1057,8 +1051,8 @@ function ensureMeetingOverlayWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width } = primaryDisplay.workAreaSize;
 
-  const widgetWidth = 240;
-  const widgetHeight = 64;
+  const widgetWidth = 300;
+  const widgetHeight = 110;
 
   const windowOptions = {
     width: widgetWidth,
@@ -1112,14 +1106,14 @@ function showAboutDialog() {
     message: 'paply',
     detail: `Version ${CURRENT_VERSION}
 
-Sprachtranskription mit Groq Whisper Large V3 Turbo
-Optionales Polishing mit Groq Llama 3.3
+Sprachtranskription mit Groq Whisper
+Behutsames Polieren des Diktats
 
 Shortcuts:
 • ${shortcut === 'GLOBE' ? 'Fn/Globe-Taste' : shortcut} - Aufnahme starten/stoppen
 • ${quitKey} - Beenden
 
-© 2024 paply`,
+© paply`,
     buttons: ['OK'],
   });
 }
@@ -1653,7 +1647,7 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
   const autopaste = s.get('autopaste');
 
   try {
-    const language = s.get('language');
+    let language = s.get('language');
     const enablePolish = s.get('enablePolish');
     updateStatus('transcribing');
 
@@ -1685,9 +1679,10 @@ async function processAudioData(audioData, isRetry = false, voiceActivity, job =
     const transcription = skipTranscription ? { text: '', segments: [] } : await transcribeAudio(audioBuffer, language, 3, voiceActivity, {
       bypassLocalFilters: isRetry,
       returnDetails: true,
-      onFiltered: result => { locallyFiltered ||= result.reason === 'known-silence-phrase'; },
+      onFiltered: result => { locallyFiltered ||= ['known-silence-phrase', 'prompt-echo'].includes(result.reason); },
     });
     const { text: transcript, segments } = transcription;
+    language = transcription.language || language;
     console.log('Transcript length:', transcript.length);
     const benchSample = {};
     const benchBase = { createdAt: new Date().toISOString(), isRetry, language, enablePolish: !!enablePolish,
@@ -2096,7 +2091,6 @@ function switchAgent(agentId) {
   // Update settings based on agent
   if (agentInfo) {
     s.set('autopaste', agentInfo.autopaste ?? true);
-    s.set('language', agentInfo.language || 'de');
   }
 
   console.log(`Switched to agent: ${agentName}`);
@@ -2182,7 +2176,12 @@ function setupIpcHandlers() {
   // Stop-Handshake: Renderer hat Restpuffer gesendet und Capture beendet.
   ipcMain.handle('meeting:capture-flushed', () => { if (meetingController) meetingController.onCaptureFlushed(); return true; });
   ipcMain.handle('meetings:list', () => (meetingStore ? meetingStore.list() : []));
-  ipcMain.handle('meetings:get', (_e, id) => (meetingStore ? meetingStore.get(id) : null));
+  ipcMain.handle('meetings:get', (_e, id) => {
+    const full = meetingStore ? meetingStore.get(id) : null;
+    if (!full) return null;
+    const { audio, ...detail } = full;
+    return { ...detail, canReanalyze: !!(audio.mic || audio.system) };
+  });
   ipcMain.handle('meetings:delete', (_e, id) => (meetingStore ? meetingStore.remove(id) : false));
   ipcMain.handle('meetings:reanalyze', (_e, id) => (meetingController ? meetingController.reanalyze(id) : { error: 'unavailable' }));
   ipcMain.handle('meetings:regenerateSummary', (_e, id) => (meetingController ? meetingController.regenerateSummary(id) : null));
@@ -2203,6 +2202,8 @@ function setupIpcHandlers() {
     return {
       groqApiKey: s.get('groqApiKey'),
       enablePolish: s.get('enablePolish'),
+      developerMode: s.get('developerMode'),
+      whisperModel: s.get('whisperModel'),
       customVocabulary: s.get('customVocabulary', ''),
       polishUnavailable,
       shortcut: s.get('shortcut'),
@@ -2236,8 +2237,10 @@ function setupIpcHandlers() {
     if (settings.geminiApiKey !== undefined) s.set('geminiApiKey', settings.geminiApiKey);
     if (settings.llmProvider !== undefined) s.set('llmProvider', settings.llmProvider);
     if (typeof settings.customVocabulary === 'string') s.set('customVocabulary', settings.customVocabulary);
+    if (typeof settings.developerMode === 'boolean') s.set('developerMode', settings.developerMode);
+    if ([WHISPER_MODEL, 'whisper-large-v3-turbo'].includes(settings.whisperModel)) s.set('whisperModel', settings.whisperModel);
     if (settings.enablePolish !== undefined) s.set('enablePolish', settings.enablePolish);
-    if (settings.language !== undefined) s.set('language', settings.language);
+    if (settings.language !== undefined) s.set('language', languageCode(settings.language));
     if (settings.autopaste !== undefined) s.set('autopaste', settings.autopaste);
     if (settings.beepEnabled !== undefined) s.set('beepEnabled', settings.beepEnabled);
     if (settings.copyToClipboard !== undefined) s.set('copyToClipboard', settings.copyToClipboard);
@@ -2317,23 +2320,7 @@ function setupIpcHandlers() {
     return getStore().get('stats');
   });
 
-  ipcMain.handle('stats:owner', () => {
-    const s = getStore();
-    if (!s.get('ownerMode')) return null;
-    return s.get('ownerStats');
-  });
-
-  // Owner Mode
-  ipcMain.handle('owner:check', () => getStore().get('ownerMode'));
-  ipcMain.handle('owner:toggle', (_event, password) => {
-    // Simple password check for owner mode (can be changed)
-    const s = getStore();
-    if (password === 'paply-owner-2024') {
-      s.set('ownerMode', !s.get('ownerMode'));
-      return s.get('ownerMode');
-    }
-    return false;
-  });
+  ipcMain.handle('diagnostics:show', showDiagnosticLog);
 
   // Profiles / Agents
   ipcMain.handle('profiles:get', () => {
@@ -2354,7 +2341,6 @@ function setupIpcHandlers() {
     if (profiles[profileId]) {
       s.set('activeProfile', profileId);
       const profile = profiles[profileId];
-      if (profile.language) s.set('language', profile.language);
       if (profile.autopaste !== undefined) s.set('autopaste', profile.autopaste);
       updateTrayMenu();
       return true;
@@ -2364,7 +2350,6 @@ function setupIpcHandlers() {
     const customAgent = customAgents.find(a => a.id === profileId);
     if (customAgent) {
       s.set('activeProfile', profileId);
-      if (customAgent.language) s.set('language', customAgent.language);
       if (customAgent.autopaste !== undefined) s.set('autopaste', customAgent.autopaste);
       updateTrayMenu();
       return true;
@@ -2625,7 +2610,7 @@ app.whenReady().then(() => {
     chunkMaxSeconds: 40,
   });
   // Unterbrochene Aufnahmen/Auswertungen (App-Neustart, Absturz) wieder aufnehmen;
-  // abgelaufenes Audio (7 Tage) löschen — jetzt und täglich.
+  // fertigen Ton und abgelaufenes Fehler-Audio (30 Tage) löschen — jetzt und täglich.
   try { meetingController.resumePending(); } catch (e) { console.error('resumePending failed:', e); }
   try { meetingController.runRetention(); } catch { /* best effort */ }
   setInterval(() => { try { meetingController.runRetention(); } catch { /* best effort */ } }, 24 * 60 * 60 * 1000);

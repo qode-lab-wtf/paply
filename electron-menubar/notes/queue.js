@@ -4,7 +4,10 @@ const path = require('node:path');
 const { uid, node, assert } = require('./contracts');
 const { encodeWav } = require('../audio/wav-encoder');
 const { filterTranscription, shouldSkipTranscription } = require('../audio/silence-filter');
-const { splitSentences, chunks, context, validatePlan, applyPlan } = require('./plan');
+const { splitSentences, chunks, context } = require('./context');
+const { validate: validatePlan, applyThought: applyPlan, fallbackTitle } = require('./thought');
+
+function hasTranscript(transcript) { return !!(transcript?.text?.trim() || transcript?.silenceProven === true); }
 
 function levels(pcm) {
   const windows = [];
@@ -32,8 +35,8 @@ function audioChunks(pcm) {
   }
   return result;
 }
-function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabulary = () => '', isBusy = () => false, isEditing = () => false, isOnline = () => true, onChange = () => {} }) {
-  let running = false, stopped = false, controller = null, timer = null, currentId = null, authKey = null;
+function createQueue({ repo, commands, groq, assets, getSettings, getKey, getUILanguage = () => Intl.DateTimeFormat().resolvedOptions().locale, vocabulary = () => '', isBusy = () => false, isEditing = () => false, isOnline = () => true, onChange = () => {} }) {
+  let running = false, stopped = false, controller = null, timer = null, currentId = null, authKey = null, retentionTimer = null;
   function save(entry) { repo.saveEntry(entry); onChange(); }
   function prepare(entry, transcript) {
     const parts = chunks(transcript.sentences), firstId = `raw_${entry.id}`;
@@ -61,19 +64,27 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
   }
   async function transcribe(entry, signal) {
     const pcm = fs.readFileSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'));
-    const pieces = audioChunks(pcm), done = repo.readLocal(`sources/${entry.id}/stt.json`, []);
+    const pieces = audioChunks(pcm), done = [];
+    for (const part of repo.readLocal(`sources/${entry.id}/stt.json`, [])) {
+      if (!hasTranscript(part)) break;
+      done.push(part);
+    }
     save({ ...entry, state: 'transcribing' });
     for (let i = done.length; i < pieces.length; i++) {
       if (signal.aborted) throw new Error('Abgebrochen');
       if (isBusy()) { const e = new Error('Diktat hat Vorrang'); e.kind = 'busy'; throw e; }
       const meta = levels(pieces[i]);
-      let text = '';
-      if (!shouldSkipTranscription(meta)) {
-        const response = await groq.transcribe(encodeWav(pieces[i]), pieces[i].length / 32000, signal, vocabulary());
+      let text = '', language = done.at(-1)?.language, model = null;
+      const silenceProven = shouldSkipTranscription(meta);
+      if (!silenceProven) {
+        const response = await groq.transcribe(encodeWav(pieces[i]), pieces[i].length / 32000, signal, vocabulary(), { previousLanguage: language, previousText: done.at(-1)?.text, voiceActivity: meta });
+        language = response.language || language;
+        model = response.model;
         if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
         text = filterTranscription(response, meta).text;
       }
-      done.push({ text, durationMs: meta.durationMs }); repo.writeLocal(`sources/${entry.id}/stt.json`, done);
+      if (!text.trim() && !silenceProven) throw new Error('Keine Sprache erkannt · Erneut versuchen');
+      done.push({ text, language, model, silenceProven, durationMs: meta.durationMs }); repo.writeLocal(`sources/${entry.id}/stt.json`, done);
     }
     const original = done.map(d => d.text).filter(Boolean).join(' ');
     if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
@@ -83,40 +94,45 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     if (hasScreen) { const hash = assets.put(fs.readFileSync(temporary)); entry.attachments = [...new Set([...(entry.attachments || []), hash])]; }
     if (match && !hasScreen) entry.message = 'Kein Startbild vorhanden · Bildschirmkontext in den Notes-Einstellungen aktivieren';
     try { fs.rmSync(temporary, { force: true }); } catch { /* later housekeeping */ }
-    const transcript = repo.saveTranscript(entry.id, { text: original, command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: 'whisper-large-v3-turbo', createdAt: Date.now() });
+    const transcript = repo.saveTranscript(entry.id, { text: original, languages: done.filter(d => d.text?.trim() && d.language).map(d => d.language), command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: done.find(d => d.model)?.model || null, silenceProven: done.every(d => d.silenceProven === true), createdAt: Date.now() });
+    if (transcript.text.trim() || transcript.silenceProven) deleteAudio(entry);
     prepare(entry, transcript);
   }
   async function structure(entry, signal) {
     const transcript = repo.transcript(entry.id); assert(transcript, 'Originaltext fehlt');
-    const parts = chunks(transcript.sentences), index = entry.partsDone || 0;
-    if (index >= parts.length) { entry.state = entry.fallback ? 'fallback' : entry.keptUser ? 'kept_user' : 'complete'; entry.finishedAt = Date.now(); save(entry); return; }
-    const rawId = `raw_${entry.id}${index ? `_${index}` : ''}`, raw = repo.current().nodes[rawId];
-    if (!raw || raw.owner === 'user' || raw.pinned) {
+    const parts = entry.retryParts ? entry.retryParts.map(p => p.sentences) : chunks(transcript.sentences), index = entry.partsDone || 0;
+    if (index >= parts.length) { entry.state = entry.keptUser ? 'kept_user' : entry.fallback ? 'fallback' : 'complete'; entry.finishedAt = Date.now(); save(entry); return; }
+    const rawId = entry.retryParts?.[index]?.nodeId || `raw_${entry.id}${index ? `_${index}` : ''}`, raw = repo.current().nodes[rawId];
+    if (!raw || raw.owner === 'user') {
       const alreadyApplied = !raw && parts[index].every(s => typeof repo.current().claims[s.id] === 'string' && repo.current().nodes[repo.current().claims[s.id]]?.sourceId === entry.id);
       entry.partsDone = index + 1; entry.state = 'transcribed'; if (!alreadyApplied) entry.keptUser = true; save(entry); return;
     }
     const waitForEditor = () => { if (isEditing(rawId)) { const error = new Error('Bearbeitung hat Vorrang'); error.kind = 'busy'; throw error; } };
     waitForEditor();
-    const ctx = context(repo.current(), parts[index], entry.id); const rawRev = raw.rev;
-    const useLarge = !!entry.largeFallback || parts[index].length >= 3 || parts[index].map(s => s.text).join(' ').length > 550;
+    const ctx = { ...context(repo.current(), parts[index], entry.id), spoken_languages: transcript.languages || (transcript.language ? [transcript.language] : []), ui_language: getUILanguage(), custom_terms: require('../dictation/polish-prompt').customTermsPrompt(vocabulary()), now: new Date(entry.createdAt).toLocaleString(), planRetry: entry.planRetry, topics_full: Object.keys(repo.current().topics).length >= 32 }; const rawRev = raw.rev;
     entry.state = 'structuring'; save(entry);
-    const planPath = `sources/${entry.id}/plan-${index}.json`;
+    const planPath = `sources/${entry.id}/thought-v6-${index}.json`;
     const cached = repo.readLocal(planPath, null);
     const reuse = cached?.rawRev === rawRev && cached.context;
     const validationContext = reuse ? { ...ctx, ...cached.context, sentences: parts[index] } : ctx;
-    let plan;
+    let plan, result;
     try {
-      const result = reuse ? cached.plan : await groq.plan(ctx, useLarge, signal);
+      result = reuse ? cached.plan : await groq.plan(ctx, true, signal);
       try { plan = validatePlan(result, validationContext); } catch (e) { e.kind = 'plan'; throw e; }
     } catch (e) {
-      if (['plan', 'invalid', 'model'].includes(e.kind) && !useLarge) { entry.largeFallback = true; entry.state = 'transcribed'; entry.retryAt = Date.now() + 1500; save(entry); return; }
-      if (['plan', 'invalid', 'model', 'too_large'].includes(e.kind)) { entry.partsDone = index + 1; entry.largeFallback = false; entry.state = 'transcribed'; entry.fallback = true; entry.message = 'Original erhalten · Einordnung nicht eindeutig'; save(entry); return; }
+      if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
+      if ((['plan', 'invalid', 'model', 'too_large', 'budget_small'].includes(e.kind) || e.kind === 'budget' && entry.planBudgetWaited)) {
+        const text = parts[index].map(s => s.text).join(' ');
+        if (!raw.ruleVersion) commands.commit(b => applyPlan(b, { title: fallbackTitle(text), text, topic: null, tasks: [], related: [] }, { rawId, rawRev }), false);
+        delete entry.planRetry; entry.planBudgetWaited = false; entry.partsDone = index + 1; entry.state = 'transcribed'; entry.fallback = true; entry.message = 'Original erhalten'; save(entry); return;
+      }
+      if (e.kind === 'budget') { entry.planBudgetWaited = true; entry.planRetry = e.planRetry || entry.planRetry; save(entry); }
       throw e;
     }
     if (signal.aborted || repo.entry(entry.id)?.state === 'discarded') return;
     // A completed request is durable before waiting for an open editor or saving
     // the projection. Retrying a local write never buys the same plan again.
-    repo.writeLocal(planPath, { plan, rawRev, context: { topics: validationContext.topics.map(t => ({ id: t.id })), existing: validationContext.existing.map(n => ({ id: n.id })) }, at: Date.now() });
+    repo.writeLocal(planPath, { plan: result, rawRev, context: { topics: validationContext.topics, existing: validationContext.existing }, at: Date.now() });
     waitForEditor();
     let applied = false;
     try { commands.commit(b => { applied = applyPlan(b, plan, { entryId: entry.id, sentences: parts[index], rawId, rawRev }); }, false); }
@@ -125,7 +141,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
       entry.fallback = true; entry.message = 'Original erhalten · Darstellung nicht verwendbar';
     }
     if (!applied && !entry.fallback) entry.keptUser = true;
-    entry.partsDone = index + 1; entry.largeFallback = false; entry.state = 'transcribed'; entry.attempts = 0; entry.retryAt = 0; save(entry);
+    delete entry.planRetry; entry.planBudgetWaited = false; entry.partsDone = index + 1; entry.largeFallback = false; entry.state = 'transcribed'; entry.attempts = 0; entry.retryAt = 0; if (!entry.fallback) entry.message = ''; save(entry);
   }
   async function tick() {
     if (stopped || running || isBusy()) return;
@@ -134,7 +150,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
       const entry = repo.entries().filter(e => ['captured', 'transcribed', 'waiting_key', 'waiting_network', 'waiting_limit', 'waiting_budget'].includes(e.state) && (!e.retryAt || e.retryAt <= Date.now())).sort((a, b) => (a.resumeStep === 'plan' || a.state === 'transcribed' ? 1 : 0) - (b.resumeStep === 'plan' || b.state === 'transcribed' ? 1 : 0) || a.createdAt - b.createdAt)[0];
       if (!entry) { await vision(); return; }
       currentId = entry.id; controller = new AbortController();
-      entry.resumeStep = repo.transcript(entry.id) ? 'plan' : 'stt';
+      entry.resumeStep = entry.state === 'transcribed' || hasTranscript(repo.transcript(entry.id)) ? 'plan' : 'stt';
       if (!getKey() || authKey === getKey()) { entry.state = 'waiting_key'; entry.message = authKey ? 'Groq-Schlüssel prüfen' : 'Groq-Schlüssel in den Einstellungen ergänzen'; entry.retryAt = Date.now() + 60000; save(entry); return; }
       authKey = null;
       if (!isOnline()) { entry.state = 'waiting_network'; entry.message = 'Lokal gesichert · wartet auf Verbindung'; entry.retryAt = Date.now() + 30000; save(entry); return; }
@@ -150,7 +166,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
         const waits = { key: 'waiting_key', auth: 'waiting_key', network: 'waiting_network', rate: 'waiting_limit', budget: 'waiting_budget', busy: entry.resumeStep === 'stt' ? 'captured' : 'transcribed' };
         entry.attempts = (entry.attempts || 0) + (Object.hasOwn(waits, error.kind) ? 0 : 1);
         entry.state = error.kind === 'budget_small' ? 'needs_attention' : waits[error.kind] || (entry.attempts >= 5 ? 'needs_attention' : entry.resumeStep === 'stt' ? 'captured' : 'transcribed');
-        entry.message = ['network', 'timeout'].includes(error.kind) ? 'Lokal gesichert · Verbindung unterbrochen' : error.message;
+        entry.message = error.code === 'ENOENT' ? 'Aufnahme nicht mehr vorhanden · bitte erneut aufnehmen' : ['network', 'timeout'].includes(error.kind) ? 'Lokal gesichert · Verbindung unterbrochen' : error.message;
         entry.retryAt = Date.now() + (Number.isFinite(error.retryMs) && error.retryMs > 0 ? error.retryMs : error.kind === 'busy' ? 2000 : Math.min(600000, 30000 * 2 ** entry.attempts));
         if (Date.now() - entry.createdAt > 86400000 && !['waiting_key', 'waiting_budget'].includes(entry.state)) entry.state = 'needs_attention';
         save(entry);
@@ -168,27 +184,41 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     catch (e) { if (e.kind === 'auth') authKey = getKey(); item.retryAt = Date.now() + Math.max(60000, e.retryMs || 600000); }
     repo.writeLocal(`assets/${item.id}.json`, item); onChange();
   }
+  function deleteAudio(entry) {
+    try { fs.rmSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'), { force: true }); } catch { /* retry at next cleanup */ }
+  }
+  function cleanAudio(now = Date.now()) {
+    for (const entry of repo.entries()) {
+      if (entry.state === 'recording' || entry.id === currentId) continue;
+      if (repo.transcript(entry.id)?.text?.trim() || repo.transcript(entry.id)?.silenceProven === true || now - (entry.stoppedAt ?? (entry.createdAt + (entry.durationMs || 0))) >= 30 * 86400000) deleteAudio(entry);
+    }
+  }
   function recover() {
     for (const entry of repo.entries()) {
       if (entry.state === 'transcribing') { entry.state = 'captured'; save(entry); }
       else if (entry.state === 'structuring') { entry.state = 'transcribed'; save(entry); }
-      // Retention only after a durable transcript exists. Failed audio is never auto-deleted.
-      if ((entry.finishedAt && entry.finishedAt < Date.now() - 7 * 86400000 && repo.transcript(entry.id)) || (entry.discardedAt && entry.state === 'discarded' && entry.discardedAt < Date.now() - 7 * 86400000)) fs.rmSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'), { force: true });
     }
   }
-  return { tick, recover,
-    start() { recover(); timer = setInterval(() => { tick().catch(() => {}); }, 1500); timer.unref(); tick().catch(() => {}); },
-    stop() { stopped = true; clearInterval(timer); controller?.abort(); },
+  return { tick, recover, cleanAudio,
+    start() { recover(); cleanAudio(); retentionTimer = setInterval(() => { try { cleanAudio(); } catch { /* retry next hour */ } }, 3600000); retentionTimer.unref(); timer = setInterval(() => { tick().catch(() => {}); }, 1500); timer.unref(); tick().catch(() => {}); },
+    stop() { stopped = true; clearInterval(timer); clearInterval(retentionTimer); controller?.abort(); },
     retry(id) {
       const e = repo.entry(id); assert(e && !['recording', 'discarded'].includes(e.state));
-      if (e.fallback) {
+      if (hasTranscript(repo.transcript(id))) {
         // Explicit retry requests a fresh plan. Automatic retries only reuse it.
-        for (let i = 0; i < (e.parts || 0); i++) repo.writeLocal(`sources/${id}/plan-${i}.json`, null);
-        e.partsDone = 0; e.fallback = false; e.largeFallback = false; e.keptUser = false;
+        for (let i = 0; i < (e.parts || 0); i++) repo.writeLocal(`sources/${id}/thought-v6-${i}.json`, null);
+        e.planBudgetWaited = false; delete e.planRetry; e.partsDone = 0; e.fallback = false; e.largeFallback = false; e.keptUser = false;
       }
-      e.state = repo.transcript(id) ? 'transcribed' : 'captured'; e.retryAt = 0; e.attempts = 0; e.message = ''; authKey = null; save(e); tick().catch(() => {});
+      const transcript = repo.transcript(id);
+      if (transcript?.sentences?.length) {
+        const existing = Object.values(repo.current().nodes).filter(n => n.sourceId === id && n.sentenceIds.length);
+        e.retryParts = existing.map(n => ({ nodeId: n.id, sentences: transcript.sentences.filter(s => n.sentenceIds.includes(s.id)) })).filter(p => p.sentences.length);
+        e.parts = e.retryParts.length;
+        if (!e.parts) { e.state = 'complete'; e.message = ''; save(e); return; }
+      }
+      e.state = hasTranscript(repo.transcript(id)) ? 'transcribed' : 'captured'; e.retryAt = 0; e.attempts = 0; e.message = ''; authKey = null; save(e); tick().catch(() => {});
     },
-    discard(id) { const e = repo.entry(id); assert(e && e.state !== 'recording'); if (currentId === id) controller?.abort(); e.state = 'discarded'; e.discardedAt = Date.now(); save(e); commands.commit(b => { for (const [nid, n] of Object.entries(b.nodes)) if (n.sourceId === id) { n.sentenceIds.forEach(s => { b.claims[s] = { tomb: true }; }); b.tombstones[nid] = Date.now(); delete b.nodes[nid]; } for (const [eid, edge] of Object.entries(b.edges)) if (!b.nodes[edge.source] || !b.nodes[edge.target]) delete b.edges[eid]; }); },
+    discard(id) { const e = repo.entry(id); assert(e && e.state !== 'recording'); if (currentId === id) controller?.abort(); e.state = 'discarded'; e.discardedAt = Date.now(); save(e); commands.commit(b => { for (const [nid, n] of Object.entries(b.nodes)) if (n.sourceId === id) { n.sentenceIds.forEach(s => { b.claims[s] = { tomb: true }; }); b.tombstones[nid] = Date.now(); delete b.nodes[nid]; for (const [tid, task] of Object.entries(b.tasks || {})) if (task.nodeId === nid && task.owner !== 'user') delete b.tasks[tid]; } for (const [eid, edge] of Object.entries(b.edges)) if (!b.nodes[edge.source] || !b.nodes[edge.target]) delete b.edges[eid]; }); },
     reconcileUndo() {
       const live = new Set(Object.values(repo.current().nodes).map(n => n.sourceId));
       for (const e of repo.entries()) if (e.discardedAt) {

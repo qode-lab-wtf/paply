@@ -288,6 +288,8 @@ class GroqClient(
                 .mapNotNull { it.string("id") }
         }
 
+    internal fun termDiagnostic(requested: Int, accepted: Int) { diagnostic("terms $requested $accepted") }
+
     @Deprecated("Use listModels or ModelCatalog") suspend fun models() = listModels()
 
     suspend fun transcribe(

@@ -14,7 +14,7 @@ import Foundation
 /// „Deployment“/„Build“, die Whisper in andere Diktate tragen könnte. Gesendet wird nur,
 /// wenn mindestens zwei Sprachen des Nutzers einen Satz haben – sonst gibt es keinen
 /// passenden Wechsel, den das Beispiel zeigen könnte.
-enum CodeSwitchPrimer {
+public enum CodeSwitchPrimer {
     /// Satzanfänge (`open`) und -enden (`close`) je Sprache.
     static let phrases: [String: (open: [String], close: [String])] = [
         "de": (["Kurzes Update: Das Meeting ist verschoben", "Ich schreibe dir später"],
@@ -57,7 +57,7 @@ enum CodeSwitchPrimer {
     }
 
     /// Sprachen des Nutzers: Einstellung, sonst die Gerätesprachen.
-    static func userLanguages(_ settings: PaplySettings) -> [String] {
+    public static func userLanguages(_ settings: PaplySettings) -> [String] {
         var list = settings.spokenLanguages
         if let fixed = settings.language, !fixed.isEmpty { list.insert(fixed, at: 0) }
         return list.isEmpty ? Locale.preferredLanguages : list

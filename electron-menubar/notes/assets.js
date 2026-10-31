@@ -4,7 +4,6 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { assert, id, uid, node } = require('./contracts');
 const { atomic } = require('./repo');
-const { encodeWav } = require('../audio/wav-encoder');
 function createAssets({ repo, nativeImage, desktopCapturer, screen, commands, getSettings }) {
   function put(bytes) {
     assert(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes) || Buffer.isBuffer(bytes));
@@ -43,10 +42,6 @@ function createAssets({ repo, nativeImage, desktopCapturer, screen, commands, ge
     if (match) {
       const thumb = match[1] === 'thumb'; const file = path.join(repo.root, thumb ? 'thumbs' : 'assets', `${match[2]}.${thumb ? 'jpg' : 'png'}`);
       try { return new Response(fs.readFileSync(file), { headers: { 'Content-Type': thumb ? 'image/jpeg' : 'image/png', 'Cache-Control': 'private, max-age=31536000', 'X-Content-Type-Options': 'nosniff' } }); } catch { return new Response(null, { status: 404 }); }
-    }
-    match = /^audio\/([\w-]{1,100})$/.exec(name);
-    if (match) {
-      try { const entry = repo.entry(match[1]); assert(entry && entry.state !== 'discarded'); const audio = encodeWav(fs.readFileSync(path.join(repo.sourcePath(entry.id), 'rec.pcm'))); return new Response(audio, { headers: { 'Content-Type': 'audio/wav' } }); } catch { return new Response(null, { status: 404 }); }
     }
     return new Response(null, { status: 403 });
   }

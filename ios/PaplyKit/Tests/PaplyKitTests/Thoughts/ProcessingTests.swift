@@ -183,7 +183,7 @@ struct ProcessingTests {
         await h.run() // weiter offline: nichts passiert
         #expect(await h.transcriber.calls == 0)
         // ohne Rohtext bleibt der Ton für den Neuversuch – auch beim Aufräumen
-        await h.store.housekeeping(now: h.clock.now.addingTimeInterval(40 * 86_400))
+        await h.store.housekeeping(now: h.clock.now.addingTimeInterval(29 * 86_400))
         #expect(await h.store.audioURL(id) != nil)
         #expect(await h.thought(id)?.audio?.file == "audio.wav")
         h.flags.online = true
@@ -192,6 +192,13 @@ struct ProcessingTests {
         #expect(thought.state == .done)
         #expect(await h.transcriber.calls == 1)
         #expect(thought.audio == nil && !FileManager.default.fileExists(atPath: h.store.wavURL(id).path))
+        h.flags.online = false
+        let expiredID = try await h.capture()
+        await h.run()
+        await h.store.housekeeping(now: h.clock.now.addingTimeInterval(40 * 86_400))
+        #expect(await h.store.audioURL(expiredID) == nil)
+        #expect(await h.thought(expiredID)?.state == .needsAttention)
+        #expect(await h.thought(expiredID)?.status.message == "Audio nach 30 Tagen entfernt · bitte erneut aufnehmen")
     }
 
     @Test func missingKeyWaitsUntilKeyIsEntered() async throws {
@@ -899,7 +906,7 @@ struct ProcessingTests {
         settings.chunkedUpload = true // wird für den Dateiweg abgeschaltet
         let transcriber = FileTranscriber(transport: server.transport, baseURL: server.baseURL, catalog: ModelCatalog())
         let result = await transcriber.transcribe(audioURL: url, apiKey: "test-placeholder", settings: settings)
-        #expect(result == .success(text: "die tomaten im garten gießen", languages: ["de"], audioSeconds: 5, model: "whisper-large-v3"))
+        #expect(result == .success(text: "die tomaten im garten gießen", languages: ["de"], audioSeconds: 5, model: "whisper-large-v3", requestedAudioSeconds: 5))
         #expect(server.requests("/audio/transcriptions").count == 1)
         #expect(server.requests("/chat/completions").isEmpty) // nie polieren
     }

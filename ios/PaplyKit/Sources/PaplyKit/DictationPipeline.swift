@@ -32,8 +32,6 @@ public actor DictationPipeline {
     private static let log = Logger(subsystem: "dev.paply.kit", category: "pipeline")
     /// Längster Teil, der in einer Anfrage hochgeladen wird (WAV ≈ 19 MB < 25 MB Free-Tier).
     static let maxPieceSeconds = 600.0
-    /// So lange wartet ein Stück höchstens auf den Text des Vorstücks (für den Prompt).
-    static let previousTextWait: Duration = .milliseconds(1500)
 
     private let settings: PaplySettings
     private let options: PipelineOptions
@@ -208,17 +206,24 @@ public actor DictationPipeline {
             Task.detached(priority: .utility) { _ = await catalog.models(client) }
         }
         let index = chunks.count
-        let previous = chunks.last?.task
+        let priorTasks = chunks.map(\.task)
+        let previous: Task<ChunkResult, Never>? = priorTasks.count <= 1 ? priorTasks.last : Task.detached(priority: .userInitiated) {
+            for task in priorTasks.reversed() {
+                guard let result = await awaitResult(task) else { return ChunkResult(failure: .cancelled) }
+                if result.succeeded && !result.text.isEmpty { return result }
+            }
+            return ChunkResult()
+        }
         let context = makeContext()
         let vad = vad
         let task = Task.detached(priority: .userInitiated) { [weak self] () -> ChunkResult in
-            // Kontext des Vorstücks: höchstens 1,5 s warten, sonst ohne dessen Ende senden.
+            // Prompt-Kontext kurz abwarten; die Erkennung darf parallel starten.
             var before: ChunkResult?
-            if let previous { before = await awaitResult(previous, timeout: Self.previousTextWait) }
+            if let previous { before = await awaitResult(previous, timeout: .milliseconds(1500)) }
             if Task.isCancelled { return ChunkResult(failure: .cancelled) }
             guard let self, await !self.isChunkingStopped else { return ChunkResult(sent: false) }
             let result = await Self.transcribe(audio[...], startSample: start, vad: vad,
-                                               previous: before, context: context)
+                                               previous: before, context: context, previousTask: previous)
             await self.chunkCompleted(index, result)
             return result
         }
@@ -240,61 +245,105 @@ public actor DictationPipeline {
         let format: PipelineOptions.UploadFormat
         let primer: String?
         let bytes: Counter
+        let requestedSamples: Counter
         let uploads: Counter
     }
 
+    private let requestedSamples = Counter()
+
     private func makeContext() -> Context {
         Context(client: client, settings: settings, format: options.uploadFormat, primer: primer,
-                bytes: bytes, uploads: uploads)
+                bytes: bytes, requestedSamples: requestedSamples, uploads: uploads)
     }
 
     /// `previous`: Ergebnis des Vorstücks (Ende als Prompt-Kontext, Sprache für kurze Stücke).
-    private static func transcribe(_ audio: ArraySlice<Int16>, startSample: Int, vad: VoiceActivityDetector,
-                                   previous: ChunkResult?, context: Context) async -> ChunkResult {
+    static func transcribe(_ audio: ArraySlice<Int16>, startSample: Int, vad: VoiceActivityDetector,
+                                   previous: ChunkResult?, context: Context, previousTask: Task<ChunkResult, Never>? = nil) async -> ChunkResult {
         let settings = context.settings
         let previousText = previous?.text
         let prompt = WhisperPrompt.build(vocabulary: settings.vocabulary, previousText: previousText, primer: context.primer)
         let encoded = AudioEncoder.encode(audio, preferFLAC: context.format == .flac)
         let seconds = Double(audio.count) / AudioEncoder.sampleRate
         let bytes = context.bytes
-        func send(_ language: String?) async -> Result<Transcription, GroqFailure> {
+        @Sendable func send(_ language: String?, termPrompt: String? = nil) async -> Result<Transcription, GroqFailure> {
             context.uploads.add(1)
             return await context.client.transcribe(audio: encoded, model: settings.transcriptionModel,
-                                                   language: language, prompt: prompt, audioSeconds: seconds,
-                                                   bytesSent: { bytes.add($0) })
+                                                   language: language, prompt: termPrompt ?? prompt, audioSeconds: seconds,
+                                                   bytesSent: { bytes.add($0); context.requestedSamples.add(audio.count) })
         }
-        // Sprachwache: kurze Stücke mit Sprache senden, fremd erkannte einmal neu (LanguageGuard).
+        // Erst erkennen, bei Bedarf mit der erwarteten Sprache gegenprüfen.
         let users = CodeSwitchPrimer.userLanguages(settings)
         let primary = LanguageGuard.primary(settings)
-        let previousLanguage = previous.flatMap { $0.succeeded && !$0.text.isEmpty ? $0.language : nil }
         let frameSamples = VoiceActivityDetector.frameLength
         let firstFrame = startSample / frameSamples
         let lastFrame = (startSample + audio.count + frameSamples - 1) / frameSamples
         // Gesprochene Dauer (VAD-Sprachanteil), nicht die Audiolänge; ohne Messwert die Audiolänge.
         let measured = (firstFrame..<lastFrame).clamped(to: 0..<vad.frameCount)
         let spoken = measured.isEmpty ? seconds : vad.activity(in: measured).speechMs / 1000
-        let first = LanguageGuard.firstRequest(fixed: settings.language, primary: primary, previous: previousLanguage,
-                                               userLanguages: users, spokenSeconds: spoken)
-        var source = first.source
-        var sentLanguage = first.language
-        var result = await send(first.language)
-        if case .success(let transcription) = result, source == .auto, !Task.isCancelled,
-           let redo = LanguageGuard.redoLanguage(detected: GroqModels.languageCode(transcription.language),
-                                                 primary: primary, userLanguages: users) {
-            let detected = GroqModels.languageCode(transcription.language) ?? "-"
-            switch await send(redo) {
+        var source = LanguageSource.auto
+        var chosenLanguage: String?
+        let firstStarted = ContinuousClock.now
+        var result = await send(nil)
+        let firstDuration = firstStarted.duration(to: .now)
+        let firstSeconds = Double(firstDuration.components.seconds) + Double(firstDuration.components.attoseconds) / 1e18
+        guard case .success(let first) = result else {
+            if case .failure(let failure) = result { return ChunkResult(failure: failure) }
+            return ChunkResult(failure: .invalidResponse)
+        }
+        let canCheck = spoken <= LanguageGuard.shortSpeechSeconds || !users.map(LanguageGuard.code).contains(LanguageGuard.code(GroqModels.languageCode(first.language) ?? ""))
+        let checkDeadline = ContinuousClock.now.advanced(by: .seconds(LanguageGuard.checkTimeout(firstSeconds: firstSeconds)))
+        // Erst für die Gegenprobe muss die tatsächlich gewählte Vorstücksprache feststehen.
+        let resolvedPrevious: ChunkResult?
+        if canCheck, let previousTask { resolvedPrevious = await awaitResult(previousTask, timeout: ContinuousClock.now.duration(to: checkDeadline)) }
+        else { resolvedPrevious = previous }
+        if Task.isCancelled { return ChunkResult(failure: .cancelled) }
+        let previousLanguage = resolvedPrevious.flatMap { $0.succeeded && !$0.text.isEmpty ? $0.language : nil }
+        let expected = LanguageGuard.expected(previous: previousLanguage, primary: primary)
+        if case .success(let first) = result, !Task.isCancelled, ContinuousClock.now < checkDeadline,
+           LanguageGuard.needsCheck(expected: expected, detected: GroqModels.languageCode(first.language),
+                                    userLanguages: users, spokenSeconds: spoken) {
+            let check = await LanguageGuard.boundedCheck(firstSeconds: firstSeconds, timeout: ContinuousClock.now.duration(to: checkDeadline)) { await send(expected) }
+            switch check ?? .failure(.cancelled) {
             case .success(let second):
-                result = .success(second)
-                source = .redo
-                sentLanguage = redo
-                log.notice("Sprachwache: \(detected, privacy: .public) erkannt, neu mit \(redo, privacy: .public) (gesprochen \(spoken, format: .fixed(precision: 1), privacy: .public) s, Audio \(seconds, format: .fixed(precision: 1), privacy: .public) s)")
-            case .failure(let failure):
-                source = .redoFailed
-                log.notice("Sprachwache: \(detected, privacy: .public) erkannt, Neuversuch mit \(redo, privacy: .public) gescheitert: \(failure.code, privacy: .public)")
+                if LanguageGuard.choose(detectedText: first.text ?? "", expectedText: second.text,
+                                        detectedConfidence: LanguageGuard.confidence(first.segments),
+                                        expectedConfidence: LanguageGuard.confidence(second.segments), spokenSeconds: spoken) == .expected {
+                    result = .success(second)
+                    chosenLanguage = expected
+                    source = .checkExpected
+                } else { source = .checkDetected }
+            case .failure:
+                source = .checkFailed
             }
-        } else if case .success(let transcription) = result {
-            let detected = GroqModels.languageCode(transcription.language) ?? "-"
-            log.notice("Sprache: \(source.rawValue, privacy: .public), gesendet \(sentLanguage ?? "-", privacy: .public), gemeldet \(detected, privacy: .public), Hauptsprache \(primary ?? "-", privacy: .public) (gesprochen \(spoken, format: .fixed(precision: 1), privacy: .public) s, Audio \(seconds, format: .fixed(precision: 1), privacy: .public) s)")
+        }
+        if Task.isCancelled { return ChunkResult(failure: .cancelled) }
+        func preclean(_ transcription: Transcription) -> String {
+            let filtered = SilenceFilter.filter(text: transcription.text, segments: transcription.segments,
+                                                meta: vad.meta(frameRange: firstFrame..<lastFrame))
+            let offset = Double(startSample) / AudioEncoder.sampleRate
+            let cleaned = TranscriptCleanup.removeEchoes(text: filtered.text, segments: filtered.keptSegments,
+                primer: context.primer, previousText: previousText, vocabulary: settings.vocabulary,
+                duration: Double(audio.count) / AudioEncoder.sampleRate,
+                voiced: { vad.voicedMs(fromSeconds: offset + $0, toSeconds: offset + $1) })
+            return SilenceFilter.isTrivialTranscript(cleaned.text) ? "" : cleaned.text
+        }
+        if case .success(var selected) = result {
+            selected.text = preclean(selected)
+            result = .success(selected)
+            chosenLanguage = chosenLanguage ?? GroqModels.languageCode(selected.language)
+            let candidates = TermGuard.candidates(settings.vocabulary, selected)
+            var accepted = 0
+            if !candidates.terms.isEmpty {
+                let language = chosenLanguage
+                let check = await LanguageGuard.boundedCheck(firstSeconds: firstSeconds) { await send(language, termPrompt: candidates.prompt) }
+                if Task.isCancelled { return ChunkResult(failure: .cancelled) }
+                if case .success(let second) = check,
+                   candidates.terms.contains(where: { TermGuard.accept($0, first: selected.text ?? "", second: second.text ?? "", lpFirst: LanguageGuard.confidence(selected.segments), lpSecond: LanguageGuard.confidence(second.segments)) }) {
+                    result = .success(second)
+                    accepted = 1
+                }
+            }
+            log.info("terms \(candidates.terms.isEmpty ? 0 : 1) \(accepted)")
         }
         switch result {
         case .failure(let failure):
@@ -317,8 +366,8 @@ public actor DictationPipeline {
                 shifted.end = segment.end.map { $0 + offset }
                 return shifted
             }
-            // Von der Wache gesendete Sprache steht fest; sonst die gemeldete.
-            let guarded = source == .short || source == .redo ? sentLanguage.map(CodeSwitchPrimer.baseCode) : nil
+            // Die gewählte Sprache, unabhängig von der Meldung der Gegenprobe.
+            let guarded = chosenLanguage
             return ChunkResult(text: text, segments: segments,
                                language: guarded ?? GroqModels.languageCode(transcription.language) ?? detectLanguage(text),
                                languageSource: source)
@@ -337,12 +386,14 @@ public actor DictationPipeline {
         // Bytes/Anfragen dieses Laufs; der erste Lauf zählt die Stücke der Aufnahme mit.
         let bytesBefore = plan == nil ? 0 : bytes.value
         let uploadsBefore = plan == nil ? 0 : uploads.value
+        let requestedBefore = plan == nil ? 0 : requestedSamples.value
         var timings = DictationTimings(audioSeconds: Double(samples.count) / AudioEncoder.sampleRate)
         func done(_ outcome: DictationOutcome, failed: Bool = false) -> DictationOutcome {
             var outcome = outcome
             timings.totalMs = ms()
             timings.uploadedBytes = bytes.value - bytesBefore
             timings.chunkCount = uploads.value - uploadsBefore
+            timings.requestedAudioSeconds = Double(requestedSamples.value - requestedBefore) / AudioEncoder.sampleRate
             outcome.timings = timings
             outcome.languageSources = (plan ?? []).compactMap { $0.result?.languageSource?.rawValue }
             if !cancelled {
@@ -378,7 +429,7 @@ public actor DictationPipeline {
         var failure: GroqFailure?
         for index in (plan ?? []).indices where plan?[index].result?.succeeded != true {
             guard let piece = plan?[index] else { break }
-            let previous = plan?[..<index].last(where: { $0.result?.succeeded == true })?.result
+            let previous = plan?[..<index].last(where: { $0.result?.succeeded == true && $0.result?.text.isEmpty == false })?.result
             let result = await Self.transcribe(samples[piece.start..<piece.end], startSample: piece.start, vad: vad,
                                                previous: previous, context: context)
             if cancelled || Task.isCancelled { return DictationOutcome() }

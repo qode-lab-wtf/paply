@@ -283,16 +283,13 @@ class ThoughtProcessor(
             expectedLive.remove(id)
             val result = FileTranscriber.result(live, settings.transcriptionModel)
             traceTranscription(id, result, null)
+            ledger.recordAudio(settings.transcriptionModel, result.sentAudioSeconds)
             when (result) {
-                TranscriptionResult.NoSpeech -> {
+                TranscriptionResult.NoSpeech, is TranscriptionResult.Empty -> {
                     markEmpty(id)
                     return null
                 }
                 is TranscriptionResult.Success -> {
-                    val amount = maxOf(1, ceil(result.audioSeconds).toInt())
-                    runCatching { ledger.reserve(result.model, amount, TokenLedger.Unit.audio) }
-                        .getOrNull()
-                        ?.let { ledger.settle(it, amount) }
                     return persistSource(id, result)
                 }
                 is TranscriptionResult.Failure -> Unit
@@ -351,16 +348,16 @@ class ThoughtProcessor(
         traceTranscription(id, result, start)
         return when (result) {
             is TranscriptionResult.Success -> {
-                ledger.settle(reservation, ceil(result.audioSeconds).toInt())
+                ledger.settle(reservation, ceil(result.sentAudioSeconds).toInt())
                 persistSource(id, result)
             }
-            TranscriptionResult.NoSpeech -> {
-                ledger.settle(reservation, 0)
+            TranscriptionResult.NoSpeech, is TranscriptionResult.Empty -> {
+                ledger.settle(reservation, ceil(result.sentAudioSeconds).toInt())
                 markEmpty(id)
                 null
             }
             is TranscriptionResult.Failure -> {
-                ledger.settle(reservation, 0)
+                ledger.settle(reservation, ceil(result.sentAudioSeconds).toInt())
                 transcriptionFailed(id, result.failure, key)
                 null
             }
@@ -940,7 +937,7 @@ class ThoughtProcessor(
                 fields["audioS"] = ThoughtTrace.Value.ms(result.audioSeconds)
                 fields["model"] = S(result.model)
             }
-            TranscriptionResult.NoSpeech -> fields["result"] = S("noSpeech")
+            TranscriptionResult.NoSpeech, is TranscriptionResult.Empty -> fields["result"] = S("noSpeech")
             is TranscriptionResult.Failure -> fields["result"] = S(result.failure.name)
         }
         trace.log("thought.transcribe.end", fields)

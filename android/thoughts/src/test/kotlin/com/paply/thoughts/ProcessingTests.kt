@@ -15,6 +15,31 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ProcessingTests {
+    @Test fun liveAudioIsBookedEvenWhenBudgetIsAlreadyExceeded() = runBlocking {
+        Harness().use { h ->
+            val id = h.capture()
+            h.processor.liveTranscript(id, DictationOutcome(
+                raw = "die tomaten gießen", languages = listOf("de"),
+                timings = DictationTimings(audioSeconds = 2.0, sentAudioSeconds = 8000.0)))
+            h.processor.waitUntilIdle()
+            assertEquals(8000, h.ledger.summary().audioSeconds)
+            assertEquals(0, h.transcriber.calls)
+        }
+    }
+
+    @Test fun ledgerBooksSentAudioForSuccessEmptyAndFailure() = runBlocking {
+        val results = listOf(
+            TranscriptionResult.Success("Ein Gedanke.", listOf("de"), 2.0, "whisper-large-v3", 4.0),
+            TranscriptionResult.Empty(4.0),
+            TranscriptionResult.Failure(TranscriptionFailure.unauthorized, 4.0),
+        )
+        for (result in results) Harness(transcriber = MockTranscriber(listOf(result))).use { h ->
+            h.capture(2.0)
+            h.run()
+            assertEquals(4, h.ledger.summary().audioSeconds)
+        }
+    }
+
     @Test
     fun capturedThoughtIsTranscribedStructuredAndKeepsNoSound() = runBlocking {
         Harness().use { h ->

@@ -81,7 +81,7 @@ public enum ThoughtValidator {
 
         // Titel
         let title: String
-        if let checked = checkedTitle(rawTitle, transcript: input.transcript) {
+        if let checked = checkedTitle(rawTitle, transcript: input.transcript, spoken: input.spokenLanguages, ui: input.uiLanguage) {
             title = checked
         } else {
             rejections.append("title")
@@ -147,7 +147,7 @@ public enum ThoughtValidator {
     static let quoteCharacters: Set<Character> = ["\"", "'", "„", "“", "”", "‚", "‘", "’", "«", "»", "‹", "›", "「", "」", "『", "』"]
 
     /// Titel säubern und prüfen; nil = Ersatztitel nötig.
-    static func checkedTitle(_ raw: String, transcript: String) -> String? {
+    static func checkedTitle(_ raw: String, transcript: String, spoken: [String] = [], ui: String = "") -> String? {
         var title = (raw.split(whereSeparator: \.isNewline).first.map(String.init) ?? "").trimmed
         title = String(title.drop(while: { quoteCharacters.contains($0) || $0 == " " }))
         // Kein Satzzeichen am Ende (Titel-Regel v2).
@@ -158,8 +158,10 @@ public enum ThoughtValidator {
         guard (1...maxTitleLength).contains(title.count) else { return nil }
         // Jede Zahl des Titels steht im Transkript.
         guard digitsContained(title, in: transcript) else { return nil }
-        // Mindestens ein Inhaltswort stammt aus dem Transkript.
-        guard sharesContentWord(title, with: transcript) else { return nil }
+        // Fremde Sprache: jedes Inhaltswort belegen; sonst genügt ein gemeinsames.
+        let languages = spoken.map(LanguageGuard.code).filter { !$0.isEmpty && $0 != "und" }
+        let strict = !languages.isEmpty && !languages.contains(LanguageGuard.code(ui))
+        guard sharesContentWord(title, with: transcript, all: strict) else { return nil }
         return title
     }
 
@@ -472,16 +474,19 @@ public enum ThoughtValidator {
 
     /// Hat der Titel mindestens ein Inhaltswort (≥ 3 Buchstaben, kein Füllwort) aus dem Transkript?
     /// Schriften ohne Leerzeichen: mindestens ein gemeinsames Zeichenpaar.
-    static func sharesContentWord(_ title: String, with transcript: String) -> Bool {
+    static func sharesContentWord(_ title: String, with transcript: String, all: Bool = false) -> Bool {
         if TextAnalysis.containsScriptioContinua(title) {
             let units = Set(TextAnalysis.contentUnits(transcript))
-            return TextAnalysis.contentUnits(title).contains(where: units.contains)
+            let content = TextAnalysis.contentUnits(title)
+            return !content.isEmpty && (all ? content.allSatisfy(units.contains) : content.contains(where: units.contains))
         }
         let forms = wordForms(transcript)
-        for word in TextAnalysis.letterRuns(TextAnalysis.normalizedLower(title))
-        where TextAnalysis.weightedLength(word) >= 3 && !taskStopwords.contains(word) && !Lexicon.fillers.contains(word) {
-            if matches(word, forms) { return true }
+        let source = Set(tokens(transcript).map(\.word))
+        let content = TextAnalysis.letterRuns(TextAnalysis.normalizedLower(title)).filter {
+            TextAnalysis.weightedLength($0) >= 3 && !taskStopwords.contains($0) && !Lexicon.fillers.contains($0)
         }
-        return false
+        return !content.isEmpty && (all
+            ? content.allSatisfy { source.contains(normalizedForMatch($0)) }
+            : content.contains { matches($0, forms) })
     }
 }

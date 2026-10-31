@@ -3,6 +3,28 @@ import Testing
 @testable import PaplyKit
 
 struct ConversationPipelineTests {
+    @Test func frenchCheckPreservesLanguageAndCacheSpeech() async throws {
+        let root = try ConversationCoreTests().root(); defer { try? FileManager.default.removeItem(at: root) }
+        let audio = root.appendingPathComponent("audio.wav")
+        let writer = try WAVWriter(url: audio)
+        writer.append(StoreSupport.tone(seconds: 0.2)); _ = writer.close()
+        let server = MockServer { request, _ in
+            let check = request.field("language") == "de"
+            let text = check ? "Guten Abend" : "Bonsoir"
+            return .json(200, ["words": [["word": text, "start": 0, "end": 0.2]],
+                "segments": [["text": text, "start": 0, "end": 0.2, "avg_logprob": check ? -0.6 : -0.1]],
+                "language": check ? "german" : "french", "duration": 0.2])
+        }
+        let transcriber = ConversationTranscriber(ledger: ConversationLedger.make(root: root), client: server.client())
+        for _ in 0..<2 {
+            let result = try await transcriber.transcribe(audio: audio, workDirectory: root.appendingPathComponent("work"), apiKey: "test", mainLanguage: "de", vocabulary: [])
+            #expect(result.language == "fr")
+            #expect(result.words.first?.word == "Bonsoir")
+            #expect(result.languageSpeechSeconds?["fr"] != nil)
+        }
+        #expect(server.requests("transcriptions").map { $0.field("language") } == [nil, "de"])
+    }
+
     func input(_ root: URL) -> ConversationAnalysisInput {
         .init(id: "test", audio: root.appendingPathComponent("audio.wav"), workDirectory: root.appendingPathComponent("work"), recordedAt: Date(), expectedSpeakers: nil, gaps: [], mainLanguage: "de", vocabulary: [], topics: [], people: [], previous: nil)
     }

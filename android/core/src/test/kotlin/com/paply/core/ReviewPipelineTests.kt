@@ -254,10 +254,10 @@ class ReviewPipelineTests {
     }
 
     @Test
-    fun hangingChunkDoesNotBlockTheNext() = runBlocking {
+    fun slowPreviousChunkStillSuppliesContext() = runBlocking {
         MockServer { r, i ->
             if (r.path!!.endsWith("/models")) Groq.models(GroqModels.polish)
-            else if (i == 0) Groq.transcription("Hängt.").delayed(60.0)
+            else if (i == 0) Groq.transcription("Vorheriger Text.").delayed(2.0)
             else Groq.transcription("Zweites Stück.")
         }
             .use { s ->
@@ -275,7 +275,7 @@ class ReviewPipelineTests {
                 eventually(20000) { s.requests("/audio/transcriptions").size == 2 }
                 expect(System.nanoTime() - start < 20_000_000_000)
                 expect(
-                    s.requests("/audio/transcriptions")[1].field("prompt")?.contains("Hängt") !=
+                    s.requests("/audio/transcriptions")[1].field("prompt")?.contains("Vorheriger Text") ==
                         true,
                 )
                 p.cancel()

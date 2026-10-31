@@ -30,6 +30,7 @@ function createRepo(root) {
   if (recovered) { if (fs.existsSync(file)) fs.copyFileSync(file, path.join(root, 'backups', `damaged-${Date.now()}.json`)); atomic(file, board); }
   const viewFile = path.join(root, 'viewport.json'), view = read(viewFile);
   try { if (view && view.zoom >= .1 && view.zoom <= 2.5) board.viewport = { ...point(view), zoom: view.zoom }; } catch { /* Last valid board view is still available. */ }
+  board.tasks ||= {};
   let lastBackup = 0;
   function save(next) {
     assert(validBoard(next)); next.rev = board.rev + 1;

@@ -204,3 +204,8 @@ Am selben Tag entschieden: Regel 1, `large-v3` und die lange Stille-Liste gelten
 überall an, der Schalter wandert in einen Entwicklerbereich, den jede App bekommt. Ton bleibt nur bis zum gesicherten
 Text, Nachhören entfällt. Das ersetzt „Originalton 7 Tage“ von 2026-09-21. Die Historie vor dem Merge wurde von
 Tester-Namen, einem privaten Vorfall und dem TestFlight-Link bereinigt.
+
+Ebenfalls am 31.10.: Gedanken auf Mac und Windows nutzen dieselben KI-Regeln wie iPhone und Android. Eigene Begriffe
+bekommen eine akustische Gegenprobe statt einer Korrektur durch die KI, das war Allans Vorschlag. Der Code soll privat
+werden, die Downloads ziehen dafür in ein eigenes öffentliches Repository um. Android-Gespräche warten auf den
+bestandenen Gerätetest des iPhones.

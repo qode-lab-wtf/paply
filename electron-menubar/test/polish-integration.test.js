@@ -1,3 +1,4 @@
+import { buildPrompt, primer, estimateTokens } from '../dictation/whisper-prompt';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import vm from 'node:vm';
 import { makeMain, source, speech } from './helpers/dictation-main';
@@ -34,7 +35,7 @@ describe.each(['darwin', 'win32'])('P2 im echten Diktatpfad auf %s', platform =>
     const result = await c.processAudioData(Buffer.from('audio'), false, speech);
     expect(result.polished).toBe(polished);
     expect(c.autopasteText).toHaveBeenCalledWith(polished, null);
-    expect(c.fetch.mock.calls[0][1].body.get('prompt')).toBe('Paply, Müller');
+    expect(c.fetch.mock.calls[0][1].body.get('prompt')).toBe(buildPrompt('Paply, Müller', '', primer(['de', 'en'])));
     const payload = JSON.parse(c.fetch.mock.calls[2][1].body);
     expect(payload.model).toBe(POLISH_MODEL); expect(payload.temperature).toBe(0);
     expect(JSON.parse(payload.messages[1].content)).toEqual({
@@ -90,12 +91,12 @@ it('erweitert transcribeAudio opt-in und belässt alte Aufrufer bei string', asy
   const filteredText = raw + ' Sicher';
   expect(await c.transcribeAudio(Buffer.from('audio'), 'de', 0, speech)).toBe(filteredText);
   expect(await c.transcribeAudio(Buffer.from('audio'), 'de', 0, speech, { returnDetails: true }))
-    .toEqual({ text: filteredText, segments: [segment] });
-  expect(c.fetch.mock.calls[0][1].body.get('prompt')).toHaveLength(200);
+    .toEqual({ text: filteredText, language: null, segments: [segment] });
+  expect(estimateTokens(c.fetch.mock.calls[0][1].body.get('prompt'))).toBeLessThanOrEqual(200);
 });
 
-it('sendet bei leerer Wortliste keinen Whisper-Prompt', async () => {
+it('sendet bei leerer Wortliste nur den Sprachwechsel-Primer', async () => {
   const { context: c } = main('darwin');
   await c.transcribeAudio(Buffer.from('audio'), 'de', 0, speech);
-  expect(c.fetch.mock.calls[0][1].body.has('prompt')).toBe(false);
+  expect(c.fetch.mock.calls[0][1].body.get('prompt')).toBe(primer(['de', 'en']));
 });

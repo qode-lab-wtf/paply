@@ -1,6 +1,6 @@
 # paply Menubar App
 
-Eigenständige macOS/Windows Menüleisten-App für Sprachtranskription mit Groq Whisper und optional Groq Llama Polishing.
+Eigenständige macOS/Windows Menüleisten-App für Sprachtranskription mit Groq Whisper und standardmäßig aktiviertem Polieren.
 
 ## Features
 
@@ -163,9 +163,7 @@ Dies erstellt automatisch ein GitHub Release mit allen Build-Artefakten und der 
 1. App starten
 2. In Menüleiste klicken → "Einstellungen..."
 3. **Groq API Key** eingeben (erforderlich für Transkription)
-4. Optional: **Anthropic API Key** für Polish-Funktion
-5. Optional: "Polish aktivieren" ankreuzen
-6. Speichern
+4. Speichern. Polieren ist standardmäßig an und lässt sich im Entwicklerbereich abschalten.
 
 ## Nutzung
 
@@ -193,4 +191,4 @@ Bei einem verfügbaren Update wird das Update automatisch heruntergeladen und na
 - electron-updater für Auto-Updates
 - auto-launch für Autostart-Funktion
 - Groq Whisper Large V3 Turbo für Transkription
-- Groq Llama 3.3 für optionales Polishing
+- Polieren standardmäßig an; abschaltbar im Entwicklerbereich

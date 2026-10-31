@@ -69,7 +69,7 @@ object ThoughtValidator {
         val rejections = mutableListOf<String>()
         val clean = checkText(rawText, input, rejections)
         val title =
-            checkedTitle(rawTitle, input.transcript)
+            checkedTitle(rawTitle, input.transcript, input.spokenLanguages, input.uiLanguage)
                 ?: fallbackTitle(clean ?: input.transcript).also { rejections.add("title") }
         val topic = checkedTopic(a.topic, input, aliases, rejections)
         val tasks = checkedTasks(a.tasks, input.transcript, rejections)
@@ -128,7 +128,7 @@ object ThoughtValidator {
 
     private val quoteCharacters = "\"'„“”‚‘’«»‹›「」『』".toSet()
 
-    fun checkedTitle(raw: String, transcript: String): String? {
+    fun checkedTitle(raw: String, transcript: String, spoken: List<String> = emptyList(), ui: String = ""): String? {
         var title =
             TextForm.trim(
                 raw.split(Regex("[\\r\\n\\u000b\\u000c\\u0085\\u2028\\u2029]+")).firstOrNull {
@@ -140,10 +140,13 @@ object ThoughtValidator {
                 .dropWhile { it in quoteCharacters || it == ' ' }
                 .dropLastWhile { it in quoteCharacters || it in ".…!?:;,–—- " }
         title = title.split(' ', '\t').filter { it.isNotEmpty() }.joinToString(" ")
+        fun base(value: String) = value.trim().lowercase(java.util.Locale.ROOT).replace('_', '-').substringBefore('-')
+        val languages = spoken.map(::base).filter { it.isNotEmpty() && it != "und" }
+        val strict = languages.isNotEmpty() && base(ui) !in languages
         return title.takeIf {
             TextForm.count(it) in 1..maxTitleLength &&
                 digitsContained(it, transcript) &&
-                sharesContentWord(it, transcript)
+                sharesContentWord(it, transcript, strict)
         }
     }
 
@@ -552,17 +555,18 @@ object ThoughtValidator {
         return false
     }
 
-    fun sharesContentWord(title: String, transcript: String): Boolean {
+    fun sharesContentWord(title: String, transcript: String, all: Boolean = false): Boolean {
         if (TextAnalysis.containsScriptioContinua(title)) {
             val units = TextAnalysis.contentUnits(transcript).toSet()
-            return TextAnalysis.contentUnits(title).any { it in units }
+            val content = TextAnalysis.contentUnits(title)
+            return content.isNotEmpty() && if (all) content.all { it in units } else content.any { it in units }
         }
         val forms = wordForms(transcript)
-        return TextAnalysis.letterRuns(TextAnalysis.normalizedLower(title)).any {
-            TextAnalysis.weightedLength(it) >= 3 &&
-                it !in taskStopwords &&
-                it !in Lexicon.fillers &&
-                matches(it, forms)
+        val source = tokens(transcript).map { it.word }.toSet()
+        val content = TextAnalysis.letterRuns(TextAnalysis.normalizedLower(title)).filter {
+            TextAnalysis.weightedLength(it) >= 3 && it !in taskStopwords && it !in Lexicon.fillers
         }
+        return content.isNotEmpty() && if (all) content.all { normalizedForMatch(it) in source }
+            else content.any { matches(it, forms) }
     }
 }

@@ -2,9 +2,10 @@
 
 Für Mac, Windows, iPhone und Android.
 
-Mac und Windows: **Cmd+X** diktieren (Groq Whisper, optional Polieren), **Cmd+Y** Gedanken,
-**Cmd+Shift+X** Gespräch aufnehmen → Gemini-Audio-Auswertung mit Sprechern, Wortlaut, Bericht und
-Nachhören (Original-Ton 7 Tage).
+Mac und Windows: **Cmd+X** diktieren (Groq Whisper, behutsames Polieren; abschaltbar im Entwicklerbereich), **Cmd+Y** Gedanken,
+**Cmd+Shift+X** Gespräch aufnehmen → Gemini-Audio-Auswertung mit Sprechern, Wortlaut, Bericht. Ton wird nach der Auswertung gelöscht; bei Fehlern bleibt er höchstens 30 Tage für den Neuversuch.
+
+Gedanken nutzen auf allen Apps die KI-Regeln v6: Titel, Text in der gesprochenen Sprache, Thema, Aufgaben und Verknüpfungen. Auf dem Desktop bleiben sie auf dem Canvas; der Reiter **Aufgaben** zeigt offene Aufgaben mit gesprochenem Termin und Quelle. Eigene Änderungen bleiben erhalten. Bestehende Formen sind weiter bearbeitbar; alte Gedanken werden nur über **Erneut** neu eingeordnet.
 
 ## Download
 
