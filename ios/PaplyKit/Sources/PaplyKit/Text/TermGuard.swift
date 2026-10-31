@@ -23,37 +23,62 @@ enum TermGuard {
         }
         return row[b.count]
     }
-    static func near(_ term: String, _ text: String) -> Bool {
-        if norm(text).contains(norm(term)) { return false }
-        let k = key(term), w = norm(text).components(separatedBy: " ")
-        let n = norm(term).components(separatedBy: " ").count + 1
-        for i in w.indices {
-            for length in 1...min(n,w.count-i) {
-                let x = key(w[i..<i+length].joined(separator: " "))
-                if x.count >= 2 && distance(x,k) <= (k.count >= 4 ? 1 : 0) { return true }
+    static let spellingRatio = 0.6
+    static func plain(_ text: String) -> String {
+        replace(text.decomposedStringWithCanonicalMapping, "\\p{M}", "").replacingOccurrences(of: " ", with: "")
+    }
+    // Lazy window cache shared by every vocabulary entry for this text.
+    final class Windows {
+        let words: [String]
+        var cache: [Int: (String, String)] = [:]
+        init(_ text: String) { words = norm(text).components(separatedBy: " ") }
+        func get(_ i: Int, _ length: Int) -> (String, String) {
+            let id = i * (words.count + 1) + length
+            if let value = cache[id] { return value }
+            let text = words[i..<i+length].joined(separator: " ")
+            let value = (key(text), plain(text))
+            cache[id] = value
+            return value
+        }
+    }
+    static func window(_ term: String, _ cache: Windows) -> (i: Int, length: Int)? {
+        let t = norm(term), k = key(term), p = plain(t)
+        guard k.count >= 3, !(" " + cache.words.joined(separator: " ") + " ").contains(" " + t + " ") else { return nil }
+        let n = t.components(separatedBy: " ").count + 1
+        let limit = Int(ceil(Double(p.count) * spellingRatio))
+        for i in cache.words.indices {
+            for length in 1...min(n, cache.words.count-i) {
+                let (x, spelling) = cache.get(i, length)
+                if x.count >= 3 && abs(x.count-k.count) <= (k.count >= 4 ? 1 : 0) && distance(x,k) <= (k.count >= 4 ? 1 : 0)
+                    && distance(spelling,p) <= limit { return (i,length) }
             }
         }
-        return false
+        return nil
     }
+    static func near(_ term: String, _ text: String) -> Bool { window(term, Windows(text)) != nil }
     static func accept(_ term: String, first: String, second: String, lpFirst: Double?, lpSecond: Double?) -> Bool {
-        guard let lpFirst, let lpSecond, lpFirst.isFinite, lpSecond.isFinite else { return false }
-        let f = norm(first), s = norm(second), t = norm(term)
-        guard !f.contains(t), s.contains(t), lpSecond >= lpFirst-gap else { return false }
-        let a = Set(f.components(separatedBy: " ")), b = Set(s.components(separatedBy: " "))
-        let n = t.components(separatedBy: " ").count
-        return b.subtracting(a).count <= n+1 && a.subtracting(b).count <= n+2
+        guard let lpFirst, let lpSecond, lpFirst.isFinite, lpSecond.isFinite, lpSecond >= lpFirst-gap else { return false }
+        let cache = Windows(first), t = norm(term), s = " " + norm(second) + " "
+        guard s.contains(" " + t + " "), let win = window(term, cache) else { return false }
+        let f = cache.words
+        let rest = Array(f[..<win.i]) + Array(f[(win.i+win.length)...])
+        let parts = s.components(separatedBy: " " + t + " ")
+        guard parts.count <= 2 || rest.count >= 3 else { return false }
+        var left = parts.joined(separator: " ").split(separator: " ").map(String.init)
+        var gone: [String] = []
+        for word in rest {
+            if let index = left.firstIndex(of: word) { left.remove(at: index) } else { gone.append(word) }
+        }
+        let allow = rest.count / 10
+        if gone.count <= allow && left.count <= allow { return true }
+        let before = win.i > 0 ? f[win.i-1] : ""
+        let after = win.i+win.length < f.count ? f[win.i+win.length] : ""
+        return gone.count == allow+1 && left.count <= allow && rest.count >= 4 && (gone.contains(before) || gone.contains(after))
     }
     static func candidates(_ vocabulary: String, _ response: Transcription) -> (terms: [String], prompt: String) {
+        let cache = Windows(response.text ?? "")
         let terms = vocabulary.components(separatedBy: CharacterSet(charactersIn: ",;\n\r")).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        var selected = Array(terms.filter { near($0,response.text ?? "") }.prefix(3))
-        let uncertain = selected.isEmpty && (response.segments?.contains { ($0.avgLogprob ?? 0) < -0.5 } ?? false)
-        if uncertain {
-            for term in terms {
-                if WhisperPrompt.estimateTokens((selected + [term]).joined(separator: ", ")) > 90 { break }
-                selected.append(term)
-            }
-        }
-        guard let first = selected.first else { return ([], "") }
-        return (selected, uncertain ? selected.joined(separator: ", ") : selected.map { "\($0), \($0)." }.joined(separator: " ") + " Hallo \(first).")
+        let selected = Array(terms.lazy.filter { window($0,cache) != nil }.prefix(3))
+        return (selected, selected.map { "\($0), \($0)." }.joined(separator: " "))
     }
 }

@@ -76,6 +76,12 @@ Das gilt für Diktat und Gedanken in allen Apps. Gespräche haben eigene, einfac
   zweites Mal mit dem Begriff im Vordergrund. Der Begriff zählt nur, wenn Whisper ihn dabei selbst hört: Die Konfidenz darf
   um höchstens `begriffe.abstand` schlechter sein, und nur der ähnlich klingende Teil ändert sich. Sonst bleibt das erste
   Ergebnis. Was die Stille-Regeln verwerfen, bekommt keine Gegenprobe. Prüffälle: `shared/begriffe/faelle.json`.
+- Nur Klangtreffer lösen aus, keine unsicheren Segmente. Klangschlüssel unter drei Zeichen lösen nie aus.
+- Zusätzlich darf der Schreibweisen-Abstand ohne Leer- und Kombinationszeichen höchstens die aufgerundete
+  Begriffslänge mal `begriffe.schreibweise` betragen. Die Gegenprobe nennt höchstens drei Kandidaten jeweils zweimal.
+- Das Klangfenster im ersten Text bestimmt den ersetzten Teil. Der Rest bleibt als Wortmenge mit Häufigkeiten erhalten,
+  mit höchstens abgerundet Restwortzahl/10 fehlenden und neuen Wörtern. Direkt am Fenster darf zusätzlich ein Wort
+  entfallen, wenn der Rest mindestens vier Wörter hat. Bei mehrfach gehörtem Begriff braucht der Rest mindestens drei Wörter.
 - Messung vom 31.10.2026: Mit zehn typischen Begriffen betrifft das rund 14 % von Allans 1.374 echten Diktaten, mit kurzen
   Namen keines. Die Gegenprobe wurde bisher nur mit künstlicher Stimme geprüft.
 

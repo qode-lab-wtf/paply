@@ -4,6 +4,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class LanguageGuardTests {
+    @Test fun whitespaceDoesNotEraseWordBoundaries() {
+        val a = Transcription(text = "ab c", segments = listOf(WhisperSegment(start = 0.0, end = 1.0, avgLogprob = -0.1)))
+        val b = a.copy(text = "a bc", segments = listOf(WhisperSegment(start = 0.0, end = 1.0, avgLogprob = -0.9)))
+        expect(!LanguageGuard.chooseExpected(a,b,2.0))
+        expect(LanguageGuard.chooseExpected(a,a.copy(text = "ab  c"),2.0))
+    }
+
     @Test fun aliasesAreSentAsWhisperCodes() = runBlocking {
         for ((device, whisper) in listOf("nb" to "no", "fil-PH" to "tl", "iw" to "he", "in" to "id", "ji" to "yi", "jw" to "jv")) {
             MockServer { _, _ -> Groq.transcription("A spoken sentence.", "English") }.use { server ->

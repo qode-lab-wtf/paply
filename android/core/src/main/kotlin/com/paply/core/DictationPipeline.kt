@@ -314,6 +314,11 @@ constructor(
                 source = if (checked == null) LanguageSource.checkFailed else LanguageSource.checkedDetected
             }
         }
+        val preFiltered = SilenceFilter.filter(result.text, result.segments, measured.meta(firstFrame until lastFrame))
+        val preOffset = startSample / AudioEncoder.sampleRate
+        val preCleaned = TranscriptCleanup.removeEchoes(preFiltered.text, preFiltered.keptSegments, primer,
+            previous?.text, settings.vocabulary, seconds) { from, to -> measured.voicedMs(preOffset + from, preOffset + to) }
+        result = result.copy(text = if (SilenceFilter.isTrivialTranscript(preCleaned.text)) "" else preCleaned.text)
         val candidates = TermGuard.candidates(settings.vocabulary, result)
         var termAccepted = 0
         if (candidates.terms.isNotEmpty()) {

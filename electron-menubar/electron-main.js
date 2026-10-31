@@ -533,6 +533,9 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         return JSON.parse(res.body);
       };
       let selected = await guardedTranscription(request, { expected: language, users, spoken: validateVoiceActivity(voiceActivity)?.speechMs / 1000 });
+      const preEcho = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
+      const preFiltered = filterTranscription(preEcho, voiceActivity, options);
+      selected = { ...preEcho, text: preFiltered.text, ...(!preFiltered.text ? { segments: [] } : {}) };
       selected = await termCheck(selected, getStore().get('customVocabulary') || '', request, firstMs);
       const json = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
       const filtered = filterTranscription(json, voiceActivity, options);

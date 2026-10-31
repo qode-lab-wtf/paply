@@ -31,6 +31,9 @@ const WERTE = {
     [`${ANDROID}/TermGuard.kt`, /gap = ([\d.]+)/],
   ],
   'begriffe.schreibweise': [
+    [`${DESKTOP}/dictation/term-guard.js`, /SPELLING_RATIO = ([\d.]+)/],
+    [`${IOS}/Text/TermGuard.swift`, /spellingRatio = ([\d.]+)/],
+    [`${ANDROID}/TermGuard.kt`, /spellingRatio = ([\d.]+)/],
   ],
   'diktat.whisper_modell': [
     [`${DESKTOP}/dictation/language-guard.js`, /WHISPER_MODEL = '([^']+)'/],

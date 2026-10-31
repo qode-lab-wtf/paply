@@ -48,6 +48,9 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
       };
       let response = await guardedTranscription(send, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
       signal?.throwIfAborted();
+      response = removeEchoes(response, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
+      const preText = require('../audio/silence-filter').filterTranscription(response, context.voiceActivity).text;
+      response = { ...response, text: preText, ...(!preText ? { segments: [] } : {}) };
       response = await require('../dictation/term-guard').termCheck(response, vocabulary, send, firstMs, signal);
       return removeEchoes({ ...response, model }, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
     },

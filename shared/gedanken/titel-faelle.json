@@ -119,5 +119,15 @@
     ],
     "ui": "de",
     "ok": true
+  },
+  {
+    "name": "Gemeinsames Fuellwort belegt keinen Titel",
+    "transcript": "Ich muss für Mama einen Kuchen backen",
+    "title": "Reiseplanung für Italien",
+    "spoken": [
+      "de"
+    ],
+    "ui": "de",
+    "ok": false
   }
 ]

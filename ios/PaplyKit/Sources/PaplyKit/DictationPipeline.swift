@@ -317,7 +317,19 @@ public actor DictationPipeline {
             }
         }
         if Task.isCancelled { return ChunkResult(failure: .cancelled) }
-        if case .success(let selected) = result {
+        func preclean(_ transcription: Transcription) -> String {
+            let filtered = SilenceFilter.filter(text: transcription.text, segments: transcription.segments,
+                                                meta: vad.meta(frameRange: firstFrame..<lastFrame))
+            let offset = Double(startSample) / AudioEncoder.sampleRate
+            let cleaned = TranscriptCleanup.removeEchoes(text: filtered.text, segments: filtered.keptSegments,
+                primer: context.primer, previousText: previousText, vocabulary: settings.vocabulary,
+                duration: Double(audio.count) / AudioEncoder.sampleRate,
+                voiced: { vad.voicedMs(fromSeconds: offset + $0, toSeconds: offset + $1) })
+            return SilenceFilter.isTrivialTranscript(cleaned.text) ? "" : cleaned.text
+        }
+        if case .success(var selected) = result {
+            selected.text = preclean(selected)
+            result = .success(selected)
             chosenLanguage = chosenLanguage ?? GroqModels.languageCode(selected.language)
             let candidates = TermGuard.candidates(settings.vocabulary, selected)
             var accepted = 0

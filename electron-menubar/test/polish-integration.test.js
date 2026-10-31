@@ -30,14 +30,13 @@ describe.each(['darwin', 'win32'])('P2 im echten Diktatpfad auf %s', platform =>
       history: [{ timestamp: new Date(Date.now() - 60000).toISOString(), transcript: 'Vorheriges Rohdiktat', polished: 'Fremde Politur' }],
     });
     c.fetch.mockResolvedValueOnce(response({ text: raw, segments: [segment] }))
-      .mockResolvedValueOnce(response({ text: raw, segments: [segment] }))
       .mockResolvedValueOnce(response({ data: [{ id: POLISH_MODEL }] }))
       .mockResolvedValueOnce(response({ choices: [{ finish_reason: 'stop', message: { content: polished } }] }));
     const result = await c.processAudioData(Buffer.from('audio'), false, speech);
     expect(result.polished).toBe(polished);
     expect(c.autopasteText).toHaveBeenCalledWith(polished, null);
     expect(c.fetch.mock.calls[0][1].body.get('prompt')).toBe(buildPrompt('Paply, Müller', '', primer(['de', 'en'])));
-    const payload = JSON.parse(c.fetch.mock.calls[3][1].body);
+    const payload = JSON.parse(c.fetch.mock.calls[2][1].body);
     expect(payload.model).toBe(POLISH_MODEL); expect(payload.temperature).toBe(0);
     expect(JSON.parse(payload.messages[1].content)).toEqual({
       current_dictation: raw, background_do_not_edit: ['Vorheriges Rohdiktat'],
