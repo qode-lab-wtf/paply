@@ -108,8 +108,10 @@ describe('queue boundaries', () => {
     const text = 'Demain je vais retrouver Sophie au café.';
     const groq = { plan: vi.fn(async ctx => ({ ...fixturePlan(ctx.sentences).plan, title: 'Treffen mit Sophie', topic: { choice: 'none' } })) };
     const q = fixture(groq, { getUILanguage: () => 'de-DE' });
-    const id = q.addText(text);
-    repo.saveTranscript(id, { ...repo.transcript(id), languages: ['fr'] });
+    const sentences = splitSentences(text, 's');
+    rawFor(sentences);
+    repo.saveEntry({ id: 's', kind: 'voice', createdAt: Date.now(), state: 'transcribed', partsDone: 0 });
+    repo.saveTranscript('s', { text, sentences, languages: ['fr'] });
     for (let i = 0; i < 4; i++) await q.tick();
     expect(groq.plan.mock.calls[0][0]).toMatchObject({ spoken_languages: ['fr'], ui_language: 'de-DE' });
     expect(single().label).toBe('Demain je vais retrouver Sophie au');
