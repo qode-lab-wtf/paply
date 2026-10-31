@@ -26,8 +26,8 @@ Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtb
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
 - **Android:** Griff am Bildschirmrand (0.2.2), Abnahme läuft auf Branch `fix/android-knopf-rand`.
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
-- **Alle:** Sprachregel und Begriffs-Gegenprobe mit echten Stimmen prüfen. Gemessen wurde bisher nur mit künstlichen Stimmen,
-  bei fremden Sprachen ganz, bei der Begriffs-Gegenprobe ebenfalls.
+- **Alle:** Fremde Sprachen und die Begriffs-Gegenprobe mit echten Stimmen prüfen. Beides ist bisher nur mit künstlichen
+  Stimmen gemessen.
 - **Repository:** Privat stellen, sobald Mac und Windows ihre Updates aus einem eigenen öffentlichen Download-Repository
   holen. Das geht mit dem nächsten Release, weil die installierten Apps die neue Adresse erst kennen müssen.
 
