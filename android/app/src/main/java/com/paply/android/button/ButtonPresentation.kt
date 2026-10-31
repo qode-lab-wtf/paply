@@ -5,7 +5,6 @@ internal object ButtonPresentation {
     const val DIM_DELAY = 3000L
     const val DIM_DURATION = 300L
     const val DIM_ALPHA = .6f
-    const val LAYOUT_WAIT = 120L
     fun logoCenter(width: Float, active: Float, onRight: Boolean): Float =
         if (onRight) width - (12f + 32f * active) else 12f + 32f * active
     fun cancelBeforeLogo(onRight: Boolean) = onRight

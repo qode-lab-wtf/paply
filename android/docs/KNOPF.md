@@ -291,22 +291,24 @@ Produktions-Neubau zuvor 38 s), einschließlich sieben neuer Regressionstests.
   Berührung und Feldwechsel wecken ihn sofort; während gehaltener Berührung und
   aktiver Phasen bleibt er hell. Keine dauernde Ruheanimation. Bei deaktivierten
   Systemanimationen werden die Zielzustände direkt gesetzt.
-- Griff und aktiver 56-dp-Kreis gehen in 220 ms ineinander über. Das Fenster
-  wächst vor der Animation und schrumpft erst nach der Rückanimation; die
-  vertikale Mitte bleibt beim Phasenwechsel erhalten. Der 72-dp-Ringbereich hat
-  8 dp Abstand zur sicheren Kante. Das 48-dp-X sitzt immer zur Bildschirmmitte.
-  Hinweise erweitern das Fenster nach innen; der obere Fallback gilt beidseitig.
-  Pegelringe, Verarbeitungsring, 650-ms-Haken, Warnungen und Zustellung bleiben.
-- Startübergang: Erst wenn Fenster und Logo-Kind ihre Zielgröße und Randposition
-  im Pre-Draw erreicht haben, beginnt der 220-ms-Ease-out-Morph. Bis dahin bleibt
-  das letzte Griffbild stehen; Zwischenlayouts werden nicht gezeichnet. Gilt
-  rechts und links. Die Aufnahme startet weiterhin sofort. Die Ringe wachsen mit,
-  damit auch sie während des Morphs nicht am Rand abgeschnitten werden.
-  Das X blendet nach 30 ms in 150 ms ein und ist dabei sofort antippbar;
-  ohne Systemanimationen erscheint es direkt im fertigen Layout. Beim Rückweg
-  verschwindet es weiterhin sofort, das Fenster schrumpft nach dem Morph.
-  Das Zurückhalten gilt höchstens 120 ms nach einer Fenstergrößen-Änderung, damit
-  ein unerwartetes Fenster auf fremden Geräten den Knopf nie einfriert.
+- Zwei Overlay-Fenster: Der Griff hat dauerhaft 44 × 56 dp, das Aktiv-Fenster
+  enthält Logo, X und Hinweise. In Ruhe ohne Hinweis ist das Aktiv-Fenster
+  unsichtbar und nicht berührbar. Ziehen, Abdimmen und Gestenausnahme gehören
+  dem Griff-Fenster.
+- Beim Tipp startet die Aufnahme sofort. Das Aktiv-Fenster erscheint in seiner
+  Zielgröße, mit dem Griffbild am selben Rand und auf gleicher Höhe. Nach seinem
+  ersten gezeichneten Bild beginnen 220-ms-Morph und 150-ms-X-Einblendung;
+  zwei Displaybilder später verschwindet der alte Griff. Das X ist während
+  seiner Einblendung antippbar. Der 72-dp-Ringbereich hält 8 dp Randabstand,
+  das X bleibt zur Bildschirmmitte hin angeordnet.
+- Beim Rückweg bleiben Fenstergröße und X-Platz erhalten (INVISIBLE). Nach dem
+  Rückmorph erscheint der Griff; nach seinem ersten Bild und zwei Displaybildern
+  verschwindet das Aktiv-Fenster. Hinweise in Ruhe verwenden denselben Austausch.
+  Für ausbleibende erste Bilder gilt eine 200-ms-Frist; neue Übergänge und
+  Entfernen verwerfen alte Rückrufe. Ohne Systemanimationen gilt sofort der
+  Endzustand. Fehler beim Hinzufügen entfernen beide Fenster über overlayFailed.
+- Vertikale Mitte, obere Rückfallposition, Pegelringe, Verarbeitungsring,
+  650-ms-Haken, Warnungen und Zustellung bleiben erhalten.
 - Einrichtung und Freundestexte nennen den Bildschirmrand. Version 0.2.2 (8).
 
 Prüfung nur über `scripts/mb.sh`, `PAPLY_WORK=work-rand022`:
@@ -317,7 +319,7 @@ Unit-Regressionen prüfen beide Kanten, seitliche Insets, vertikales Ausweichen,
 Ziehbegrenzung, Kantenwechsel, Abdimmen, neue Schlüssel und gespiegelte X-Anordnung.
 Gerätetests wurden angepasst und nur kompiliert. Keine Emulator-UI gestartet.
 Noch am Gerät abzunehmen: Samsung-Zurück-Geste und Ziehen über die Mitte,
-TalkBack, Abdimmen sowie tatsächlich sprung-/blinkfreier Fenstergrößenwechsel,
+TalkBack, Abdimmen sowie tatsächlich sprung-/blinkfreier Fensteraustausch,
 Hinweise und Rotation an beiden Kanten. Keine neue Mikrofon-/Zustellabnahme.
 
 Abschluss: `BUILD SUCCESSFUL` (29 s). Core: 402 Tests, davon 401 bestanden und
@@ -326,10 +328,11 @@ Abschluss: `BUILD SUCCESSFUL` (29 s). Core: 402 Tests, davon 401 bestanden und
 Keine Fehler; Debug-/Release-Lint, beide Animal-Sniffer-Prüfungen und beide
 Debug-APK-Bauten erfolgreich.
 
-Nachprüfung des Startübergangs: dieselben neun Pflichtaufgaben über `mb.sh`
-mit `PAPLY_WORK=work-rand022` erfolgreich (33 s). Core: 401 bestanden,
-1 übersprungen; Thoughts: 433 bestanden; App: 193 bestanden. Debug-/Release-Lint
-ohne Fehler, Animal Sniffer und beide Debug-APK-Bauten grün. Die Änderung nutzt
-Androids Layout-/Pre-Draw-Lebenszyklus, keine neue reine Fachlogik.
-Keine Emulator-UI gestartet; lückenlose Framefolge, beide Kanten, Rückweg und
-abgeschaltete Systemanimationen müssen separat am Gerät abgenommen werden.
+Zwei-Fenster-Änderung: Drei neue Unit-Tests prüfen Fensterzuständigkeit für alle
+Phasen mit/ohne Hinweis und beide Wechselrichtungen einschließlich wiederholter
+Render-Aufrufe. Die alten Layout-Sperren sind entfernt.
+Prüfstatus dieser Änderung: `PAPLY_WORK=work-rand022 android/scripts/mb.sh sync`
+scheiterte am SSH-Verbindungs-Timeout zum offline gemeldeten MacBook. Daher noch
+keine neuen Unit-Test-, Lint-, Animal-Sniffer- oder APK-Ergebnisse. Die obigen
+Build-Ergebnisse gehören zum vorherigen Stand. Geräteabnahme weiterhin offen;
+keine Emulator-UI gestartet.

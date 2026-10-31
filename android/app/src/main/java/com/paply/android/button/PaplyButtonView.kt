@@ -16,11 +16,11 @@ import kotlin.math.sin
 
 /** One small display-list per frame; no layouts, audio work or allocations in onDraw. */
 internal class PaplyButtonView(context: Context) : View(context) {
+    var dimInIdle = true
     var onRight = true
         set(value) { field = value; invalidate() }
     var settled: () -> Unit = {}
     internal var expanding = false; private set
-    internal var awaitingExpansion = false; private set
     private var morph = 0f
     private var morphAnimator: ValueAnimator? = null
     private val shape = Path()
@@ -38,7 +38,7 @@ internal class PaplyButtonView(context: Context) : View(context) {
     fun wake() {
         awakeAt = SystemClock.uptimeMillis()
         removeCallbacks(dim); animate().cancel(); alpha = 1f
-        if (phase == ButtonPolicy.Phase.IDLE && !touched) postDelayed(dim, ButtonPresentation.DIM_DELAY)
+        if (dimInIdle && phase == ButtonPolicy.Phase.IDLE && !touched) postDelayed(dim, ButtonPresentation.DIM_DELAY)
     }
     var amber = false
         set(value) { if (field != value) { field = value; invalidate() } }
@@ -62,17 +62,16 @@ internal class PaplyButtonView(context: Context) : View(context) {
         contentDescription = "Paply-Diktat starten"
     }
 
-    fun setPhase(value: ButtonPolicy.Phase, deferExpansion: Boolean = false) {
+    fun setPhase(value: ButtonPolicy.Phase, animate: Boolean = true) {
         if (phase == value) return
         val wasIdle = phase == ButtonPolicy.Phase.IDLE
         phase = value
         if (wasIdle != (value == ButtonPolicy.Phase.IDLE)) {
             morphAnimator?.removeAllListeners(); morphAnimator?.cancel()
-            awaitingExpansion = value != ButtonPolicy.Phase.IDLE && deferExpansion
             expanding = true
-            if (!awaitingExpansion) animateMorph()
+            if (animate) animateMorph()
         }
-        if (!awaitingExpansion) wake()
+        wake()
         // Every recording has fresh visual state, independent of transient hints.
         amplitude = 0f
         time = 0f
@@ -89,15 +88,7 @@ internal class PaplyButtonView(context: Context) : View(context) {
         invalidate()
     }
 
-    // Called at pre-draw, after both the overlay and its children have their new bounds.
-    fun expandAfterLayout() {
-        if (!awaitingExpansion) return
-        awaitingExpansion = false
-        wake()
-        animateMorph()
-    }
-
-    private fun animateMorph() {
+    fun animateMorph() {
         val target = if (phase == ButtonPolicy.Phase.IDLE) 0f else 1f
         if (ValueAnimator.areAnimatorsEnabled()) {
             morphAnimator = ValueAnimator.ofFloat(morph, target).apply {
@@ -111,7 +102,7 @@ internal class PaplyButtonView(context: Context) : View(context) {
                 })
                 start()
             }
-        } else { morph = target; expanding = false; invalidate() }
+        } else { morph = target; expanding = false; invalidate(); settled() }
     }
 
     private fun startAnimation() {
