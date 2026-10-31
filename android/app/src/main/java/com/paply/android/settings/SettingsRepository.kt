@@ -52,6 +52,7 @@ data class DictationPrefs(
     val vocabulary: String,
     val transcriptionModel: String,
     val chunkUpload: Boolean,
+    val polish: Boolean = true,
 )
 
 data class AppPreferences(
@@ -68,12 +69,13 @@ data class AppPreferences(
     internal val revision: Long = 0,
     val paplyButton: Boolean = true,
     val buttonForeground: Boolean = false,
+    val polish: Boolean = true,
 ) {
     val languages: List<String> get() = if (automaticLanguages) detectedLanguages else manualLanguages
     fun dictationPrefs(): DictationPrefs = DictationPrefs(
         mainLanguage?.takeIf { it in languages } ?: LanguageCodes.normalize(Locale.getDefault().toLanguageTag())?.takeIf { it in languages }
             ?: languages.firstOrNull() ?: "en",
-        languages.toList(), vocabulary, transcriptionModel, chunkUpload,
+        languages.toList(), vocabulary, transcriptionModel, chunkUpload, polish,
     )
 }
 
@@ -159,10 +161,10 @@ class SettingsRepository private constructor(context: Context) {
             return AppPreferences(o.optBoolean("automaticLanguages", true), list("detectedLanguages"), list("manualLanguages"),
                 o.optString("mainLanguage").takeIf { it.isNotBlank() }, o.optString("vocabulary"),
                 o.optString("transcriptionModel", "whisper-large-v3"), o.optBoolean("chunkUpload", true),
-                o.optBoolean("betaThoughts", true), o.optBoolean("developerMode"), o.optBoolean("tileAdded"), o.optLong("revision"), o.optBoolean("paplyButton", true), o.optBoolean("buttonForeground")).normalized()
+                o.optBoolean("betaThoughts", true), o.optBoolean("developerMode"), o.optBoolean("tileAdded"), o.optLong("revision"), o.optBoolean("paplyButton", true), o.optBoolean("buttonForeground"), o.optBoolean("polish", true)).normalized()
         }
         internal fun encode(p: AppPreferences) = JSONObject().apply {
-            put("automaticLanguages", p.automaticLanguages); put("detectedLanguages", JSONArray(p.detectedLanguages))
+            put("polish", p.polish); put("automaticLanguages", p.automaticLanguages); put("detectedLanguages", JSONArray(p.detectedLanguages))
             put("manualLanguages", JSONArray(p.manualLanguages)); put("mainLanguage", p.mainLanguage ?: "")
             put("vocabulary", p.vocabulary); put("transcriptionModel", p.transcriptionModel); put("chunkUpload", p.chunkUpload)
             put("betaThoughts", p.betaThoughts); put("developerMode", p.developerMode); put("tileAdded", p.tileAdded); put("revision", p.revision); put("paplyButton", p.paplyButton); put("buttonForeground", p.buttonForeground)

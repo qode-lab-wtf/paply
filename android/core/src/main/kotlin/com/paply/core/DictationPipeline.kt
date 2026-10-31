@@ -25,6 +25,7 @@ constructor(
     private val detector: LanguageDetector = NoLanguageDetector,
     private val clock: PaplyClock = SystemPaplyClock,
     private val onState: (DictationStatus) -> Unit = {},
+    private val previousPieceLanguage: String? = null,
 ) : AutoCloseable {
     constructor(
         configuration: DictationConfiguration,
@@ -56,7 +57,6 @@ constructor(
 
     companion object {
         const val maxPieceSeconds = 600.0
-        const val previousTextWaitMillis = 1500L
     }
 
     private val lock = Any()
@@ -187,7 +187,7 @@ constructor(
                 if (warmCatalog) catalog.cachedModels(client)
                 val before =
                     if (previous != null)
-                        withTimeoutOrNull(previousTextWaitMillis) { awaitChunk(previous) }
+                        awaitChunk(previous)
                     else null
                 currentCoroutineContext().ensureActive()
                 if (synchronized(lock) { chunkingStopped }) return@async ChunkResult(sent = false)
@@ -287,28 +287,27 @@ constructor(
         val lastFrame = (startSample + audio.size + n - 1) / n
         val range = maxOf(0, firstFrame) until minOf(lastFrame, measured.frameCount)
         val spoken = if (range.isEmpty()) seconds else measured.activity(range).speechMs / 1000
-        val first =
-            LanguageGuard.firstRequest(settings.language, primary, previousLanguage, users, spoken)
-        var source = first.source
-        var sentLanguage = first.language
-        var result =
-            try {
-                send(first.language)
-            } catch (f: GroqFailure) {
-                return ChunkResult(failure = f)
+        val expected = LanguageGuard.expected(previousLanguage ?: previousPieceLanguage, primary)
+        val first = try { send(null) } catch (f: GroqFailure) {
+            return ChunkResult(failure = f)
+        }
+        val detected = GroqModels.languageCode(first.language)
+        var result = first
+        var chosenLanguage = detected
+        var source = LanguageSource.auto
+        if (LanguageGuard.needsCheck(expected, detected, users, spoken)) {
+            val checked = try { send(expected) } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                error.asGroqFailure()
+                null
             }
-        if (source == LanguageSource.auto) {
-            val redo =
-                LanguageGuard.redoLanguage(GroqModels.languageCode(result.language), primary, users)
-            if (redo != null)
-                try {
-                    result = send(redo)
-                    source = LanguageSource.redo
-                    sentLanguage = redo
-                } catch (error: Throwable) {
-                    error.asGroqFailure()
-                    source = LanguageSource.redoFailed
-                }
+            if (LanguageGuard.chooseExpected(first, checked)) {
+                result = checkNotNull(checked)
+                chosenLanguage = expected
+                source = LanguageSource.checkedExpected
+            } else {
+                source = if (checked == null) LanguageSource.checkFailed else LanguageSource.checkedDetected
+            }
         }
         currentCoroutineContext().ensureActive()
         val filtered =
@@ -336,14 +335,10 @@ constructor(
                 cleaned.segments.map {
                     it.copy(start = it.start?.plus(offset), end = it.end?.plus(offset))
                 }
-        val guarded =
-            if (source == LanguageSource.short || source == LanguageSource.redo)
-                sentLanguage?.let(CodeSwitchPrimer::baseCode)
-            else null
         return ChunkResult(
             text,
             segments,
-            guarded ?: GroqModels.languageCode(result.language) ?: detectLanguage(text, detector),
+            chosenLanguage ?: detectLanguage(text, detector),
             languageSource = source,
         )
     }
@@ -464,6 +459,7 @@ constructor(
                                 uploadedBytes = bytes.get() - bytesBefore,
                                 chunkCount = uploads.get() - uploadsBefore,
                             ),
+                        lastPieceLanguage = plan.orEmpty().lastOrNull()?.result?.language,
                         languageSources =
                             plan.orEmpty().mapNotNull { it.result?.languageSource?.rawValue },
                     )

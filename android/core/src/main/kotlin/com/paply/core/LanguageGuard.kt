@@ -12,36 +12,43 @@ internal object LanguageGuard {
         return codes.firstOrNull()
     }
 
-    data class Request(val language: String?, val source: LanguageSource)
+    const val checkGap = 0.15
 
-    fun firstRequest(
-        fixed: String?,
-        primary: String?,
-        previous: String?,
-        userLanguages: List<String>,
-        spokenSeconds: Double,
-    ): Request {
-        fixed?.trimmed()?.takeIf(String::isNotEmpty)?.let {
-            return Request(it, LanguageSource.fixed)
-        }
-        if (!(spokenSeconds <= shortSpeechSeconds)) return Request(null, LanguageSource.auto)
-        val codes = userLanguages.map(CodeSwitchPrimer::baseCode)
-        previous
-            ?.let(CodeSwitchPrimer::baseCode)
-            ?.takeIf { it in codes }
-            ?.let {
-                return Request(it, LanguageSource.short)
-            }
-        if (primary != null) return Request(primary, LanguageSource.short)
-        return Request(null, LanguageSource.auto)
+    fun expected(previous: String?, primary: String?): String? =
+        listOfNotNull(previous, primary).map(CodeSwitchPrimer::baseCode).firstOrNull { it.isNotEmpty() }
+
+    fun needsCheck(expected: String?, detected: String?, users: List<String>, spoken: Double): Boolean {
+        val e = expected?.let(CodeSwitchPrimer::baseCode).orEmpty()
+        val d = detected?.let(CodeSwitchPrimer::baseCode).orEmpty()
+        return e.isNotEmpty() && d.isNotEmpty() && e != d &&
+            (spoken <= shortSpeechSeconds || d !in users.map(CodeSwitchPrimer::baseCode))
     }
 
-    fun redoLanguage(detected: String?, primary: String?, userLanguages: List<String>): String? {
-        val code = detected?.let(CodeSwitchPrimer::baseCode) ?: return null
-        return primary?.takeIf {
-            code.isNotEmpty() &&
-                code != it &&
-                code !in userLanguages.map(CodeSwitchPrimer::baseCode)
+    /** Raw response only: filtering must not bias language confidence. */
+    fun confidence(response: Transcription): Double? {
+        val segments = response.segments?.takeIf { it.isNotEmpty() } ?: return null
+        var total = 0.0
+        var weights = 0.0
+        for (segment in segments) {
+            val lp = segment.avgLogprob?.takeIf { it.isFinite() } ?: return null
+            val duration = (segment.end ?: 0.0) - (segment.start ?: 0.0)
+            val weight = maxOf(0.01, duration.takeIf { it.isFinite() } ?: 0.0)
+            total += lp * weight
+            weights += weight
         }
+        return total / weights
+    }
+
+    private fun normalized(text: String): String =
+        text.lowercase(java.util.Locale.ROOT).replace(Regex("\\s+"), "")
+            .replace(Regex("^[\\p{P}]+|[\\p{P}]+$"), "")
+
+    fun chooseExpected(detected: Transcription, checked: Transcription?): Boolean {
+        if (checked == null) return false
+        if (detected.text != null && checked.text != null &&
+            normalized(detected.text) == normalized(checked.text)) return true
+        val first = confidence(detected) ?: return false
+        val second = confidence(checked) ?: return false
+        return first - second < checkGap
     }
 }

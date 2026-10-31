@@ -52,6 +52,34 @@ class StreamingTranscriberTests {
             }
         } finally { Files.deleteIfExists(file) }
     }
+    @Test fun foreignPreviousPieceIsExpectedAcrossPipelineRuns() = runBlocking {
+        val file = Files.createTempFile("foreign-pieces", ".wav")
+        try {
+            WAVWriter(file).also { w -> repeat(65) { w.append(voice()) }; w.close() }
+            MockWebServer().use { server ->
+                server.dispatcher = object : Dispatcher() {
+                    override fun dispatch(request: RecordedRequest): MockResponse {
+                        val body = request.body.clone().readUtf8()
+                        val checked = body.contains("name=\"language\"")
+                        return MockResponse().setBody(if (checked)
+                            """{"text":"Falsche Übersetzung.","language":"de","segments":[{"start":0,"end":3,"avg_logprob":-0.7}]}"""
+                        else """{"text":"On se voit ce soir.","language":"fr","segments":[{"start":0,"end":3,"avg_logprob":-0.1}]}""")
+                    }
+                }
+                ModelCatalog().use { catalog ->
+                    val result = FileTranscriber(baseURL = server.url("/"), catalog = catalog)
+                        .transcribe(file, "fake", PaplySettings(primaryLanguage = "de", spokenLanguages = listOf("de"))) as TranscriptionResult.Success
+                    assertEquals(listOf("fr"), result.languages)
+                    // First piece needs a German check; next piece expects French and needs none.
+                    assertEquals(3, server.requestCount)
+                    assertFalse(server.takeRequest().body.readUtf8().contains("name=\"language\""))
+                    assertTrue(server.takeRequest().body.readUtf8().contains("name=\"language\""))
+                    assertFalse(server.takeRequest().body.readUtf8().contains("name=\"language\""))
+                }
+            }
+        } finally { Files.deleteIfExists(file) }
+    }
+
     @Test fun truncatedAndUnalignedDataNeverReachesNetwork() = runBlocking {
         val file = Files.createTempFile("broken", ".wav")
         try {

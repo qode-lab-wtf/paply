@@ -104,6 +104,7 @@ data class DictationOutcome(
     val noSpeech: Boolean = false,
     val languageSources: List<String> = emptyList(),
     val error: DictationError? = null,
+    val lastPieceLanguage: String? = null,
 ) {
     companion object {
         fun fromJson(json: String): DictationOutcome {
@@ -137,6 +138,7 @@ data class DictationOutcome(
                 o.string("error")?.let { value ->
                     DictationError.entries.firstOrNull { it.name == value }
                 },
+                o.string("lastPieceLanguage"),
             )
         }
     }
@@ -153,6 +155,7 @@ data class DictationOutcome(
         polishModel?.let { put("polishModel", it) }
         put("noSpeech", noSpeech)
         error?.let { put("error", it.name) }
+        lastPieceLanguage?.let { put("lastPieceLanguage", it) }
         put(
             "timings",
             buildJsonObject {
@@ -216,6 +219,9 @@ enum class PolishFailureCode(val rawValue: String) {
 }
 
 enum class LanguageSource(val rawValue: String) {
+    checkedExpected("checked-expected"),
+    checkedDetected("checked-detected"),
+    checkFailed("check-failed"),
     auto("auto"),
     short("short"),
     redo("redo"),

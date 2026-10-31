@@ -174,10 +174,10 @@ class PipelineTests {
                     o.raw == "Erstes Stück endet hier. Zweites Stück folgt. Und der Rest." &&
                         o.text == o.raw &&
                         o.languages == listOf("de", "en") &&
-                        o.timings.chunkCount == 3,
+                        o.timings.chunkCount == 4,
                 )
                 val u = s.requests("/audio/transcriptions")
-                expect(u.size == 3)
+                expect(u.size == 4)
                 expect(
                     u[1].field("prompt")!!.endsWith("Erstes Stück endet hier.") &&
                         u[2].field("prompt")!!.endsWith("Zweites Stück folgt."),
@@ -185,9 +185,9 @@ class PipelineTests {
                 expect(
                     u[0].field("language") == null &&
                         u[1].field("language") == null &&
-                        u[2].field("language") == "en",
+                        u[2].field("language") == null && u[3].field("language") == "en",
                 )
-                expect(o.languageSources == listOf("auto", "auto", "short"))
+                expect(o.languageSources == listOf("auto", "auto", "checked-expected"))
             }
     }
 
