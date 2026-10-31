@@ -36,7 +36,16 @@ class DeveloperSettingsDeviceTest {
                 found = find(text)
             }
         }
-        var node = requireNotNull(found) { "Missing $text" }
+        var node = requireNotNull(found) {
+            val labels = mutableListOf<String>()
+            fun describe(node: AccessibilityNodeInfo) {
+                node.text?.let { labels += it.toString() }
+                node.contentDescription?.let { labels += it.toString() }
+                for (i in 0 until node.childCount) node.getChild(i)?.let(::describe)
+            }
+            instrumentation.uiAutomation.rootInActiveWindow?.let(::describe)
+            "Missing $text; visible controls: $labels"
+        }
         while (!node.isClickable) node = requireNotNull(node.parent) { "Not clickable: $text" }
         assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
