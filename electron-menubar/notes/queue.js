@@ -35,7 +35,7 @@ function audioChunks(pcm) {
   }
   return result;
 }
-function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabulary = () => '', isBusy = () => false, isEditing = () => false, isOnline = () => true, onChange = () => {} }) {
+function createQueue({ repo, commands, groq, assets, getSettings, getKey, getUILanguage = () => Intl.DateTimeFormat().resolvedOptions().locale, vocabulary = () => '', isBusy = () => false, isEditing = () => false, isOnline = () => true, onChange = () => {} }) {
   let running = false, stopped = false, controller = null, timer = null, currentId = null, authKey = null, retentionTimer = null;
   function save(entry) { repo.saveEntry(entry); onChange(); }
   function prepare(entry, transcript) {
@@ -94,7 +94,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     if (hasScreen) { const hash = assets.put(fs.readFileSync(temporary)); entry.attachments = [...new Set([...(entry.attachments || []), hash])]; }
     if (match && !hasScreen) entry.message = 'Kein Startbild vorhanden · Bildschirmkontext in den Notes-Einstellungen aktivieren';
     try { fs.rmSync(temporary, { force: true }); } catch { /* later housekeeping */ }
-    const transcript = repo.saveTranscript(entry.id, { text: original, command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: done.find(d => d.model)?.model || null, silenceProven: done.every(d => d.silenceProven === true), createdAt: Date.now() });
+    const transcript = repo.saveTranscript(entry.id, { text: original, languages: done.filter(d => d.text?.trim() && d.language).map(d => d.language), command: hasScreen ? match[0] : null, sentences: splitSentences(hasScreen ? original.slice(match[0].length) : original, entry.id), model: done.find(d => d.model)?.model || null, silenceProven: done.every(d => d.silenceProven === true), createdAt: Date.now() });
     if (transcript.text.trim() || transcript.silenceProven) deleteAudio(entry);
     prepare(entry, transcript);
   }
@@ -109,7 +109,7 @@ function createQueue({ repo, commands, groq, assets, getSettings, getKey, vocabu
     }
     const waitForEditor = () => { if (isEditing(rawId)) { const error = new Error('Bearbeitung hat Vorrang'); error.kind = 'busy'; throw error; } };
     waitForEditor();
-    const ctx = { ...context(repo.current(), parts[index], entry.id), custom_terms: vocabulary().slice(0, 200), now: new Date(entry.createdAt).toLocaleString(), topics_full: Object.keys(repo.current().topics).length >= 32 }; const rawRev = raw.rev;
+    const ctx = { ...context(repo.current(), parts[index], entry.id), spoken_languages: transcript.languages || (transcript.language ? [transcript.language] : []), ui_language: getUILanguage(), custom_terms: vocabulary().slice(0, 200), now: new Date(entry.createdAt).toLocaleString(), topics_full: Object.keys(repo.current().topics).length >= 32 }; const rawRev = raw.rev;
     entry.state = 'structuring'; save(entry);
     const planPath = `sources/${entry.id}/thought-v6-${index}.json`;
     const cached = repo.readLocal(planPath, null);

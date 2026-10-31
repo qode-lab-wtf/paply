@@ -46,8 +46,8 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
     },
     async plan(ctx, _large, signal) {
       const settings = getTranscriptionSettings();
-      const input = { ui_language: settings.systemLanguages?.[0] || Intl.DateTimeFormat().resolvedOptions().locale,
-        spoken_languages: userLanguages(settings.language, settings.systemLanguages), now: ctx.now || new Date().toLocaleString(),
+      const input = { ui_language: ctx.ui_language || settings.systemLanguages?.[0] || Intl.DateTimeFormat().resolvedOptions().locale,
+        spoken_languages: ctx.spoken_languages || [], now: ctx.now || new Date().toLocaleString(),
         custom_terms: ctx.custom_terms || '', topics_full: ctx.topics_full || false,
         topics: (ctx.topics || []).map(t => ({ id: t.id, name: t.title, n: t.n || 0, hint: '' })),
         candidates: (ctx.existing || []).map(n => ({ ref: n.id, title: n.label, topic: n.topic, when: n.when, excerpt: n.text })),
@@ -62,7 +62,7 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
       }
       if (amount > 7600) throw Object.assign(new Error('Original erhalten'), { kind: 'too_large' });
       // Only IDs actually sent to the model may be used in its answer.
-      ctx = { ...ctx, topics: (ctx.topics || []).filter(t => input.topics.some(x => x.id === t.id)), existing: (ctx.existing || []).filter(n => input.candidates.some(x => x.ref === n.id)) };
+      ctx = { ...ctx, ui_language: input.ui_language, spoken_languages: input.spoken_languages, topics: (ctx.topics || []).filter(t => input.topics.some(x => x.id === t.id)), existing: (ctx.existing || []).filter(n => input.candidates.some(x => x.ref === n.id)) };
       let model = PRIMARY_MODEL, effort = 'low', shortRetry = false, effortRetry = false;
       for (;;) {
         try {

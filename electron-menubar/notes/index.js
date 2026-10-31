@@ -62,7 +62,7 @@ function createNotes(deps) {
     captureWindow.setPosition(Math.round(area.x + (area.width - 340) / 2), area.y + area.height - 160); captureWindow.showInactive();
   }
   capture = createCapture({ repo, commands, getSettings, isDictating, isMeetingActive, show: showCapture, send: sendCapture, screenshot: assets.screenshot, hide(ms) { clearTimeout(hideTimer); hideTimer = setTimeout(() => captureWindow?.hide(), ms); }, onChange: changed });
-  queue = createQueue({ repo, commands, groq, assets, getSettings, getKey: () => store.get('groqApiKey'), vocabulary: () => store.get('customVocabulary', ''), isBusy: () => isDictating() || isMeetingActive() || capture.status().active, isEditing: id => editingId === id, isOnline: () => deps.net.isOnline(), onChange: changed });
+  queue = createQueue({ getUILanguage: () => app.getPreferredSystemLanguages()[0] || Intl.DateTimeFormat().resolvedOptions().locale, repo, commands, groq, assets, getSettings, getKey: () => store.get('groqApiKey'), vocabulary: () => store.get('customVocabulary', ''), isBusy: () => isDictating() || isMeetingActive() || capture.status().active, isEditing: id => editingId === id, isOnline: () => deps.net.isOnline(), onChange: changed });
   async function openBoard() {
     settings.refreshKeyLabels();
     if (boardWindow && !boardWindow.isDestroyed()) { boardWindow.webContents.send('notes:changed', snapshot()); boardWindow.show(); boardWindow.focus(); return true; }

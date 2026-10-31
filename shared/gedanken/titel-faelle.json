@@ -1,0 +1,123 @@
+[
+  {
+    "name": "Französisch: gemeinsamer Name erlaubt keine Übersetzung",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon.",
+    "title": "Treffen mit Sophie",
+    "spoken": [
+      "fr"
+    ],
+    "ui": "de",
+    "ok": false
+  },
+  {
+    "name": "Französisch: eigene Worte",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon.",
+    "title": "Retrouver Sophie au café",
+    "spoken": [
+      "fr"
+    ],
+    "ui": "de",
+    "ok": true
+  },
+  {
+    "name": "Deutsch: gebeugtes Wort bleibt möglich",
+    "transcript": "Die Tomaten brauchen größere Töpfe.",
+    "title": "Tomaten brauchen großen Topf",
+    "spoken": [
+      "de"
+    ],
+    "ui": "de",
+    "ok": true
+  },
+  {
+    "name": "Unbekannt: ein Inhaltswort genügt",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon.",
+    "title": "Treffen mit Sophie",
+    "spoken": [],
+    "ui": "de",
+    "ok": true
+  },
+  {
+    "name": "Gemischt: UI-Sprache auch als Minderheit genügt",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon. Morgen kaufe ich Blumen.",
+    "title": "Sophie bekommt Blumen",
+    "spoken": [
+      "fr",
+      "fr",
+      "de-DE"
+    ],
+    "ui": "de",
+    "ok": true
+  },
+  {
+    "name": "Gemischt ohne UI-Sprache: streng",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon. Tomorrow I buy flowers.",
+    "title": "Treffen mit Sophie",
+    "spoken": [
+      "fr",
+      "en"
+    ],
+    "ui": "de",
+    "ok": false
+  },
+  {
+    "name": "Basiscodes stimmen überein",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon.",
+    "title": "Sophie prépare les vacances",
+    "spoken": [
+      "fr-CA"
+    ],
+    "ui": "fr_FR",
+    "ok": true
+  },
+  {
+    "name": "Fremdsprache: Zahl allein genügt nicht",
+    "transcript": "Demain nous partons à 15 heures.",
+    "title": "Treffen um 15",
+    "spoken": [
+      "fr"
+    ],
+    "ui": "de",
+    "ok": false
+  },
+  {
+    "name": "Neue Zahl bleibt verboten",
+    "transcript": "Ich kaufe 3 Pflanzen.",
+    "title": "3 Pflanzen für 8 Zimmer",
+    "spoken": [
+      "de"
+    ],
+    "ui": "de",
+    "ok": false
+  },
+  {
+    "name": "Ohne gemeinsames Inhaltswort auch locker abgelehnt",
+    "transcript": "Ich kaufe Pflanzen.",
+    "title": "Urlaub planen",
+    "spoken": [
+      "de"
+    ],
+    "ui": "de",
+    "ok": false
+  },
+  {
+    "name": "Titel über 60 Zeichen bleibt verboten",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon.",
+    "title": "Sophie voyage voyage voyage voyage voyage voyage voyage voyage voyage ",
+    "spoken": [
+      "fr"
+    ],
+    "ui": "de",
+    "ok": false
+  },
+  {
+    "name": "Unbestimmter Sprachcode ist unbekannt",
+    "transcript": "Demain je vais retrouver Sophie au café. Nous parlerons de notre voyage à Lyon.",
+    "title": "Treffen mit Sophie",
+    "spoken": [
+      "und"
+    ],
+    "ui": "de",
+    "ok": true
+  }
+]

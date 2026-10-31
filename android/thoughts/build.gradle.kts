@@ -29,3 +29,7 @@ dependencies {
     add("signature", "com.toasttab.android:gummy-bears-api-29:0.14.0@signature")
 }
 tasks.named("test") { dependsOn("animalsnifferMain") }
+
+tasks.withType<Test>().configureEach {
+    systemProperty("paply.shared.thoughts", rootProject.file("../shared/gedanken").absolutePath)
+}
