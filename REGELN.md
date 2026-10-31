@@ -31,9 +31,10 @@ Windows:
    erkannte Sprache keine eigene Sprache ist: Dasselbe Stück läuft ein zweites Mal, diesmal mit der erwarteten Sprache.
    Die Gegenprobe wartet höchstens zweimal die Dauer der ersten Anfrage plus 5 Sekunden, maximal 60 Sekunden.
    Bei Zeitablauf bleibt das erste Ergebnis.
-4. Ist der Text beider Läufe gleich, gilt die erwartete Sprache. Sonst gewinnt die erkannte Sprache, wenn ihre Konfidenz
-   um mindestens `sprache.abstand` besser ist, ansonsten die erwartete. Scheitert die Gegenprobe, dauert sie zu lange oder
-   fehlt ein Konfidenzwert, bleibt das erste Ergebnis.
+4. Ist der Text beider Läufe gleich, gilt die erwartete Sprache. Bei kurzen Stücken gewinnt die erkannte Sprache, wenn
+   ihre Konfidenz um mindestens `sprache.abstand` besser ist. Bei langen Stücken gewinnt sie immer, außer die erwartete
+   Sprache ist um mindestens `sprache.abstand` besser. Scheitert die Gegenprobe, dauert sie zu lange oder fehlt ein
+   Konfidenzwert, bleibt das erste Ergebnis.
 
 Konfidenz ist der Mittelwert von `avg_logprob` über alle Segmente, gewichtet mit der Segmentdauer. Prüffälle:
 `shared/sprache/faelle.json`.
@@ -42,7 +43,9 @@ Konfidenz ist der Mittelwert von `avg_logprob` über alle Segmente, gewichtet mi
 heute Abend.“ Nur erkennen lassen reicht nicht, weil sehr kurze Stücke falsch erkannt werden und Whisper dann in die
 andere Richtung übersetzt. Messung vom 31.10.2026: Bei echten Aufnahmen gab es ab 3 Sekunden keine Fehlerkennung
 (0 von 21), bei 2 Sekunden eine von 15, darunter deutlich mehr. Gemessen wurde mit deutschen Aufnahmen und künstlichen
-Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
+Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch. Lange Stücke (5 bis 12 Sekunden, künstliche
+Stimmen): Die Erkennung lag immer richtig. Die Vorgabe `de` übersetzte oder erfand Text, außer bei Englisch und einem
+türkischen Satz, wo der Text gleich blieb.
 
 ## 2. Polieren
 
@@ -69,6 +72,10 @@ Das gilt für Diktat und Gedanken in allen Apps. Gespräche haben eigene, einfac
 
 - Ein Begriff ersetzt nur ein ähnlich klingendes, sicher falsch gehörtes Wort.
 - Paply fügt nie einen Begriff ein, der nicht gesprochen wurde.
+- Begriffs-Gegenprobe bei Diktat und Gedanken: Klingt ein Teil des Textes nach einem eigenen Begriff oder ist Whisper bei
+  einem Segment unsicher, läuft das Stück ein zweites Mal mit dem Begriff im Vordergrund. Der Begriff zählt nur, wenn
+  Whisper ihn dabei selbst hört: Die Konfidenz darf um höchstens `begriffe.abstand` schlechter sein, und der übrige Text
+  bleibt gleich. Sonst bleibt das erste Ergebnis. Prüffälle: `shared/begriffe/faelle.json`.
 - Polieren und Gedanken sehen die ersten 200 Zeichen der Liste. Whisper sieht beim Diktat so viele ganze Begriffe, wie in
   etwa 90 Tokens passen.
 
@@ -155,6 +162,7 @@ Diese Tabelle liest der Wächter direkt. Steht ein Wert in einer App anders, sch
 | --- | --- | --- |
 | `sprache.kurz_sekunden` | `5` | Bis zu dieser Sprechzeit bekommt eine abweichende Erkennung eine Gegenprobe |
 | `sprache.abstand` | `0.15` | So viel besser muss die Konfidenz der erkannten Sprache sein, damit sie gewinnt |
+| `begriffe.abstand` | `0.05` | So viel schlechter darf die Konfidenz der Begriffs-Gegenprobe höchstens sein |
 | `diktat.whisper_modell` | `whisper-large-v3` | Standardmodell für Diktat |
 | `polieren.modell` | `qwen/qwen3.8-27b` | Modell fürs Polieren |
 | `polieren.ausweichmodell` | `openai/gpt-oss-120b` | Bei Limit oder fehlendem Modell |

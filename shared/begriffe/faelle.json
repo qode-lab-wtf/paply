@@ -1,0 +1,147 @@
+{
+ "klang": [
+  {
+   "name": "Allans Fall",
+   "term": "law min",
+   "text": "Hallo Herr Lehmann, wie geht es dir?",
+   "near": true
+  },
+  {
+   "name": "Getrennt gehört",
+   "term": "law min",
+   "text": "Ich treffe La Vimin morgen um drei.",
+   "near": true
+  },
+  {
+   "name": "Zusammengeschrieben",
+   "term": "law min",
+   "text": "Schick das bitte an LaVieMin.",
+   "near": true
+  },
+  {
+   "name": "V statt W",
+   "term": "Law Min",
+   "text": "Hallo Lavi Min, wie geht es dir?",
+   "near": true
+  },
+  {
+   "name": "Sch und Ch",
+   "term": "Schuster",
+   "text": "Ich rufe Chuster an.",
+   "near": true
+  },
+  {
+   "name": "Ph und F",
+   "term": "Philipp",
+   "text": "Das sagte Filip gestern.",
+   "near": true
+  },
+  {
+   "name": "Begriff steht schon im Text",
+   "term": "law min",
+   "text": "Hallo Law Min, wie geht es dir?",
+   "near": false
+  },
+  {
+   "name": "Nichts Aehnliches",
+   "term": "law min",
+   "text": "Das Wetter ist heute schoen.",
+   "near": false
+  },
+  {
+   "name": "Kurzer Begriff nur exakt",
+   "term": "Max",
+   "text": "Ich bin muede und mag nicht.",
+   "near": false
+  },
+  {
+   "name": "Kurzer Begriff exakt gehoert",
+   "term": "Maks",
+   "text": "Ich rufe Max gleich an.",
+   "near": true
+  }
+ ],
+ "annahme": [
+  {
+   "name": "Allans Fall",
+   "term": "law min",
+   "first": "Hallo Herr Lehmann, wie geht es dir?",
+   "second": "Hallo law min, wie geht es dir?",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": true
+  },
+  {
+   "name": "Messung Lavi Min",
+   "term": "Law Min",
+   "first": "Hallo Lavi Min, wie geht es dir?",
+   "second": "Hallo Law Min, wie geht es dir?",
+   "lpFirst": -0.22,
+   "lpSecond": -0.08,
+   "accept": true
+  },
+  {
+   "name": "Messung LaVieMin",
+   "term": "Law Min",
+   "first": "Schick das bitte an LaVieMin.",
+   "second": "Schick das bitte an Law Min.",
+   "lpFirst": -0.41,
+   "lpSecond": -0.12,
+   "accept": true
+  },
+  {
+   "name": "Konfidenz leicht schlechter, noch erlaubt",
+   "term": "Law Min",
+   "first": "Ich treffe La Vimin morgen.",
+   "second": "Ich treffe Law Min morgen.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.33,
+   "accept": true
+  },
+  {
+   "name": "Konfidenz deutlich schlechter",
+   "term": "law min",
+   "first": "Hallo Herr Lehmann, wie geht es dir?",
+   "second": "Hallo law min, wie geht es dir?",
+   "lpFirst": -0.3,
+   "lpSecond": -0.4,
+   "accept": false
+  },
+  {
+   "name": "Echter Lehmann bleibt, Begriff nicht gehoert",
+   "term": "law min",
+   "first": "Hallo Herr Lehmann, wie geht es Ihnen?",
+   "second": "Hallo Herr Lehmann, wie geht es Ihnen?",
+   "lpFirst": -0.04,
+   "lpSecond": -0.05,
+   "accept": false
+  },
+  {
+   "name": "Rest des Textes hat sich veraendert",
+   "term": "law min",
+   "first": "Hallo Herr Lehmann, wie geht es dir?",
+   "second": "Hallo law min, ich bin heute leider gar nicht da.",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Begriff stand schon im ersten Text",
+   "term": "law min",
+   "first": "Hallo law min, wie geht es dir?",
+   "second": "Hallo law min, wie geht es dir?",
+   "lpFirst": -0.3,
+   "lpSecond": -0.1,
+   "accept": false
+  },
+  {
+   "name": "Konfidenz fehlt",
+   "term": "law min",
+   "first": "Hallo Herr Lehmann, wie geht es dir?",
+   "second": "Hallo law min, wie geht es dir?",
+   "lpFirst": null,
+   "lpSecond": -0.1,
+   "accept": false
+  }
+ ]
+}

@@ -25,6 +25,8 @@ const WERTE = {
     [`${IOS}/Text/LanguageGuard.swift`, /checkGap = ([\d.]+)/],
     [`${ANDROID}/LanguageGuard.kt`, /checkGap = ([\d.]+)/],
   ],
+  'begriffe.abstand': [
+  ],
   'diktat.whisper_modell': [
     [`${DESKTOP}/dictation/language-guard.js`, /WHISPER_MODEL = '([^']+)'/],
     [`${IOS}/PublicAPI.swift`, /transcriptionModel = "([^"]+)"/],

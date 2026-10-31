@@ -23,5 +23,8 @@
   {"name": "Geraetecode nb entspricht Whisper no", "spoken": 2.0, "expected": "nb", "detected": "no", "users": ["nb"], "check": false, "result": "detected"},
   {"name": "Geraetecode fil entspricht Whisper tl", "spoken": 2.0, "expected": "fil-PH", "detected": "tl", "users": ["fil"], "check": false, "result": "detected"},
   {"name": "Alter Code iw entspricht Whisper he", "spoken": 2.0, "expected": "iw", "detected": "he", "users": ["iw"], "check": false, "result": "detected"},
-  {"name": "Alter Code in entspricht Whisper id", "spoken": 12.0, "expected": "de", "detected": "id", "users": ["de", "in"], "check": false, "result": "detected"}
+  {"name": "Alter Code in entspricht Whisper id", "spoken": 12.0, "expected": "de", "detected": "id", "users": ["de", "in"], "check": false, "result": "detected"},
+  {"name": "Lang, fremde Sprache leicht unsicherer: erkannte gewinnt", "spoken": 12.0, "expected": "de", "detected": "ar", "users": ["de", "en"], "check": true, "lpDetected": -0.5, "lpExpected": -0.45, "sameText": false, "result": "detected"},
+  {"name": "Lang, fremde Sprache kaum besser: erkannte gewinnt trotzdem", "spoken": 12.0, "expected": "de", "detected": "ar", "users": ["de", "en"], "check": true, "lpDetected": -0.5, "lpExpected": -0.6, "sameText": false, "result": "detected"},
+  {"name": "Lang, erwartete Sprache deutlich besser: erwartete gewinnt", "spoken": 9.0, "expected": "de", "detected": "ru", "users": ["de", "en"], "check": true, "lpDetected": -0.4, "lpExpected": -0.25, "sameText": false, "result": "expected"}
 ]
