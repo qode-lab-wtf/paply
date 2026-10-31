@@ -69,6 +69,11 @@ Stimmen in sechs Fremdsprachen, echte fremdsprachige Aufnahmen fehlen noch.
 
 - Aus einem gesprochenen Gedanken werden Titel, sauberer Text, Thema, Aufgaben und Verknüpfungen.
 - Die KI erfindet nichts und übersetzt nichts. Nur ein neuer Themenname folgt der Gerätesprache.
+- Titelprüfung: Ist die gesprochene Sprache unbekannt oder entspricht ihr Basiscode der UI-Sprache, muss mindestens
+  ein Inhaltswort aus dem Gesagten stammen. Sonst muss jedes Inhaltswort dort vorkommen (jeweils normalisiert).
+  Bei mehreren gesprochenen Sprachen genügt die UI-Sprache darunter für die lockere Prüfung. Die Sprachen stammen
+  aus den erkannten Stücken beziehungsweise der Sprachangabe des Gedankens. Zahlen- und Längenprüfung bleiben bestehen.
+  Gemeinsame Prüffälle: `shared/gedanken/titel-faelle.json`.
 - Aufgaben nur bei ausdrücklicher Absicht, höchstens 5. Verknüpfungen höchstens 3.
 - Die KI ordnet nur diesen einen Gedanken ein, nie die ganze Ablage neu. Themen zusammenführen schlägt sie höchstens vor.
 - Was der Nutzer selbst geändert hat, überschreibt die KI nie.

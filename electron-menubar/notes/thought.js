@@ -6,6 +6,8 @@ const obj = properties => ({ type: 'object', additionalProperties: false, requir
 const string = { type: 'string' }, nullable = { type: ['string', 'null'] }, array = items => ({ type: 'array', items }), enumeration = values => ({ type: 'string', enum: values });
 const SCHEMA = obj({ title: string, clean_text: string, topic: obj({ choice: enumeration(['existing','new','none']), id: nullable, new_name: nullable, symbol: enumeration(C.ICONS) }), tasks: array(obj({ text: string, quote: string, due_hint: nullable })), related: array(obj({ ref: string, kind: enumeration(['continues','same_matter','changes']), reason: string, confidence: enumeration(['high','medium','low']) })) });
 const words = s => s.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+const { languageCode } = require('../dictation/language-guard');
+const { normalizedLower } = require('../dictation/polish-text');
 const digits = require('./numbers').digitsContained;
 const fallbackTitle = text => [...text.trim().split(/\s+/).slice(0, 6).join(' ')].slice(0, 60).join('');
 const effectiveNegations = s => negationCount(s.replace(/nicht vergessen|vergiss nicht|don't forget|do not forget|n'oublie(?:z)? pas/gi, ''));
@@ -27,7 +29,11 @@ function validate(value, ctx) {
   const clean = value.clean_text.trim();
   const text = polishRejection(raw, clean, { profile: 'thought', vocabulary: ctx.custom_terms || '' }) ? raw : clean;
   let title = value.title.split('\n')[0].trim().replace(/^["'„“«]+|["'„“».,!?;:… –—-]+$/g, '');
-  if (!title || [...title].length > 60 || !digits(title, raw) || !words(title).some(w => words(raw).includes(w)) || contentWords(title).some(w => !words(raw).includes(w))) title = fallbackTitle(text);
+  const languages = (ctx.spoken_languages || []).map(languageCode).filter(c => c && c !== 'und');
+  const strict = languages.length > 0 && !languages.includes(languageCode(ctx.ui_language || ''));
+  const content = contentWords(title), source = normalizedLower(raw);
+  const grounded = w => contentWords(source).includes(w);
+  if (!title || [...title].length > 60 || !digits(title, raw) || !content.length || !(strict ? content.every(grounded) : content.some(grounded))) title = fallbackTitle(text);
   let topic = null;
   if (value.topic.choice === 'existing' && ctx.topics.some(t => t.id === value.topic.id)) topic = { id: value.topic.id };
   if (value.topic.choice === 'new' && typeof value.topic.new_name === 'string') {
