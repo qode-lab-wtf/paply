@@ -541,6 +541,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
       const filtered = filterTranscription(json, voiceActivity, options);
       // Whisper gibt bei sehr kurzem/leisem Ton gern den prompt (eigene Begriffe) wörtlich zurück.
       if (json.echoRemoved && !filtered.text) filtered.reason = 'prompt-echo';
+      if (!filtered.text) filtered.reason = preEcho.echoRemoved ? 'prompt-echo' : preFiltered.reason || filtered.reason;
       options.onFiltered?.(filtered);
       if (filtered.droppedSegments || filtered.reason) {
         console.log('[Diktat-Stillefilter]', filtered.reason || 'no-speech-segments',

@@ -41,6 +41,21 @@ enum TermGuard {
             return value
         }
     }
+    // Phonetic tolerance is at most one edit; avoid a full edit-distance matrix.
+    static func soundMatch(_ x: String, _ k: String) -> Bool {
+        if x == k { return true }
+        guard k.utf8.count >= 4, abs(x.utf8.count-k.utf8.count) <= 1 else { return false }
+        let a = Array(x.utf8), b = Array(k.utf8)
+        var i = 0, j = 0, edits = 0
+        while i < a.count && j < b.count {
+            if a[i] == b[j] { i += 1; j += 1; continue }
+            edits += 1
+            if edits > 1 { return false }
+            if a.count >= b.count { i += 1 }
+            if b.count >= a.count { j += 1 }
+        }
+        return edits + (a.count-i) + (b.count-j) <= 1
+    }
     static func window(_ term: String, _ cache: Windows) -> (i: Int, length: Int)? {
         let t = norm(term), k = key(term), p = plain(t)
         guard k.count >= 3, !(" " + cache.words.joined(separator: " ") + " ").contains(" " + t + " ") else { return nil }
@@ -49,7 +64,7 @@ enum TermGuard {
         for i in cache.words.indices {
             for length in 1...min(n, cache.words.count-i) {
                 let (x, spelling) = cache.get(i, length)
-                if x.count >= 3 && abs(x.count-k.count) <= (k.count >= 4 ? 1 : 0) && distance(x,k) <= (k.count >= 4 ? 1 : 0)
+                if x.count >= 3 && soundMatch(x,k)
                     && distance(spelling,p) <= limit { return (i,length) }
             }
         }

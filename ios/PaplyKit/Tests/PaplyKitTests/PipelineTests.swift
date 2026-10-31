@@ -67,7 +67,7 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         #expect(outcome.text == outcome.polished)
         #expect(outcome.languages == ["de"])
         #expect(outcome.polishModel == GroqModels.polish)
-        #expect(outcome.timings.chunkCount == 2)
+        #expect(outcome.timings.chunkCount == 1)
         #expect(outcome.timings.uploadedBytes > 1000)
         let t = outcome.timings
         #expect(t.transcriptionDoneMs != nil && t.polishDoneMs != nil && t.totalMs != nil)
@@ -158,7 +158,7 @@ private func echoPolish(_ request: MockServer.Request) -> MockServer.Reply {
         // Gescheitertes Stück + Rest in einem Teil, kein getrennter Rest-Upload.
         #expect(uploads.count == 3)
         #expect(uploads[2].body.count > uploads[0].body.count)
-        #expect(outcome.timings.chunkCount == 2)
+        #expect(outcome.timings.chunkCount == 1)
     }
 
     @Test func finalTranscriptionFailureIsReportedInGerman() async {

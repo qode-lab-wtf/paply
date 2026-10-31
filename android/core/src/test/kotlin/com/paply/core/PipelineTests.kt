@@ -81,7 +81,7 @@ class PipelineTests {
                 expect(
                     o.languages == listOf("de") &&
                         o.polishModel == GroqModels.polish &&
-                        o.timings.chunkCount == 2 &&
+                        o.timings.chunkCount == 1 &&
                         o.timings.uploadedBytes > 1000,
                 )
                 val t = o.timings
@@ -221,7 +221,7 @@ class PipelineTests {
                 val u = s.requests("/audio/transcriptions")
                 expect(o.raw == "Das gesamte Diktat in einem Stück." && o.errorMessage == null)
                 expect(u.size == 3 && u[2].bodySize > u[0].bodySize)
-                expect(o.timings.chunkCount == 2)
+                expect(o.timings.chunkCount == 1)
             }
     }
 
