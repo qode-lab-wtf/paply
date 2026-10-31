@@ -77,6 +77,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation(libs.junit)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation(libs.junit)
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("org.json:json:20240303")
