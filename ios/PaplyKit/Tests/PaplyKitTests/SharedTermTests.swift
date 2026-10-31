@@ -34,7 +34,7 @@ struct SharedTermTests {
         for start in stride(from: 0, to: audio.count, by: 1600) { await p.append(Array(audio[start..<min(start+1600,audio.count)])) }
         let result = await p.finish()
         #expect(server.requests("/audio/transcriptions").count == (mode == "empty" ? 1 : 2))
-        #expect(abs(result.timings.requestedAudioSeconds - (mode == "empty" ? 3 : 6)) < 0.01)
+        #expect(abs((result.timings.requestedAudioSeconds ?? -1) - (mode == "empty" ? 3 : 6)) < 0.01)
         if mode != "empty" {
             #expect(server.requests("/audio/transcriptions")[1].field("language") == "de")
             #expect(server.requests("/audio/transcriptions")[1].field("prompt") == "Law Min, Law Min. Hallo Law Min.")
