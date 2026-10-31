@@ -191,8 +191,7 @@ function createMeetingStore({ baseDir, store }) {
       }
     }
 
-    // Audio-Pfade: seit v1.13 bleiben die WAV-Spuren 7 Tage erhalten (Nachhören, Neu-Auswerten),
-    // danach null. .opus existiert nur bei sehr alten Meetings (vor v1.11.0).
+    // Interne Audio-Pfade für Neuversuche; nicht an die Oberfläche weiterreichen. .opus existiert nur bei sehr alten Meetings (vor v1.11.0).
     const audioPath = (channel) => {
       const opus = _safePath(id, [`audio_${channel}.opus`]);
       if (fs.existsSync(opus)) return opus;

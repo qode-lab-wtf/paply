@@ -73,7 +73,7 @@ function createCapture({ repo, commands, getSettings, isDictating, isMeetingActi
     try { fs.closeSync(a.fd); } catch { message ||= 'Aufnahme beendet · Speicher prüfen'; }
     active = null;
     const entry = repo.entry(a.id) || { id: a.id, kind: 'voice', createdAt: a.createdAt, partsDone: 0, attempts: 0 };
-    Object.assign(entry, { state: a.bytes ? 'captured' : 'needs_attention', durationMs: a.bytes / 32, attachments: a.attachments, message: message || (a.bytes ? '' : 'Kein Ton aufgenommen'), droppedPackets: a.droppedPackets });
+    Object.assign(entry, { stoppedAt: Date.now(), state: a.bytes ? 'captured' : 'needs_attention', durationMs: a.bytes / 32, attachments: a.attachments, message: message || (a.bytes ? '' : 'Kein Ton aufgenommen'), droppedPackets: a.droppedPackets });
     try { repo.saveEntry(entry); } catch { message = 'Speicher voll oder nicht erreichbar · vorhandenen Ton beim Neustart wiederherstellen'; }
     if (!a.bytes) { try { emptyPlaceholder(a.id); } catch { /* Keep the last durable board on disk failure. */ } }
     state(message ? 'error' : 'saved', message || (getSettings().hasGroqKey ? 'Gedanke gesichert' : 'Gesichert · Schlüssel ergänzen')); if (!quitting) hide(message ? 3000 : 1400);

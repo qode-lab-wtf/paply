@@ -45,7 +45,7 @@ async function transcribeWithGroq(opts) {
   }
   if (onProgress) onProgress({ stage: 'groq', windows: total });
   await q.idle();
-  if (total > 0 && errors >= total) { const e = new Error('Groq Whisper: alle Fenster fehlgeschlagen'); e.code = 'groq_failed'; throw e; }
+  if (errors > 0) { const e = new Error('Groq Whisper: mindestens ein Fenster fehlgeschlagen'); e.code = 'groq_failed'; throw e; }
 
   const micS = mic.map((s) => ({ ...s, speaker: 'Sprecher 1' }));
   const sysS = sys.map((s) => ({ ...s, speaker: 'Gegenstelle' }));

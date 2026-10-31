@@ -4,7 +4,7 @@ export interface Note { id: string; kind: 'note'|'sticky'|'text'|'hub'|'table'|'
 export interface NoteEdge { id: string; source: string; target: string; sourceHandle: string; targetHandle: string; arrow: boolean; inferred: boolean; label: string; rev: number }
 export interface NotesBoard { schemaVersion: number; rev: number; nodes: Record<string, Note>; edges: Record<string, NoteEdge>; topics: Record<string, { id: string; title: string; icon: string; owner: string; createdAt: number }>; viewport: { x: number; y: number; zoom: number }; entries: { id: string; kind: string; createdAt: number; state: string; message: string; durationMs: number }[]; assets: Record<string, { analysis?: { caption: string; visibleText: string } }>; preferences: NotesPreferences; capture: { active: boolean; paused: boolean; entryId: string|null; elapsedMs: number }; budget: { tokens: number; audioSeconds: number; requests: number }; canUndo: boolean; canRedo: boolean }
 export interface CaptureState { phase: string; entryId: string|null; epoch: number; elapsedMs?: number; detail?: string; hasImage?: boolean }
-export interface NotesSource { text?: string; command?: string|null; entry: { id: string; createdAt: number }; audioUrl: string|null }
+export interface NotesSource { text?: string; command?: string|null; entry: { id: string; createdAt: number } }
 export interface NotesAPI {
   editing(value: { id: string; active: boolean }): Promise<NotesBoard>;
   get(): Promise<NotesBoard>; command(ops: unknown[]): Promise<NotesBoard>; place(positions: { id: string; position: XY }[]): Promise<NotesBoard>; viewport(value: { x: number; y: number; zoom: number }): Promise<boolean>;

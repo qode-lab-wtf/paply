@@ -21,13 +21,41 @@ const SUMMARY_RESPONSE_SCHEMA = {
   required: ['titel', 'kurzfassung', 'themen', 'entscheidungen', 'offeneFragen', 'todos'],
 };
 
+// Kleine, konservative Wort-Erkennung für Auswertungen ohne Sprachmetadaten.
+// Unklare Abschnitte zählen zur Hauptsprache, damit einzelne Fremdwörter nicht umschalten.
+const LANGUAGE_WORDS = {
+  de: 'der die das und ist sind wir ich du ein eine nicht mit für haben werden heute morgen',
+  en: 'the and is are we i you a an not with for have will this that our today tomorrow',
+  fr: 'le la les et est sont nous je vous un une pas avec pour avons ce cette demain',
+  es: 'el la los las y es son nosotros yo usted un una no con para tenemos mañana',
+  it: 'il lo gli e è sono noi io voi un una non con per abbiamo domani',
+  tr: 've bir bu için değil biz ben siz bugün yarın ile var',
+};
+function textLanguage(text) {
+  const words = String(text || '').toLowerCase().match(/\p{L}+/gu) || [];
+  const scores = Object.entries(LANGUAGE_WORDS).map(([lang, list]) => [lang, words.filter(w => list.split(' ').includes(w)).length]).sort((a, b) => b[1] - a[1]);
+  return scores[0][1] >= 2 && scores[0][1] > scores[1][1] ? scores[0][0] : null;
+}
+function reportLanguage(text, main = 'de', segments = [], detectedLanguage) {
+  const parts = segments.length ? segments : String(text || '').split(/\n|(?<=[.!?])\s+/).filter(Boolean).map(text => ({ text, language: detectedLanguage }));
+  const timed = parts.every(s => Number.isFinite(s.tEnd) && Number.isFinite(s.tStart) && s.tEnd > s.tStart);
+  const weights = new Map(); let total = 0;
+  for (const part of parts) {
+    const weight = timed ? part.tEnd - part.tStart : (String(part.text || '').match(/\p{L}+/gu) || []).length;
+    const lang = (part.language || part.lang || detectedLanguage || textLanguage(part.text) || main).toLowerCase().split('-')[0];
+    weights.set(lang, (weights.get(lang) || 0) + weight); total += weight;
+  }
+  for (const [lang, weight] of weights) if (total > 0 && weight / total >= .8) return lang;
+  return main;
+}
+
 /**
  * Erzeugt den Prompt für den Bericht.
  * @param {string} transcriptText - Transkript als Text („Sprecher 1: …“ je Zeile, ggf. mit [mm:ss])
  * @param {string} language
  */
-function getMeetingSummaryPrompt(transcriptText, language) {
-  const lang = language || 'de';
+function getMeetingSummaryPrompt(transcriptText, language, segments = [], detectedLanguage) {
+  const lang = reportLanguage(transcriptText, language || 'de', segments, detectedLanguage);
   return `Du bist ein sorgfältiger Protokollant. Unten steht das automatisch erkannte Transkript eines Gesprächs (Sprecher sind neutral nummeriert; der Text kann Erkennungsfehler enthalten). Erstelle daraus einen verständlichen, gut aufgebauten Bericht als JSON.
 
 Antworte NUR mit einem validen JSON-Objekt (kein Markdown, keine Erklärungen) mit exakt diesen Keys:
@@ -38,7 +66,7 @@ Antworte NUR mit einem validen JSON-Objekt (kein Markdown, keine Erklärungen) m
 - "offeneFragen": string[] — ungeklärte Fragen und vertagte Punkte
 - "todos": Array von { "text": string, "verantwortlich": string|null, "frist": string|null } — konkrete Aufgaben/Folgemaßnahmen, die im Gespräch vereinbart oder angekündigt wurden. "verantwortlich" und "frist" NUR eintragen, wenn sie im Gespräch genannt wurden, sonst null. Sprecherbezeichnungen (z. B. „Sprecher 2“) unverändert übernehmen.
 
-Regeln: Nichts erfinden, keine Zuständigkeiten oder Beschlüsse hinzudichten, Bedingungen („wenn … dann …“) erhalten, Zahlen und Namen exakt übernehmen. Wenn etwas unklar ist, als offene Frage aufführen. Sprache des Berichts: ${lang}.
+Regeln: Nichts erfinden, keine Zuständigkeiten oder Beschlüsse hinzudichten, Bedingungen („wenn … dann …“) erhalten, Zahlen und Namen exakt übernehmen. Wenn etwas unklar ist, als offene Frage aufführen. Sprache des Berichts: ${lang}. Bei durchgehend anderer Sprache (mindestens 80 % der Sprechzeit oder des Textes) schreibe in dieser Sprache, sonst in der Hauptsprache ${language || 'de'}. Zitate bleiben immer wörtlich in der Originalsprache, niemals übersetzen.
 
 Transkript:
 ${transcriptText}`;
@@ -96,7 +124,7 @@ function parseSummaryJson(raw) {
  */
 async function generateMeetingSummary(transcriptText, opts = {}) {
   const { apiKey, groqApiKey, geminiApiKey, llmProvider, model, geminiModel, language, fetchImpl } = opts;
-  const prompt = getMeetingSummaryPrompt(transcriptText, language || 'de');
+  const prompt = getMeetingSummaryPrompt(transcriptText, language || 'de', opts.segments, opts.detectedLanguage);
 
   const { text, model: usedModel } = await chatComplete({
     system: 'Du bist ein sorgfältiger Protokollant. Antworte immer mit einem validen JSON-Objekt und erfinde nichts.',
@@ -125,4 +153,4 @@ async function generateMeetingSummary(transcriptText, opts = {}) {
   return summary;
 }
 
-module.exports = { getMeetingSummaryPrompt, parseSummaryJson, generateMeetingSummary, GROQ_CHAT_URL, SUMMARY_RESPONSE_SCHEMA, SUMMARY_SCHEMA_VERSION };
+module.exports = { reportLanguage, getMeetingSummaryPrompt, parseSummaryJson, generateMeetingSummary, GROQ_CHAT_URL, SUMMARY_RESPONSE_SCHEMA, SUMMARY_SCHEMA_VERSION };

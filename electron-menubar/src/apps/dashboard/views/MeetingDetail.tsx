@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, RefreshCw, Play, Copy, Download, Phone, AlertTriangle, Users, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, RefreshCw, Copy, Download, Phone, AlertTriangle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,8 +28,6 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
   const [todos, setTodos] = useState<MeetingTodo[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const micAudioRef = useRef<HTMLAudioElement | null>(null);
-  const sysAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -74,7 +72,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
   const handleReanalyze = async () => {
     setMsg(null);
     const r = await window.electronAPI.reanalyzeMeeting(id);
-    if (r && r.error === 'no_audio') setMsg('Kein Audio mehr vorhanden (nach 7 Tagen gelöscht) — eine neue Auswertung ist nicht möglich.');
+    if (r && r.error === 'no_audio') setMsg('Kein Ton mehr vorhanden — eine neue Auswertung ist nicht möglich.');
     else if (r && r.error) setMsg('Neu auswerten nicht möglich: ' + r.error);
     else await load(true);
   };
@@ -89,14 +87,6 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
     if (speaker === 'me') return 'Ich';
     if (speaker === 'other') return 'Gegenstelle';
     return speaker;
-  };
-
-  const playAt = (channel: 'mic' | 'system', t: number) => {
-    const el = channel === 'system' && sysAudioRef.current ? sysAudioRef.current : micAudioRef.current;
-    const other = el === micAudioRef.current ? sysAudioRef.current : micAudioRef.current;
-    if (!el) return;
-    try { other?.pause(); } catch { /* egal */ }
-    try { el.currentTime = Math.max(0, t); el.play().catch(() => {}); } catch { /* egal */ }
   };
 
   if (loading) {
@@ -120,9 +110,9 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
     );
   }
 
-  const { index, transcript, audio } = meeting;
+  const { index, transcript } = meeting;
   const summary = normalizeSummary(meeting.summary);
-  const hasAudio = !!(audio.mic || audio.system);
+  const hasAudio = meeting.canReanalyze;
   const status = index.status || (transcript.segments.length ? 'ready' : 'failed');
   const segments = transcript.segments;
 
@@ -144,7 +134,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
   };
   const handleExport = async () => { await window.electronAPI.exportMeeting({ title: index.title, markdown: markdown() }); };
 
-  const expires = index.audioExpiresAt ? new Date(index.audioExpiresAt) : null;
+  const expires = new Date((index.stoppedAt ? Date.parse(index.stoppedAt) : Date.parse(index.startTime) + (index.durationMs || 0)) + 30 * 86400000);
 
   return (
     <div className="space-y-5">
@@ -183,14 +173,13 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
       {status === 'failed' && (
         <div className="text-sm rounded-md border border-red-200 bg-red-50 text-red-700 px-3 py-2 space-y-2">
           <p><b>Die Auswertung ist fehlgeschlagen.</b> {index.analysisError || ''}</p>
-          <p className="text-xs">Die Aufnahme ist gespeichert{expires ? ` (bis ${expires.toLocaleDateString('de-DE')})` : ''}. Prüfe die API-Keys in den Einstellungen und starte die Auswertung erneut.</p>
+          <p className="text-xs">{hasAudio ? `Die Aufnahme bleibt für einen Neuversuch bis ${expires.toLocaleDateString('de-DE')} gespeichert. Prüfe die API-Keys und starte die Auswertung erneut.` : 'Der Ton wurde gelöscht. Der vorhandene Text bleibt erhalten.'}</p>
           <Button size="sm" variant="outline" onClick={handleReanalyze} disabled={!hasAudio}><RefreshCw className="w-3 h-3 mr-1" />Neu auswerten</Button>
         </div>
       )}
       {status === 'ready' && index.analysis === 'groq-fallback' && (
         <div className="text-sm rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 flex items-center justify-between gap-3">
-          <span>Ohne Sprechertrennung ausgewertet (Gemini nicht verfügbar{index.analysisError ? `: ${index.analysisError}` : ''}). Gemini-Key in den Einstellungen hinterlegen und neu auswerten.</span>
-          <Button size="sm" variant="outline" onClick={handleReanalyze} disabled={!hasAudio}><Sparkles className="w-3 h-3 mr-1" />Neu auswerten</Button>
+          <span>Ohne Sprechertrennung ausgewertet (Gemini nicht verfügbar{index.analysisError ? `: ${index.analysisError}` : ''}). Der Wortlaut bleibt erhalten.</span>
         </div>
       )}
       {index.captureStartGapMs && index.captureStartGapMs.mic > 1500 && (
@@ -289,9 +278,6 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base">Konversation</CardTitle>
-            <span className="text-xs text-muted-foreground">
-              {hasAudio ? (expires ? `Audio bis ${expires.toLocaleDateString('de-DE')} verfügbar` : 'Audio verfügbar') : (index.audioDeleted ? 'Audio nach 7 Tagen gelöscht' : 'kein Audio')}
-            </span>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -325,15 +311,7 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
             <div className="space-y-2.5">
               {segments.map((seg, i) => (
                 <div key={i} className="flex gap-2 text-sm group">
-                  <button
-                    className={cn('shrink-0 w-14 text-[11px] font-mono tabular-nums text-muted-foreground text-left flex items-center gap-1 mt-0.5', hasAudio && 'hover:text-primary')}
-                    onClick={() => hasAudio && playAt(seg.channel, seg.tStart)}
-                    title={hasAudio ? 'Ab hier anhören' : 'Audio nicht mehr vorhanden'}
-                    disabled={!hasAudio}
-                  >
-                    <Play className={cn('w-3 h-3', hasAudio ? 'opacity-40 group-hover:opacity-100' : 'opacity-0')} />
-                    {formatTime(seg.tStart)}
-                  </button>
+                  <span className="shrink-0 w-14 text-[11px] font-mono text-muted-foreground">{formatTime(seg.tStart)}</span>
                   <span className={cn('shrink-0 w-24 text-xs font-semibold mt-0.5 truncate', speakerClass(seg.speaker))} title={speakerLabel(seg.speaker)}>
                     {speakerLabel(seg.speaker)}
                   </span>
@@ -342,24 +320,6 @@ export function MeetingDetail({ id, onBack }: MeetingDetailProps) {
                   </p>
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* Audio-Player (Seek-Ziele für ▶) */}
-          {hasAudio && (
-            <div className="pt-2 border-t space-y-2">
-              {audio.mic && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-16 shrink-0">Mikrofon</span>
-                  <audio ref={micAudioRef} controls preload="metadata" src={`file://${encodeURI(audio.mic)}`} className="w-full h-8" />
-                </div>
-              )}
-              {audio.system && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-16 shrink-0">Gegenstelle</span>
-                  <audio ref={sysAudioRef} controls preload="metadata" src={`file://${encodeURI(audio.system)}`} className="w-full h-8" />
-                </div>
-              )}
             </div>
           )}
         </CardContent>

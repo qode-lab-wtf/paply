@@ -104,7 +104,7 @@ function createNotes(deps) {
     try { await new Promise(resolve => setTimeout(resolve, 200)); await assets.camera(p?.target || null, p?.position ? C.point(p.position) : undefined); return snapshot(); }
     finally { if (visible && window && !window.isDestroyed() && !closing) { window.show(); window.focus(); } }
   });
-  handle('notes:source', 'board', value => { const nid = C.id(value), sourceId = repo.current().nodes[nid]?.sourceId || nid; const entry = repo.entry(sourceId); C.assert(entry && entry.state !== 'discarded'); return { ...repo.transcript(sourceId), entry, audioUrl: fs.existsSync(path.join(repo.sourcePath(sourceId), 'rec.pcm')) ? `paply-notes://audio/${sourceId}` : null }; });
+  handle('notes:source', 'board', value => { const nid = C.id(value), sourceId = repo.current().nodes[nid]?.sourceId || nid; const entry = repo.entry(sourceId); C.assert(entry && entry.state !== 'discarded'); return { ...repo.transcript(sourceId), entry }; });
   handle('notes:retry', 'board', value => { queue.retry(C.id(value)); return snapshot(); });
   handle('notes:discard', 'board', value => { queue.discard(C.id(value)); return snapshot(); });
   handle('notes:capture:toggle', 'board', async () => { await capture.toggle(); return snapshot(); });

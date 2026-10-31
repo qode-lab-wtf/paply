@@ -42,3 +42,15 @@ describe('groq-fallback', () => {
     await expect(transcribeWithGroq({ micWavPath: mic, apiKey: '' })).rejects.toMatchObject({ code: 'no_key' });
   });
 });
+
+it('behandelt auch teilweise fehlgeschlagene Fenster als Fehler, damit kein Ton verloren geht', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'paply-gf-partial-'));
+  try {
+    const mic = path.join(dir, 'audio_mic.wav'); fs.writeFileSync(mic, encodeWav(pcm(45)));
+    let calls = 0;
+    const fetchImpl = async () => ++calls === 1
+      ? { ok: true, json: async () => ({ segments: [{ start: 0, end: 3, text: 'Ein Teil ist gespeichert.' }] }) }
+      : { ok: false, status: 401, text: async () => 'Unauthorized' };
+    await expect(transcribeWithGroq({ micWavPath: mic, apiKey: 'k', fetchImpl })).rejects.toMatchObject({ code: 'groq_failed' });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -58,3 +58,28 @@ describe('summary v2', () => {
     await expect(generateMeetingSummary('T', { apiKey: 'k', fetchImpl: fakeFetch })).rejects.toMatchObject({ code: 'empty' });
   });
 });
+
+describe('Berichtssprache nach Regel 6', () => {
+  const { reportLanguage } = require('./summary.js');
+  it('wählt ab 80 Prozent Sprechzeit die andere Sprache, darunter die Hauptsprache', () => {
+    const segments = n => [{ text: 'Hello', language: 'en', tStart: 0, tEnd: n }, { text: 'Hallo', language: 'de', tStart: n, tEnd: 100 }];
+    expect(reportLanguage('', 'de', segments(80))).toBe('en');
+    expect(reportLanguage('', 'de', segments(79))).toBe('de');
+  });
+  it('gewichtet ohne Zeiten die Wörter und akzeptiert Sprachangaben der Auswertung', () => {
+    expect(reportLanguage('', 'de', [{ text: 'one two three four', language: 'en' }, { text: 'Hallo', language: 'de' }])).toBe('en');
+    expect(reportLanguage('Bonjour', 'de', [], 'fr')).toBe('fr');
+    expect(reportLanguage('', 'fr')).toBe('fr');
+  });
+  it('erkennt durchgehend englische und französische Texte ohne Metadaten', () => {
+    expect(reportLanguage('We will discuss the project and the plan for our team today.', 'de')).toBe('en');
+    expect(reportLanguage('Nous avons un projet et nous sommes avec vous pour le travail demain.', 'de')).toBe('fr');
+  });
+  it('bleibt bei gemischtem Text in der Hauptsprache und erhält Zitate im Prompt wörtlich', () => {
+    const segments = [{ text: 'We will discuss the project and the plan.', tStart: 0, tEnd: 60 }, { text: 'Wir haben heute eine Frage und werden das mit der Gruppe klären.', tStart: 60, tEnd: 100 }];
+    expect(reportLanguage('', 'de', segments)).toBe('de');
+    const quote = 'Sprecher 1: “On se voit ce soir.”';
+    const prompt = getMeetingSummaryPrompt(quote, 'de');
+    expect(prompt).toContain(quote); expect(prompt).toContain('Zitate bleiben immer wörtlich');
+  });
+});
