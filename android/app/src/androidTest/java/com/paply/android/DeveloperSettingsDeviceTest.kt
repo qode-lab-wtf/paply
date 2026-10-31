@@ -4,6 +4,8 @@ import android.content.Intent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.*
 import androidx.test.platform.app.InstrumentationRegistry
 import com.paply.android.settings.SettingsRepository
@@ -49,7 +51,7 @@ class DeveloperSettingsDeviceTest {
                         if (route == "developer") DeveloperScreen(prefs,
                             { transform -> scope.launch { repository.update(transform) } },
                             { route = it })
-                        else Text(route)
+                        else Text(route, modifier = Modifier.safeDrawingPadding())
                     }
                 }
             }
