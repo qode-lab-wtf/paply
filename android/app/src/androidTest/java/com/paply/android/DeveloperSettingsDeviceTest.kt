@@ -21,7 +21,7 @@ class DeveloperSettingsDeviceTest {
         instrumentation.waitForIdleSync()
         instrumentation.uiAutomation.waitForIdle(100, 5000)
         fun visit(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-            if (node.text?.toString() == text) return node
+            if (node.text?.toString() == text || node.contentDescription?.toString() == text) return node
             for (i in 0 until node.childCount) node.getChild(i)?.let { visit(it)?.let { found -> return found } }
             return null
         }
