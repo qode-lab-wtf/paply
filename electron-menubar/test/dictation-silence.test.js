@@ -1,3 +1,4 @@
+import { termCheck } from '../dictation/term-guard.js';
 import { WHISPER_MODEL, userLanguages, guardedTranscription } from '../dictation/language-guard.js';
 import { primer, buildPrompt, removeEchoes } from '../dictation/whisper-prompt.js';
 import { vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations } from '../dictation/polish-prompt.js';
@@ -26,7 +27,7 @@ function main(response = { text: 'Vielen Dank.' }, settings = {}) {
   const values = { language: 'de', groqApiKey: 'test-placeholder', enablePolish: true, autopaste: true, ...settings };
   const window = { webContents: { send: vi.fn() }, hide: vi.fn(), showInactive: vi.fn() };
   const context = vm.createContext({
-    WHISPER_MODEL, userLanguages, guardedTranscription, primer, buildPrompt, removeEchoes,
+    termCheck, WHISPER_MODEL, userLanguages, guardedTranscription, primer, buildPrompt, removeEchoes,
     process: { env: {} }, dictationJobs: createDictationJobs(), friendlyError, explainDictationStatus, retryAfterMs, transcriptionTimeoutMs, transcriptionBudgetMs,
     readResponse: (url, options, ms) => readResponse(url, options, ms, context.fetch),
     savePreviousApp: async () => null, positionRecordingWindow: vi.fn(), mainWindow: null, isRecording: false,

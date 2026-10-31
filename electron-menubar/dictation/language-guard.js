@@ -93,11 +93,12 @@ function needsCheck({ spoken, expected, detected, users = [] }) {
       !users.map(languageCode).includes(detected))
   );
 }
-function decide({ sameText, lpDetected, lpExpected, failed = false }) {
-  if (failed) return 'detected';
+function decide({ sameText, lpDetected, lpExpected, failed = false, spoken = 0 }) {
   if (sameText) return 'expected';
+  if (failed) return 'detected';
   if (!Number.isFinite(lpDetected) || !Number.isFinite(lpExpected))
     return 'detected';
+  if (spoken > SHORT_SPEECH_SECONDS) return lpExpected - lpDetected >= CHECK_GAP ? 'expected' : 'detected';
   return lpDetected - lpExpected >= CHECK_GAP ? 'detected' : 'expected';
 }
 function confidence(response) {
@@ -153,6 +154,7 @@ async function guardedTranscription(
     return original;
   } finally { clearTimeout(timer); }
   return decide({
+    spoken: Number.isFinite(spoken) ? spoken : (duration ?? first.duration ?? Infinity),
     sameText: normalize(first.text) === normalize(check.text),
     lpDetected: confidence(first),
     lpExpected: confidence(check),

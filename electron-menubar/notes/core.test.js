@@ -119,7 +119,7 @@ describe('queue boundaries', () => {
     repo.saveTranscript('s', { text, sentences, languages: ['fr'] });
     for (let i = 0; i < 4; i++) await q.tick();
     expect(groq.plan.mock.calls[0][0]).toMatchObject({ spoken_languages: ['fr'], ui_language: 'de-DE' });
-    expect(single().label).toBe('Demain je vais retrouver Sophie au');
+    expect(single().label).toBe('Demain je vais retrouver Sophie au …');
     q.stop();
   });
   function fixture(groq, extra = {}) { return createQueue({ repo, commands, groq, ...extra, assets: { pending: () => [] }, getSettings: () => defaults(), getKey: () => 'fake', onChange: vi.fn() }); }

@@ -23,7 +23,7 @@ struct SharedLanguageTests {
     @Test(arguments: cases) func sharedCases(_ c: Case) {
         let check = LanguageGuard.needsCheck(expected: c.expected, detected: c.detected, userLanguages: c.users, spokenSeconds: c.spoken)
         #expect(check == c.check)
-        let choice = check ? LanguageGuard.choose(detectedText: "original", expectedText: c.sameText == true ? "original" : "other", detectedConfidence: c.lpDetected, expectedConfidence: c.lpExpected) : .detected
+        let choice = check ? LanguageGuard.choose(detectedText: "original", expectedText: c.sameText == true ? "original" : "other", detectedConfidence: c.lpDetected, expectedConfidence: c.lpExpected, spokenSeconds: c.spoken) : .detected
         #expect((choice == .detected ? "detected" : "expected") == c.result)
     }
 }

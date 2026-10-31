@@ -55,12 +55,13 @@ internal object LanguageGuard {
         text.lowercase(java.util.Locale.ROOT).replace(Regex("\\s+"), "")
             .replace(Regex("^[\\p{P}]+|[\\p{P}]+$"), "")
 
-    fun chooseExpected(detected: Transcription, checked: Transcription?): Boolean {
+    fun chooseExpected(detected: Transcription, checked: Transcription?, spoken: Double = 0.0): Boolean {
         if (checked == null) return false
         if (detected.text != null && checked.text != null &&
             normalized(detected.text) == normalized(checked.text)) return true
         val first = confidence(detected) ?: return false
         val second = confidence(checked) ?: return false
+        if (spoken > shortSpeechSeconds) return second - first >= checkGap
         return first - second < checkGap
     }
 }

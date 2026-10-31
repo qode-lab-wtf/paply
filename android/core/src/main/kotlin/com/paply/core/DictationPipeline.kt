@@ -263,15 +263,15 @@ constructor(
             encoder.encode(audio, options.uploadFormat == PipelineOptions.UploadFormat.flac)
         currentCoroutineContext().ensureActive()
         val seconds = audio.size / AudioEncoder.sampleRate
-        suspend fun upload(language: String?): Transcription {
+        suspend fun upload(language: String?, termPrompt: String? = null): Transcription {
             currentCoroutineContext().ensureActive()
             uploads.incrementAndGet()
-            return client.transcribe(encoded, settings.transcriptionModel, language, prompt, seconds) {
+            return client.transcribe(encoded, settings.transcriptionModel, language, termPrompt ?: prompt, seconds) {
                 bytes.addAndGet(it)
                 sentSamples.addAndGet(audio.size.toLong())
             }
         }
-        suspend fun send(language: String?): Transcription = try { upload(language) }
+        suspend fun send(language: String?, termPrompt: String? = null): Transcription = try { upload(language, termPrompt) }
         catch (failure: GroqFailure) {
             // A manufacturer codec may emit FLAC the server cannot decode. Keep model,
             // language, prompt and PCM identical; never repeat this fallback for a WAV.
@@ -279,7 +279,7 @@ constructor(
                 failure.code !in setOf("invalid_audio", "invalid_audio_file", "invalid_audio_format", "audio_decode_error", "invalid_request_error", "http")) throw failure
             currentCoroutineContext().ensureActive()
             encoded = encoder.encode(audio, preferFLAC = false)
-            upload(language)
+            upload(language, termPrompt)
         }
         val users = CodeSwitchPrimer.userLanguages(settings, deviceLanguages)
         val primary =
@@ -306,13 +306,19 @@ constructor(
                 error.asGroqFailure()
                 null
             }
-            if (LanguageGuard.chooseExpected(first, checked)) {
+            if (LanguageGuard.chooseExpected(first, checked, spoken)) {
                 result = checkNotNull(checked)
                 chosenLanguage = expected
                 source = LanguageSource.checkedExpected
             } else {
                 source = if (checked == null) LanguageSource.checkFailed else LanguageSource.checkedDetected
             }
+        }
+        val candidates = TermGuard.candidates(settings.vocabulary, result)
+        if (candidates.terms.isNotEmpty()) {
+            val checked = try { withTimeoutOrNull(LanguageGuard.checkTimeoutMs(firstMs)) { send(chosenLanguage, candidates.prompt) } }
+            catch (error: Throwable) { currentCoroutineContext().ensureActive(); null }
+            if (checked != null && candidates.terms.any { TermGuard.accept(it, result.text.orEmpty(), checked.text.orEmpty(), LanguageGuard.confidence(result), LanguageGuard.confidence(checked)) }) result = checked
         }
         currentCoroutineContext().ensureActive()
         val filtered =

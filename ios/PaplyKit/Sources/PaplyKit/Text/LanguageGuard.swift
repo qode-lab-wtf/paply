@@ -45,10 +45,11 @@ public enum LanguageGuard {
     }
 
     enum Choice { case detected, expected }
-    static func choose(detectedText: String, expectedText: String?, detectedConfidence: Double?, expectedConfidence: Double?) -> Choice {
+    static func choose(detectedText: String, expectedText: String?, detectedConfidence: Double?, expectedConfidence: Double?, spokenSeconds: Double = 0) -> Choice {
         guard let expectedText else { return .detected }
         if normalize(detectedText) == normalize(expectedText) { return .expected }
         guard let detectedConfidence, let expectedConfidence else { return .detected }
+        if spokenSeconds > shortSpeechSeconds { return expectedConfidence - detectedConfidence >= checkGap ? .expected : .detected }
         return detectedConfidence - expectedConfidence >= checkGap ? .detected : .expected
     }
 

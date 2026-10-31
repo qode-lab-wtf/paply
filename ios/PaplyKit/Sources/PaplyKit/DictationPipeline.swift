@@ -265,10 +265,10 @@ public actor DictationPipeline {
         let encoded = AudioEncoder.encode(audio, preferFLAC: context.format == .flac)
         let seconds = Double(audio.count) / AudioEncoder.sampleRate
         let bytes = context.bytes
-        @Sendable func send(_ language: String?) async -> Result<Transcription, GroqFailure> {
+        @Sendable func send(_ language: String?, termPrompt: String? = nil) async -> Result<Transcription, GroqFailure> {
             context.uploads.add(1)
             return await context.client.transcribe(audio: encoded, model: settings.transcriptionModel,
-                                                   language: language, prompt: prompt, audioSeconds: seconds,
+                                                   language: language, prompt: termPrompt ?? prompt, audioSeconds: seconds,
                                                    bytesSent: { bytes.add($0); context.requestedSamples.add(audio.count) })
         }
         // Erst erkennen, bei Bedarf mit der erwarteten Sprache gegenprüfen.
@@ -307,13 +307,27 @@ public actor DictationPipeline {
             case .success(let second):
                 if LanguageGuard.choose(detectedText: first.text ?? "", expectedText: second.text,
                                         detectedConfidence: LanguageGuard.confidence(first.segments),
-                                        expectedConfidence: LanguageGuard.confidence(second.segments)) == .expected {
+                                        expectedConfidence: LanguageGuard.confidence(second.segments), spokenSeconds: spoken) == .expected {
                     result = .success(second)
                     chosenLanguage = expected
                     source = .checkExpected
                 } else { source = .checkDetected }
             case .failure:
                 source = .checkFailed
+            }
+        }
+        if Task.isCancelled { return ChunkResult(failure: .cancelled) }
+        if case .success(let selected) = result {
+            chosenLanguage = chosenLanguage ?? GroqModels.languageCode(selected.language)
+            let candidates = TermGuard.candidates(settings.vocabulary, selected)
+            if !candidates.terms.isEmpty {
+                let language = chosenLanguage
+                let check = await LanguageGuard.boundedCheck(firstSeconds: firstSeconds) { await send(language, termPrompt: candidates.prompt) }
+                if Task.isCancelled { return ChunkResult(failure: .cancelled) }
+                if case .success(let second) = check,
+                   candidates.terms.contains(where: { TermGuard.accept($0, first: selected.text ?? "", second: second.text ?? "", lpFirst: LanguageGuard.confidence(selected.segments), lpSecond: LanguageGuard.confidence(second.segments)) }) {
+                    result = .success(second)
+                }
             }
         }
         switch result {

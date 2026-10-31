@@ -41,6 +41,7 @@ if (!hasSingleInstanceLock) { app.quit(); }
 else {
 app.on('second-instance', () => { app.whenReady().then(() => { const win = createMainWindow(); win.show(); win.focus(); }); });
 
+const { termCheck } = require('./dictation/term-guard');
 const { WHISPER_MODEL, languageCode, userLanguages, guardedTranscription } = require('./dictation/language-guard');
 const { primer, buildPrompt, removeEchoes } = require('./dictation/whisper-prompt');
 const path = require('node:path');
@@ -489,14 +490,16 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
       const users = userLanguages(language, app.getPreferredSystemLanguages());
       const example = primer(users);
       const vocabulary = vocabularyPrompt(getStore().get('customVocabulary'));
-      const request = async forcedLanguage => {
+      let firstMs;
+      const request = async (forcedLanguage, termPrompt) => {
+        const started = Date.now();
         const formData = new FormData();
         const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
         formData.append('file', audioBlob, 'audio.webm');
         formData.append('model', getStore().get('whisperModel') || WHISPER_MODEL);
         if (forcedLanguage) formData.append('language', forcedLanguage);
         formData.append('response_format', 'verbose_json');
-        const prompt = buildPrompt(vocabulary, '', example);
+        const prompt = termPrompt ?? buildPrompt(vocabulary, '', example);
         if (prompt) formData.append('prompt', prompt);
 
         console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
@@ -526,9 +529,11 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
           throw error;
         }
 
+        firstMs ??= Date.now() - started;
         return JSON.parse(res.body);
       };
-      const selected = await guardedTranscription(request, { expected: language, users, spoken: validateVoiceActivity(voiceActivity)?.speechMs / 1000 });
+      let selected = await guardedTranscription(request, { expected: language, users, spoken: validateVoiceActivity(voiceActivity)?.speechMs / 1000 });
+      selected = await termCheck(selected, getStore().get('customVocabulary') || '', request, firstMs);
       const json = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
       const filtered = filterTranscription(json, voiceActivity, options);
       // Whisper gibt bei sehr kurzem/leisem Ton gern den prompt (eigene Begriffe) wörtlich zurück.

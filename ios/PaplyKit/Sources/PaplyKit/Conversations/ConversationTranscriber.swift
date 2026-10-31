@@ -185,7 +185,7 @@ public actor ConversationTranscriber {
                         if case .failure(.cancelled) = check { throw CancellationError() }
                         if case .success(let second) = check,
                            LanguageGuard.choose(detectedText: Self.rawText(result), expectedText: Self.rawText(second),
-                                                detectedConfidence: Self.confidence(result), expectedConfidence: Self.confidence(second)) == .expected {
+                                                detectedConfidence: Self.confidence(result), expectedConfidence: Self.confidence(second), spokenSeconds: spoken) == .expected {
                             result = second; result.language = expected
                         }
                     }

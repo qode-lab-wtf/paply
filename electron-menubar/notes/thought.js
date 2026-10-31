@@ -33,7 +33,7 @@ function validate(value, ctx) {
   const strict = languages.length > 0 && !languages.includes(languageCode(ctx.ui_language || ''));
   const source = contentWords(normalizedLower(raw));
   if (strict && !contentWords(title).every(w => source.includes(w))) title = fallbackTitle(text);
-  if (!title || [...title].length > 60 || !digits(title, raw) || !words(title).some(w => matches(w, words(raw))) || contentWords(title).some(w => !matches(w, words(raw)))) title = fallbackTitle(text);
+  if (!title || [...title].length > 60 || !digits(title, raw) || !words(title).some(w => matches(w, words(raw)))) title = fallbackTitle(text);
   let topic = null;
   if (value.topic.choice === 'existing' && ctx.topics.some(t => t.id === value.topic.id)) topic = { id: value.topic.id };
   if (value.topic.choice === 'new' && typeof value.topic.new_name === 'string') {

@@ -20,7 +20,7 @@ class SharedLanguageTests(private val case: JsonObject) {
                 avgLogprob = case[key]?.jsonPrimitive?.doubleOrNull)))
         val same = case["sameText"]?.jsonPrimitive?.booleanOrNull == true
         val expected = needed && LanguageGuard.chooseExpected(response("first", "lpDetected"),
-            response(if (same) "first" else "second", "lpExpected"))
+            response(if (same) "first" else "second", "lpExpected"), case.getValue("spoken").jsonPrimitive.double)
         assertEquals(str("name"), str("result"), if (expected) "expected" else "detected")
     }
 

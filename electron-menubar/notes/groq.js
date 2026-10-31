@@ -34,14 +34,21 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
       const settings = getTranscriptionSettings();
       const users = userLanguages(settings.language, settings.systemLanguages);
       const example = primer(users), model = settings.whisperModel || WHISPER_MODEL;
-      const response = await guardedTranscription(async language => {
+      let firstMs;
+      const send = async (language, termPrompt) => {
+        const started = Date.now();
         const form = new FormData(); form.append('file', new Blob([wav], { type: 'audio/wav' }), 'thought.wav'); form.append('model', model);
         if (language) form.append('language', language);
         form.append('response_format', 'verbose_json'); form.append('temperature', '0');
-        const prompt = buildPrompt(vocabulary, context.previousText, example);
+        const prompt = termPrompt ?? buildPrompt(vocabulary, context.previousText, example);
         if (prompt) form.append('prompt', prompt);
-        return request('audio/transcriptions', form, { model, amount: Math.max(10, seconds), unit: 'audio', multipart: true, signal, timeout: 120000 });
-      }, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
+        const result = await request('audio/transcriptions', form, { model, amount: Math.max(10, seconds), unit: 'audio', multipart: true, signal, timeout: 120000 });
+        firstMs ??= Date.now() - started;
+        return result;
+      };
+      let response = await guardedTranscription(send, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
+      signal?.throwIfAborted();
+      response = await require('../dictation/term-guard').termCheck(response, vocabulary, send, firstMs, signal);
       return removeEchoes({ ...response, model }, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
     },
     async plan(ctx, _large, signal) {
