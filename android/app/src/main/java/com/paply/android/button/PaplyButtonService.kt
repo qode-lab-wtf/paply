@@ -377,6 +377,8 @@ class PaplyButtonService : AccessibilityService() {
             else -> message
         }
         render()
+        // Non-touchable windows are not reported to screen readers.
+        hintText?.let { bar?.announceForAccessibility(it) }
         hintJob = scope.launch {
             delay(4000)
             hintText = null; render()

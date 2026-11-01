@@ -118,15 +118,21 @@ class ButtonDeviceTest {
                     assertEquals(end, field.textSelectionEnd)
                 }
             }
+            val announced = java.util.concurrent.CopyOnWriteArrayList<String>()
+            ui.setOnAccessibilityEventListener { event ->
+                if (event.eventType == android.view.accessibility.AccessibilityEvent.TYPE_ANNOUNCEMENT) announced += event.text.joinToString(" ")
+            }
             assertTrue(button.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             waitFor { it.contentDescription?.toString() == "Aufnahme beenden und einsetzen" }
             // Bauleitung injects its known WAV now, after audio.start, via the authorized host.
             Thread.sleep(12_000)
             if (scenario == "field") {
                 assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-                val notice = waitFor { it.text?.contains("Einfügen") == true }
-                Thread.sleep(3000)
-                assertTrue("Clipboard notice must stay visible", notice.refresh() && notice.isVisibleToUser)
+                val until = android.os.SystemClock.uptimeMillis() + 60_000
+                while (announced.none { "Einfügen" in it }) {
+                    assertTrue("Clipboard notice must be announced", android.os.SystemClock.uptimeMillis() < until)
+                    Thread.sleep(200)
+                }
                 waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }
                 assertTrue(waitFor { it.hintText?.toString() == "Zweites Textfeld" }.let { it.isShowingHintText || it.text.isNullOrEmpty() || it.text == it.hintText })
                 assertTrue(waitFor { it.text?.toString()?.equals("Zwischenablage prüfen", ignoreCase = true) == true }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
