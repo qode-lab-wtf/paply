@@ -209,3 +209,10 @@ Ebenfalls am 31.10.: Gedanken auf Mac und Windows nutzen dieselben KI-Regeln wie
 bekommen eine akustische Gegenprobe statt einer Korrektur durch die KI, das war Allans Vorschlag. Der Code soll privat
 werden, die Downloads ziehen dafür in ein eigenes öffentliches Repository um. Android-Gespräche warten auf den
 bestandenen Gerätetest des iPhones.
+
+## 2026-11-01 — Download-Repository und Vorabversion
+
+Mac und Windows holen Updates ab 1.16.0 aus `qode-lab-wtf/paply-downloads`. Jede neue Version startet als Vorabversion,
+Allan prüft sie zuerst selbst, erst die Freigabe erreicht die übrigen Nutzer. Gespiegelt wird von der Bauleitung per
+`gh`, dafür ist kein zusätzlicher Token im Repository nötig. Paply bleibt bei „nie übersetzen“; eine wählbare Übersetzung
+steht auf der Wunschliste in `docs/STAND.md`.

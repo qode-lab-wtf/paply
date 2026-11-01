@@ -3,17 +3,32 @@
 ## Release auslösen (DMG bauen lassen)
 
 Die GitHub Action `build-release.yml` baut Mac (DMG + ZIP) und Windows und legt
-ein GitHub-Release an, sobald ein Tag `v*` gepusht wird:
+ein GitHub-Release an, sobald ein Tag `v*` gepusht wird. Es startet als Vorabversion,
+installierte Apps bekommen davon noch nichts mit:
 
 ```bash
-cd ~/Vibe/paply-main   # Mac mini: ~/Vibe/paply
+cd ~/Vibe/paply
 git push origin main          # Code hochladen
-git tag v1.8.0                 # Version-Tag (muss zur package.json-Version passen)
-git push origin v1.8.0         # löst die Action aus
+git tag v1.16.0               # Version-Tag (muss zur package.json-Version passen)
+git push origin v1.16.0       # löst die Action aus
 ```
 
-Danach: GitHub → Actions beobachten. Nach Erfolg liegt das Release unter
-`github.com/qode-lab-wtf/paply/releases` mit `.dmg`, `.zip`, `latest-mac.yml`.
+Nach Erfolg kommt die Version ins öffentliche Download-Repository
+`qode-lab-wtf/paply-downloads`. Von dort holen sich die Apps ihre Updates:
+
+```bash
+electron-menubar/scripts/release-downloads.sh spiegeln 1.16.0
+```
+
+Jetzt die Vorabversion selbst prüfen. Erst danach geht sie an alle:
+
+```bash
+electron-menubar/scripts/release-downloads.sh freigeben 1.16.0
+```
+
+Bis 1.15.3 suchen installierte Apps im Code-Repository nach Updates, deshalb gibt
+`freigeben` beide Repositories frei. Das Code-Repository kann erst privat werden, wenn
+diese Apps auf 1.16 oder neuer sind.
 
 ## Zwei Wege, das Update zu bekommen
 

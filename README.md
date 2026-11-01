@@ -9,7 +9,7 @@ Gedanken nutzen auf allen Apps die KI-Regeln v6: Titel, Text in der gesprochenen
 
 ## Download
 
-Aktuelle Version: https://github.com/qode-lab-wtf/paply/releases/latest
+Aktuelle Version: https://github.com/qode-lab-wtf/paply-downloads/releases/latest
 (Apple Silicon: `paply-<version>-arm64.dmg`). Die App ist nicht signiert — beim ersten Start
 Rechtsklick → Öffnen. Installierte Apps aktualisieren sich danach selbst.
 

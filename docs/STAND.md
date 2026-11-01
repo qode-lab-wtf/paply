@@ -1,9 +1,10 @@
 # Paply — Stand
 
-**Zeitpunkt:** 31.10.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
+**Zeitpunkt:** 1.11.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
 
-Die Tabelle zeigt den Stand von `main`. Veröffentlicht sind noch Mac und Windows v1.15.3, iPhone 0.1.0 und Android 0.2.1.
-Alles von heute muss erst in eine neue Version.
+Die Tabelle zeigt den Stand von `main`. Mac und Windows 1.16.0 sind Vorabversion und nur auf Allans MacBook, die übrigen
+Nutzer bleiben bis zur Freigabe auf 1.15.3. iPhone: Build 10 auf Allans iPhone und bei TestFlight. Android bleibt bei
+Testern auf 0.2.1, die neue Sprachregel kommt dort mit 0.2.2.
 
 ## Überblick
 
@@ -27,19 +28,30 @@ Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtb
 - **Android:** Griff am Bildschirmrand (0.2.2), Abnahme läuft auf Branch `fix/android-knopf-rand`.
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 - **Alle:** Fremde Sprachen und die Begriffs-Gegenprobe mit echten Stimmen prüfen. Beides ist bisher nur mit künstlichen
-  Stimmen gemessen.
-- **Repository:** Privat stellen, sobald Mac und Windows ihre Updates aus einem eigenen öffentlichen Download-Repository
-  holen. Das geht mit dem nächsten Release, weil die installierten Apps die neue Adresse erst kennen müssen.
+  Stimmen gemessen. Echter Lauf am 1.11.: 9 von 9 Sätzen in fünf Fremdsprachen blieben in Originalsprache und -schrift,
+  auch nach dem Polieren.
+- **Repository:** Privat stellen, sobald die installierten Apps auf 1.16 oder neuer sind. Ab dieser Version holen sie
+  ihre Updates aus dem öffentlichen Repository `qode-lab-wtf/paply-downloads`.
+
+## Wunschliste
+
+Ideen für später, noch nicht gebaut. Die Reihenfolge ist keine Rangfolge.
+
+- **Übersetzen als Schalter, für alle Apps:** In den Einstellungen wählt man zwischen Originalsprache und Übersetzung in
+  eine gewählte Sprache. Standard bleibt die Originalsprache. Beispiel: Wer in der Muttersprache spricht, aber auf
+  Deutsch schreiben will, bekommt deutschen Text. Bis dahin gilt „Paply übersetzt nie“ aus `REGELN.md`.
+- **Konto, für alle Apps:** Ein Konto-System, damit Einstellungen wie dieser Schalter pro Person gelten.
 
 ## Mac und Windows
 
-- **Version:** v1.15.3, veröffentlicht, auf Allans MacBook installiert. `main`: 936 automatische Tests.
-- **Offen:** Rückmeldung des Windows-Freunds, Electron-Upgrade.
+- **Version:** 1.16.0 als Vorabversion, auf Allans MacBook installiert. Für alle gilt noch 1.15.3. `main`: 936 automatische Tests.
+- **Offen:** Allans Test von 1.16.0, danach Freigabe. Rückmeldung des Windows-Freunds, Electron-Upgrade.
 - **Veröffentlichen:** [RELEASE.md](RELEASE.md). **Verlauf:** [stand/desktop.md](stand/desktop.md).
 
 ## iPhone
 
-- **Version:** 0.1.0, TestFlight bis Build 7, Build 9 als Debug auf Allans iPhone. `main`: 748 PaplyKit-Tests.
+- **Version:** 0.1.0, Build 10 auf Allans iPhone und zu TestFlight hochgeladen. Tester stehen auf Build 7, bis Build 10 der
+  Gruppe „Testing“ zugewiesen ist. `main`: 748 PaplyKit-Tests.
 - **Offen:** Gerätetests (Hauptsprache, Anrufe, Vibration, `idlePause`), Akku in Bereitschaft, „Gespräche“ mit echten
   Aufnahmen. Pilotmessung englische Meetings: 12–19 % der Wörter falsch oder unbekannt zugeordnet, noch keine Freigabe.
 - **Veröffentlichen:** [ios/docs/TESTFLIGHT.md](../ios/docs/TESTFLIGHT.md). **Verlauf:** [stand/ios.md](stand/ios.md).
