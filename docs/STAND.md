@@ -25,7 +25,6 @@ Testern auf 0.2.1, die neue Sprachregel kommt dort mit 0.2.2.
 Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtbar, was den anderen fehlt.
 
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
-- **Android:** Griff am Bildschirmrand (0.2.2), Abnahme läuft auf Branch `fix/android-knopf-rand`.
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 - **Alle:** Fremde Sprachen und die Begriffs-Gegenprobe mit echten Stimmen prüfen. Beides ist bisher nur mit künstlichen
   Stimmen gemessen. Echter Lauf am 1.11.: 9 von 9 Sätzen in fünf Fremdsprachen blieben in Originalsprache und -schrift,
@@ -58,8 +57,9 @@ Ideen für später, noch nicht gebaut. Die Reihenfolge ist keine Rangfolge.
 
 ## Android
 
-- **Version:** 0.2.1, als APK für Tester. Emulator-Abnahme API 30/34/36. `main`: 1.081 Tests.
-- **Offen:** Echte Geräte (Pixel, Samsung), Anrufe, Bluetooth. „Gespräche“ gibt es noch nicht.
+- **Version:** 0.2.2 auf `main`, signierte APK gebaut, noch nicht verteilt. Tester stehen auf 0.2.1. Emulator-Abnahme
+  API 30/34/36. `main`: 1.092 Tests.
+- **Offen:** Griff auf echtem Samsung, TalkBack, weitere echte Geräte, Anrufe, Bluetooth. „Gespräche“ gibt es noch nicht.
 - **Veröffentlichen:** [android/docs/RELEASE.md](../android/docs/RELEASE.md). **Verlauf:** [stand/android.md](stand/android.md).
 
 ## So arbeiten wir

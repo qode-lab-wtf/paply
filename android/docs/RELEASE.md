@@ -100,3 +100,11 @@ nach Abschluss bleibt nur der Hinweis auf das Tastatur-Symbol.
 - Knopf neu: Pegelringe statt Pille mit Zeit/„Fertig“, Tipp auf den Knopf = einsetzen, X = verwerfen, kurzer Haken statt Erfolgstext; sitzt über der Eingabezeile (Senden frei), weicht tippbaren Elementen aus, gleitet bei Feldwechsel, bleibt während Aufnahme immer sichtbar; Leerzeichen ab Android 13; 9-min-Vorwarnung mit Haptik.
 - Abnahme Emulator API 30/34/36 (Sideload über Dateien-App, Instrumented + manuell, Google Messages): bereit. Rest klein: im Querformat mit mehrzeiligem Entwurf überlappt der Knopf die leere Feldecke; im Vollbild-Editor teils über der „Weiter“-Taste.
 - SHA-256 `e3db4757a8b4edfcaf18aeaf0446e19d14bd866e8b2b6ccf35579b87b19dbbd3`, Commit `b075036`.
+
+## 0.2.2 (8) – 1.11.2026
+- Griff am Bildschirmrand statt rundem Knopf in Ruhe: sichtbar 24 × 44 dp, blendet nach 3 s auf 60 % ab, ziehbar, Kantenwechsel. Antippen wächst weich zum Kreis mit Wellen und X. Zwei Overlay-Fenster, damit kein sichtbares Fenster die Größe wechselt.
+- Hinweise in Ruhe als nicht berührbare Pille neben dem Griff, Ansage für Screenreader.
+- Enthält außerdem Sprachregel, Begriffs-Gegenprobe und Entwicklerbereich von `main`.
+- Abnahme Emulator API 30/34/36 (Google Messages, beide Kanten, Querformat, Gesten-Navigation, Animationen aus, Gerätetests): bereit. 1.092 Unit-Tests (1 übersprungen), Lint, Animal Sniffer grün.
+- Update über die Dateien-App: Daten bleiben, Bedienungshilfe ist danach aus (API 34). Rest klein: Griff überlappt im alten Kontakte-Editor auf API 30 die Kamera-Schaltfläche um etwa 6 dp.
+- Nicht geprüft: Griff auf echtem Samsung, TalkBack gesprochen, 9-Minuten-Warnung am Gerät.

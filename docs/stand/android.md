@@ -73,6 +73,14 @@
 - **Danach V1 in Etappen:** Gedanken (Kachel, Widget, Benachrichtigung, KI ordnet) → Landkarte, Aufgaben,
   Erinnerungen → Feinschliff und Robustheit → APK für Freunde. Ein echtes Gerät entscheidet Allan.
 
+## 0.2.2 – Griff am Bildschirmrand (1.11.2026)
+
+- Der runde Knopf in Ruhe wird zum schmalen Griff am Rand, blendet nach 3 s ab, lässt sich ziehen und auf die andere Seite setzen.
+- Griff und Aufnahme-Kreis liegen in zwei Fenstern, damit beim Antippen nichts blinkt. Hinweise in Ruhe sind reine Anzeige
+  neben dem Griff und werden für Screenreader angesagt.
+- Eine echte Taste in Samsung-Tastatur oder Gboard ist nicht möglich, beide lassen keine fremden Tasten zu.
+- Update über die Dateien-App: Daten bleiben, die Bedienungshilfe ist danach aus (Emulator API 34). Steht in der Anleitung.
+
 ## Ideen Android (Tester 29.10., noch nicht beauftragt)
 - Konto bzw. Abgleich: Transkripte vom Handy auch am Laptop (Desktop-Paply). Das braucht einen Server oder Sync und
   widerspricht „Daten nur auf dem Gerät“. Allan entscheidet.
