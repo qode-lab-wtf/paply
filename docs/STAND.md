@@ -3,8 +3,8 @@
 **Zeitpunkt:** 1.11.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
 
 Die Tabelle zeigt den Stand von `main`. Mac und Windows 1.16.0 sind Vorabversion und nur auf Allans MacBook, die übrigen
-Nutzer bleiben bis zur Freigabe auf 1.15.3. iPhone: Build 10 auf Allans iPhone und bei TestFlight. Android bleibt bei
-Testern auf 0.2.1, die neue Sprachregel kommt dort mit 0.2.2.
+Nutzer bleiben bis zur Freigabe auf 1.15.3. iPhone: Build 10 auf Allans iPhone und bei TestFlight. Android: 0.2.2 ist
+gebaut und noch nicht verteilt, Tester bleiben bis dahin auf 0.2.1.
 
 ## Überblick
 
