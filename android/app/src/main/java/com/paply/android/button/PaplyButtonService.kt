@@ -49,6 +49,7 @@ class PaplyButtonService : AccessibilityService() {
     private var grip: PaplyButtonView? = null
     private lateinit var gripLayout: WindowManager.LayoutParams
     private var activeWanted = false
+    private var returning = false
     private var firstActiveFrame = false
     private var exchange = 0
     private var frameWait: (() -> Unit)? = null
@@ -404,7 +405,8 @@ class PaplyButtonService : AccessibilityService() {
         maxOffset = anchor?.let { ButtonPosition.maxOffset(it, safeTop, dp(72), dp(8)) } ?: 0
         if (anchor != null) offset = offset.coerceIn(0, maxOffset)
         val anchoredY = anchor?.let { ButtonPosition.top(it, safeTop, dp(72), dp(8), offset) }?.plus(inset)
-        val persistent = ButtonWindows.active(phase, hintText)
+        val windows = ButtonWindows.visibility(phase, hintText)
+        val persistent = windows.activeVisible
         val holding = bar != null && reservedPosition != null &&
             ((!eligible && SystemClock.elapsedRealtime() < fieldGapUntil) ||
                 (eligible && bounds != null && fieldStability.top != null &&
@@ -477,34 +479,49 @@ class PaplyButtonService : AccessibilityService() {
                 }
             }
         }
-        val change = ButtonWindows.change(activeWanted, persistent)
+        val change = ButtonWindows.change(activeWanted, windows.activeTouchable)
         val opening = change == ButtonWindows.Change.OPEN
         val closing = change == ButtonWindows.Change.CLOSE
         if (opening || closing) { exchange++; frameWait?.invoke(); frameWait = null }
-        activeWanted = persistent
+        activeWanted = windows.activeTouchable
+        if (opening) returning = false
+        if (closing) returning = true
         if (opening) firstActiveFrame = true
         if (closing) firstActiveFrame = false
-        logo?.setPhase(phase, animate = !firstActiveFrame)
+        logo?.setPhase(phase, animate = !firstActiveFrame && !closing)
         logo?.amber = amber
         logo?.let { if (it.layoutParams.width != logoWidth || it.layoutParams.height != size) {
             it.layoutParams = LinearLayout.LayoutParams(logoWidth, size)
         } }
-        val returning = !persistent && bar?.visibility == View.VISIBLE
-        label?.visibility = if (model.hint != null) View.VISIBLE
-            else if (returning) View.INVISIBLE else View.GONE
+        val idleHint = windows.hintOnly && !returning
+        // During the return keep exactly the previous measured children. INVISIBLE
+        // must never introduce a formerly GONE label (its padding alone is 16 dp).
+        if (returning) {
+            if (label?.visibility == View.VISIBLE) label?.visibility = View.INVISIBLE
+        } else {
+            logo?.visibility = if (idleHint) View.GONE else View.VISIBLE
+            label?.visibility = if (model.hint != null) View.VISIBLE else View.GONE
+            if (label?.text?.toString().orEmpty() != hintText.orEmpty()) label?.text = hintText
+        }
         cancel?.let {
             if (!model.cancel) { it.animate().cancel(); it.alpha = 0f }
-            it.visibility = if (model.cancel) View.VISIBLE else View.INVISIBLE
+            it.visibility = if (idleHint) View.GONE else if (model.cancel) View.VISIBLE else View.INVISIBLE
             if (model.cancel && !firstActiveFrame && it.alpha == 0f) revealCancel()
         }
-        if (!returning && label?.text?.toString().orEmpty() != hintText.orEmpty()) label?.text = hintText
         logo?.onRight = onRight
-        val controlsWidth = logoWidth + dp(48)
+        val controlsWidth = if (idleHint) dp(44) + dp(8) else logoWidth + dp(48)
         val labelWidth = (horizontal.width - controlsWidth).coerceAtLeast(0)
-        if (label?.maxWidth != labelWidth) label?.maxWidth = labelWidth
+        if (!returning) label?.let {
+            it.maxWidth = labelWidth
+            // Give short messages their intrinsic width, including padding. The
+            // remaining safe width is used only when the text needs to wrap.
+            val textWidth = kotlin.math.ceil(android.text.Layout.getDesiredWidth(it.text, it.paint).toDouble()).toInt()
+            val width = (textWidth + it.paddingLeft + it.paddingRight).coerceAtMost(labelWidth)
+            if (it.layoutParams.width != width) it.layoutParams = LinearLayout.LayoutParams(width, dp(48))
+        }
         bar?.layoutDirection = if (ButtonPresentation.cancelBeforeLogo(onRight)) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
         label?.layoutDirection = View.LAYOUT_DIRECTION_LTR
-        if (needsMeasure) bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width.coerceAtLeast(0), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY))
+        if (!returning && needsMeasure) bar?.measure(View.MeasureSpec.makeMeasureSpec(horizontal.width.coerceAtLeast(0), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY))
         // Fix the actual window width too: a WRAP_CONTENT relayout can otherwise
         // grow beyond the measured left-anchored position on the next frame.
         val previousHeight = layout.height; val previousWidth = layout.width; val previousX = layout.x; val previousY = layout.y
@@ -513,13 +530,14 @@ class PaplyButtonService : AccessibilityService() {
         val placementObstacles = obstacles + imeBounds
         val reserved = if (holding) reservedPosition else if (eligible && keyboardStable && anchoredY != null)
             ButtonPosition.choose(safeLeft, screen.x - safeRight, safeTop,
-                keyboardTop.coerceAtMost(screen.y), if (persistent) layout.width else dp(44), dp(72), dp(8),
+                keyboardTop.coerceAtMost(screen.y), if (activeWanted) layout.width else dp(44), dp(72), dp(8),
                 bounds?.box(), placementObstacles, offset, anchor, onRight)
         else null
         // Preserve the vertical center when changing phase; only geometry of the controls changes.
         val stable = if ((opening || closing || phase != ButtonPolicy.Phase.IDLE || logo?.expanding == true || (lastRender != null && lastRender?.model?.phase != phase)) && reservedPosition != null && reserved != null) reservedPosition else reserved
         reservedPosition = stable
-        val x = ButtonPosition.edge(safeLeft, screen.x - safeRight, layout.width, onRight)
+        val hintInset = if (idleHint) dp(44) + dp(8) else 0
+        val x = ButtonPosition.edge(safeLeft + hintInset, screen.x - safeRight - hintInset, layout.width, onRight)
         val anchored = stable?.let { ButtonPosition.Box(x, it.top + inset, x + layout.width, it.top + inset + size) }
         val target = ButtonPosition.resolve(phase, hintText != null, anchored,
             x + layout.width, safeTop, layout.width, size, dp(8))
@@ -574,7 +592,12 @@ class PaplyButtonService : AccessibilityService() {
             afterFrame(bar!!, first = {
                 if (activeWanted) { firstActiveFrame = false; logo?.animateMorph(); revealCancel() }
             }) { if (activeWanted) grip?.visibility = View.INVISIBLE }
-        } else if (closing && logo?.expanding != true) showGrip()
+        } else if (closing) {
+            logo?.animateMorph()
+        } else if (!returning) {
+            if (!activeWanted) grip?.visibility = View.VISIBLE
+            setActiveVisible(windows.activeVisible)
+        }
     }
 
     private fun revealCancel() {
@@ -618,16 +641,23 @@ class PaplyButtonService : AccessibilityService() {
     }
 
     private fun showGrip() {
-        if (activeWanted || grip == null || bar?.visibility != View.VISIBLE) return
+        if (activeWanted || !returning || grip == null) return
         grip?.visibility = View.VISIBLE
         grip?.wake()
-        if (!ValueAnimator.areAnimatorsEnabled()) setActiveVisible(false)
-        else afterFrame(grip!!) { if (!activeWanted) setActiveVisible(false) }
+        fun finishReturn() {
+            if (activeWanted || !returning) return
+            setActiveVisible(false)
+            returning = false
+            lastRender = null
+            render()
+        }
+        if (!ValueAnimator.areAnimatorsEnabled()) finishReturn()
+        else afterFrame(grip!!) { finishReturn() }
     }
 
     private fun setActiveVisible(visible: Boolean) {
         bar?.visibility = if (visible) View.VISIBLE else View.INVISIBLE
-        layout.flags = if (visible) layout.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        layout.flags = if (visible && (activeWanted || returning)) layout.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
             else layout.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         try { wm.updateViewLayout(bar, layout) } catch (_: Exception) { failOverlay() }
     }
@@ -641,7 +671,7 @@ class PaplyButtonService : AccessibilityService() {
             runCatching { wm.removeViewImmediate(view) }
         }
         bar = null; grip = null; logo = null
-        activeWanted = false; firstActiveFrame = false; lastRender = null
+        activeWanted = false; returning = false; firstActiveFrame = false; lastRender = null
     }
 
     private fun failOverlay() {

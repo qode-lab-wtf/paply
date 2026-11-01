@@ -303,7 +303,9 @@ Produktions-Neubau zuvor 38 s), einschließlich sieben neuer Regressionstests.
   das X bleibt zur Bildschirmmitte hin angeordnet.
 - Beim Rückweg bleiben Fenstergröße und X-Platz erhalten (INVISIBLE). Nach dem
   Rückmorph erscheint der Griff; nach seinem ersten Bild und zwei Displaybildern
-  verschwindet das Aktiv-Fenster. Hinweise in Ruhe verwenden denselben Austausch.
+  verschwindet das Aktiv-Fenster. Beim Rückmorph bleiben auch Label-Messung und
+  Text unverändert: ein zuvor GONE gesetztes Label bleibt GONE, ein vorhandenes
+  wird INVISIBLE. So fügt sein 16-dp-Padding keinen Platz vor dem Logo hinzu.
   Für ausbleibende erste Bilder gilt eine 200-ms-Frist; neue Übergänge und
   Entfernen verwerfen alte Rückrufe. Ohne Systemanimationen gilt sofort der
   Endzustand. Fehler beim Hinzufügen entfernen beide Fenster über overlayFailed.
@@ -336,3 +338,28 @@ scheiterte am SSH-Verbindungs-Timeout zum offline gemeldeten MacBook. Daher noch
 keine neuen Unit-Test-, Lint-, Animal-Sniffer- oder APK-Ergebnisse. Die obigen
 Build-Ergebnisse gehören zum vorherigen Stand. Geräteabnahme weiterhin offen;
 keine Emulator-UI gestartet.
+
+### 0.2.2 – Rückweg und getrennte Ruhehinweise
+
+- Ruhehinweise tauschen den Griff nicht mehr aus. Nach einem laufenden Rückmorph
+  zeigt das Aktiv-Fenster nur die Pille mit `FLAG_NOT_TOUCHABLE`; Logo und X sind
+  GONE. Der Griff bleibt sichtbar und bedienbar. Die Pille liegt mit 8 dp Abstand
+  neben der 44-dp-Touchfläche zur Mitte, an beiden Kanten auf gleicher Höhe.
+- Hinweise messen ihre Textbreite einschließlich Padding, begrenzt durch die
+  sichere Bildschirmbreite abzüglich Griff/Abstand beziehungsweise aktiver
+  Bedienelemente. Kurze Texte bleiben schmal; längere dürfen zweizeilig werden.
+  Ein Aufnahmestart entfernt den Hinweis und verwendet den bisherigen Austausch.
+- Die reine Fensterentscheidung prüft Ruhe mit/ohne Hinweis, alle aktiven Phasen
+  und die Wechselrichtungen. Der Gerätetest misst den Griffknoten direkt, ohne
+  `.parent`, und sucht sichtbare Knoten über alle Fenster (auch X und Hinweise).
+  `ButtonVisualDeviceTest` prüft einen angehängten Einzel-View und enthält keine
+  Annahme über einen gemeinsamen Overlay-Elternknoten.
+- Keine Emulator-UI gestartet; Pixelgleichheit, durchgereichte Tipps und der
+  Start aus einem Ruhehinweis benötigen weiterhin die Geräte-Nachabnahme.
+
+Prüfung dieser Korrektur: `PAPLY_WORK=work-rand022 android/scripts/mb.sh sync`,
+danach über `mb.sh build` alle neun oben genannten Aufgaben erfolgreich
+(`BUILD SUCCESSFUL`, 33 s). Core: 441 Tests, 440 bestanden, 1 übersprungen;
+Thoughts: 450 bestanden; App: 201 bestanden. Keine Fehler. Core/Thoughts und
+Animal Sniffer waren UP-TO-DATE; App-Tests, Debug-/Release-Lint und beide APKs
+wurden erfolgreich geprüft beziehungsweise gebaut. Gerätetests nur kompiliert.

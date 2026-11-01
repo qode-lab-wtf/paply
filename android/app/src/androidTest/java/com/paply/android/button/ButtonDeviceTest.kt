@@ -60,7 +60,7 @@ class ButtonDeviceTest {
             fun find(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
                 fun walk(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
                     if (node == null) return null
-                    if (predicate(node)) return node
+                    if (node.isVisibleToUser && predicate(node)) return node
                     for (i in 0 until node.childCount) walk(node.getChild(i))?.let { return it }
                     return null
                 }
@@ -83,14 +83,14 @@ class ButtonDeviceTest {
             assertEquals((56 * density).toInt(), idleBounds.height())
             fun bounds(node: AccessibilityNodeInfo) = android.graphics.Rect().also(node::getBoundsInScreen)
             fun aboveKeyboard() {
-                val b = bounds(waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" }.parent)
+                val b = bounds(waitFor { it.contentDescription?.toString() == "Paply-Diktat starten" })
                 val ime = ui.windows.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
                     .map { android.graphics.Rect().also(it::getBoundsInScreen) }.minOf { it.top }
                 assertTrue("Button overlaps IME: $b / $ime", b.bottom <= ime - (8 * context.resources.displayMetrics.density).toInt())
             }
             aboveKeyboard()
             if (scenario == "drag") {
-                val b = bounds(button.parent)
+                val b = bounds(button)
                 val x = b.centerX().toFloat(); val y = b.centerY().toFloat(); val time = android.os.SystemClock.uptimeMillis()
                 for ((action, yy) in listOf(android.view.MotionEvent.ACTION_DOWN to y, android.view.MotionEvent.ACTION_MOVE to y + 400, android.view.MotionEvent.ACTION_UP to y + 400)) {
                     val event = android.view.MotionEvent.obtain(time, android.os.SystemClock.uptimeMillis(), action, x, yy, 0)
