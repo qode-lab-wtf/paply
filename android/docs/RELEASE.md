@@ -108,3 +108,4 @@ nach Abschluss bleibt nur der Hinweis auf das Tastatur-Symbol.
 - Abnahme Emulator API 30/34/36 (Google Messages, beide Kanten, Querformat, Gesten-Navigation, Animationen aus, Gerätetests): bereit. 1.092 Unit-Tests (1 übersprungen), Lint, Animal Sniffer grün.
 - Update über die Dateien-App: Daten bleiben, Bedienungshilfe ist danach aus (API 34). Rest klein: Griff überlappt im alten Kontakte-Editor auf API 30 die Kamera-Schaltfläche um etwa 6 dp.
 - Nicht geprüft: Griff auf echtem Samsung, TalkBack gesprochen, 9-Minuten-Warnung am Gerät.
+- Signierte APK kurz geprüft (API 34): Griff, Aufnahme, X, kein Absturz. SHA-256 `047eeb08a45d13a8ddcddbf298f9d48b2ac40c7ed4b77c5aea0c35e0fb092da8`, Commit `10b112c`.
