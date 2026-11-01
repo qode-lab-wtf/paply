@@ -28,8 +28,17 @@ Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtb
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
 - **Alle:** Fremde Sprachen und die Begriffs-Gegenprobe mit echten Stimmen prüfen. Beides ist bisher nur mit künstlichen
   Stimmen gemessen.
-- **Repository:** Privat stellen, sobald Mac und Windows ihre Updates aus einem eigenen öffentlichen Download-Repository
-  holen. Das geht mit dem nächsten Release, weil die installierten Apps die neue Adresse erst kennen müssen.
+- **Repository:** Privat stellen, sobald die installierten Apps auf 1.16 oder neuer sind. Ab dieser Version holen sie
+  ihre Updates aus dem öffentlichen Repository `qode-lab-wtf/paply-downloads`.
+
+## Wunschliste
+
+Ideen für später, noch nicht gebaut. Die Reihenfolge ist keine Rangfolge.
+
+- **Übersetzen als Schalter, für alle Apps:** In den Einstellungen wählt man zwischen Originalsprache und Übersetzung in
+  eine gewählte Sprache. Standard bleibt die Originalsprache. Beispiel: Wer in der Muttersprache spricht, aber auf
+  Deutsch schreiben will, bekommt deutschen Text. Bis dahin gilt „Paply übersetzt nie“ aus `REGELN.md`.
+- **Konto, für alle Apps:** Ein Konto-System, damit Einstellungen wie dieser Schalter pro Person gelten.
 
 ## Mac und Windows
 

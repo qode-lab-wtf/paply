@@ -128,7 +128,7 @@ jobs:
         with:
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: true
           files: |
             ./mac-build/*.dmg
             ./mac-build/*.zip

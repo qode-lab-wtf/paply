@@ -474,7 +474,7 @@ function deleteHistoryItem(id) {
 // API CALLS
 // ============================================================================
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-const GITHUB_REPO = 'qode-lab-wtf/paply';
+const GITHUB_REPO = 'qode-lab-wtf/paply-downloads';
 const CURRENT_VERSION = require('./package.json').version;
 
 async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceActivity, options = {}) {
