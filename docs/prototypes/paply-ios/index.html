@@ -1,0 +1,1526 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paply fürs iPhone – klickbarer Ablauf</title>
+<!-- Prototyp: simuliert. Kein Mikrofon, keine Cloud-Anfrage. Ziel: iPhone 14 Pro Max, iOS 18. -->
+<style>
+:root{
+  --p-fg: var(--foreground, #15201a);
+  --p-muted: var(--muted-foreground, #66746c);
+  --p-card: var(--card, #ffffff);
+  --p-line: var(--border, rgba(0,0,0,.1));
+  --p-sub: color-mix(in srgb, var(--p-fg) 6%, transparent);
+  --p-sub2: color-mix(in srgb, var(--p-fg) 10%, transparent);
+  --spring: cubic-bezier(.3,1.25,.5,1);
+  --p-ok: color-mix(in srgb, #22b45f 72%, var(--p-fg));
+  --p-warn: color-mix(in srgb, #e8590c 78%, var(--p-fg));
+  --p-mid: color-mix(in srgb, #d69a00 72%, var(--p-fg));
+  --ios: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", system-ui, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{background:transparent}
+body{margin:0;color:var(--p-fg);font-family:var(--font-sans, var(--ios));-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+[hidden]{display:none !important}
+
+/* ---------- Seitenraster ---------- */
+.pf{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto 1fr;
+  grid-template-areas:"tabs tabs" "stage now" "stage rail";column-gap:28px;row-gap:14px;padding:2px 0 8px}
+.tabs{grid-area:tabs;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:flex;padding:3px;border-radius:12px;background:var(--p-sub);gap:2px}
+.seg button{border:0;background:none;padding:7px 12px;border-radius:9px;font-size:13px;font-weight:500;color:var(--p-muted);display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background .2s,color .2s}
+.seg button[aria-selected=true]{background:var(--p-card);color:var(--p-fg);box-shadow:0 1px 2px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.06)}
+.badge{font-size:10px;font-weight:650;letter-spacing:.01em;padding:3px 6px;border-radius:99px;background:rgba(34,180,95,.16);color:var(--p-ok)}
+.badge.mut{background:var(--p-sub2);color:var(--p-muted)}
+.reset{margin-left:auto;border:0;background:var(--p-sub);border-radius:10px;padding:7px 11px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;color:var(--p-fg)}
+.reset svg{width:14px;height:14px}
+.stage{grid-area:stage;position:relative}
+.now{grid-area:now;min-width:0}
+.rail{grid-area:rail;min-width:0;display:flex;flex-direction:column;gap:12px}
+
+/* ---------- Jetzt-Box ---------- */
+.now-box{border-radius:16px;padding:14px 16px;background:var(--p-sub);position:relative;overflow:hidden}
+.now-row{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.now-k{font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--p-ok);display:flex;align-items:center;gap:6px}
+.now-k i{width:7px;height:7px;border-radius:50%;background:#22b45f;box-shadow:0 0 0 3px rgba(34,180,95,.18)}
+.sim{font-size:11px;color:var(--p-muted)}
+.now-t{font-size:19px;line-height:1.25;font-weight:620;letter-spacing:-.01em;margin-top:6px;text-wrap:balance}
+.now-t.flash{animation:flash .5s ease}
+@keyframes flash{0%,100%{transform:none}30%{transform:translateX(-4px)}60%{transform:translateX(3px)}}
+.say{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--p-card);box-shadow:0 0 0 .5px var(--p-line)}
+.say-k{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--p-muted);text-transform:uppercase;letter-spacing:.05em}
+.say-k svg{width:13px;height:13px;color:#e8590c}
+.say-t{display:block;margin-top:4px;font-size:15px;line-height:1.4;font-style:italic;color:var(--p-fg);min-height:21px}
+.say-t .w{animation:win .25s ease both}
+.say-t[data-cut]::before{content:'… ';opacity:.5}
+@keyframes win{from{opacity:0;filter:blur(3px)}to{opacity:1;filter:none}}
+
+/* ---------- Seitenleiste ---------- */
+.rtabs{display:flex;gap:2px;padding:3px;border-radius:11px;background:var(--p-sub);align-self:flex-start}
+.rtabs button{border:0;background:none;padding:5px 10px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--p-muted)}
+.rtabs button[aria-selected=true]{background:var(--p-card);color:var(--p-fg);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.variant{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--p-muted)}
+.variant .seg button{padding:5px 10px;font-size:12.5px}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.steps .grp{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--p-muted);padding:10px 0 4px}
+.steps .grp:first-child{padding-top:0}
+.st{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:9px;font-size:13.5px;line-height:1.3;color:var(--p-muted);transition:background .25s,color .25s}
+.st .d{flex:none;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--p-sub2);display:grid;place-items:center;font-size:10px;font-weight:700}
+.st.done{color:var(--p-fg)}
+.st.done .d{background:#22b45f;box-shadow:none;color:#fff}
+.st.done .d::after{content:"";width:8px;height:4.5px;border:2px solid #fff;border-top:0;border-right:0;transform:translateY(-1px) rotate(-45deg)}
+.st.cur{background:var(--p-card);color:var(--p-fg);font-weight:600;box-shadow:0 0 0 .5px var(--p-line),0 1px 3px rgba(0,0,0,.06)}
+.st.cur .d{box-shadow:inset 0 0 0 5px #ffc233}
+.st.info{color:var(--p-fg)}
+.st.info .d{width:6px;height:6px;margin:0 6px;background:#22b45f;box-shadow:none}
+.stats{display:grid;grid-template-columns:repeat(var(--n,3),1fr);gap:6px}
+.stat{border-radius:12px;background:var(--p-sub);padding:9px 8px 8px;min-width:0}
+.stat b{display:block;font-size:22px;line-height:1;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat span{display:block;margin-top:4px;font-size:10.5px;color:var(--p-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat.bump b{animation:bump .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.28);color:var(--p-ok)}100%{transform:scale(1)}}
+.tech{margin:0;font-size:12.5px;line-height:1.45;color:var(--p-muted);display:flex;gap:8px}
+.tech svg{flex:none;width:14px;height:14px;margin-top:1px;opacity:.8}
+.sum{border-radius:14px;padding:12px 14px;background:rgba(34,180,95,.10);box-shadow:inset 0 0 0 1px rgba(34,180,95,.22);font-size:13px;line-height:1.45}
+.sum h4{margin:0 0 6px;font-size:13.5px}
+.sum .row span{white-space:nowrap}
+.sum .row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px solid rgba(34,180,95,.18)}
+.sum .row:first-of-type{border-top:0}
+.sum .row b{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.sum p{margin:6px 0 0;color:var(--p-muted)}
+.sum .act{margin-top:8px;border:0;border-radius:9px;padding:7px 11px;background:#22b45f;color:#fff;font-size:12.5px;font-weight:600}
+.open{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.open li{font-size:12.5px;line-height:1.45;padding:9px 11px;border-radius:11px;background:var(--p-sub)}
+.open b{display:block;font-size:13px;margin-bottom:2px}
+.open .lvl{float:right;font-size:10.5px;font-weight:650;padding:2px 6px;border-radius:99px;margin-left:6px}
+.lvl.r{background:rgba(232,89,12,.16);color:var(--p-warn)}
+.lvl.m{background:rgba(255,194,51,.22);color:var(--p-mid)}
+.lvl.g{background:rgba(34,180,95,.15);color:var(--p-ok)}
+.src{font-size:11.5px;color:var(--p-muted);line-height:1.6}
+.src a{color:inherit}
+
+/* ---------- Unter dem Telefon ---------- */
+.under{display:flex;align-items:center;justify-content:center;gap:10px;height:44px;margin-top:10px}
+.hw{border:0;border-radius:99px;padding:9px 14px 9px 10px;background:var(--p-fg);color:var(--background,#fff);font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 6px 16px -8px rgba(0,0,0,.5)}
+.hw svg{width:22px;height:22px}
+.hw:active{transform:scale(.97)}
+.haptic{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--p-ok);position:absolute;left:64px;top:50%;margin-top:-11px;padding:3px 8px 3px 6px;border-radius:99px;background:rgba(34,180,95,.14);opacity:0;transform:scale(.8);transition:opacity .2s,transform .35s var(--spring)}
+.haptic.on{opacity:1;transform:none}
+.haptic svg{width:15px;height:15px}
+
+/* ---------- Hinweisring ---------- */
+.ring{position:absolute;left:0;top:0;pointer-events:none;z-index:40;border-radius:16px;box-shadow:0 0 0 2.5px #ffc233,0 0 0 7px rgba(255,194,51,.25);opacity:0;transition:opacity .25s}
+.ring.on{opacity:1;animation:ringp 1.5s ease-in-out infinite}
+.ring.bump{animation:ringb .5s ease}
+@keyframes ringp{0%,100%{box-shadow:0 0 0 2.5px #ffc233,0 0 0 6px rgba(255,194,51,.28)}50%{box-shadow:0 0 0 2.5px #ffc233,0 0 0 12px rgba(255,194,51,0)}}
+@keyframes ringb{0%,100%{transform:var(--t)}35%{transform:var(--t) scale(1.12)}}
+
+/* ======================= iPhone ======================= */
+.dev-wrap{position:relative}
+.device{position:absolute;left:0;top:0;width:458px;height:960px;transform-origin:0 0;border-radius:72px;padding:14px;
+  background:linear-gradient(145deg,#4a4850 0%,#26252a 30%,#1b1a1e 70%,#3a3940 100%);
+  box-shadow:inset 0 0 0 1.5px #56545c,inset 0 0 0 4px #0d0d0f,0 40px 70px -30px rgba(0,0,0,.55),0 10px 24px -12px rgba(0,0,0,.35)}
+.device::before{content:"";position:absolute;inset:5px;border-radius:67px;background:#000}
+.btn-side{position:absolute;width:4px;border-radius:2px;background:linear-gradient(90deg,#2a292e,#55535b)}
+.b-mute{left:-3px;top:178px;height:32px}.b-vu{left:-3px;top:250px;height:62px}.b-vd{left:-3px;top:328px;height:62px}
+.b-pw{right:-3px;top:290px;height:100px;background:linear-gradient(270deg,#2a292e,#55535b)}
+.screen{position:relative;width:430px;height:932px;border-radius:56px;overflow:clip;background:#000;font-family:var(--ios);color:#000;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.01em;isolation:isolate;user-select:none;-webkit-user-select:none}
+:where(.screen button){border:0;background:none;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.app{position:absolute;inset:0;overflow:clip;z-index:1}
+.app.front{z-index:3}
+
+/* Statusleiste */
+.sb{position:absolute;top:0;left:0;right:0;height:54px;z-index:45;pointer-events:none;color:#000;transition:color .3s}
+.screen[data-theme=dark] .sb{color:#fff}
+.sb-l{position:absolute;left:0;width:152px;top:18px;height:23px;display:flex;align-items:center;justify-content:center}
+.sb-time{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.sb-crumb{position:absolute;left:22px;top:-1px;font-size:12px;font-weight:600;color:#007aff;display:none;align-items:center;gap:3px;pointer-events:auto;padding:6px 6px 6px 0}
+.sb.crumb .sb-time{opacity:0}
+.sb.crumb .sb-crumb{display:flex;left:0;right:0;top:-6px;justify-content:center;font-size:15px}
+.sb-crumb svg{width:10px;height:10px}
+.sb-r{position:absolute;right:0;width:152px;top:18px;height:23px;display:flex;align-items:center;justify-content:center;gap:6px}
+.sb-r svg{display:block}
+.sb-dot{width:7px;height:7px;border-radius:50%;background:#ff9f0a;margin-right:1px;transform:scale(0);transition:transform .35s var(--spring)}
+.sb-dot.on{transform:scale(1)}
+.sb-net{transition:opacity .2s}
+.screen.la .sb-net{opacity:0;width:0;margin-left:-6px}
+.screen.la .sb-r{justify-content:flex-end;padding-right:26px}
+
+/* Dynamic Island + Live Activity */
+.island{position:absolute;top:11px;left:50%;width:126px;height:37px;margin-left:-63px;border-radius:19px;background:#000;z-index:70;
+  transition:width .55s var(--spring),margin-left .55s var(--spring);display:flex;align-items:center;justify-content:space-between;padding:0 11px;pointer-events:none;overflow:hidden}
+.is-lead,.is-trail{display:flex;align-items:center;opacity:0;transition:opacity .2s}
+.island.la .is-lead,.island.la .is-trail{opacity:1;transition-delay:.18s}
+.is-lead svg{width:22px;height:22px}
+.is-trail{position:relative;height:20px;color:#3ad879;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.is-trail>span{display:none;align-items:center;gap:7px}
+.island[data-s=rec] .is-rec,.island[data-s=busy] .is-busy,.island[data-s=done] .is-done,.island[data-s=ready] .is-ready{display:flex}
+.is-bars{display:flex;align-items:center;gap:2px;height:16px}
+.is-bars i{width:3px;height:16px;border-radius:2px;background:#3ad879;transform:scaleY(.25)}
+.is-spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(58,216,121,.25);border-top-color:#3ad879;animation:spin .8s linear infinite}
+.is-done svg{width:18px;height:18px}
+.is-ready{font-size:13px;color:rgba(255,255,255,.7)}
+.is-ready i{width:7px;height:7px;border-radius:50%;background:#ff9f0a}
+/* iOS-Datenschutzpunkt (Mikro) sitzt seit iOS 16 in der Dynamic Island */
+.is-dot{position:absolute;right:15px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:#ff9f0a;box-shadow:0 0 6px rgba(255,159,10,.6);transform:scale(0);transition:transform .35s var(--spring)}
+.island.mic:not(.la) .is-dot{transform:scale(1)}
+.sb-dot{display:none}
+.gmenu{position:absolute;left:14px;bottom:80px;width:256px;border-radius:14px;background:rgba(246,246,248,.95);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 14px 40px rgba(0,0,0,.28);overflow:hidden;z-index:58;transform-origin:22px 100%;transform:scale(.55);opacity:0;pointer-events:none;transition:transform .4s var(--spring),opacity .15s}
+.gmenu.on{transform:none;opacity:1;pointer-events:auto}
+.gmenu button{display:flex;align-items:center;justify-content:space-between;width:100%;height:46px;padding:0 16px;font-size:17px;color:#000;text-align:left;position:relative}
+.gmenu button+button::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:rgba(60,60,67,.22)}
+.gmenu i{display:block;height:8px;background:rgba(60,60,67,.1)}
+.gmenu i+button::before{display:none}
+.gmenu svg{width:20px;height:20px}
+.gmenu .cur{font-weight:600}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Home-Leiste + Wischhinweis */
+.home{position:absolute;left:0;right:0;bottom:0;height:64px;z-index:55;touch-action:none;pointer-events:none}
+.home.active{pointer-events:auto;cursor:grab}
+.home-bar{position:absolute;left:50%;bottom:8px;width:140px;height:5px;margin-left:-70px;border-radius:3px;background:#000;transition:background .3s}
+.screen[data-theme=dark] .home-bar{background:#fff}
+.coach{position:absolute;left:50%;bottom:22px;transform:translateX(-50%) translateY(6px);display:flex;align-items:center;gap:8px;padding:8px 14px 8px 12px;border-radius:99px;
+  background:rgba(255,255,255,.16);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);color:#fff;font-size:14px;font-weight:600;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .25s,transform .4s var(--spring)}
+.coach svg{width:16px;height:16px}
+.coach.on{opacity:1;transform:translateX(-50%);pointer-events:auto}
+.finger{position:absolute;bottom:3px;left:50%;width:22px;height:22px;margin-left:-90px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.95) 0 35%,rgba(255,255,255,.35) 36% 60%,transparent 62%);opacity:0;pointer-events:none}
+.finger.on{animation:finger 1.9s cubic-bezier(.45,0,.25,1) infinite}
+@keyframes finger{0%{opacity:0;transform:translateX(0)}12%{opacity:1}70%{opacity:1;transform:translateX(160px)}85%,100%{opacity:0;transform:translateX(180px)}}
+
+/* Alerts */
+.veil{position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.22);display:grid;place-items:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.veil.on{opacity:1;pointer-events:auto}
+.alert{width:270px;border-radius:14px;background:rgba(242,242,247,.9);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8);text-align:center;overflow:hidden;transform:scale(1.12);transition:transform .35s var(--spring)}
+.veil.on .alert{transform:none}
+.al-b{padding:19px 16px 16px}
+.al-t{font-size:17px;line-height:22px;font-weight:600;margin:0 0 4px;letter-spacing:-.02em}
+.al-m{font-size:13px;line-height:17px;margin:0}
+.al-btns{display:flex;border-top:.5px solid rgba(60,60,67,.3)}
+.al-btns button{flex:1;height:44px;font-size:17px;color:#007aff}
+.al-btns button+button{border-left:.5px solid rgba(60,60,67,.3)}
+.al-btns .pref{font-weight:600}
+.al-btns.stack{flex-direction:column}
+.al-btns.stack button+button{border-left:0;border-top:.5px solid rgba(60,60,67,.3)}
+
+/* ---------- Nachrichten ---------- */
+.app-msg{background:#fff;display:flex;flex-direction:column}
+.m-head{flex:none;height:132px;position:relative;z-index:5;background:rgba(249,249,249,.94);backdrop-filter:blur(20px);border-bottom:.5px solid rgba(0,0,0,.16)}
+.m-back{position:absolute;left:10px;top:70px;display:flex;align-items:center;gap:4px;color:#007aff}
+.m-back svg{width:13px;height:22px}
+.m-back span{background:#007aff;color:#fff;font-size:15px;font-weight:600;border-radius:99px;padding:1px 8px}
+.m-who{position:absolute;left:50%;top:58px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px}
+.m-av{width:52px;height:52px;border-radius:50%;background:linear-gradient(#a5abb8,#858b98);color:#fff;font-size:21px;font-weight:600;display:grid;place-items:center;letter-spacing:.02em}
+.m-name{font-size:12px;color:#000;display:flex;align-items:center;gap:2px}
+.m-name svg{width:6px;height:9px;opacity:.4}
+.m-vid{position:absolute;right:18px;top:76px;color:#007aff}
+.m-vid svg{width:28px;height:20px}
+.m-thread{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;padding:8px 0 10px;overflow:clip}
+.m-meta{align-self:center;font-size:11.5px;color:#8a8a8e;text-align:center;margin:0 0 10px;line-height:1.35}
+.m-meta b{font-weight:600}
+.bub{position:relative;z-index:0;max-width:74%;padding:7px 13px 8px;border-radius:19px;font-size:17px;line-height:22px;letter-spacing:-.025em;margin-top:3px;word-wrap:break-word}
+.bub.in{align-self:flex-start;background:#e9e9eb;color:#000;margin-left:16px}
+.bub.out{align-self:flex-end;background:#0b84fe;color:#fff;margin-right:16px}
+.bub.tail::before,.bub.tail::after{content:"";position:absolute;bottom:0;z-index:-1;height:20px}
+.bub.out.tail::before{right:-7px;width:20px;background:#0b84fe;border-bottom-left-radius:15px}
+.bub.out.tail::after{right:-10px;width:10px;background:#fff;border-bottom-left-radius:10px}
+.bub.in.tail::before{left:-7px;width:20px;background:#e9e9eb;border-bottom-right-radius:15px}
+.bub.in.tail::after{left:-10px;width:10px;background:#fff;border-bottom-right-radius:10px}
+.bub.pop{animation:pop .5s var(--spring) both}
+@keyframes pop{from{opacity:0;transform:translateY(14px) scale(.92)}to{opacity:1;transform:none}}
+.bub.typing{display:flex;gap:5px;padding:12px 14px}
+.bub.typing i{width:8px;height:8px;border-radius:50%;background:#909095;animation:dots 1.2s infinite ease-in-out}
+.bub.typing i:nth-child(2){animation-delay:.15s}.bub.typing i:nth-child(3){animation-delay:.3s}
+@keyframes dots{0%,60%,100%{opacity:.35;transform:none}30%{opacity:1;transform:translateY(-2px)}}
+.m-deliv{align-self:flex-end;margin:3px 18px 0 0;font-size:11px;color:#8a8a8e;font-weight:500}
+.m-bar{flex:none;position:relative;display:flex;align-items:flex-end;gap:9px;padding:6px 12px 7px 10px;background:#fff;z-index:4}
+.m-plus{flex:none;width:34px;height:34px;border-radius:50%;background:#ececee;display:grid;place-items:center;color:#7d7d82;margin-bottom:1px}
+.m-plus svg{width:18px;height:18px}
+.m-field{flex:1;position:relative;min-height:36px;border-radius:18px;box-shadow:inset 0 0 0 1px #d3d3d8;padding:7px 42px 7px 13px;font-size:17px;line-height:22px;letter-spacing:-.025em;text-align:left;cursor:text}
+.m-ph{color:#b7b7bc}
+.m-field.has .m-ph{display:none}
+.m-text{white-space:pre-wrap}
+.ins{animation:ins .5s ease both}
+@keyframes ins{from{opacity:0;filter:blur(4px);background:rgba(58,216,121,.25)}to{opacity:1;filter:none;background:transparent}}
+.caret{display:none;width:2px;height:22px;background:#007aff;vertical-align:-5px;margin:0 1px;border-radius:1px;animation:blink 1.05s steps(1) infinite}
+.m-field.focus .caret{display:inline-block}
+@keyframes blink{50%{opacity:0}}
+.m-mic{position:absolute;right:10px;bottom:7px;width:22px;height:22px;color:#a0a0a5}
+.m-send{position:absolute;right:4px;bottom:4px;width:29px;height:29px;border-radius:50%;background:#0b84fe;color:#fff;display:none;place-items:center}
+.m-send svg{width:16px;height:16px}
+.m-field.has .m-mic{display:none}
+.m-field.has .m-send{display:grid;animation:pop .35s var(--spring)}
+.m-spacer{flex:none;height:34px;transition:height .42s cubic-bezier(.2,.8,.2,1)}
+.app-msg.kbup .m-spacer{height:341px}
+
+/* ---------- Tastaturen ---------- */
+.kb{position:absolute;left:0;right:0;bottom:0;height:341px;background:#d1d4da;z-index:6;transform:translateY(100%);transition:transform .42s cubic-bezier(.2,.8,.2,1)}
+.kb.on{transform:none}
+.kb.swap{transition:none}
+.kb-sugg{height:44px;display:flex;align-items:center;font-size:16px;color:#1c1c1e}
+.kb-sugg span{flex:1;text-align:center}
+.kb-sugg span+span{border-left:1px solid rgba(0,0,0,.14)}
+.kb-keys{padding:8px 3.5px 0}
+.kb-row{display:flex;justify-content:space-between;gap:6px;height:43px}
+.kb-row+.kb-row{margin-top:11px}
+.key{flex:none;width:33px;height:43px;border-radius:5.5px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.32);display:grid;place-items:center;font-size:22.5px;font-weight:400;color:#000;line-height:1}
+.key.fn{background:#abb0ba}
+.key svg{width:23px;height:23px}
+.kb-row .mid{display:flex;gap:6px}
+.key.w45{width:45px}
+.key.sp{flex:1;font-size:16px}
+.key.ret{width:92px}
+.key.shift{background:#fff}
+.kb-sys{position:absolute;left:0;right:0;bottom:0;height:76px}
+.kb-globe,.kb-dict{position:absolute;top:10px;width:44px;height:44px;display:grid;place-items:center;color:#4b4f56}
+.kb-globe{left:12px}.kb-dict{right:12px}
+.kb-globe svg,.kb-dict svg{width:27px;height:27px}
+
+/* Paply-Tastatur: Nachbau der Apple-Tastatur, Paply-Taste in der Vorschlagsleiste */
+.pk{display:flex;flex-direction:column}
+.pk-bar{position:relative;flex:none;height:44px;display:flex;align-items:center;padding-right:7px}
+.pk-sugg{flex:1;display:flex;align-items:center;font-size:16px;color:#1c1c1e}
+.pk-sugg span{flex:1;text-align:center;transition:opacity .2s}
+.pk-sugg span+span{border-left:1px solid rgba(0,0,0,.14)}
+.pk-go{position:relative;flex:none;width:36px;height:36px;border-radius:50%;background:#0f2c20;display:grid;place-items:center;margin-left:6px;box-shadow:0 1px 0 rgba(0,0,0,.28);transition:transform .2s}
+.pk-go .m{width:21px;height:21px}
+.pk-go:active{transform:scale(.9)}
+.pk-go-dot{position:absolute;top:0;right:0;width:9px;height:9px;border-radius:50%;background:#ff9f0a;box-shadow:0 0 0 2px #d1d4da;transform:scale(0);transition:transform .35s var(--spring)}
+.pk.sess .pk-go-dot{transform:scale(1)}
+.pk:not([data-s=ready]):not([data-s=inserted]) .pk-go{opacity:0;transition:opacity .1s}
+.pk-undo{position:absolute;left:8px;top:7px;height:30px;padding:0 11px 0 9px;border-radius:15px;background:rgba(255,255,255,.8);box-shadow:0 1px 0 rgba(0,0,0,.12);font-size:14px;font-weight:600;color:#1c1c1e;display:flex;align-items:center;gap:5px;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .2s,transform .35s var(--spring)}
+.pk-undo svg{width:14px;height:14px}
+.pk[data-s=inserted] .pk-undo{opacity:1;pointer-events:auto;transform:none}
+.pk[data-s=inserted] .pk-sugg span:first-child{opacity:0}
+.pk-pill{position:absolute;left:6px;right:7px;top:4px;height:36px;border-radius:18px;background:#0f2c20;color:#eef5f0;overflow:hidden;cursor:pointer;
+  clip-path:inset(0 0 0 calc(100% - 36px) round 18px);opacity:0;pointer-events:none;transition:clip-path .55s var(--spring),opacity .12s,background .3s}
+.pk:not([data-s=ready]):not([data-s=inserted]) .pk-pill{clip-path:inset(0 round 18px);opacity:1;pointer-events:auto}
+.pk[data-s=rec] .pk-pill{background:linear-gradient(180deg,#45e086,#22b45f);color:#05210f}
+.pp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:9px;font-size:15px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none}
+.pk[data-s=rec] .f-rec,.pk[data-s=busy] .f-busy,.pk[data-s=opening] .f-open,.pk[data-s=empty] .f-empty{opacity:1;pointer-events:auto}
+.f-rec{justify-content:flex-start;padding:0 3px 0 4px}
+.pk-x{flex:none;width:28px;height:28px;border-radius:50%;background:rgba(5,33,15,.14);display:grid;place-items:center;color:#05210f}
+.pk-x svg{width:12px;height:12px}
+.pk-wave{display:flex;align-items:center;gap:2.5px;height:24px;margin-left:4px}
+.pk-wave i{width:2.5px;height:22px;border-radius:2px;background:#0b2a1a;opacity:.85;transform:scaleY(.1)}
+.pk-time{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;margin-left:6px;color:#06301a}
+.pk-done{margin-left:auto;display:flex;align-items:center;gap:6px;height:30px;padding:0 13px 0 10px;border-radius:15px;background:#0f2c20;color:#fff;font-size:15px;font-weight:650}
+.pk-done svg{width:16px;height:16px;color:#3ad879}
+.spin{width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(255,255,255,.2);border-top-color:#3ad879;animation:spin .8s linear infinite}
+.pk .kb-keys{padding-top:8px}
+.key{position:relative;cursor:pointer}
+.key.shift svg path{fill:none;stroke:#000;stroke-width:1.6;stroke-linejoin:round}
+.key.shift{background:#abb0ba}
+.key.shift.on{background:#fff}
+.key.shift.on svg path{fill:#000}
+.key.pressed::after{content:attr(data-c);position:absolute;left:50%;bottom:calc(100% - 6px);width:50px;height:58px;margin-left:-25px;border-radius:10px 10px 7px 7px;background:#fff;
+  box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 4px 10px rgba(0,0,0,.22);display:grid;place-items:start center;padding-top:8px;font-size:32px;color:#000;z-index:4}
+.key.fn.pressed{background:#fff}
+.key.sp.pressed{background:#abb0ba}
+
+/* Paply-Ebene hinter 🌐: gleiche Höhe wie Apples Tastatur, nur fürs Diktat */
+.pl{display:flex;flex-direction:column}
+.pl-top{flex:none;height:46px;display:flex;align-items:center;gap:8px;padding:0 16px;font-size:13.5px;color:#3a3d42}
+.pl-top .pk-brand{display:flex;align-items:center;gap:6px;color:#0f2c20}
+.pl-top .pk-brand .m{width:22px;height:22px}
+.pl-top .pk-brand .wm{width:42px;height:22px}
+.pl-st{margin-left:auto;font-weight:500;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
+.pl-st i{width:8px;height:8px;border-radius:50%;background:#ff3b30;animation:blink 1s steps(1) infinite}
+.pl-mid{position:relative;flex:none;height:150px}
+.lf{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;opacity:0;transform:scale(.96);transition:opacity .22s,transform .45s var(--spring);pointer-events:none}
+.pl[data-s=ready] .lf-ready,.pl[data-s=rec] .lf-rec,.pl[data-s=busy] .lf-busy,.pl[data-s=done] .lf-done,.pl[data-s=opening] .lf-open,.pl[data-s=empty] .lf-empty{opacity:1;transform:none;pointer-events:auto}
+.pl-wave{display:flex;align-items:center;gap:3px;height:72px}
+.pl-wave i{width:4px;height:68px;border-radius:2px;background:#13803f;transform:scaleY(.06)}
+.pl-hint{font-size:14px;color:#5b5f66}
+.pl-go{width:84px;height:84px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#1d4a35,#0f2c20);display:grid;place-items:center;box-shadow:0 1px 0 rgba(0,0,0,.3),0 10px 24px -10px rgba(15,44,32,.7)}
+.pl-go .m{width:46px;height:46px}
+.pl-big{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;color:#1c1c1e}
+.pl-ok{width:58px;height:58px;border-radius:50%;background:#22b45f;color:#fff;display:grid;place-items:center;box-shadow:0 8px 20px -8px rgba(34,180,95,.8)}
+.pl-ok svg{width:30px;height:30px}
+.pl-big .spin{width:22px;height:22px;border-color:rgba(15,44,32,.15);border-top-color:#22b45f}
+.pl-bot{flex:none;display:flex;gap:8px;padding:6px 6px 0;height:58px;transition:opacity .2s}
+.pl:not([data-s=rec]) .pl-bot{opacity:0;pointer-events:none}
+.pl-x{flex:none;width:120px;height:48px;border-radius:10px;background:#abb0ba;font-size:16px;font-weight:500;color:#1c1c1e;box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.pl-done{flex:1;height:48px;border-radius:10px;background:linear-gradient(180deg,#45e086,#22b45f);color:#05210f;font-size:18px;font-weight:650;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.pl-done svg{width:20px;height:20px}
+
+/* ---------- Paply-App: nur Verlauf, Einstellungen und kurzes Aufblitzen ---------- */
+.app-paply{background:radial-gradient(120% 75% at 50% -5%,#1d4a35 0%,#0f2c20 42%,#08160f 100%);color:#eef5f0}
+.pa-brand{display:flex;align-items:center;gap:7px;color:#eef5f0}
+.pa-brand .wm{width:46px;height:24px}
+.pa-brand .m{width:24px;height:24px}
+.pv{position:absolute;inset:0;opacity:0;pointer-events:none;transform:translateX(36px);transition:opacity .25s,transform .55s var(--spring)}
+.pv.on{opacity:1;pointer-events:auto;transform:none}
+.pv.away{transform:translateX(-36px)}
+.orbz{position:absolute;left:50%;top:250px;width:184px;height:184px;margin-left:-92px}
+.cloud{position:absolute;left:-60px;top:-60px;width:304px;height:304px;overflow:visible;pointer-events:none}
+.blob{fill:#3ad879;transform-box:view-box;transform-origin:0 0;opacity:.2}
+.ripples{position:absolute;inset:0;pointer-events:none}
+.ripples span{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 1.5px rgba(58,216,121,.6)}
+.orb{position:absolute;inset:0;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 28%,rgba(255,255,255,.16),rgba(255,255,255,.03) 62%),#0f2c20;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 1px rgba(255,255,255,.07),0 28px 60px -18px rgba(0,0,0,.75),0 0 0 1px rgba(0,0,0,.35)}
+.orb .m{width:86px;height:86px}
+.fl-t{position:absolute;left:0;right:0;top:470px;text-align:center}
+.fl-t b{display:block;font-size:30px;font-weight:700;letter-spacing:-.025em}
+.fl-t span{display:block;margin-top:6px;font-size:17px;color:rgba(238,245,240,.6);font-variant-numeric:tabular-nums}
+.fl-bar{position:absolute;left:50%;top:552px;width:120px;height:4px;margin-left:-60px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;opacity:0}
+.fl-bar i{display:block;height:100%;background:#3ad879;transform-origin:0 50%;transform:scaleX(0)}
+.flash[data-auto] .fl-bar{opacity:1}
+.flash[data-auto].on .fl-bar i{animation:flbar 1s linear forwards}
+@keyframes flbar{to{transform:scaleX(1)}}
+.pa-bot{position:absolute;left:20px;right:20px;bottom:76px;z-index:3}
+.pa-hint{border-radius:20px;padding:14px 16px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.12);display:flex;gap:12px;align-items:center}
+.pa-hint svg{flex:none;width:30px;height:30px;color:#ffc233}
+.pa-hint b{display:block;font-size:16px;font-weight:650}
+.pa-hint span{display:block;font-size:14px;color:rgba(238,245,240,.68);margin-top:2px;line-height:1.3}
+
+/* Startseite: Sitzung + Verlauf */
+.ph{padding:60px 18px 0}
+.ph-top{display:flex;align-items:center;justify-content:space-between;height:46px;padding:0 2px}
+.ph-gear{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.08);display:grid;place-items:center;color:#eef5f0;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.12)}
+.ph-gear svg{width:21px;height:21px}
+.ph-sess{margin-top:16px;display:flex;align-items:center;gap:12px;padding:14px 14px 14px 16px;border-radius:20px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.12)}
+.ph-sess i{flex:none;width:10px;height:10px;border-radius:50%;background:#ff9f0a;box-shadow:0 0 0 4px rgba(255,159,10,.18);transition:background .3s,box-shadow .3s}
+.ph-sess.off i{background:rgba(255,255,255,.28);box-shadow:none}
+.ph-sess div{flex:1;min-width:0}
+.ph-sess b{display:block;font-size:16px;font-weight:650}
+.ph-sess span{display:block;font-size:13.5px;color:rgba(238,245,240,.62);margin-top:2px}
+.ph-sess button{flex:none;height:34px;padding:0 14px;border-radius:17px;background:rgba(255,255,255,.12);font-size:14px;font-weight:600;color:#eef5f0}
+.ph-h{margin:26px 4px 2px;font-size:24px;font-weight:700;letter-spacing:-.02em}
+.ph-day{margin:14px 4px 8px;font-size:12.5px;font-weight:600;color:rgba(238,245,240,.48);text-transform:uppercase;letter-spacing:.05em}
+.ph-item{display:block;width:100%;text-align:left;padding:12px 15px;border-radius:16px;background:rgba(255,255,255,.05);margin-bottom:8px;color:#eef5f0;transition:background .25s}
+.ph-item p{margin:0;font-size:15.5px;line-height:21px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ph-item small{display:flex;justify-content:space-between;margin-top:6px;font-size:12.5px;color:rgba(238,245,240,.45)}
+.ph-item.hit{background:rgba(58,216,121,.2)}
+.toast{position:absolute;left:50%;bottom:58px;transform:translate(-50%,12px);padding:10px 16px 10px 13px;border-radius:99px;background:rgba(238,245,240,.95);color:#0f2c20;font-size:15px;font-weight:600;display:flex;gap:7px;align-items:center;opacity:0;transition:opacity .2s,transform .4s var(--spring);pointer-events:none;z-index:8}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast svg{width:17px;height:17px;color:#13803f}
+
+/* Einstellungen */
+.ps{padding:60px 0 0}
+.ps-nav{position:relative;height:46px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600}
+.ps-nav button{position:absolute;left:10px;display:flex;align-items:center;gap:4px;color:#3ad879;font-size:17px;font-weight:400;padding:8px 6px}
+.ps-nav button svg{width:12px;height:21px}
+.ps-cap{margin:20px 34px 7px;font-size:12.5px;color:rgba(238,245,240,.5);text-transform:uppercase;letter-spacing:.03em}
+.ps-grp{margin:0 16px;border-radius:14px;background:rgba(255,255,255,.07);overflow:hidden}
+.ps-row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:0 16px;font-size:16.5px;text-align:left;position:relative;color:#eef5f0}
+.ps-row+.ps-row::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:rgba(255,255,255,.1)}
+.ps-row .lbl{flex:1}
+.ps-row .val{color:rgba(238,245,240,.55)}
+.ps-row .val.ok{color:#7cf29a}
+.ps-row .chev{width:8px;height:14px;color:rgba(238,245,240,.3)}
+.ps-row.red{color:#ff6b5e}
+.ps-foot{margin:7px 34px 0;font-size:12.5px;line-height:17px;color:rgba(238,245,240,.45)}
+.ps-val-pop{animation:bump .4s cubic-bezier(.3,1.6,.5,1)}
+
+/* Onboarding */
+.ob{position:absolute;inset:0}
+.obv{position:absolute;inset:0;padding:120px 26px 0;display:flex;flex-direction:column;opacity:0;transform:translateX(40px);pointer-events:none;transition:opacity .3s,transform .55s var(--spring)}
+.obv.on{opacity:1;transform:none;pointer-events:auto}
+.obv.gone{transform:translateX(-40px)}
+.ob-ico{width:76px;height:76px;border-radius:20px;display:grid;place-items:center;margin-bottom:22px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14)}
+.ob-ico svg{width:38px;height:38px;color:#3ad879}
+.appicon{width:110px;height:110px;border-radius:25px;display:grid;place-items:center;background:linear-gradient(#173f2d,#0a1d15);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 24px 50px -18px rgba(0,0,0,.8),0 0 0 .5px rgba(255,255,255,.08)}
+.appicon .m{width:70px;height:70px}
+.ob h2{margin:0;font-size:32px;line-height:38px;font-weight:700;letter-spacing:-.03em}
+.ob p{margin:12px 0 0;font-size:17px;line-height:24px;color:rgba(238,245,240,.7)}
+.ob .cta{position:absolute;left:26px;right:26px;bottom:76px;display:flex;flex-direction:column;gap:12px}
+.obtn{height:58px;border-radius:29px;background:linear-gradient(180deg,#4be28a,#22b45f);color:#05210f;font-size:18px;font-weight:650;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+.obtn[disabled]{opacity:.35;cursor:default}
+.obtn.ghost{background:rgba(255,255,255,.1);color:#eef5f0;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14)}
+.obtn svg{width:20px;height:20px}
+.keybox{margin-top:26px;border-radius:16px;padding:15px 16px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14);font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:16px;color:rgba(238,245,240,.4);display:flex;justify-content:space-between;align-items:center}
+.keybox.set{color:#fff}
+.paste{display:inline-flex;align-items:center;gap:6px;margin-top:12px;align-self:flex-start;height:40px;padding:0 15px 0 12px;border-radius:20px;background:#eef5f0;color:#0f2c20;font-size:16px;font-weight:600}
+.paste svg{width:17px;height:17px}
+.keyok{margin-top:12px;font-size:14px;color:#7cf29a;display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .3s}
+.keyok.on{opacity:1}
+.keyok svg{width:16px;height:16px}
+.mini{margin-top:22px;display:flex;flex-direction:column;gap:10px}
+.mini div{display:flex;align-items:center;gap:12px;font-size:16px;color:rgba(238,245,240,.85)}
+.mini i{flex:none;width:26px;height:26px;border-radius:50%;background:rgba(58,216,121,.15);color:#7cf29a;font-style:normal;font-size:13px;font-weight:700;display:grid;place-items:center}
+.tfield{margin-top:22px;min-height:96px;border-radius:18px;padding:14px 16px;background:#fff;color:#000;font-size:17px;line-height:23px;box-shadow:0 0 0 2px #3ad879}
+.tfield .ph{color:#a0a0a5}
+.tfield .caret{display:inline-block}
+.path{margin-top:20px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13.5px;color:rgba(238,245,240,.85)}
+.path span{padding:6px 10px;border-radius:99px;background:rgba(255,255,255,.08)}
+.path svg{width:8px;height:12px;opacity:.5}
+
+/* ---------- Einstellungen ---------- */
+.app-set{background:#f2f2f7;color:#000}
+.stp{position:absolute;inset:0;background:#f2f2f7;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.stp.off{transform:translateX(100%)}
+.stp.under{transform:translateX(-30%)}
+.st-nav{position:absolute;top:56px;left:0;right:0;height:44px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600}
+.st-nav .bk{position:absolute;left:8px;display:flex;align-items:center;gap:4px;color:#007aff;font-weight:400}
+.st-nav .bk svg{width:12px;height:21px}
+.st-big{margin:108px 20px 14px;font-size:34px;line-height:41px;font-weight:700;letter-spacing:-.01em}
+.st-cap{margin:0 36px 7px;font-size:13px;color:#6d6d72;text-transform:uppercase;letter-spacing:-.005em}
+.st-grp{margin:0 16px 30px;background:#fff;border-radius:11px;overflow:hidden}
+.st-row{display:flex;align-items:center;gap:12px;width:100%;min-height:46px;padding:0 16px;font-size:17px;text-align:left;position:relative}
+.st-row+.st-row::before{content:"";position:absolute;top:0;left:57px;right:0;height:.5px;background:#c6c6c8}
+.st-row.noi+.st-row::before,.st-row.noi::before{left:16px}
+.st-row .lbl{flex:1}
+.st-row .val{color:#8a8a8e}
+.st-row .chev{width:8px;height:14px;color:#c4c4c7}
+.sti{flex:none;width:29px;height:29px;border-radius:7px;display:grid;place-items:center;color:#fff}
+.sti svg{width:18px;height:18px}
+.tg{flex:none;width:51px;height:31px;border-radius:16px;background:#e9e9ea;position:relative;transition:background .25s}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15),0 3px 1px rgba(0,0,0,.06);transition:transform .35s var(--spring)}
+.tg.on{background:#34c759}
+.tg.on::after{transform:translateX(20px)}
+.st-row.dis{opacity:.4;pointer-events:none}
+.st-foot{margin:-22px 36px 0;font-size:13px;line-height:18px;color:#6d6d72}
+.st-foot a{color:#007aff;text-decoration:none}
+
+/* ---------- Schmal ---------- */
+@media (max-width:640px){
+  .pf{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-template-areas:"tabs" "now" "stage" "rail";row-gap:12px}
+  .stage{justify-self:center}
+  .seg{width:100%}
+  .seg button{flex:1;justify-content:center;padding:7px 6px;font-size:12.5px}
+  .seg .badge{display:none}
+  .reset{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<!-- Marke „p-Kopf“ (Geometrie aus electron-menubar/brand/mark.svg) und Wortmarke -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gBody" x1="300" y1="236" x2="470" y2="842" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7cf29a"/><stop offset="1" stop-color="#22b45f"/></linearGradient>
+    <linearGradient id="gBeak" x1="0" y1="0" x2=".5" y2="1"><stop offset="0" stop-color="#ffe066"/><stop offset="1" stop-color="#ffa51f"/></linearGradient>
+    <mask id="mGap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><circle cx="470" cy="450" r="230" fill="#000"/></mask>
+    <mask id="mGapM" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><circle cx="470" cy="450" r="238" fill="#000"/></mask>
+    <mask id="mEye" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><circle cx="520" cy="410" r="62" fill="#000"/></mask>
+    <symbol id="mark" viewBox="208 220 640 640">
+      <path d="M529.21 538.93A150 150 0 1 1 729.96 576.91A110 110 0 0 0 529.21 538.93Z" fill="url(#gBeak)" mask="url(#mGap)"/>
+      <g mask="url(#mEye)" fill="url(#gBody)"><path d="M256 450a214 214 0 1 0 428 0a214 214 0 1 0 -428 0Z"/><path d="M334 450A78 78 0 0 1 412 528V764A78 78 0 0 1 334 842A78 78 0 0 1 256 764V528A78 78 0 0 1 334 450Z"/></g>
+    </symbol>
+    <symbol id="markM" viewBox="208 220 640 640">
+      <path d="M529.21 538.93A150 150 0 1 1 729.96 576.91A110 110 0 0 0 529.21 538.93Z" fill="currentColor" mask="url(#mGapM)"/>
+      <g mask="url(#mEye)" fill="currentColor"><path d="M256 450a214 214 0 1 0 428 0a214 214 0 1 0 -428 0Z"/><path d="M334 450A78 78 0 0 1 412 528V764A78 78 0 0 1 334 842A78 78 0 0 1 256 764V528A78 78 0 0 1 334 450Z"/></g>
+    </symbol>
+    <symbol id="word" viewBox="-14 -78 478 252">
+      <g fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><circle cx="50" cy="50" r="38"/><path d="M12 50V150"/><circle cx="166" cy="50" r="38"/><path d="M204 12V88"/><circle cx="282" cy="50" r="38"/><path d="M244 50V150"/><path d="M338 -64V88"/><path d="M374 12V48A38 38 0 0 0 450 48V12M450 48V112C450 146 426 162 392 160"/></g>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="pf" id="pf">
+  <div class="tabs">
+    <div class="seg" role="tablist" aria-label="Ablauf wählen">
+      <button role="tab" data-ui="tab" data-tab="alltag" aria-selected="true">Alltag</button>
+      <button role="tab" data-ui="tab" data-tab="session" aria-selected="false">Sitzung starten <span class="badge mut">selten</span></button>
+      <button role="tab" data-ui="tab" data-tab="app" aria-selected="false">Paply-App</button>
+      <button role="tab" data-ui="tab" data-tab="setup" aria-selected="false">Einrichten</button>
+    </div>
+    <button class="reset" data-ui="reset" aria-label="Ablauf neu starten"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4"/><path d="M2.3 1.8v3h3"/></svg>Nochmal</button>
+  </div>
+
+  <div class="now">
+    <div class="now-box">
+      <div class="now-row"><span class="now-k"><i></i>Jetzt</span><span class="haptic" id="haptic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4.5 8v8M2 10v4M19.5 8v8M22 10v4"/></svg>Haptik</span><span class="sim">Simulation · kein Mikro, keine Cloud</span></div>
+      <div class="now-t" id="nowT">…</div>
+      <div class="say" id="say" hidden><span class="say-k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="8.6" y="2.8" width="6.8" height="11.6" rx="3.4"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0M12 17.7v3.5"/></svg><span id="sayK">Du sprichst</span></span><span class="say-t" id="sayT"></span></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="dev-wrap" id="devWrap">
+      <div class="device" id="device">
+        <i class="btn-side b-mute"></i><i class="btn-side b-vu"></i><i class="btn-side b-vd"></i><i class="btn-side b-pw"></i>
+        <div class="screen" id="screen" data-theme="light">
+
+          <!-- ============ Nachrichten ============ -->
+          <section class="app app-msg" id="appMsg">
+            <header class="m-head">
+              <div class="m-back"><svg viewBox="0 0 12 21" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10.5 10 19"/></svg><span>3</span></div>
+              <div class="m-who"><div class="m-av">LM</div><div class="m-name">Lena <svg viewBox="0 0 6 9" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m1 1 3.5 3.5L1 8"/></svg></div></div>
+              <div class="m-vid"><svg viewBox="0 0 28 20" fill="currentColor"><rect x="0" y="2" width="19" height="16" rx="4"/><path d="m21 8 6-4v12l-6-4z"/></svg></div>
+            </header>
+            <div class="m-thread" id="thread"></div>
+            <div class="m-bar">
+              <div class="m-plus"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg></div>
+              <div class="m-field" id="mField" data-act="field" role="textbox" aria-label="Nachricht"><span class="m-ph">iMessage</span><span class="m-text" id="mText"></span><i class="caret"></i>
+                <svg class="m-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="8.6" y="2.8" width="6.8" height="11.6" rx="3.4"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0M12 17.7v3.5"/></svg>
+                <button class="m-send" id="mSend" data-act="send" aria-label="Senden"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13.5V3M3.5 7.3 8 2.8l4.5 4.5"/></svg></button>
+              </div>
+            </div>
+            <div class="m-spacer"></div>
+
+            <div class="kb" id="kbApple"></div>
+
+            <div class="kb pl" id="kbPanel" data-s="ready">
+              <div class="pl-top"><span class="pk-brand"><svg class="m"><use href="#mark"/></svg><svg class="wm"><use href="#word"/></svg></span><span class="pl-st" id="plSt"></span></div>
+              <div class="pl-mid">
+                <div class="lf lf-ready"><button class="pl-go" id="plGo" data-act="speak" aria-label="Sprechen"><svg class="m"><use href="#mark"/></svg></button><span class="pl-hint">Tippen zum Sprechen</span></div>
+                <div class="lf lf-rec"><div class="pl-wave" id="plWave"></div><span class="pl-hint">Sprich einfach – dann „Fertig“</span></div>
+                <div class="lf lf-busy"><span class="pl-big"><span class="spin"></span>Schreibe …</span></div>
+                <div class="lf lf-done"><span class="pl-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg></span><span class="pl-hint">Eingesetzt – zurück zur Apple-Tastatur</span></div>
+                <div class="lf lf-open"><span class="pl-big"><span class="spin"></span>Paply schaltet das Mikro ein …</span></div>
+                <div class="lf lf-empty"><span class="pl-big">Nichts gehört – nochmal?</span></div>
+              </div>
+              <div class="pl-bot"><button class="pl-x" data-act="cancel">Abbrechen</button><button class="pl-done" id="plDone" data-act="speak"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg>Fertig</button></div>
+              <div class="kb-sys"><button class="kb-globe" data-act="globeP" aria-label="Nächste Tastatur"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.2"/><ellipse cx="12" cy="12" rx="4" ry="9.2"/><path d="M3 12h18M4.6 7.6h14.8M4.6 16.4h14.8"/></svg></button></div>
+            </div>
+
+            <div class="kb pk" id="kbPaply" data-s="ready">
+              <div class="pk-bar">
+                <span class="pk-sugg"><span>„Ich“</span><span>Ja</span><span>Danke</span></span>
+                <button class="pk-undo" data-act="undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Rückgängig</button>
+                <button class="pk-go" id="pkGo" data-act="speak" aria-label="Paply: sprechen"><svg class="m"><use href="#mark"/></svg><i class="pk-go-dot"></i></button>
+                <div class="pk-pill" id="pkPill" data-act="speak">
+                  <span class="pp f-rec"><button class="pk-x" data-act="cancel" aria-label="Abbrechen"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg></button><span class="pk-wave" id="pkWave"></span><span class="pk-time" id="pkTime">0:00</span><span class="pk-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg>Fertig</span></span>
+                  <span class="pp f-busy"><span class="spin"></span>Schreibe …</span>
+                  <span class="pp f-open"><span class="spin"></span>Paply schaltet das Mikro ein …</span>
+                  <span class="pp f-empty">Nichts gehört – nochmal?</span>
+                </div>
+              </div>
+              <div class="kb-keys" id="pkKeys"></div>
+              <div class="kb-sys"><button class="kb-globe" data-act="globeBack" aria-label="Nächste Tastatur"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.2"/><ellipse cx="12" cy="12" rx="4" ry="9.2"/><path d="M3 12h18M4.6 7.6h14.8M4.6 16.4h14.8"/></svg></button></div>
+            </div>
+          </section>
+
+          <!-- ============ Paply-App ============ -->
+          <section class="app app-paply" id="appPaply" hidden>
+            <div class="pv flash" id="pvFlash" data-v="flash">
+              <div class="orbz">
+                <svg class="cloud" viewBox="-152 -152 304 304"><g class="blob" id="blobB"><path id="blobBP"/></g><g class="blob" id="blobA"><path id="blobAP"/></g></svg>
+                <div class="ripples" id="ripples"></div>
+                <div class="orb"><svg class="m"><use href="#mark"/></svg></div>
+              </div>
+              <div class="fl-t"><b>Mikro ist an</b><span id="paSub">hört zu · 0:00</span></div>
+              <div class="fl-bar"><i></i></div>
+              <div class="pa-bot"><div class="pa-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M14 6.5 19.5 12 14 17.5"/></svg><div><b id="paHintT">Zurückwischen</b><span id="paHintS">Sprich einfach weiter – Paply hört schon zu.</span></div></div></div>
+            </div>
+            <div class="pv ph" id="pvHome" data-v="home">
+              <div class="ph-top"><span class="pa-brand"><svg class="m"><use href="#mark"/></svg><svg class="wm"><use href="#word"/></svg></span><button class="ph-gear" id="phGear" data-act="gear" aria-label="Einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg></button></div>
+              <div class="ph-sess" id="phSess"><i></i><div><b id="phSessT"></b><span id="phSessS"></span></div><button data-act="sessToggle" id="phSessBtn"></button></div>
+              <div class="ph-h">Verlauf</div>
+              <div id="phList"></div>
+            </div>
+            <div class="pv ps" id="pvSet" data-v="settings">
+              <div class="ps-nav"><button data-act="gearBack" id="psBack"><svg viewBox="0 0 12 21" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10.5 10 19"/></svg>Verlauf</button>Einstellungen</div>
+              <div class="ps-cap">Diktat</div>
+              <div class="ps-grp">
+                <div class="ps-row"><span class="lbl">Sprache</span><span class="val">Deutsch + Englisch</span></div>
+                <div class="ps-row"><span class="lbl">Groq-Schlüssel</span><span class="val">••••3F2a</span></div>
+              </div>
+              <div class="ps-foot">Der Schlüssel liegt nur im Schlüsselbund dieses iPhones.</div>
+              <div class="ps-cap">Sitzung</div>
+              <div class="ps-grp">
+                <div class="ps-row"><span class="lbl">Anzeige oben</span><span class="val">nur oranger Punkt</span></div>
+                <button class="ps-row" id="psSessRow" data-act="sessDur"><span class="lbl">Mikro bereit halten</span><span class="val" id="psSess">bis Neustart</span><svg class="chev" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></button>
+              </div>
+              <div class="ps-foot">Paply blitzt nur nach einem Neustart einmal auf. Den orangen Punkt zeigt iOS, solange das Mikro bereit ist – ausblenden kann ihn keine App.</div>
+              <div class="ps-cap">Starten mit</div>
+              <div class="ps-grp">
+                <div class="ps-row"><span class="lbl">🌐 antippen</span><span class="val ok">Paply</span></div>
+                <div class="ps-row"><span class="lbl">🌐 gedrückt halten</span><span class="val">Apples Liste</span></div>
+                <div class="ps-row"><span class="lbl">Schnelltaste</span><span class="val">Rückseite 2×</span></div>
+              </div>
+              <div class="ps-cap">Vom Mac übernommen</div>
+              <div class="ps-grp">
+                <div class="ps-row"><span class="lbl">Eigene Begriffe</span><span class="val">12 Wörter</span></div>
+                <div class="ps-row"><span class="lbl">Snippets</span><span class="val">3</span></div>
+              </div>
+              <div class="ps-foot">Eigene Begriffe helfen bei Namen und Fachwörtern. Snippets später per langem Druck auf die Paply-Taste.</div>
+            </div>
+            <div class="toast" id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg>Kopiert</div>
+
+<div class="ob" id="ob" hidden>
+              <div class="obv" data-v="1">
+                <div class="appicon"><svg class="m"><use href="#mark"/></svg></div>
+                <h2 style="margin-top:30px">Sprich.<br>Paply schreibt.</h2>
+                <p>Diktieren auf dem iPhone – wie am Mac. Einmal einrichten, dann in jeder App.</p>
+                <div class="cta"><button class="obtn" id="obStart" data-act="obStart">Los geht’s</button></div>
+              </div>
+              <div class="obv" data-v="2">
+                <div class="ob-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M16 7l3 3M14.5 8.5l2 2"/></svg></div>
+                <h2>Dein Groq-Schlüssel</h2>
+                <p>Derselbe wie am Mac. Er bleibt nur auf diesem iPhone – im Schlüsselbund.</p>
+                <div class="keybox" id="keybox"><span id="keyT">gsk_…</span></div>
+                <button class="paste" id="obPaste" data-act="obPaste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4V3h6v1" stroke-linecap="round"/></svg>Einsetzen</button>
+                <div class="keyok" id="keyok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg><span id="keyokT">Prüfe …</span></div>
+                <div class="cta"><button class="obtn" id="obNext2" data-act="obNext2" disabled>Weiter</button></div>
+              </div>
+              <div class="obv" data-v="3">
+                <div class="ob-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="8.6" y="2.8" width="6.8" height="11.6" rx="3.4"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0M12 17.7v3.5"/></svg></div>
+                <h2>Mikrofon</h2>
+                <p>Paply hört nur zu, wenn du es startest. Du siehst es immer: Dynamic Island und oranger Punkt.</p>
+                <div class="cta"><button class="obtn" id="obMic" data-act="obMic">Mikrofon erlauben</button></div>
+              </div>
+              <div class="obv" data-v="4">
+                <div class="ob-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 9.5h.01M9.3 9.5h.01M12.6 9.5h.01M15.9 9.5h.01M18 9.5h.01M8 14.5h8" stroke-linecap="round" stroke-width="2"/></svg></div>
+                <h2>Paply-Tastatur</h2>
+                <p>Damit landet dein Text direkt im Feld – in jeder App. Einmal einschalten:</p>
+                <div class="mini"><div><i>1</i>Tastaturen</div><div><i>2</i>Paply einschalten</div><div><i>3</i>Vollen Zugriff erlauben</div></div>
+                <div class="cta"><button class="obtn" id="obSettings" data-act="obSettings">Zu den Einstellungen</button></div>
+              </div>
+              <div class="obv" data-v="5">
+                <h2>Probier’s aus</h2>
+                <p style="margin-top:8px">Hier in Paply nimmt die Tastatur direkt auf.</p>
+                <div class="tfield" id="tfield"><span class="ph" id="tph">Hier erscheint dein Text</span><span id="tText"></span><i class="caret"></i></div>
+              </div>
+              <div class="obv" data-v="6">
+                <div class="ob-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="3"/><circle cx="12" cy="9" r="1.6" fill="currentColor"/><circle cx="12" cy="14" r="1.6" fill="currentColor"/></svg></div>
+                <h2>Optional: Schnelltaste</h2>
+                <p>Zweimal hinten aufs iPhone tippen startet und stoppt die Aufnahme – ohne den Knopf zu suchen, auch einhändig.</p>
+                <div class="path"><span>Einstellungen</span><svg viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m1.5 1.5 4.5 4.5-4.5 4.5"/></svg><span>Bedienungshilfen</span><svg viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m1.5 1.5 4.5 4.5-4.5 4.5"/></svg><span>Tippen</span><svg viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m1.5 1.5 4.5 4.5-4.5 4.5"/></svg><span>Auf Rückseite tippen</span><svg viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m1.5 1.5 4.5 4.5-4.5 4.5"/></svg><span>Doppeltippen</span><svg viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m1.5 1.5 4.5 4.5-4.5 4.5"/></svg><span>Paply diktieren</span></div>
+                <div class="cta"><button class="obtn" id="obDone" data-act="obDone">Fertig</button><button class="obtn ghost" data-act="obDone">Später</button></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ Einstellungen ============ -->
+          <section class="app app-set" id="appSet" hidden>
+            <div class="stp" id="stPaply">
+              <div class="st-nav"><span class="bk"><svg viewBox="0 0 12 21" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10.5 10 19"/></svg>Einstellungen</span></div>
+              <div class="st-big">Paply</div>
+              <div class="st-cap">Paply Zugriff erlauben</div>
+              <div class="st-grp">
+                <div class="st-row"><span class="sti" style="background:#ff9500"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="8.6" y="2.8" width="6.8" height="11.6" rx="3.4"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0M12 17.7v3.5"/></svg></span><span class="lbl">Mikrofon</span><span class="tg on"></span></div>
+                <button class="st-row" id="stKbRow" data-act="stKbRow"><span class="sti" style="background:#8e8e93"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M8 14.5h8" stroke-linecap="round"/></svg></span><span class="lbl">Tastaturen</span><span class="val" id="stKbVal">Aus</span><svg class="chev" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></button>
+                <div class="st-row"><span class="sti" style="background:linear-gradient(135deg,#3a3a3c,#1c1c1e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="6.5" stroke="url(#gBody)"/></svg></span><span class="lbl">Siri & Suchen</span><svg class="chev" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div>
+                <div class="st-row"><span class="sti" style="background:#ff3b30"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6Zm-2.2 15a2.3 2.3 0 0 0 4.4 0Z"/></svg></span><span class="lbl">Mitteilungen</span><span class="val">Aus</span><svg class="chev" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"/></svg></div>
+              </div>
+            </div>
+            <div class="stp off" id="stKbs">
+              <div class="st-nav"><span class="bk"><svg viewBox="0 0 12 21" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10.5 10 19"/></svg>Paply</span>Tastaturen</div>
+              <div style="height:118px"></div>
+              <div class="st-grp">
+                <button class="st-row noi" id="tgPaplyRow" data-act="tgPaply"><span class="lbl">Paply</span><span class="tg" id="tgPaply"></span></button>
+                <button class="st-row noi dis" id="tgFullRow" data-act="tgFull"><span class="lbl">Vollen Zugriff erlauben</span><span class="tg" id="tgFull"></span></button>
+              </div>
+              <div class="st-foot"><a>Über Tastaturen und Datenschutz …</a></div>
+            </div>
+          </section>
+
+          <!-- System -->
+          <div class="sb" id="sb">
+            <div class="sb-l"><span class="sb-time">9:41</span><button class="sb-crumb" id="sbCrumb" data-act="crumb"><svg viewBox="0 0 9 9" fill="currentColor"><path d="M7.5 0v9L0 4.5z"/></svg>Paply</button></div>
+            <div class="sb-r"><i class="sb-dot" id="sbDot"></i>
+              <svg class="sb-net" width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7.5" width="3" height="4.5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+              <svg class="sb-net" width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.4c2.3 0 4.4.9 6 2.4l1.2-1.2A10.1 10.1 0 0 0 8 .7 10.1 10.1 0 0 0 .8 3.6L2 4.8a8.5 8.5 0 0 1 6-2.4Z"/><path d="M8 5.7c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4a6.8 6.8 0 0 0-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4Z"/><path d="M8 9c.6 0 1.1.2 1.5.6L8 11.2 6.5 9.6C6.9 9.2 7.4 9 8 9Z"/></svg>
+              <svg width="28" height="13" viewBox="0 0 28 13" fill="currentColor"><rect x=".5" y=".5" width="24" height="12" rx="3.8" fill="none" stroke="currentColor" opacity=".38"/><rect x="2" y="2" width="18.5" height="9" rx="2.4"/><path d="M26 4.6v3.8c.8-.3 1.3-1.1 1.3-1.9s-.5-1.6-1.3-1.9Z" opacity=".42"/></svg>
+            </div>
+          </div>
+          <div class="island" id="island" data-s="idle">
+            <span class="is-lead"><svg><use href="#mark"/></svg></span>
+            <span class="is-trail">
+              <span class="is-rec"><span class="is-bars" id="isBars"><i></i><i></i><i></i><i></i><i></i></span><span id="isTime">0:00</span></span>
+              <span class="is-busy"><i class="is-spin"></i></span>
+              <span class="is-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg></span>
+              <span class="is-ready"><i></i>bereit</span>
+            </span>
+            <i class="is-dot"></i>
+          </div>
+          <div class="gmenu" id="gMenu"><button data-act="gm" data-k="de" class="cur"><span>Deutsch, Englisch</span><svg viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 9.5 17 19 7"/></svg></button><button data-act="gm" data-k="paply"><span>Paply</span><svg><use href="#mark"/></svg></button><button data-act="gm" data-k="emoji"><span>Emoji</span></button><i></i><button data-act="gm" data-k="set"><span>Tastatureinstellungen …</span></button></div>
+          <div class="veil" id="veil"><div class="alert" id="alert"></div></div>
+          <div class="home" id="home">
+            <button class="coach" id="coach" data-act="swipe"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8h11M9.5 3.5 14 8l-4.5 4.5"/></svg>Unten nach rechts wischen</button>
+            <i class="finger" id="finger"></i>
+            <i class="home-bar"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="under">
+      <button class="hw" id="hwBack" data-act="backtap" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.8"/><circle cx="12" cy="9.5" r="1.4" fill="currentColor"/><circle cx="12" cy="14" r="1.4" fill="currentColor"/><path d="M3 9.5c-.8 1.4-.8 3.1 0 4.5M21 9.5c.8 1.4.8 3.1 0 4.5" opacity=".6"/></svg>Rückseite 2× antippen</button>
+    </div>
+  </div>
+
+  <aside class="rail" id="rail">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div class="rtabs" role="tablist"><button data-ui="rt" data-rt="flow" aria-selected="true">Ablauf</button><button data-ui="rt" data-rt="open" aria-selected="false">Noch offen</button></div>
+      <div class="variant" id="kbVar" hidden><span>Tastatur:</span><div class="seg"><button data-ui="kbv" data-v="orig" aria-selected="true">Original + 🌐</button><button data-ui="kbv" data-v="nachbau" aria-selected="false">Nachbau</button></div></div>
+      <div class="variant" id="variant" hidden><span>Zurück:</span><div class="seg"><button data-ui="var" data-v="swipe" aria-selected="true">Wischen</button><button data-ui="var" data-v="auto" aria-selected="false">Automatisch</button></div></div>
+    </div>
+    <div data-rp="flow" style="display:flex;flex-direction:column;gap:12px">
+      <ol class="steps" id="steps"></ol>
+      <div class="stats" id="stats"></div>
+      <p class="tech" id="tech"></p>
+      <div class="sum" id="sum" hidden></div>
+    </div>
+    <div data-rp="open" hidden>
+      <ul class="open">
+        <li><span class="lvl r">Grenze</span><b>🌐 selbst umbelegen</b>Geht nicht. Antippen wechselt zur nächsten Tastatur (= Paply), Gedrückthalten zeigt Apples Liste. Englisch steckt in der deutschen Tastatur (iOS 18, zweite Sprache) – kein Sprachwechsel nötig.</li>
+        <li><span class="lvl m">Testen</span><b>🌐-Reihenfolge und Emoji</b>Zurück nach dem Einsetzen geht per Apple-Funktion zur nächsten Tastatur. Ob Emoji dabei dazwischenfunkt, prüfen wir auf dem Gerät – sonst Reihenfolge anpassen.</li>
+        <li><span class="lvl r">Grenze</span><b>Oranger Punkt</b>Sitzt in der Dynamic Island und bleibt, solange das Mikro bereit ist. Keine App kann ihn ausblenden – auch Wispr Flow nicht.</li>
+        <li><span class="lvl m">Testen</span><b>Einmal aufblitzen – hält das?</b>Nach Neustart sicher nochmal. Offen: Akku bei dauerhaft bereitem Mikro, und ob Paply das Mikro nach Anrufen oder Siri selbst zurückbekommt.</li>
+        <li><span class="lvl r">Risiko</span><b>Tastatur öffnet Paply / automatisch zurück</b>Kein offizieller Apple-Weg. Wispr Flow macht es im App Store so; das automatische Zurück hat Apple mit iOS 26.4 eingeschränkt.</li>
+        <li><span class="lvl m">Testen</span><b>Schnelltaste und Groq</b>Ob die Schnelltaste im Hintergrund aufnimmt. Groq-Qualität und Tempo (~1 s angenommen) messen.</li>
+      </ul>
+      <p class="src">Quellen: <a href="https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/CustomKeyboard.html" target="_blank" rel="noopener">Apple Custom Keyboard</a> · <a href="https://developer.apple.com/documentation/uikit/configuring-open-access-for-a-custom-keyboard" target="_blank" rel="noopener">Open Access</a> · <a href="https://developer.apple.com/forums/thread/816408" target="_blank" rel="noopener">Apple DTS</a> · <a href="https://developer.apple.com/documentation/activitykit/displaying-live-data-with-live-activities" target="_blank" rel="noopener">Live Activities</a> · <a href="https://docs.wisprflow.ai/articles/6269634092-adapting-to-ios-26-4" target="_blank" rel="noopener">Wispr Flow</a> · <a href="https://github.com/KeyboardKit/KeyboardKitPro" target="_blank" rel="noopener">KeyboardKit Pro</a> · <a href="https://developer.apple.com/documentation/uikit/uiinputviewcontroller" target="_blank" rel="noopener">UIInputViewController</a> · <a href="https://www.igeeksblog.com/how-to-set-up-use-multilingual-typing-iphone/" target="_blank" rel="noopener">Mehrsprachig tippen</a></p>
+    </div>
+  </aside>
+  <div class="ring" id="ring"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const val = (v) => (typeof v === 'function' ? v() : v);
+
+// Feder als CSS-linear() (wie RecordingPill.tsx)
+function spring(k, c) {
+  let x = 0, v = 0, t = 0; const dt = 1 / 2000, s = [];
+  while (t < 2) { v += (-k * (x - 1) - c * v) * dt; x += v * dt; t += dt; s.push(x); if (t > .08 && Math.abs(x - 1) < .002 && Math.abs(v) < .03) break; }
+  const n = 32, p = Array.from({ length: n + 1 }, (_, i) => +s[Math.round(i / n * (s.length - 1))].toFixed(3)); p[0] = 0; p[n] = 1;
+  return { easing: `linear(${p.join(',')})`, duration: Math.round(t * 1000) };
+}
+const SM = spring(420, 30);
+const SUPPORTS_LINEAR = CSS.supports('transition-timing-function', 'linear(0, 1)');
+if (SUPPORTS_LINEAR) document.documentElement.style.setProperty('--spring', SM.easing);
+const EASE = SUPPORTS_LINEAR ? SM.easing : 'cubic-bezier(.3,1.25,.5,1)';
+
+// Klangwolke (wie Desktop-Pille), Radius 92 = Orb
+function blob(seed) {
+  const pts = [];
+  for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; const r = 92 * (1 + .09 * Math.sin(3 * a + seed) + .05 * Math.sin(5 * a + seed * 2.1) + .03 * Math.sin(7 * a)); pts.push(`${(Math.cos(a) * r).toFixed(1)} ${(Math.sin(a) * r).toFixed(1)}`); }
+  return `M${pts.join('L')}Z`;
+}
+$('#blobAP').setAttribute('d', blob(.4)); $('#blobBP').setAttribute('d', blob(2.2));
+
+// Tastenfeld wie Apples deutsche Tastatur – für Apples Original und für den Nachbau
+const ICON = {
+  shift: '<svg viewBox="0 0 24 24"><path d="M12 3.5 3.5 12.5h4.6V20h7.8v-7.5h4.6z"/></svg>',
+  del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/><path d="m12 9.5 5 5m0-5-5 5" stroke-linecap="round"/></svg>',
+  emoji: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c1.8 2.2 5.2 2.2 7 0"/><circle cx="9.3" cy="10" r=".9" fill="currentColor"/><circle cx="14.7" cy="10" r=".9" fill="currentColor"/></svg>',
+  ret: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 6v5a3 3 0 0 1-3 3H6"/><path d="M9.5 10.5 6 14l3.5 3.5"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9.2"/><ellipse cx="12" cy="12" rx="4" ry="9.2"/><path d="M3 12h18M4.6 7.6h14.8M4.6 16.4h14.8"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="8.6" y="2.8" width="6.8" height="11.6" rx="3.4"/><path d="M5.5 11.2a6.5 6.5 0 0 0 13 0M12 17.7v3.5"/></svg>',
+};
+function keyRows() {
+  const k = (c) => `<span class="key" data-act="key" data-k="${c}" data-c="${c.toUpperCase()}">${c.toUpperCase()}</span>`;
+  return `
+    <div class="kb-row">${[...'qwertzuiopü'].map(k).join('')}</div>
+    <div class="kb-row">${[...'asdfghjklöä'].map(k).join('')}</div>
+    <div class="kb-row"><span class="key fn w45 shift on" data-act="shift">${ICON.shift}</span><span class="mid">${[...'yxcvbnm'].map(k).join('')}</span><span class="key fn w45" data-act="del">${ICON.del}</span></div>
+    <div class="kb-row"><span class="key fn w45" data-act="nokey" style="font-size:16px">123</span><span class="key fn w45" data-act="nokey">${ICON.emoji}</span><span class="key sp" data-act="space">Leerzeichen</span><span class="key fn ret" data-act="ret">${ICON.ret}</span></div>`;
+}
+$('#kbApple').innerHTML = `<div class="kb-sugg"><span>„Ich“</span><span>Ja</span><span>Danke</span></div><div class="kb-keys">${keyRows()}</div>
+  <div class="kb-sys"><button class="kb-globe" id="kbGlobe" data-act="globe" aria-label="Nächste Tastatur">${ICON.globe}</button><span class="kb-dict">${ICON.mic}</span></div>`;
+$('#pkKeys').innerHTML = keyRows();
+$('#pkWave').innerHTML = '<i></i>'.repeat(22);
+$('#plWave').innerHTML = '<i></i>'.repeat(40);
+
+// ---------- Inhalte ----------
+const TXT = {
+  m1: 'Klar! Das Angebot ist fast fertig. Ich schick dir das PDF heute bis 17 Uhr, dann gehen wir morgen im Call die offenen Punkte durch.',
+  m2: 'Morgen passt mir 10 Uhr oder direkt nach dem Lunch. Schick mir einfach einen Invite.',
+  s1: 'Ja, bin in zwanzig Minuten da. Bring bitte die Unterlagen fürs Meeting mit.',
+  test: 'Hallo, das ist mein erster Test mit Paply auf dem iPhone.',
+};
+const HIST = [
+  ['Heute', '09:41', '0:07', 'Klar! Das Angebot ist fast fertig. Ich schick dir das PDF heute bis 17 Uhr, dann gehen wir morgen im Call die offenen Punkte durch.'],
+  ['Heute', '09:12', '0:04', 'Rückruf Steuerberaterin – Unterlagen bis Freitag zusammenstellen.'],
+  ['Heute', '08:47', '0:05', 'Can you send me the deck before the call? Danke dir!'],
+  ['Gestern', '18:05', '0:06', 'Einkaufsliste: Hafermilch, Tomaten, Basilikum und Brot vom Bäcker.'],
+  ['Gestern', '14:30', '0:05', 'Bitte den Termin mit Jonas auf Donnerstag 11 Uhr verschieben.'],
+];
+const SESS = ['15 Min', '1 Std', '8 Std', 'bis Neustart'];
+const orig = () => S.kbv === 'orig';
+
+// ---------- Schritte ----------
+const STEP = {
+  'a.field':   { now: 'Tippe ins Textfeld', t: '#mField', note: () => orig() ? 'Es erscheint Apples Original-Tastatur – unverändert, mit Apples Autokorrektur und Gleitschreiben.' : 'Paplys Nachbau der Apple-Tastatur: gleiche Tasten, gleiche Stelle, gleiche Höhe – plus Paply-Taste oben rechts.' },
+  'a.globe':   { now: 'Tippe 🌐 unten links – Paply hört sofort zu', t: '#kbGlobe', note: 'Antippen = Paply. Gedrückt halten = Apples Tastaturliste wie immer (probier es: 🌐 halten). Die Paply-Ebene hat dieselbe Höhe – das Feld bleibt stehen.' },
+  'a.speak':   { now: 'Tippe die Paply-Taste oben rechts', t: '#pkGo', note: 'Sie sitzt in der Vorschlagsleiste: Keine Taste verrutscht, nichts wird höher.' },
+  'a.stop':    { now: 'Reinreden – dann „Fertig“', t: () => orig() ? '#plDone' : '#pkPill', note: () => orig() ? 'Kein Live-Text: Whisper schreibt nach dem Stopp (geschätzt ~1 s). Danach springt Paply von selbst zu Apples Tastatur zurück.' : 'Nur die Leiste oben zeigt die Aufnahme, die Tasten bleiben. Kein Live-Text: Whisper schreibt nach dem Stopp (~1 s).' },
+  'a.send':    { now: 'Der Text steht im Feld – senden', t: '#mSend', note: () => orig() ? 'Apples Tastatur ist schon wieder da – korrigieren wie gewohnt. Die Tasten tippen hier wirklich.' : 'Korrigieren geht sofort mit denselben Tasten – die Tasten tippen hier wirklich.' },
+  'a.wait':    { now: 'Lena antwortet …', t: null },
+  'a.back':    { now: 'Jetzt die Schnelltaste: Rückseite 2× antippen', t: '#hwBack', note: 'Rückseite 2× (iPhone-Bedienungshilfen) startet die Aufnahme – ohne Knopf, auch einhändig.' },
+  'a.backStop':{ now: 'Reinreden – dann nochmal Rückseite 2×', t: '#hwBack', note: () => orig() ? 'Apples Tastatur bleibt offen. Die Dynamic Island zeigt die Aufnahme – ob iOS das hier erlaubt, prüfen wir auf dem Gerät.' : 'Oder „Fertig“ tippen. Die Leiste zeigt die Aufnahme.' },
+  'a.backIns': { now: 'Text ist bereit – tippe 🌐, er springt ins Feld', t: '#kbGlobe', note: 'Bei offener Apple-Tastatur darf Paply nicht direkt schreiben. Ein Tipp auf 🌐 setzt den Text ein und springt zurück.' },
+  'a.send2':   { now: 'Der Text steht im Feld – senden', t: '#mSend', note: 'Klappt in jeder App. Passwort- und Nummernfelder nutzen immer Apples Tastatur.' },
+  'a.done':    { now: 'Geschafft – kein einziger App-Wechsel', t: null },
+  's.field':   { now: 'Tippe ins Textfeld', t: '#mField', note: 'Das iPhone wurde neu gestartet – die Sitzung ist aus.' },
+  's.globe':   { now: 'Tippe 🌐 unten links', t: '#kbGlobe', note: 'Tastaturen dürfen nicht aufs Mikro. Paply muss es einmal im Vordergrund einschalten – Apples Regel, auch für Wispr Flow.' },
+  's.speak':   { now: 'Tippe die Paply-Taste oben rechts', t: '#pkGo', note: 'Tastaturen dürfen nicht aufs Mikro. Paply muss es einmal im Vordergrund einschalten – Apples Regel, auch für Wispr Flow.' },
+  's.swipe':   { now: 'Paply blitzt auf – unten nach rechts zurückwischen', t: '#coach', swipe: 1, note: 'In der App gibt es nichts zu tun: Paply hört schon zu. Danach bleibt das Mikro bereit bis zum nächsten Neustart.' },
+  's.auto':    { now: 'Paply springt von selbst zurück …', t: null, note: 'Inoffizieller Trick auf iOS 18. Wispr Flow hat ihn genutzt, Apple hat ihn mit iOS 26.4 eingeschränkt.' },
+  's.stop':    { now: 'Reinreden – dann „Fertig“', t: () => orig() ? '#plDone' : '#pkPill', note: 'Die Aufnahme lief schon, während du zurückgewischt hast.' },
+  's.send':    { now: 'Der Text steht im Feld – senden', t: '#mSend' },
+  's.done':    { now: 'Geschafft – ab jetzt wieder wie im Alltag', t: null },
+  'p.free':    { now: 'Die Paply-App: nur Verlauf und Einstellungen', t: null, note: 'Kein Aufnahme-Bildschirm. Diktiert wird immer dort, wo du gerade schreibst.' },
+  'su.start':  { now: 'Tippe „Los geht’s“', t: '#obStart', note: 'Einmalig, ca. 2 Minuten. Danach nie wieder.' },
+  'su.key':    { now: 'Groq-Schlüssel einsetzen', t: '#obPaste', note: 'Am Mac kopieren, am iPhone einsetzen (Universelle Zwischenablage). Apples Einsetzen-Knopf fragt nicht extra nach.' },
+  'su.keyNext':{ now: 'Weiter', t: '#obNext2' },
+  'su.mic':    { now: 'Mikrofon erlauben', t: '#obMic' },
+  'su.micOk':  { now: 'Tippe „Erlauben“', t: '#alOk' },
+  'su.set':    { now: 'Tippe „Zu den Einstellungen“', t: '#obSettings', note: 'Paply springt direkt auf seine eigene Einstellungsseite – kein Suchen.' },
+  'su.kbRow':  { now: 'Tippe „Tastaturen“', t: '#stKbRow' },
+  'su.kbOn':   { now: 'Paply einschalten', t: '#tgPaplyRow', note: 'Danach: Englisch als zweite Sprache in die deutsche Tastatur, Paply direkt dahinter. Dann ist 🌐 antippen dein Paply-Knopf.' },
+  'su.fullOn': { now: '„Vollen Zugriff erlauben“ einschalten', t: '#tgFullRow', note: 'Damit Tastatur und App Text austauschen können. iOS warnt deutlich – Paply speichert nichts, was du tippst.' },
+  'su.fullOk': { now: 'Tippe „Erlauben“', t: '#alOk' },
+  'su.back':   { now: 'Oben links „◀ Paply“ tippen', t: '#sbCrumb', note: 'Den Rücksprung-Link zeigt iOS, weil Paply die Einstellungen geöffnet hat.' },
+  'su.try':    { now: 'Test: Paply-Taste tippen', t: '#plGo', note: 'Das ist die Paply-Ebene, die sonst hinter 🌐 liegt.' },
+  'su.tryStop':{ now: 'Reinreden – dann „Fertig“', t: '#plDone' },
+  'su.opt':    { now: 'Optional: Schnelltaste – oder fertig', t: '#obDone', note: 'Die Rückseite stellst du in den iPhone-Einstellungen ein (5 Tipps).' },
+  'su.done':   { now: 'Eingerichtet. Weiter mit „Alltag“.', t: null },
+};
+const RAIL = {
+  alltagO: [
+    { g: 'Mit 🌐 – Apples Tastatur bleibt' },
+    { id: 'a1', t: 'Ins Textfeld tippen' }, { id: 'a2', t: '🌐 – Paply hört sofort zu' }, { id: 'a3', t: 'Reinreden → „Fertig“' }, { id: 'a4', t: 'Text im Feld, Apple-Tastatur zurück → Senden' },
+    { g: 'Mit der Schnelltaste' },
+    { id: 'a5', t: 'Rückseite 2× – Aufnahme läuft' }, { id: 'a6', t: 'Reinreden → Rückseite 2×' }, { id: 'a7', t: '🌐 – Text springt ins Feld' }, { id: 'a8', t: 'Senden' },
+  ],
+  alltagN: [
+    { g: 'Mit der Paply-Taste (Nachbau)' },
+    { id: 'a1', t: 'Ins Textfeld tippen' }, { id: 'a2', t: 'Paply-Taste oben rechts' }, { id: 'a3', t: 'Reinreden → „Fertig“' }, { id: 'a4', t: 'Text steht im Feld → Senden' },
+    { g: 'Mit der Schnelltaste' },
+    { id: 'a5', t: 'Rückseite 2× – Aufnahme läuft' }, { id: 'a6', t: 'Reinreden → Rückseite 2×' }, { id: 'a7', t: 'Text steht im Feld → Senden' },
+  ],
+  session: [
+    { g: 'Einmal nach einem Neustart' },
+    { id: 's1', t: 'Ins Textfeld tippen' }, { id: 's2', t: () => orig() ? '🌐 – Paply blitzt auf' : 'Paply-Taste – Paply blitzt auf' }, { id: 's3', t: 'Zurück (wischen oder automatisch)' },
+    { id: 's4', t: 'Reinreden → „Fertig“' }, { id: 's5', t: 'Text steht im Feld → Senden' },
+  ],
+  app: [
+    { g: 'Was in der App ist' },
+    { i: 'Verlauf – Eintrag antippen kopiert ihn' }, { i: 'Sitzung – sehen, beenden, starten' }, { i: 'Einstellungen – Zahnrad oben rechts' },
+    { g: 'Was nicht in der App ist' },
+    { i: 'Aufnehmen – das passiert in jeder App über 🌐 oder die Schnelltaste' },
+  ],
+  setup: [
+    { g: 'Einmalig' },
+    { id: 'u1', t: 'Paply öffnen' }, { id: 'u2', t: 'Groq-Schlüssel einsetzen' }, { id: 'u3', t: 'Mikrofon erlauben' },
+    { id: 'u4', t: 'Tastatur einschalten' }, { id: 'u5', t: 'Vollen Zugriff erlauben' }, { id: 'u6', t: 'Zurück & testen' }, { id: 'u7', t: 'Optional: Schnelltaste' },
+  ],
+};
+function railList() {
+  if (S.tab === 'alltag') return orig() ? RAIL.alltagO : RAIL.alltagN;
+  return RAIL[S.tab];
+}
+function railId() {
+  const st = S.step;
+  if (S.tab === 'alltag') {
+    if (orig()) return { 'a.field': 'a1', 'a.globe': 'a2', 'a.stop': 'a3', 'a.send': 'a4', 'a.wait': 'a5', 'a.back': 'a5', 'a.backStop': 'a6', 'a.backIns': 'a7', 'a.send2': 'a8', 'a.done': 'end' }[st];
+    return { 'a.field': 'a1', 'a.speak': 'a2', 'a.stop': 'a3', 'a.send': 'a4', 'a.wait': 'a5', 'a.back': 'a5', 'a.backStop': 'a6', 'a.send2': 'a7', 'a.done': 'end' }[st];
+  }
+  if (S.tab === 'session') return { 's.field': 's1', 's.globe': 's2', 's.speak': 's2', 's.swipe': 's3', 's.auto': 's3', 's.stop': 's4', 's.send': 's5', 's.done': 'end' }[st];
+  if (S.tab === 'setup') return { 'su.start': 'u1', 'su.key': 'u2', 'su.keyNext': 'u2', 'su.mic': 'u3', 'su.micOk': 'u3', 'su.set': 'u4', 'su.kbRow': 'u4', 'su.kbOn': 'u4', 'su.fullOn': 'u5', 'su.fullOk': 'u5', 'su.back': 'u6', 'su.try': 'u6', 'su.tryStop': 'u6', 'su.opt': 'u7', 'su.done': 'end' }[st];
+  return null;
+}
+
+// ---------- Zustand ----------
+const S = { tab: 'alltag', variant: 'swipe', kbv: 'orig', sessIdx: 3 };
+let token = 0;
+const APPS = { msg: $('#appMsg'), paply: $('#appPaply'), set: $('#appSet') };
+const KB = { apple: $('#kbApple'), paply: $('#kbPaply'), panel: $('#kbPanel') };
+const screen = $('#screen');
+let scale = .74;
+
+function reset(tab = S.tab) {
+  token++;
+  stopSpeech(); $('#say').hidden = true; $('#haptic').classList.remove('on'); gmenu(false);
+  Object.assign(S, { tab, step: null, front: 'msg', stack: [], session: false, kb: 'none', rec: null, busy: false, shift: false, pending: '',
+    counts: { tap: 0, swipe: 0, sw: 0, back: 0 }, snaps: [], field: '', fieldBefore: '', island: 'idle' });
+  // Nachrichten
+  $('#thread').innerHTML = '<div class="m-meta">iMessage<br><b>Heute</b> 09:38</div>';
+  addBubble('in', tab === 'session' ? 'Kommst du heute noch ins Büro?' : 'Hey! Wie ist der Stand beim Angebot? Brauche es bis morgen 🙏', false);
+  setField(''); focusField(false);
+  if (KB.panel.parentElement !== APPS.msg) APPS.msg.appendChild(KB.panel);
+  setKb('none', true);
+  // Paply-App
+  $('#ob').hidden = true; $$('.obv').forEach((v) => v.classList.remove('on', 'gone'));
+  $('#keybox').classList.remove('set'); $('#keyT').textContent = 'gsk_…'; $('#keyok').classList.remove('on'); $('#obNext2').disabled = true;
+  $('#tText').textContent = ''; $('#tph').hidden = false;
+  $('#toast').classList.remove('on');
+  // Einstellungen (iOS)
+  $('#stPaply').className = 'stp'; $('#stKbs').className = 'stp off';
+  $('#tgPaply').classList.remove('on'); $('#tgFull').classList.remove('on'); $('#tgFullRow').classList.add('dis'); $('#stKbVal').textContent = 'Aus';
+  // System
+  alertBox(null); crumb(false); coach(false);
+  $('#hwBack').hidden = tab !== 'alltag';
+  $('#variant').hidden = tab !== 'session';
+  $('#kbVar').hidden = !(tab === 'alltag' || tab === 'session');
+  $$('[data-ui=var]').forEach((b) => b.setAttribute('aria-selected', b.dataset.v === S.variant));
+  $$('[data-ui=kbv]').forEach((b) => b.setAttribute('aria-selected', b.dataset.v === S.kbv));
+  $$('[data-ui=tab]').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  $('#sum').hidden = true;
+
+  if (tab === 'alltag') { S.session = true; placeApp('msg'); go('a.field'); }
+  else if (tab === 'session') { placeApp('msg'); go('s.field'); }
+  else if (tab === 'app') { S.session = true; placeApp('paply'); paView('home'); renderHome(); renderSettings(); go('p.free'); }
+  else { placeApp('paply'); paView(null); $('#ob').hidden = false; obView(1); go('su.start'); }
+  island('idle'); sbDot(); pk('ready'); pl('ready'); renderStats(true);
+}
+
+// ---------- Schritt / Seitenleiste ----------
+function go(step) {
+  S.step = step;
+  const d = STEP[step] || {};
+  $('#nowT').textContent = val(d.now) || '';
+  coach(!!d.swipe);
+  S.target = val(d.t) || null;
+  renderRail();
+  const n = val(d.note) || '';
+  $('#tech').innerHTML = n ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4M8 4.9v.1" stroke-linecap="round"/></svg><span>${n}</span>` : '';
+  if (step.endsWith('done')) summary();
+}
+function renderRail() {
+  const list = railList();
+  const cur = railId();
+  const ids = list.filter((x) => x.id).map((x) => x.id);
+  const ci = cur === 'end' ? ids.length : ids.indexOf(cur);
+  let i = 0;
+  $('#steps').innerHTML = list.map((x) => {
+    if (x.g) return `<li class="grp">${x.g}</li>`;
+    if (x.i) return `<li class="st info"><span class="d"></span><span>${x.i}</span></li>`;
+    const idx = i++; const cls = idx < ci ? 'done' : idx === ci ? 'cur' : '';
+    return `<li class="st ${cls}"><span class="d">${cls === 'done' ? '' : idx + 1}</span><span>${val(x.t)}</span></li>`;
+  }).join('');
+}
+function statItems() {
+  if (S.tab === 'alltag') return [['tap', 'Tipps'], ['back', 'Rückseite'], ['sw', 'App-Wechsel']];
+  if (S.tab === 'session') return [['tap', 'Tipps'], ['swipe', 'Wischen'], ['sw', 'App-Wechsel']];
+  if (S.tab === 'setup') return [['tap', 'Tipps'], ['sw', 'App-Wechsel']];
+  return [];
+}
+function renderStats(init) {
+  const c = S.counts, items = statItems(), el = $('#stats');
+  el.hidden = !items.length;
+  el.style.setProperty('--n', items.length);
+  if (init || el.childElementCount !== items.length) el.innerHTML = items.map(([k, l]) => `<div class="stat" data-k="${k}"><b>${c[k]}</b><span>${l}</span></div>`).join('');
+  else items.forEach(([k]) => { $(`.stat[data-k=${k}] b`).textContent = c[k]; });
+}
+function count(k) {
+  S.counts[k]++;
+  renderStats();
+  const el = $(`.stat[data-k=${k}]`); if (el) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+}
+function diff(a, b) { return { tap: b.tap - a.tap, swipe: b.swipe - a.swipe, sw: b.sw - a.sw, back: b.back - a.back }; }
+function fmtC(c) {
+  const p = [];
+  if (c.back) p.push(`${c.back}× Rückseite`);
+  if (c.tap || !c.back) p.push(`${c.tap} ${c.tap === 1 ? 'Tipp' : 'Tipps'}`);
+  if (c.swipe) p.push(`${c.swipe}× Wischen`);
+  p.push(c.sw ? `${c.sw} App-Wechsel` : 'kein App-Wechsel');
+  return p.join(' · ');
+}
+function summary() {
+  const el = $('#sum'); el.hidden = false;
+  const z = { tap: 0, swipe: 0, sw: 0, back: 0 }, s = S.snaps;
+  if (S.tab === 'alltag') {
+    el.innerHTML = `<h4>So viel Aufwand war es</h4>
+      <div class="row"><span>${orig() ? 'Mit 🌐' : 'Mit der Paply-Taste'}</span><b>${fmtC(diff(z, s[0]))}</b></div>
+      <div class="row"><span>Mit der Schnelltaste</span><b>${fmtC(diff(s[0], s[1]))}</b></div>
+      <p>${orig() ? 'So wenig wie beim Apple-Diktat – und Apples Tastatur blieb die ganze Zeit original.' : 'So wenig wie beim Apple-Diktat – Tasten und Textfeld blieben, wo sie waren.'}</p>
+      <button class="act" data-ui="kbv" data-v="${orig() ? 'nachbau' : 'orig'}">${orig() ? 'Zum Vergleich: Nachbau ansehen' : 'Zurück zu Original + 🌐'}</button>`;
+  } else if (S.tab === 'session') {
+    el.innerHTML = `<h4>So viel Aufwand war es</h4>
+      <div class="row"><span>Sitzung starten</span><b>${fmtC(S.counts)}</b></div>
+      <p>Passiert nur einmal nach einem Neustart. Danach bleibt das Mikro bereit – oben zeigt iOS nur den kleinen orangen Punkt.</p>
+      <button class="act" data-ui="var" data-v="${S.variant === 'auto' ? 'swipe' : 'auto'}">${S.variant === 'auto' ? 'Mit Wischen vergleichen' : 'Automatisch zurück ausprobieren'}</button>`;
+  } else {
+    el.innerHTML = `<h4>Einmal erledigt</h4><div class="row"><span>Einrichtung</span><b>${S.counts.tap} Tipps · ca. 2 Min</b></div><p>Schlüssel, Mikro und Tastatur fragt Paply danach nie wieder ab.</p><button class="act" data-ui="tab" data-tab="alltag">Zum Alltag</button>`;
+  }
+}
+
+// ---------- Hinweisring ----------
+const ring = $('#ring'), pf = $('#pf');
+function placeRing() {
+  const sel = S.target; const el = sel && $(sel);
+  if (!el || S.busy) { ring.classList.remove('on'); return; }
+  const r = el.getBoundingClientRect(), p = pf.getBoundingClientRect();
+  if (r.width < 2 || el.closest('[hidden]')) { ring.classList.remove('on'); return; }
+  const pad = 5;
+  const x = r.left - p.left - pad, y = r.top - p.top - pad, w = r.width + pad * 2, h = r.height + pad * 2;
+  ring.style.width = w + 'px'; ring.style.height = h + 'px';
+  const t = `translate(${x}px,${y}px)`; ring.style.transform = t; ring.style.setProperty('--t', t);
+  const br = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+  ring.style.borderRadius = Math.min(h / 2, br * scale + pad) + 'px';
+  ring.classList.add('on');
+}
+function nudge(msg) {
+  const n = $('#nowT');
+  if (msg) { const keep = n.textContent; n.textContent = msg; clearTimeout(n._t); n._t = setTimeout(() => { if (n.textContent === msg) n.textContent = keep; }, 2200); }
+  n.classList.remove('flash'); void n.offsetWidth; n.classList.add('flash');
+  ring.classList.remove('bump'); void ring.offsetWidth; ring.classList.add('bump'); setTimeout(() => ring.classList.remove('bump'), 520);
+}
+
+// ---------- Apps / Übergänge ----------
+function theme() { screen.dataset.theme = S.front === 'paply' ? 'dark' : 'light'; islandRender(); }
+function placeApp(id) {
+  for (const [k, el] of Object.entries(APPS)) { el.getAnimations().forEach((a) => a.cancel()); el.style.transform = ''; el.style.zIndex = ''; el.classList.toggle('front', k === id); el.hidden = k !== id; }
+  S.front = id; S.stack = []; theme();
+}
+async function openApp(id) {
+  const from = APPS[S.front], to = APPS[id];
+  S.stack.push(S.front); S.front = id; theme();
+  to.hidden = false; to.style.zIndex = 3; from.style.zIndex = 2;
+  from.animate([{ transform: 'translateX(0)', filter: 'brightness(1)' }, { transform: 'translateX(-28%)', filter: 'brightness(.7)' }], { duration: SM.duration, easing: EASE, fill: 'both' });
+  const a = to.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], { duration: SM.duration, easing: EASE, fill: 'both' });
+  await a.finished;
+  from.hidden = true; from.getAnimations().forEach((x) => x.cancel()); to.getAnimations().forEach((x) => x.cancel());
+  from.classList.remove('front'); to.classList.add('front'); from.style.zIndex = ''; to.style.zIndex = '';
+}
+async function backTo(dx = 0) {
+  const fromId = S.front, toId = S.stack.pop();
+  const from = APPS[fromId], to = APPS[toId];
+  S.front = toId; theme();
+  to.hidden = false; to.style.zIndex = 2; from.style.zIndex = 3;
+  from.style.transform = ''; to.style.transform = '';
+  const p = Math.min(1, dx / 430);
+  const o = { duration: Math.max(220, 420 * (1 - p)), easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'both' };
+  const a = from.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(104%)' }], o);
+  to.animate([{ transform: `translateX(calc(-104% + ${dx}px))` }, { transform: 'translateX(0)' }], o);
+  await a.finished;
+  from.hidden = true; from.getAnimations().forEach((x) => x.cancel()); to.getAnimations().forEach((x) => x.cancel());
+  from.classList.remove('front'); to.classList.add('front'); from.style.zIndex = ''; to.style.zIndex = '';
+}
+// Wischen an der Unterkante (Finger folgt)
+(() => {
+  const home = $('#home'); let drag = null;
+  const toId = (el) => Object.keys(APPS).find((k) => APPS[k] === el);
+  const ok = () => !S.busy && S.stack.length && STEP[S.step]?.swipe;
+  home.addEventListener('pointerdown', (e) => { if (e.target.closest('.coach')) return; if (!ok()) return; drag = { x0: e.clientX, dx: 0 }; try { home.setPointerCapture(e.pointerId); } catch (_) {} });
+  home.addEventListener('pointermove', (e) => {
+    if (!drag) return; drag.dx = Math.max(0, (e.clientX - drag.x0) / scale);
+    const from = APPS[S.front], to = APPS[S.stack[S.stack.length - 1]];
+    to.hidden = false; to.style.zIndex = 2; from.style.zIndex = 3;
+    from.style.transform = `translateX(${drag.dx}px)`; to.style.transform = `translateX(calc(-104% + ${drag.dx}px))`;
+  });
+  const end = () => {
+    if (!drag) return; const dx = drag.dx; drag = null;
+    if (dx > 70) { doSwipe(dx); return; }
+    const from = APPS[S.front], to = APPS[S.stack[S.stack.length - 1]];
+    const o = { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' };
+    from.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }], o);
+    to.animate([{ transform: `translateX(calc(-104% + ${dx}px))` }, { transform: 'translateX(-104%)' }], o).finished.then(() => { if (S.front !== toId(to)) to.hidden = true; });
+    from.style.transform = ''; to.style.transform = '';
+    if (dx < 8) nudge();
+  };
+  home.addEventListener('pointerup', end); home.addEventListener('pointercancel', end);
+})();
+async function doSwipe(dx = 0) {
+  if (!STEP[S.step]?.swipe || !S.stack.length || S.busy) { nudge(); return; }
+  const tk = token;
+  S.busy = true; count('swipe'); count('sw'); coach(false);
+  await backTo(dx); if (tk !== token) return;
+  S.busy = false;
+  go('s.stop');
+}
+
+// ---------- System-Elemente ----------
+function coach(on) { $('#coach').classList.toggle('on', on); $('#finger').classList.toggle('on', on); $('#home').classList.toggle('active', on); }
+function crumb(on) { $('#sb').classList.toggle('crumb', on); }
+function sbDot() { $('#island').classList.toggle('mic', !!(S.session || (S.rec && !S.rec.stopped))); }
+function haptic() {
+  const h = $('#haptic'); h.classList.add('on'); clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove('on'), 1500);
+  $('#device').animate([0, -2, 2, -1.5, 1, 0].map((x) => ({ translate: `${x}px 0` })), { duration: 260, easing: 'linear' });
+}
+const IW = { idle: 126, rec: 226, busy: 170, done: 196, ready: 196 };
+function island(s) { S.island = s; islandRender(); }
+function islandRender() {
+  const el = $('#island');
+  const s = S.front === 'paply' ? 'idle' : S.island;
+  el.dataset.s = s; el.classList.toggle('la', s !== 'idle'); screen.classList.toggle('la', s !== 'idle');
+  el.style.width = IW[s] + 'px'; el.style.marginLeft = -IW[s] / 2 + 'px';
+}
+function alertBox(kind) {
+  const v = $('#veil');
+  if (!kind) { v.classList.remove('on'); return; }
+  const A = {
+    mic: { t: '„Paply“ möchte auf das Mikrofon zugreifen.', m: 'Paply macht aus deiner Stimme Text – nur, wenn du die Aufnahme startest.', b: ['Nicht erlauben', 'Erlauben'], pref: 1, ok: 1 },
+    full: { t: 'Vollen Zugriff für Tastaturen von „Paply“ erlauben?', m: 'Tastaturen mit vollem Zugriff können alles übertragen, was du eingibst – auch frühere Eingaben wie Adressen oder Kreditkartennummern.', b: ['Erlauben', 'Nicht erlauben'], pref: 1, ok: 0 },
+  }[kind];
+  $('#alert').innerHTML = `<div class="al-b"><p class="al-t">${A.t}</p><p class="al-m">${A.m}</p></div><div class="al-btns${kind === 'full' ? ' stack' : ''}">${A.b.map((b, i) => `<button ${i === A.ok ? 'id="alOk" data-act="alOk"' : 'data-act="alNo"'} class="${i === A.pref ? 'pref' : ''}">${b}</button>`).join('')}</div>`;
+  v.classList.add('on');
+}
+
+// ---------- Nachrichten ----------
+function addBubble(side, text, anim = true) {
+  const th = $('#thread');
+  th.querySelectorAll(`.bub.${side}.tail`).forEach((b) => b.classList.remove('tail'));
+  const prev = th.lastElementChild;
+  if (prev && prev.classList.contains('m-deliv')) prev.remove();
+  const b = document.createElement('div'); b.className = `bub ${side} tail${anim ? ' pop' : ''}`; b.textContent = text; th.appendChild(b);
+  if (side === 'out') { const d = document.createElement('div'); d.className = 'm-deliv'; d.textContent = 'Zugestellt'; th.appendChild(d); }
+}
+function typing(on) {
+  const th = $('#thread');
+  if (on) { const b = document.createElement('div'); b.className = 'bub in tail typing pop'; b.id = 'typing'; b.innerHTML = '<i></i><i></i><i></i>'; th.appendChild(b); }
+  else $('#typing')?.remove();
+}
+function setField(t, anim) {
+  S.field = t; const el = $('#mText'); el.textContent = t;
+  $('#mField').classList.toggle('has', !!t.trim());
+  renderCase();
+  if (anim) { el.classList.remove('ins'); void el.offsetWidth; el.classList.add('ins'); }
+}
+function focusField(on) { $('#mField').classList.toggle('focus', on); }
+// Tastatur wechseln: von „keine“ fährt sie hoch, zwischen Tastaturen tauscht iOS sofort
+function setKb(which, instant) {
+  const prev = S.kb; S.kb = which;
+  const swap = instant || (prev !== 'none' && which !== 'none');
+  for (const [k, el] of Object.entries(KB)) {
+    if (swap) el.classList.add('swap');
+    el.classList.toggle('on', k === which);
+  }
+  if (swap) requestAnimationFrame(() => requestAnimationFrame(() => Object.values(KB).forEach((el) => el.classList.remove('swap'))));
+  APPS.msg.classList.toggle('kbup', which !== 'none' && KB[which]?.parentElement === APPS.msg);
+}
+function insertText(t) { S.fieldBefore = S.field; setField(S.field && !/\s$/.test(S.field) ? S.field + ' ' + t : S.field + t, true); }
+// Echtes Tippen (Großschreibung am Satzanfang wie bei Apple)
+function typingOk() { return (S.kb === 'apple' || S.kb === 'paply') && S.front === 'msg' && KB[S.kb].parentElement === APPS.msg && !S.rec && !S.busy; }
+function renderCase() {
+  const up = S.shift || S.field === '' || /[.!?]\s$/.test(S.field);
+  $$('.kb .key[data-k]').forEach((k) => { const c = up ? k.dataset.k.toUpperCase() : k.dataset.k; k.textContent = c; k.dataset.c = c; });
+  $$('.kb .key.shift').forEach((k) => k.classList.toggle('on', up));
+}
+function press(el) { el.classList.add('pressed'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('pressed'), 140); }
+
+// ---------- Paply-Tastaturen ----------
+function pk(s) { const el = KB.paply; el.dataset.s = s; el.classList.toggle('sess', !!S.session && el.parentElement === APPS.msg); }
+function pl(s) {
+  KB.panel.dataset.s = s;
+  $('#plSt').innerHTML = s === 'rec' ? '<i></i><span id="plTime">0:00</span>' : s === 'ready' ? '<span style="opacity:.7">Deutsch · English</span>' : '';
+}
+const kbs = (s) => (S.kb === 'paply' ? pk(s) : pl(s));
+
+// ---------- Paply-App ----------
+function paView(v) {
+  $$('#appPaply .pv').forEach((p) => { p.classList.toggle('on', p.dataset.v === v); p.classList.toggle('away', v === 'settings' && p.dataset.v === 'home'); });
+}
+function renderHome() {
+  const on = S.session;
+  $('#phSess').classList.toggle('off', !on);
+  $('#phSessT').textContent = on ? 'Sitzung aktiv' : 'Sitzung aus';
+  $('#phSessS').textContent = on ? `Mikro bereit · hält ${SESS[S.sessIdx]}` : 'Startet beim nächsten Diktat kurz neu';
+  $('#phSessBtn').textContent = on ? 'Beenden' : 'Starten';
+  let day = '';
+  $('#phList').innerHTML = HIST.map(([d, time, dur, text], i) => {
+    const head = d !== day ? `<div class="ph-day">${d}</div>` : ''; day = d;
+    return `${head}<button class="ph-item" data-act="hist" data-i="${i}"><p>${text}</p><small><span>${time}</span><span>${dur} gesprochen</span></small></button>`;
+  }).join('');
+}
+function renderSettings() { $('#psSess').textContent = SESS[S.sessIdx]; }
+function toast() { const t = $('#toast'); t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), 1400); }
+
+// ---------- Aufnahme-Simulation ----------
+let speechT = null;
+function startRec(text, delay = 900) {
+  stopSpeech();
+  S.rec = { t0: performance.now(), words: 0, all: text.split(' '), stopped: false, lt: 0 };
+  sbDot();
+  const say = $('#say'); say.hidden = false; $('#sayK').textContent = 'Du sprichst (simuliert)'; $('#sayT').innerHTML = '<span style="opacity:.45">…</span>'; delete $('#sayT').dataset.cut;
+  let i = 0; const rec = S.rec;
+  const next = () => {
+    if (S.rec !== rec || rec.stopped) return;
+    if (i >= rec.all.length) { $('#sayK').textContent = 'Fertig gesprochen – jetzt stoppen'; return; }
+    const w = rec.all[i++]; rec.words = i;
+    if (i === 1) $('#sayT').innerHTML = '';
+    const s = document.createElement('span'); s.className = 'w'; s.textContent = (i > 1 ? ' ' : '') + w; const box = $('#sayT'); box.appendChild(s);
+    const ws = box.querySelectorAll('.w'); if (ws.length > 12) { ws[0].remove(); box.dataset.cut = '1'; }
+    rec.lt = .55 + Math.random() * .45;
+    const pause = /[.!?]$/.test(w) ? 480 : /[,–]$/.test(w) ? 260 : 0;
+    speechT = setTimeout(next, 120 + w.length * 17 + pause + Math.random() * 50);
+  };
+  speechT = setTimeout(next, delay);
+}
+function stopSpeech() { clearTimeout(speechT); speechT = null; }
+function endRec() {
+  const r = S.rec; if (!r) return '';
+  r.stopped = true; stopSpeech(); sbDot();
+  $('#say').hidden = true;
+  let w = r.all.slice(0, r.words).join(' ');
+  if (!w) return '';
+  if (r.words < r.all.length) { w = w.replace(/[,–]+$/, ''); if (!/[.!?]$/.test(w)) w += '.'; }
+  return w;
+}
+function cancelRec() { const r = S.rec; if (r) { r.stopped = true; stopSpeech(); } S.rec = null; $('#say').hidden = true; sbDot(); }
+
+function nextText() { return S.tab === 'setup' ? TXT.test : S.tab === 'session' ? TXT.s1 : S.snaps.length ? TXT.m2 : TXT.m1; }
+// Aufnahme bei laufender Sitzung: sofort, ohne App-Wechsel
+function warmStart() {
+  startRec(nextText(), 450); kbs('rec'); haptic();
+  go(S.tab === 'setup' ? 'su.tryStop' : S.tab === 'session' ? 's.stop' : 'a.stop');
+}
+// Sitzung aus: Paply blitzt kurz auf, um das Mikro einzuschalten
+async function coldStart() {
+  const tk = token; S.busy = true;
+  kbs('opening'); await wait(380); if (tk !== token) return;
+  const auto = S.variant === 'auto';
+  const fl = $('#pvFlash');
+  if (auto) fl.dataset.auto = '1'; else delete fl.dataset.auto;
+  $('#paHintT').textContent = auto ? 'Gleich zurück' : 'Zurückwischen';
+  $('#paHintS').textContent = auto ? 'Sprich einfach los – Paply hört schon zu.' : 'Sprich einfach weiter – Paply hört schon zu.';
+  paView('flash'); count('sw'); S.session = true;
+  startRec(nextText(), 1900); kbs('rec'); haptic(); sbDot();
+  await openApp('paply'); if (tk !== token) return;
+  if (auto) {
+    go('s.auto'); await wait(1000); if (tk !== token) return;
+    count('sw'); await backTo(0); if (tk !== token) return;
+    S.busy = false; go('s.stop');
+  } else { S.busy = false; go('s.swipe'); }
+}
+const NEXT = { 'a.stop': 'a.send', 'a.backStop': 'a.send2', 's.stop': 's.send' };
+const BACK = { 'a.stop': () => (orig() ? 'a.globe' : 'a.speak'), 'a.backStop': () => 'a.back', 's.stop': () => (orig() ? 's.globe' : 's.speak'), 'su.tryStop': () => 'su.try' };
+async function stopInKeyboard() {
+  const tk = token, st = S.step; S.busy = true;
+  const text = endRec(); S.rec = null;
+  kbs('busy');
+  await wait(1050); if (tk !== token) return;
+  if (!text) {
+    kbs('empty'); await wait(1300); if (tk !== token) return;
+    S.busy = false;
+    if (S.kb === 'panel' && S.tab !== 'setup') { setKb('apple'); pl('ready'); } else kbs('ready');
+    go(BACK[st]()); return;
+  }
+  if (S.tab === 'setup') {
+    $('#tph').hidden = true; $('#tText').textContent = text; $('#tText').classList.add('ins');
+    pl('done'); sbDot(); await wait(1700); if (tk !== token) return; S.busy = false;
+    setKb('none'); obView(6); go('su.opt'); return;
+  }
+  insertText(text);
+  if (S.kb === 'panel') {
+    // Paply-Ebene: einsetzen, kurz bestätigen, dann von selbst zurück zu Apples Tastatur
+    pl('done'); await wait(650); if (tk !== token) return;
+    setKb('apple'); pl('ready');
+  } else pk('inserted');
+  S.busy = false;
+  go(NEXT[st]);
+}
+// Schnelltaste bei offener Apple-Tastatur: Aufnahme im Hintergrund, Text wartet auf 🌐
+async function stopBack() {
+  const tk = token; S.busy = true;
+  const text = endRec(); S.rec = null;
+  island('busy'); await wait(1050); if (tk !== token) return;
+  S.busy = false;
+  if (!text) { island('idle'); go('a.back'); return; }
+  S.pending = text; island('done'); go('a.backIns');
+}
+async function insertPending() {
+  const tk = token; S.busy = true;
+  setKb('panel'); pl('done'); insertText(S.pending); S.pending = ''; island('idle');
+  await wait(650); if (tk !== token) return;
+  setKb('apple'); pl('ready'); S.busy = false; go('a.send2');
+}
+async function sendMsg() {
+  const tk = token, st = S.step;
+  addBubble('out', S.field); setField('');
+  S.snaps.push({ ...S.counts });
+  pk('ready');
+  if (st === 'a.send') {
+    go('a.wait'); S.busy = true; await wait(600); if (tk !== token) return;
+    typing(true); await wait(1400); if (tk !== token) return; typing(false);
+    addBubble('in', 'Perfekt, danke! Wann passt dir morgen der Call?');
+    S.busy = false; go('a.back');
+  } else if (st === 'a.send2') go('a.done');
+  else go('s.done');
+}
+
+// ---------- Onboarding ----------
+function obView(n) { $$('.obv').forEach((v) => { const k = +v.dataset.v; v.classList.toggle('on', k === n); v.classList.toggle('gone', k < n); }); }
+
+// ---------- Aktionen ----------
+const ACT = {
+  field() {
+    if (S.step !== 'a.field' && S.step !== 's.field') { nudge(); return; }
+    count('tap'); focusField(true);
+    const a = S.tab === 'alltag';
+    if (orig()) { setKb('apple'); go(a ? 'a.globe' : 's.globe'); }
+    else { setKb('paply'); pk('ready'); go(a ? 'a.speak' : 's.speak'); }
+  },
+  async globe() { // 🌐 auf Apples Tastatur
+    const st = S.step;
+    if (st === 'a.globe') { count('tap'); setKb('panel'); warmStart(); }
+    else if (st === 's.globe') { count('tap'); setKb('panel'); if (S.session) warmStart(); else await coldStart(); }
+    else if (st === 'a.backIns') { count('tap'); await insertPending(); }
+    else nudge();
+  },
+  async gm(el) {
+    gmenu(false);
+    if (el.dataset.k === 'paply') { await ACT.globe(); return; }
+    nudge(el.dataset.k === 'de' ? 'Schon aktiv – Deutsch und Englisch in einer Tastatur' : 'Im Prototyp nicht nachgebaut');
+  },
+  globeP() { if (S.rec) { nudge('Erst „Fertig“ oder „Abbrechen“'); return; } setKb('apple'); },
+  globeBack() { nudge('Der Nachbau ersetzt Apples Tastatur – 🌐 führt hier nur zu Emoji'); },
+  key(el) { if (!typingOk()) { nudge(); return; } press(el); const c = el.dataset.c; S.shift = false; setField(S.field + c); },
+  shift() { if (!typingOk()) return; S.shift = !S.shift; renderCase(); },
+  del(el) { if (!typingOk()) return; press(el); setField(S.field.slice(0, -1)); },
+  space(el) { if (!typingOk()) return; press(el); setField(S.field + ' '); },
+  ret(el) { press(el); },
+  nokey() { nudge('Zahlen und Emoji sind im Prototyp nicht nachgebaut'); },
+  async speak() {
+    const st = S.step;
+    if (st === 'a.speak' || st === 'su.try') { count('tap'); warmStart(); }
+    else if (st === 's.speak') { count('tap'); if (S.session) warmStart(); else await coldStart(); }
+    else if (['a.stop', 's.stop', 'su.tryStop'].includes(st)) { count('tap'); await stopInKeyboard(); }
+    else if (st === 'a.backStop' && !orig()) { count('tap'); await stopInKeyboard(); }
+    else if (st === 'a.back') nudge('Diesmal mit der Schnelltaste unter dem iPhone');
+    else nudge();
+  },
+  cancel() {
+    const b = BACK[S.step]; if (!b) return;
+    cancelRec();
+    if (S.kb === 'panel' && S.tab !== 'setup') { setKb('apple'); pl('ready'); } else kbs('ready');
+    island('idle'); go(b());
+  },
+  undo() {
+    const back = { 'a.send': 'a.speak', 'a.send2': 'a.back', 's.send': 's.speak' }[S.step];
+    if (back) { setField(S.fieldBefore); pk('ready'); go(back); }
+  },
+  send() { if (['a.send', 'a.send2', 's.send'].includes(S.step)) sendMsg(); else nudge(); },
+  async backtap() {
+    if (S.step === 'a.back') {
+      count('back'); startRec(nextText(), 450); haptic();
+      if (orig()) island('rec'); else pk('rec');
+      go('a.backStop');
+    } else if (S.step === 'a.backStop') {
+      count('back'); haptic();
+      if (orig()) await stopBack(); else await stopInKeyboard();
+    } else nudge();
+  },
+  swipe() { doSwipe(0); },
+  // Paply-App
+  gear() { if (S.tab === 'app') paView('settings'); },
+  gearBack() { if (S.tab === 'app') paView('home'); },
+  sessToggle() { S.session = !S.session; if (S.session) haptic(); renderHome(); sbDot(); },
+  hist(el) { el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), 500); toast(); },
+  sessDur() {
+    S.sessIdx = (S.sessIdx + 1) % SESS.length; renderSettings(); renderHome();
+    const v = $('#psSess'); v.classList.remove('ps-val-pop'); void v.offsetWidth; v.classList.add('ps-val-pop');
+  },
+  // Einrichtung
+  obStart() { if (S.step === 'su.start') { count('tap'); obView(2); go('su.key'); } else nudge(); },
+  async obPaste() {
+    if (S.step !== 'su.key') { nudge(); return; }
+    const tk = token; count('tap'); S.busy = true;
+    $('#keybox').classList.add('set'); $('#keyT').textContent = 'gsk_••••••••••••••••3F2a';
+    $('#keyok').classList.add('on'); $('#keyokT').textContent = 'Prüfe …';
+    await wait(900); if (tk !== token) return;
+    $('#keyokT').textContent = 'Funktioniert · im Schlüsselbund gesichert'; $('#obNext2').disabled = false;
+    S.busy = false; go('su.keyNext');
+  },
+  obNext2() { if (S.step === 'su.keyNext') { count('tap'); obView(3); go('su.mic'); } else nudge(); },
+  obMic() { if (S.step === 'su.mic') { count('tap'); alertBox('mic'); go('su.micOk'); } else nudge(); },
+  alOk() {
+    if (S.step === 'su.micOk') { count('tap'); alertBox(null); obView(4); go('su.set'); }
+    else if (S.step === 'su.fullOk') { count('tap'); alertBox(null); $('#tgFull').classList.add('on'); $('#stKbVal').textContent = 'An'; crumb(true); go('su.back'); }
+    else nudge();
+  },
+  alNo() { nudge('Ohne das geht es nicht – bitte „Erlauben“'); },
+  async obSettings() {
+    if (S.step !== 'su.set') { nudge(); return; }
+    const tk = token; count('tap'); count('sw'); S.busy = true;
+    $('#stPaply').className = 'stp'; $('#stKbs').className = 'stp off';
+    crumb(true); await openApp('set'); if (tk !== token) return;
+    S.busy = false; go('su.kbRow');
+  },
+  stKbRow() { if (S.step === 'su.kbRow') { count('tap'); $('#stPaply').className = 'stp under'; $('#stKbs').className = 'stp'; go('su.kbOn'); } else nudge(); },
+  tgPaply() { if (S.step === 'su.kbOn') { count('tap'); $('#tgPaply').classList.add('on'); $('#tgFullRow').classList.remove('dis'); go('su.fullOn'); } else nudge(); },
+  tgFull() { if (S.step === 'su.fullOn') { count('tap'); alertBox('full'); go('su.fullOk'); } else nudge(); },
+  async crumb() {
+    if (S.step !== 'su.back') { nudge(); return; }
+    const tk = token; count('tap'); count('sw'); crumb(false); S.busy = true;
+    APPS.paply.appendChild(KB.panel); S.kb = 'none';
+    obView(5);
+    await backTo(0); if (tk !== token) return;
+    setKb('panel'); pl('ready');
+    S.busy = false; go('su.try');
+  },
+  obDone() { if (S.step === 'su.opt') { count('tap'); go('su.done'); } else nudge(); },
+};
+const UI = {
+  tab(el) { reset(el.dataset.tab); },
+  reset() { reset(S.tab); },
+  rt(el) {
+    $$('[data-ui=rt]').forEach((b) => b.setAttribute('aria-selected', b === el));
+    $$('[data-rp]').forEach((p) => { p.hidden = p.dataset.rp !== el.dataset.rt; });
+  },
+  var(el) { S.variant = el.dataset.v; reset('session'); },
+  kbv(el) { S.kbv = el.dataset.v; reset(S.tab === 'session' ? 'session' : 'alltag'); },
+};
+pf.addEventListener('click', (e) => {
+  const u = e.target.closest('[data-ui]');
+  if (u) { UI[u.dataset.ui]?.(u); return; }
+  const a = e.target.closest('[data-act]');
+  if (!a || a.disabled) return;
+  if (S.busy) return;
+  ACT[a.dataset.act]?.(a);
+});
+
+// ---------- 🌐 gedrückt halten: Apples Tastaturliste (bleibt Apples Funktion) ----------
+function gmenu(on) { $('#gMenu').classList.toggle('on', on); S.menu = on; }
+(() => {
+  let t = null, longed = false;
+  pf.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('#kbGlobe') || S.busy) return;
+    longed = false; clearTimeout(t);
+    t = setTimeout(() => { longed = true; haptic(); gmenu(true); }, 480);
+  });
+  const clear = () => clearTimeout(t);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => pf.addEventListener(ev, clear));
+  pf.addEventListener('click', (e) => {
+    if (longed && e.target.closest('#kbGlobe')) { e.stopImmediatePropagation(); longed = false; return; }
+    if (S.menu && !e.target.closest('#gMenu')) { e.stopImmediatePropagation(); gmenu(false); }
+  }, true);
+})();
+
+// ---------- Größe ----------
+function fit() {
+  const W = pf.clientWidth;
+  const narrow = W <= 640;
+  scale = narrow ? Math.min(.86, (W - 8) / 458) : Math.max(.6, Math.min(.74, (W - 28 - 300) / 458));
+  $('#device').style.transform = `scale(${scale})`;
+  const dw = $('#devWrap'); dw.style.width = 458 * scale + 'px'; dw.style.height = 960 * scale + 'px';
+}
+let lastW = 0;
+new ResizeObserver(() => { if (pf.clientWidth !== lastW) { lastW = pf.clientWidth; fit(); } }).observe(pf); fit();
+
+// ---------- 60-fps-Schleife: Pegel, Timer, Wolke, Ringe ----------
+let lvl = 0, lastSec = -1, lastBar = 0, lastRip = 0;
+const hist = new Array(40).fill(0);
+const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const waveBars = $$('#pkWave i'), plBars = $$('#plWave i'), isBars = $$('#isBars i');
+const flashEl = $('#pvFlash');
+function frame(t) {
+  requestAnimationFrame(frame);
+  const r = S.rec;
+  if (r && !r.stopped) {
+    r.lt *= .935;
+    const target = Math.max(r.lt, .05 + .03 * Math.sin(t / 170));
+    lvl += (target - lvl) * (target > lvl ? .45 : .12);
+    const s = Math.floor((performance.now() - r.t0) / 1000);
+    if (s !== lastSec) { lastSec = s; const f = fmt(s); $('#pkTime').textContent = f; $('#isTime').textContent = f; $('#paSub').textContent = 'hört zu · ' + f; const pt = $('#plTime'); if (pt) pt.textContent = f; }
+  } else { lvl *= .85; lastSec = -1; }
+  if (t - lastBar > 65) {
+    lastBar = t; hist.push(lvl * (.55 + Math.random() * .45)); hist.shift();
+    const off = hist.length - waveBars.length;
+    for (let i = 0; i < waveBars.length; i++) waveBars[i].style.transform = `scaleY(${Math.max(.1, Math.min(1, hist[off + i] * 1.25))})`;
+    for (let i = 0; i < plBars.length; i++) plBars[i].style.transform = `scaleY(${Math.max(.06, Math.min(1, hist[i] * 1.3))})`;
+    for (let i = 0; i < isBars.length; i++) isBars[i].style.transform = `scaleY(${Math.max(.2, Math.min(1, lvl * (0.6 + .5 * Math.abs(Math.sin(t / 120 + i * 1.3)))))})`;
+  }
+  const a = $('#blobA'), b = $('#blobB');
+  a.style.transform = `rotate(${(t * .03) % 360}deg) scale(${1 + lvl * .42})`;
+  b.style.transform = `rotate(${(-t * .022) % 360}deg) scale(${1 + lvl * .3})`;
+  if (r && !r.stopped && lvl > .55 && t - lastRip > 520 && S.front === 'paply' && flashEl.classList.contains('on')) {
+    lastRip = t; const ring2 = document.createElement('span'); $('#ripples').appendChild(ring2);
+    ring2.animate([{ transform: 'scale(1)', opacity: .7 }, { transform: 'scale(1.55)', opacity: 0 }], { duration: 900, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => ring2.remove();
+  }
+  placeRing();
+}
+requestAnimationFrame(frame);
+
+reset('alltag');
+window.__paply = { S, ACT, reset, doSwipe };
+})();
+</script>
+</body>
+</html>
