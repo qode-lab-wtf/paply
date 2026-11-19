@@ -1,8 +1,8 @@
 # Paply — Stand
 
-**Zeitpunkt:** 1.11.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
+**Zeitpunkt:** 19.11.2026 · Alle Apps liegen in diesem Repository auf `main`. Verhalten: [`REGELN.md`](../REGELN.md).
 
-Die Tabelle zeigt den Stand von `main`. Mac und Windows 1.16.0 sind Vorabversion und nur auf Allans MacBook, die übrigen
+Die Tabelle zeigt den Stand von `main`. Mac und Windows 1.16.1 sind Vorabversion und nur auf Allans MacBook, die übrigen
 Nutzer bleiben bis zur Freigabe auf 1.15.3. iPhone: Build 10 auf Allans iPhone und bei TestFlight. Android: 0.2.2 ist
 gebaut und noch nicht verteilt, Tester bleiben bis dahin auf 0.2.1.
 
@@ -45,8 +45,8 @@ Ideen für später, noch nicht gebaut. Die Reihenfolge ist keine Rangfolge.
 
 ## Mac und Windows
 
-- **Version:** 1.16.0 als Vorabversion, auf Allans MacBook installiert. Für alle gilt noch 1.15.3. `main`: 936 automatische Tests.
-- **Offen:** Allans Test von 1.16.0, danach Freigabe. Rückmeldung des Windows-Freunds, Electron-Upgrade.
+- **Version:** 1.16.1 als Vorabversion, nur auf Allans MacBook. Alle anderen bleiben bis zur Freigabe auf 1.15.3. 957 automatische Tests.
+- **Offen:** Allans Test von 1.16.1, danach Freigabe. Rückmeldung des Windows-Freunds, Electron-Upgrade.
 - **Veröffentlichen:** [RELEASE.md](RELEASE.md). **Verlauf:** [stand/desktop.md](stand/desktop.md).
 
 ## iPhone

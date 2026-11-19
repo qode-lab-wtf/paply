@@ -2,7 +2,7 @@
 
 Übersicht aller Apps: [../STAND.md](../STAND.md).
 
-## 19.11.2026 — Echo-Gegenprobe (unveröffentlicht)
+## 19.11.2026 — Echo-Gegenprobe, 1.16.1 (Vorabversion, nur Allans MacBook)
 
 - **Fehler in 1.16.0:** Whisper schrieb bei langen Diktaten den Beispielsatz („Ich schreibe dir später, see you
   tomorrow.“) statt des gesprochenen Schlusses, in Allans Verlauf 20 von 446 Diktaten. Der alte Echo-Filter schützte
