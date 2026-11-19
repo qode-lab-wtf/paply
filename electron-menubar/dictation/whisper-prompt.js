@@ -1,5 +1,6 @@
 const { languageCode } = require('./language-guard');
 const { vocabularyPrompt, isVocabularyEcho } = require('./polish-prompt');
+const { hasLowSpeechActivity, validateVoiceActivity } = require('../audio/silence-filter');
 const phrases = {
   de: [
     ['Kurzes Update: Das Meeting ist verschoben', 'Ich schreibe dir später'],
@@ -98,6 +99,11 @@ function buildPrompt(vocabulary = '', previousText = '', example = '') {
   } else if (tail.length) parts.push(tail.join(' '));
   return parts.join(' ');
 }
+// Misst die App verlässlich kaum Stimme, geht das Stück ohne Prompt an Whisper:
+// Mit Prompt erfand Whisper bei leisem Ton Englisch, ohne kam nur „.“.
+function whisperPrompt(vocabulary, previousText, example, voiceActivity) {
+  return hasLowSpeechActivity(validateVoiceActivity(voiceActivity)) ? '' : buildPrompt(vocabulary, previousText, example);
+}
 // Begriffe nur bei sehr kurzer Sprechzeit verwerfen. Längere Primer-Echos
 // sind auch ohne Messung verdächtig; nachweislich viel Sprache schützt sie.
 function removeEchoes(
@@ -137,4 +143,61 @@ function removeEchoes(
   } else if (echo(response.text || '')) return { ...response, text: '', echoRemoved: true };
   return response;
 }
-module.exports = { primer, estimateTokens, buildPrompt, removeEchoes };
+// Echo-Gegenprobe: Sieht ein Ergebnis nach dem eigenen Prompt aus, läuft dasselbe
+// Stück ohne Prompt noch einmal, und dieser Lauf gilt. Die Erkennung darf großzügig
+// sein, ein Fehlalarm kostet nur eine Anfrage, nie Text.
+const tokens = (s) => [...String(s || '').normalize('NFC').matchAll(/[\p{L}\p{N}\p{M}]+/gu)];
+const lower = (s) => tokens(s).map((m) => m[0].toLowerCase());
+// Wortläufe aus `text`, die mindestens `min` Wörter am Stück aus `source` sind.
+function runs(text, source, min) {
+  const t = tokens(text), w = t.map((m) => m[0].toLowerCase()), s = lower(source), found = [];
+  for (let i = 0; i < w.length; ) {
+    let best = 0;
+    for (let j = 0; j < s.length; j++) {
+      let n = 0;
+      while (w[i + n] !== undefined && w[i + n] === s[j + n]) n++;
+      best = Math.max(best, n);
+    }
+    if (best >= min) { found.push([t[i].index, t[i + best - 1].index + t[i + best - 1][0].length]); i += best; } else i++;
+  }
+  return found;
+}
+// Sätze aus mindestens drei Wörtern, die fast nur aus eigenen Begriffen bestehen.
+const listSentences = (text, vocabulary) =>
+  vocabulary ? [...String(text || '').matchAll(/[^.!?。]+[.!?。]*/gu)]
+    .filter((m) => lower(m[0]).length >= 3 && isVocabularyEcho(m[0], vocabulary))
+    .map((m) => [m.index, m.index + m[0].length]) : [];
+function looksLikeEcho(response, { example = '', vocabulary = '', previousText = '' } = {}) {
+  const text = response?.text || '';
+  return runs(text, example, 3).length > 0 || listSentences(text, vocabularyPrompt(vocabulary)).length > 0
+    || (response?.segments || []).some((s) => lower(s.text).length >= 3 && runs(s.text, previousText, lower(s.text).length).length > 0);
+}
+// Rückfall, wenn die Gegenprobe scheitert: nur die eindeutigen Echo-Wörter streichen,
+// nicht ganze Segmente, denn mit Prompt liefert Whisper oft Segmente über 20 Sekunden.
+function cutEchoes(response, { example = '', vocabulary = '' } = {}) {
+  const cut = (text) => {
+    let out = text || '';
+    for (const [a, b] of [...runs(out, example, 5), ...listSentences(out, vocabularyPrompt(vocabulary))].sort((x, y) => y[0] - x[0]))
+      out = out.slice(0, a) + out.slice(b).replace(/^[\s,.;:!?]+/u, ' ');
+    return out.replace(/\s+/g, ' ').trim();
+  };
+  if (!response.segments?.length) return { ...response, text: cut(response.text) };
+  const segments = response.segments.map((s) => ({ ...s, text: cut(s.text) })).filter((s) => s.text);
+  return { ...response, segments, text: segments.map((s) => s.text).join(' ') };
+}
+async function echoCheck(first, request, { firstMs, signal, diagnose = (requested, accepted) => console.log('[Echo]', requested, accepted), ...prompt } = {}) {
+  if (!looksLikeEcho(first, prompt)) { diagnose(0, 0); return first; }
+  let timer, accepted = false;
+  try {
+    signal?.throwIfAborted();
+    // Die Sprache ist schon entschieden; ein leerer termPrompt heißt: kein Prompt.
+    const second = await Promise.race([request(first.language, ''), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), Math.min(60000, 2 * (firstMs || 0) + 5000)); })]);
+    signal?.throwIfAborted();
+    accepted = true;
+    return { ...second, language: first.language, echoRemoved: true };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { ...cutEchoes(first, prompt), echoRemoved: true };
+  } finally { clearTimeout(timer); diagnose(1, Number(accepted)); }
+}
+module.exports = { primer, estimateTokens, buildPrompt, whisperPrompt, removeEchoes, looksLikeEcho, cutEchoes, echoCheck };

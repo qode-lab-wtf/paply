@@ -190,6 +190,8 @@ it('Agenten und Profile schreiben keine Hauptsprache; UI bietet zusätzliche Ger
 it('filters first-result term echoes before requesting a countercheck',async()=>{
  const m=makeMain('darwin',{customVocabulary:'Law Min',enablePolish:false,autopaste:false});
  const text=buildPrompt('Law Min','',primer(['de','en']));
- m.context.fetch.mockResolvedValue({ok:true,text:async()=>JSON.stringify({language:'de',text,segments:[{text,avg_logprob:-.8}]})});
- try {await m.context.processAudioData(Buffer.from('audio'),false,{...speech,speechMs:80});expect(m.context.fetch).toHaveBeenCalledTimes(1);expect(m.context.addToHistory).not.toHaveBeenCalled();} finally {m.dispose();}
+ m.context.fetch.mockResolvedValueOnce({ok:true,text:async()=>JSON.stringify({language:'de',text,segments:[{text,avg_logprob:-.8}]})})
+  .mockResolvedValueOnce({ok:true,text:async()=>JSON.stringify({language:'de',text:'',segments:[]})});
+ // Echo-Gegenprobe ohne Prompt statt Begriffs-Gegenprobe.
+ try {await m.context.processAudioData(Buffer.from('audio'),false,{...speech,speechMs:80});expect(m.context.fetch).toHaveBeenCalledTimes(2);expect(m.context.fetch.mock.calls[1][1].body.has('prompt')).toBe(false);expect(m.context.addToHistory).not.toHaveBeenCalled();} finally {m.dispose();}
 });

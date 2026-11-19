@@ -67,6 +67,19 @@ Das gilt für Diktat und Gedanken in allen Apps. Gespräche haben eigene, einfac
 - Typische Whisper-Erfindungen wie „Vielen Dank.“ werden bei Stille verworfen. Echt gesprochen bleiben sie stehen.
 - Steht nur ein Untertitel-Rest wie „Amara.org“ da, fällt er immer weg.
 - Alle Apps nutzen dieselbe Stille-Liste. Der Wächter vergleicht sie.
+- Misst die App verlässlich kaum Stimme (wie bei den Stille-Phrasen), geht das Stück ganz ohne Prompt an Whisper: kein
+  Beispielsatz, keine Begriffe, kein Vorstück. Das gilt auch für die Sprach-Gegenprobe.
+- Echo-Gegenprobe: Stehen im Text drei Wörter am Stück aus dem Beispielsatz des Whisper-Prompts, ein Satz aus
+  mindestens drei Wörtern fast nur aus eigenen Begriffen oder bei Gedanken ein Segment nur aus dem Ende des Vorstücks,
+  läuft das Stück noch einmal ohne Prompt mit der schon entschiedenen Sprache. Dieser Lauf gilt, egal wie viel
+  gesprochen wurde. Er wartet so lange wie die Sprach-Gegenprobe. Scheitert er, werden nur eindeutige Echos gestrichen:
+  fünf Wörter am Stück aus dem Beispielsatz oder der Begriffssatz.
+
+**Warum so:** Seit dem Beispielsatz schrieb Whisper in 20 von 446 Diktaten (davor 0 von 1.331) „Ich schreibe dir
+später, see you tomorrow.“ statt des gesprochenen Schlusses. Ein Filter hätte nur das Echo gelöscht, der Schluss wäre
+trotzdem weg. Ein echt gesagter Beispielsatz steht auch im zweiten Lauf und bleibt. Bei leisem Ton ohne Sprache
+erfand Whisper mit Prompt 6 von 6 Mal englischen Text, ohne Prompt 0 von 6 Mal. Der Beispielsatz selbst bleibt: Ohne ihn
+wurde ein englischer Satz in einem deutschen Diktat übersetzt (Messung vom 19.11.2026, künstliche Stimmen).
 
 ## 4. Eigene Begriffe
 
@@ -193,3 +206,4 @@ stimmt. **In Arbeit** wird gerade behoben, **Bewusst** bleibt so, **Nachzureiche
 | A11 | Mac, Windows | Eigene Agenten haben einen eigenen KI-Text, können übersetzen und umgehen das Sicherheitsnetz | Regeln 1 und 2 gelten dort nicht | Bewusst, der Nutzer stellt das selbst ein |
 | A12 | Mac, Windows | Gedanken dürfen 30 statt 10 Minuten lang sein | Regel 7 | Bewusst, Grenzen werden nicht gekürzt |
 | A14 | iPhone | Mit eingeschalteter Beta „Gespräche“ bewahrt das Stimmen-Lernen bis zu 10 Kopien von Gedanken-Ton bis zu 7 Tage auf | Regel 8 gilt dort nicht | Bewusst, nur in der Beta |
+| A15 | iPhone, Android | Keine Echo-Gegenprobe, Echos werden nur bei wenig gemessener Stimme gelöscht. Der Prompt geht auch bei kaum Stimme mit | Ein Echo am Ende eines langen Diktats bleibt stehen, der Schluss fehlt. Bei leisem Ton sind englische Erfindungen wahrscheinlicher | Nachzureichen, vorher dort messen (kürzere Stücke, eigene Kette) |

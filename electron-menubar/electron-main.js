@@ -43,7 +43,7 @@ app.on('second-instance', () => { app.whenReady().then(() => { const win = creat
 
 const { termCheck } = require('./dictation/term-guard');
 const { WHISPER_MODEL, languageCode, userLanguages, guardedTranscription } = require('./dictation/language-guard');
-const { primer, buildPrompt, removeEchoes } = require('./dictation/whisper-prompt');
+const { primer, whisperPrompt, removeEchoes, echoCheck } = require('./dictation/whisper-prompt');
 const path = require('node:path');
 const fs = require('node:fs');
 // Diagnose-Protokoll so früh wie möglich: nach Sperre und (Test-)userData, vor allen Modulen.
@@ -499,7 +499,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         formData.append('model', getStore().get('whisperModel') || WHISPER_MODEL);
         if (forcedLanguage) formData.append('language', forcedLanguage);
         formData.append('response_format', 'verbose_json');
-        const prompt = termPrompt ?? buildPrompt(vocabulary, '', example);
+        const prompt = termPrompt ?? whisperPrompt(vocabulary, '', example, voiceActivity);
         if (prompt) formData.append('prompt', prompt);
 
         console.log(`Starting Groq transcription (attempt ${i + 1}/${retries + 1}, size: ${audioBuffer.length} bytes)...`);
@@ -533,7 +533,7 @@ async function transcribeAudio(audioBuffer, language = 'de', retries = 3, voiceA
         return JSON.parse(res.body);
       };
       let selected = await guardedTranscription(request, { expected: language, users, spoken: validateVoiceActivity(voiceActivity)?.speechMs / 1000 });
-      const preEcho = removeEchoes(selected, { example, vocabulary, speechMs: validateVoiceActivity(voiceActivity)?.speechMs });
+      const preEcho = await echoCheck(selected, request, { example, vocabulary, firstMs });
       const preFiltered = filterTranscription(preEcho, voiceActivity, options);
       selected = { ...preEcho, text: preFiltered.text, ...(!preFiltered.text ? { segments: [] } : {}) };
       selected = await termCheck(selected, getStore().get('customVocabulary') || '', request, firstMs);

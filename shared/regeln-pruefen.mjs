@@ -103,6 +103,10 @@ const AUSNAHMEN = {
   A11: () => lies(`${DESKTOP}/dictation/custom-agent-prompt.js`).includes('Übersetze den finalen Text'),
   A12: () => lies(`${DESKTOP}/notes/capture.js`).includes('30 * 60000'),
   A14: () => gibtEs('ios/App/Conversations/ConversationLearning.swift'),
+  A15: () => !lies(`${IOS}/Text/TranscriptCleanup.swift`).includes('func echoCheck')
+    || !lies(`${ANDROID}/TranscriptCleanup.kt`).includes('fun echoCheck')
+    || /let prompt = WhisperPrompt\.build\(/.test(lies(`${IOS}/DictationPipeline.swift`))
+    || /val prompt = WhisperPrompt\.build\(/.test(lies(`${ANDROID}/DictationPipeline.kt`)),
   A13: () => lies(`${IOS}/Conversations/ConversationSummarizer.swift`).includes('knapp auf Deutsch'),
 };
 

@@ -2,6 +2,27 @@
 
 Übersicht aller Apps: [../STAND.md](../STAND.md).
 
+## 19.11.2026 — Echo-Gegenprobe (unveröffentlicht)
+
+- **Fehler in 1.16.0:** Whisper schrieb bei langen Diktaten den Beispielsatz („Ich schreibe dir später, see you
+  tomorrow.“) statt des gesprochenen Schlusses, in Allans Verlauf 20 von 446 Diktaten. Der alte Echo-Filter schützte
+  solche Texte wegen der langen Sprechzeit.
+- **Neu:** Sieht ein Ergebnis nach dem eigenen Prompt aus, läuft dasselbe Stück ohne Prompt mit der schon entschiedenen
+  Sprache, und dieser Lauf gilt. Diktat und Gedanken, ein gemeinsamer Helfer (`echoCheck` in
+  `dictation/whisper-prompt.js`). Scheitert der zweite Lauf, werden nur eindeutige Echo-Wörter gestrichen, nicht ganze
+  Segmente. Diagnose `[Echo] angefragt angenommen`. Meetings, Polieren und Einsetzen unverändert.
+- **Prüfung:** 957 Tests in 55 Dateien, Regelwächter. Allans Verlauf (nur gezählt): Die Erkennung schlägt bei 20 von
+  1.782 Diktaten an, darunter alle 19 typischen Echos. Mit künstlicher Stimme ließ sich das Echo in 12 langen Läufen
+  nicht nachstellen. iPhone und Android folgen (A15).
+- **Kaum Stimme, kein Prompt:** Misst die App verlässlich kaum Stimme (`hasLowSpeechActivity`, dieselbe Bedingung wie
+  bei den Stille-Phrasen), geht das Stück ohne Prompt an Whisper, auch in der Sprach-Gegenprobe. Gemessen mit leisem
+  Ton: mit Prompt 6/6 englische Erfindungen („Thank you for watching!“, „Update“), ohne 0/6, nur „.“.
+- **Beispielsatz bleibt:** 8 gemischte Stücke mit und ohne Prompt. 6 gleich, 1 nur anders gesetzt. In einem längeren
+  deutschen Diktat übersetzte Whisper den englischen Satz ohne Beispielsatz (2/2), mit ihm blieb er wörtlich.
+- **Abschlussprobe mit Groq:** Langes deutsches Diktat und gemischtes Stück unverändert richtig, je 1 Anfrage. Leises
+  Atmen ging ohne Prompt raus, die Sprach-Gegenprobe mit `de` erfand aber „Untertitelung des ZDF, 2020“, und kein
+  Stille-Filter kennt diese Form. Offen.
+
 ## 31.10.2026 — Gleichstand mit iPhone und Android
 
 - **Gedanken-Endreview (31.10.2026, unveröffentlicht):** Link-Sicherheit und lokale Schwelle getrennt; Aufgaben mit bis zu 200 Zeichen langen, unscharf belegten Zitaten, mobile Textbereinigung und 5/10-Abschnittslimit. Budget-Neuversuch bleibt über Wartezeiten erhalten, Rückfall ist endlich und sichtbar; erfolglose Wiederholung schützt vorhandene KI-Ergebnisse. Themen-Dubletten, Titelbeugung/CJK, Eingabe-Aliase, eigene/erledigte Aufgaben und fehlender Ton korrigiert. Whisper-Begriffe, Meeting-Sprachkontinuität und Aufnahmehinweis nachgezogen. 878 Desktop-Tests, Vite, TypeScript und Regelwächter bestanden. Echter isolierter Lauf: 4 gesprochene Gedanken, 4 eingeordnet, 4 Aufgaben, 1 Verknüpfung, französischer Text und Titel erhalten; 9 HTTP-Anfragen (5 Whisper, 4 Einordnung), 10.447 Chat-Tokens. iPhone: 30-Tage-Tonbereinigung ergänzt, 743 Swift-Tests bestanden. Kein Release oder Windows-/GUI-Gerätetest.

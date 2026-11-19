@@ -1,6 +1,6 @@
 import { termCheck } from '../../dictation/term-guard.js';
 import { WHISPER_MODEL, languageCode, userLanguages, guardedTranscription } from '../../dictation/language-guard.js';
-import { primer, buildPrompt, removeEchoes } from '../../dictation/whisper-prompt.js';
+import { primer, buildPrompt, whisperPrompt, removeEchoes, echoCheck } from '../../dictation/whisper-prompt.js';
 import { vocabularyPrompt, uncertainSegments, buildPolishMessages, recentRawDictations, isVocabularyEcho } from '../../dictation/polish-prompt.js';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,7 +23,7 @@ export function makeMain(platform = 'darwin', settings = {}) {
   const timers = [];
   const ipc = {};
   const context = vm.createContext({
-    termCheck, WHISPER_MODEL, languageCode, userLanguages, guardedTranscription, primer, buildPrompt, removeEchoes,
+    termCheck, WHISPER_MODEL, languageCode, userLanguages, guardedTranscription, primer, buildPrompt, whisperPrompt, removeEchoes, echoCheck,
     Buffer, ArrayBuffer, Uint8Array, Blob, FormData, AbortController, Date, fs, path,
     notesBridge: { dictationState: vi.fn(), meetingStarted: vi.fn() },
     process: { env: {}, platform },

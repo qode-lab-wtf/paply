@@ -26,6 +26,8 @@ Eine Funktion, die nur in einer App gebaut wird, kommt hierher. So bleibt sichtb
 
 - **Android:** „Gespräche“, sobald das iPhone den Gerätetest bestanden hat (A8).
 - **Mac, Windows:** Gespräche mit Besitzer-Erkennung und Aufgaben-Reiter wie auf dem iPhone (A9). Erinnerungen und Widgets.
+- **iPhone, Android:** Wie auf Mac und Windows: Sieht ein Text nach dem eigenen Whisper-Prompt aus, läuft das Stück ohne
+  Prompt noch einmal. Bei kaum gemessener Stimme geht gar kein Prompt mit. Vorher dort messen (A15).
 - **Alle:** Fremde Sprachen und die Begriffs-Gegenprobe mit echten Stimmen prüfen. Beides ist bisher nur mit künstlichen
   Stimmen gemessen. Echter Lauf am 1.11.: 9 von 9 Sätzen in fünf Fremdsprachen blieben in Originalsprache und -schrift,
   auch nach dem Polieren.

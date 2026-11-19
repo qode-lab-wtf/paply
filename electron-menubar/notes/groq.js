@@ -1,6 +1,6 @@
 'use strict';
 const { WHISPER_MODEL, userLanguages, guardedTranscription } = require('../dictation/language-guard');
-const { primer, buildPrompt, removeEchoes } = require('../dictation/whisper-prompt');
+const { primer, whisperPrompt, removeEchoes, echoCheck } = require('../dictation/whisper-prompt');
 const { PROMPT } = require('./prompt');
 const { SCHEMA, validate } = require('./thought');
 const PRIMARY_MODEL = 'openai/gpt-oss-120b';
@@ -40,7 +40,7 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
         const form = new FormData(); form.append('file', new Blob([wav], { type: 'audio/wav' }), 'thought.wav'); form.append('model', model);
         if (language) form.append('language', language);
         form.append('response_format', 'verbose_json'); form.append('temperature', '0');
-        const prompt = termPrompt ?? buildPrompt(vocabulary, context.previousText, example);
+        const prompt = termPrompt ?? whisperPrompt(vocabulary, context.previousText, example, context.voiceActivity);
         if (prompt) form.append('prompt', prompt);
         const result = await request('audio/transcriptions', form, { model, amount: Math.max(10, seconds), unit: 'audio', multipart: true, signal, timeout: 120000 });
         firstMs ??= Date.now() - started;
@@ -48,7 +48,7 @@ function createGroq({ getKey, ledger, getTranscriptionSettings = () => ({}), fet
       };
       let response = await guardedTranscription(send, { expected: context.previousLanguage || settings.language, users, spoken: context.voiceActivity?.speechMs / 1000, duration: seconds });
       signal?.throwIfAborted();
-      response = removeEchoes(response, { example, vocabulary, previousText: context.previousText, speechMs: context.voiceActivity?.speechMs });
+      response = await echoCheck(response, send, { example, vocabulary, previousText: context.previousText, firstMs, signal });
       const preText = require('../audio/silence-filter').filterTranscription(response, context.voiceActivity).text;
       response = { ...response, text: preText, ...(!preText ? { segments: [] } : {}) };
       response = await require('../dictation/term-guard').termCheck(response, vocabulary, send, firstMs, signal);
